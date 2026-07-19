@@ -4,8 +4,8 @@ namespace Puck.World.Protocol;
 /// The kind-tagged vocabulary of live world edits carried over <see cref="IServerLink.SubmitWorldMutation"/> — the
 /// closed set of in-flight mutations that <em>is</em> the editor substrate. One coarse record per
 /// <see cref="WorldDefinition"/> section, addressed by stable id, whole-row upsert (never a field poke): a genre world
-/// arrives as different DATA through these same messages, never a new message shape (the §2.6 audit). Mutations buffer
-/// on the server and drain at the tick boundary before intents (settled question 9); each composes a candidate
+/// arrives as different DATA through these same messages, never a new message shape. Mutations buffer
+/// on the server and drain at the tick boundary before intents; each composes a candidate
 /// definition, revalidates the whole document, and — on success — swaps the server's live definition, appends to the
 /// journal (the undo engine), and rebuilds the changed section's derived state.
 /// </summary>
@@ -57,10 +57,21 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The camera name to remove.</param>
     internal sealed record RemoveCamera(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 
-    /// <summary>Replaces the whole static scene (ground albedos + boulders).</summary>
+    /// <summary>Replaces the whole static scene (ground albedos + shape rows).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Scene">The scene.</param>
     internal sealed record SetScene(WorldPrincipal Principal, WorldScene Scene) : WorldMutation(Principal);
+
+    /// <summary>Upserts one static-scene shape row addressed by <see cref="WorldSceneRow.Id"/> — replaces the matching
+    /// row or appends a new one. The editor's per-act scene grain (a whole-scene resend per act stays wrong).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole scene row.</param>
+    internal sealed record UpsertSceneRow(WorldPrincipal Principal, WorldSceneRow Row) : WorldMutation(Principal);
+
+    /// <summary>Removes the scene row with id <paramref name="Id"/>. Rejected if no row declares that id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The scene-row id to remove.</param>
+    internal sealed record RemoveSceneRow(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
     /// <summary>Replaces the whole seat spawn-point list (order maps slots; takes effect at the next seat activation).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -110,4 +121,84 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The overlay id to remove.</param>
     internal sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a creation ASSET row addressed by <see cref="WorldCreation.Id"/>. The compose boundary
+    /// canonicalizes the row's document (doc + hash always come from the SAME <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/>)
+    /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
+    /// compute is never accepted.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Creation">The whole creation row.</param>
+    internal sealed record UpsertCreation(WorldPrincipal Principal, WorldCreation Creation) : WorldMutation(Principal);
+
+    /// <summary>Removes the creation row with id <paramref name="Id"/>. Rejected loudly when no row declares that id
+    /// OR when live placements still reference it (the conservative no-cascade ruling — remove the placements first).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The creation id to remove.</param>
+    internal sealed record RemoveCreation(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a placement INSTANCE row addressed by <see cref="WorldPlacement.Id"/>. Rejected loudly
+    /// when it names no creation row, violates the placement policy envelope, or would exceed the probed render
+    /// envelope (the capacity-honesty contract).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Placement">The whole placement row.</param>
+    internal sealed record UpsertPlacement(WorldPrincipal Principal, WorldPlacement Placement) : WorldMutation(Principal);
+
+    /// <summary>Removes the placement row with id <paramref name="Id"/>. Rejected if no row declares that id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The placement id to remove.</param>
+    internal sealed record RemovePlacement(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a placeable speaker addressed by <see cref="WorldSpeaker.Name"/> (the camera pair's audio
+    /// sibling — whole-row, <c>$type fixed|anchored|bed</c>).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Speaker">The whole speaker row.</param>
+    internal sealed record UpsertSpeaker(WorldPrincipal Principal, WorldSpeaker Speaker) : WorldMutation(Principal);
+
+    /// <summary>Removes the speaker named <paramref name="Name"/>. Rejected if no row declares that name.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The speaker name to remove.</param>
+    internal sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Upserts a tune ASSET row addressed by <see cref="WorldTune.Id"/>. The compose boundary
+    /// re-canonicalizes the embedded <c>puck.audio.v1</c> document and REJECTS a hash the pipeline did not itself
+    /// compute, the same rule as <see cref="UpsertCreation"/>.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Tune">The whole tune row.</param>
+    internal sealed record UpsertTune(WorldPrincipal Principal, WorldTune Tune) : WorldMutation(Principal);
+
+    /// <summary>Removes the tune row with id <paramref name="Id"/>. Rejected loudly while speakers still reference it
+    /// (the conservative no-cascade ruling — retarget or remove the speakers first).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The tune id to remove.</param>
+    internal sealed record RemoveTune(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a synth-patch ASSET row addressed by <see cref="WorldPatch.Id"/> — the <c>puck.synth.v1</c>
+    /// twin of <see cref="UpsertTune"/>, same canonicalize + hash-pin boundary.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Patch">The whole patch row.</param>
+    internal sealed record UpsertPatch(WorldPrincipal Principal, WorldPatch Patch) : WorldMutation(Principal);
+
+    /// <summary>Removes the patch row with id <paramref name="Id"/>. Rejected loudly while speakers or emission
+    /// facets still reference it (no cascade — the dependents are named).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The patch id to remove.</param>
+    internal sealed record RemovePatch(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
+    /// LIVE: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
+    /// <c>MasterGain</c> follows the lever-precedence rule: it flows live only until the <c>world.volume</c> session
+    /// lever engages — thereafter the lever owns "now" and the field owns the next boot (<c>world.save</c> folds the
+    /// lever back into it).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Audio">The audio defaults row.</param>
+    internal sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole editor/authoring policy row. A single whole-row mutation carries both
+    /// consumption classes the row holds (see <see cref="WorldAuthoringDefaults"/>'s remarks): the boot-consumed
+    /// headroom/repeat-cap fields apply at the NEXT boot (the frozen render-envelope probe cannot retroactively grow),
+    /// while the live-consumed candidate/layout/preview fields apply at the very next tick — the server's accept echo
+    /// narrates the split honestly rather than picking one class for the whole row.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Authoring">The whole authoring policy row.</param>
+    internal sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
 }

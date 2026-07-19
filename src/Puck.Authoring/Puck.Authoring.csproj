@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+    </ItemGroup>
+</Project>

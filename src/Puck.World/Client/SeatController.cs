@@ -48,7 +48,7 @@ internal sealed class SeatController {
     /// its own reference for speeds, assigned over the session wire.</summary>
     public WorldProfile? Profile { get; set; }
 
-    /// <summary>The seat's client-side intent-source copy (mirrors the server body's; both are written by
+    /// <summary>The seat's client-side intent-source copy (matches the server body's; both are written by
     /// <c>player.control</c>).</summary>
     public IntentSource Source => m_source;
 

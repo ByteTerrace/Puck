@@ -97,7 +97,7 @@ internal sealed class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_seatSpawns = definition.SpawnPoints;
-        // Boot the live peer-source default from the document (§2.1 session write-back home). A live retune/swap keeps the
+        // Boot the live peer-source default from the document (the session write-back home). A live retune/swap keeps the
         // running session value — this seeds only at construction, so a saved world's authored default is honored at boot.
         m_defaultPeerSource = definition.Population.DefaultPeerSource;
 
@@ -358,8 +358,8 @@ internal sealed class WorldPopulation {
 
     /// <summary>Advances every active seat body by one exact simulation tick: a wander-sourced seat gets this tick's
     /// producer image staged first (the same deterministic path as a peer), then the body integrates its submitted
-    /// intent per the merge rule. Runs after <see cref="AdvanceSimulated"/> in the server step, mirroring the
-    /// historical population-then-seats order.</summary>
+    /// intent per the merge rule. Runs after <see cref="AdvanceSimulated"/> in the server step, so the
+    /// population advances before seats.</summary>
     /// <param name="stepTicks">The exact engine ticks this step advances.</param>
     public void AdvanceSeats(ulong stepTicks) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
@@ -454,7 +454,7 @@ internal sealed class WorldPopulation {
     // Stage one entity's wander producer image for this tick: advance its weave/activity phases, read the pose out of
     // the body, shape the archetype's intent, and stage it below the submitted stream. Index-seeded and deterministic;
     // the same path serves peers and wander-sourced seats. Phases advance only while the source names the producer,
-    // matching the historical idle freeze.
+    // so an Idle-sourced entity's phases stay frozen.
     private void StageWander(Entry entry, WorldBody body, ulong stepTicks) {
         // Poses flow out of the sim: read this tick's pose from the body.
         var planarX = body.FixedPosition.X;

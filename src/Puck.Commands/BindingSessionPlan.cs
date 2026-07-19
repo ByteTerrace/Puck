@@ -33,7 +33,7 @@ public sealed record BindingSessionPlan(
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageId);
 
-        var page = (document.Pages.FirstOrDefault(predicate: page => string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal))
+        var page = (document.Chords.Select(selector: static row => row.Page).FirstOrDefault(predicate: page => string.Equals(a: page?.Id, b: pageId, comparisonType: StringComparison.Ordinal))
             ?? throw new ArgumentException(message: $"the document has no page \"{pageId}\"", paramName: nameof(pageId)));
 
         if (page.Entries.Count == 0) {

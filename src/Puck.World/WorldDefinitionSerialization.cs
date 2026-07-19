@@ -22,6 +22,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldScreen))]
 [JsonSerializable(typeof(WorldCamera))]
 [JsonSerializable(typeof(WorldScene))]
+[JsonSerializable(typeof(WorldSceneRow))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(MotionTuning))]
 [JsonSerializable(typeof(WanderTuning))]
@@ -32,8 +33,29 @@ namespace Puck.World;
 // emits its metadata for both the canonical writer and the verb accessor.
 [JsonSerializable(typeof(WorldBindingOverlay))]
 [JsonSerializable(typeof(BindingProfileDocument))]
+// The creation/placement rows (world.creation.set / world.placement.set verb accessors). The embedded
+// puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
+// member policies (see the converter's remarks).
+[JsonSerializable(typeof(WorldCreation))]
+[JsonSerializable(typeof(WorldPlacement))]
+// The editor/authoring policy row (world.authoring.set verb accessor).
+[JsonSerializable(typeof(WorldAuthoringDefaults))]
+// The audio sections: the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
+// world.tune.set / world.patch.set / world.audio.set verb accessors). The embedded puck.audio.v1 / puck.synth.v1
+// documents ride their families' OWN canonical serializer shape, matching CreationDocumentJsonConverter's.
+[JsonSerializable(typeof(WorldSpeaker))]
+// The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
+// None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
+[JsonSerializable(typeof(WorldSpeaker.Fixed), TypeInfoPropertyName = "WorldSpeakerFixed")]
+[JsonSerializable(typeof(WorldSpeaker.Anchored), TypeInfoPropertyName = "WorldSpeakerAnchored")]
+[JsonSerializable(typeof(WorldSpeakerSource.None), TypeInfoPropertyName = "WorldSpeakerSourceNone")]
+[JsonSerializable(typeof(WorldSpeakerSource.Machine), TypeInfoPropertyName = "WorldSpeakerSourceMachine")]
+[JsonSerializable(typeof(WorldTune))]
+[JsonSerializable(typeof(WorldPatch))]
+[JsonSerializable(typeof(WorldAudioDefaults))]
+[JsonSerializable(typeof(WorldAudioCue))]
 [JsonSourceGenerationOptions(
-    Converters = new[] { typeof(Vector3JsonConverter) },
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = true
@@ -80,6 +102,54 @@ internal sealed class Vector3JsonConverter : JsonConverter<Vector3> {
 
         return reader.GetSingle();
     }
+}
+
+/// <summary>
+/// Bridges an embedded <see cref="Puck.Authoring.CreationDocument"/> (a <see cref="WorldCreation.Document"/>) through
+/// the creation contract's OWN serializer shape (<see cref="Puck.Authoring.DocumentJsonOptions.Shared"/> — member
+/// order, string enums, and the LOAD-BEARING <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
+/// policies, so the inline-canonical embed carries exactly the member vocabulary
+/// <see cref="Puck.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
+/// writer, which is deterministic — the ouroboros gate covers the composition.
+/// </summary>
+internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Authoring.CreationDocument> {
+    /// <inheritdoc/>
+    public override Puck.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Authoring.CreationDocument>(reader: ref reader, options: Puck.Authoring.DocumentJsonOptions.Shared);
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Puck.Authoring.CreationDocument value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
+}
+
+/// <summary>
+/// Bridges an embedded <see cref="Puck.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
+/// audio contract's OWN serializer shape (<see cref="Puck.Authoring.DocumentJsonOptions.Shared"/>) instead of this
+/// context's policies, so the inline-canonical embed carries exactly the member vocabulary
+/// <see cref="Puck.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
+/// </summary>
+internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Authoring.AudioDocument> {
+    /// <inheritdoc/>
+    public override Puck.Authoring.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Authoring.AudioDocument>(reader: ref reader, options: Puck.Authoring.DocumentJsonOptions.Shared);
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Puck.Authoring.AudioDocument value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
+}
+
+/// <summary>
+/// Bridges an embedded <see cref="Puck.Authoring.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
+/// the synth contract's OWN serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
+/// </summary>
+internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Authoring.SynthPatchDocument> {
+    /// <inheritdoc/>
+    public override Puck.Authoring.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Authoring.SynthPatchDocument>(reader: ref reader, options: Puck.Authoring.DocumentJsonOptions.Shared);
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Puck.Authoring.SynthPatchDocument value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
 }
 
 /// <summary>

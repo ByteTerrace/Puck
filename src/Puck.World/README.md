@@ -6,7 +6,7 @@ exceeds an engine capability, the engine grows (flagged, minimal, Post-gated) �
 never the other way around. `Puck.Demo` remains the prototyping ground this
 project supersedes; nothing here depends on it.
 
-## The vision contract (owner-declared)
+## The vision contract
 
 | Requirement | Value | Status |
 |---|---|---|
@@ -166,11 +166,13 @@ The guiding rule for what describes a world is **"the definition of a world is
 pulled from the server."** So the hardcoded facts of *this* world are gathered
 into one aggregate, `WorldDefinition`, with a `Default` that is today's world
 verbatim — every value byte-equal to what shipped. It bundles the static
-`WorldScene` (ground + `boulder-N`-id'd boulder placements), the seat
+`WorldScene` (ground albedos + polymorphic `WorldSceneRow` placements —
+`boulder-N` spheres and `slab-N` material-carrying boxes, upserted/removed by
+stable id), the seat
 `SpawnPoints` (each a stable `seat-N` id + position), the `WanderTuning` (the
 stand-ins' drift/weave/inward-steer), the `MotionTuning` (move/turn speeds, the
-ground plane, and the whole jump feel kit — one number, `ActionScale`, still
-retunes the arc), and the `WorldRenderDefaults` (the boot render levers + the
+ground plane, and the whole jump feel kit — one number, `ActionScale`, retunes
+the whole feel), and the `WorldRenderDefaults` (the boot render levers + the
 `world.quality` preset table). Every consumer — the roster, the population, the
 frame source, the render settings, the `world.quality` verb — takes it by
 construction/DI and reads the fields; nothing bakes the constants inline anymore.
@@ -188,7 +190,7 @@ writes the active definition back canonically (stable member order, invariant
 numbers, LF, one trailing newline), so a load→save reproduces the file
 byte-for-byte — the ouroboros gate.
 
-This mirrors the **player-document stack** exactly (`WorldProfile` /
+This matches the **player-document stack** exactly (`WorldProfile` /
 `WorldPlayerDocument` / `BuildDefault`): a serialization-friendly record shape
 whose in-code `BuildDefault` is the hand-authored stand-in for what a document
 (or a server stream) will fill later — see **The player document + bindings**
@@ -204,7 +206,7 @@ are proven by `proof.cs worlddoc`.
 rots into a deserializer for its only input; a second and third keep it a
 *format*). `Assets/worlds/kart-remap.world.json` exercises the per-world binding
 overlay (see **The player document + bindings**). `Assets/worlds/expo.world.json`
-is the standing §2.6 genre-neutrality proof artifact — booting `--world
+is the standing genre-neutrality proof artifact — booting `--world
 expo.world.json` yields a **visibly different game with zero code**: a new `glider`
 kit row (6 kits, not 5), a `table` kit-assignment policy, retuned locomotion, a
 warmer four-pillar scene, staggered spawns, and three asset-free screens (5→3),
@@ -215,11 +217,11 @@ levers + `world.save`) reproducible with `proof.cs expo-author`, and proven
 (loud boot line + a distinguishing `world.status` fact + the write-back slice) by
 `proof.cs expodoc`. All three round-trip byte-for-byte under the `worlddoc`
 ouroboros. (One deliberate divergence noted in code: the
-scene's boulders are a minimal World-local `WorldBoulder` record, not a
-`Puck.Scene.SceneObject`, because that vocabulary speaks material *indices* and
-JSON vector arrays through an op chain — a contortion for six inline-colored
-spheres; the convergence onto the `puck.run.v1` scene document is named there
-for when the scene grows.)
+scene's rows are the minimal World-local kind-tagged `WorldSceneRow` records
+(`boulder` | `slab`), not `Puck.Scene.SceneObject`s, because that vocabulary
+speaks material *indices* and JSON vector arrays through an op chain — a
+contortion for a handful of inline-colored shapes; the convergence onto the
+`puck.run.v1` scene document is named there for when the scene grows.)
 
 ## Moldable state (the mutation vocabulary)
 
@@ -242,8 +244,8 @@ scripted `mutate-then-read` pair needs no polling.
 | `world.kit.assign hash \| table <kit>…` | sets the kit→entity `WorldKitAssignment` policy |
 | `world.kit.tune <name> <field> <value>` | console sugar: read-modify-write one `MotionTuning` field into a whole-row `UpsertKit` |
 | `world.screen.set <screen-json>` / `world.screen.remove <index>` | upsert/remove a `WorldScreen` row (keyed by index) |
-| `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); document-only, applies at next boot |
-| `world.scene.set <scene-json>` | replaces the static scene (albedos + boulders) |
+| `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); applies LIVE — a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension/kind change recreates it, a removal releases it |
+| `world.scene.set <scene-json>` | replaces the whole static scene (albedos + rows); the per-row editor grain is `UpsertSceneRow`/`RemoveSceneRow` (the `editor.*` verbs) |
 | `world.spawns.set <spawns-json-array>` | replaces the seat spawn-point list |
 | `world.motion.set <json>` | replaces the profileless `MotionTuning` |
 | `world.wander.set <json>` | replaces `WanderTuning` |
@@ -314,22 +316,28 @@ Every `IServerLink` write submission carries its acting **`WorldPrincipal`**
 verbs act as), an **addon** (a WASM guest, named), or a **peer** (a network/
 population body). One server-side table, **`WorldGrants`**
 (`Server/WorldGrants.cs`), holds every grant and is the ONE place a write is
-authorized — the named primitive the three former ad-hoc ownership forms
-(`WorldEngagement`'s latch, the demo's machine-input ownership,
-`AddonHost.SlotOwner`) collapse into.
+authorized — the single primitive that engagement (`WorldEngagement`'s latch),
+machine-input ownership, and addon slot ownership (`AddonHost.SlotOwner`) all
+reduce to.
 
 A **grant** (`WorldGrant`) is `(principal, capability, subject, exclusive)`.
 **Capabilities** (`WorldCapability`): `Drive` (submit a body's intents/
 commands), `Control` (engage a screen/machine route), `Mutate` (apply a
-`WorldMutation` targeting a `WorldSection`), `Edit` (a player-profile section
-— declared now, wired by the Phase 3 player-document arc). **Subjects**
-(`GrantSubject`): the `all` wildcard, `body:<n>`, `screen:<n>`, or
+`WorldMutation` targeting a `WorldSection`), `Edit` (a player-profile
+section, checked against the concrete `profile:<id>` subject). **Subjects**
+(`GrantSubject`): the `all` wildcard, `body:<n>`, `screen:<n>`,
 `section:<name>` (one of the eleven `WorldSection` values: kits, screens,
 cameras, scene, spawns, motion, wander, population, render, addons,
-bindings). **Exclusive** generalizes the engagement latch: a second exclusive
+bindings), or `profile:<id>` (a player profile's stable string id — the
+subject matches `WorldPrincipal`'s index+nullable-string shape). **Exclusive**
+generalizes the engagement latch: a second exclusive
 acquisition of the same `(capability, subject)` by a DIFFERENT live principal
 is rejected loudly; re-granting a subject a principal already holds is
-idempotent. Storage is a per-principal set of four subject sets — an
+idempotent; the SEEDED permissive defaults (the ordinary `all` wildcards AND
+the seeded per-section `Mutate` rows) never block an exclusive acquisition —
+the backdrop must never block a reservation, and enforcement makes the
+exclusive holder the sole effective owner anyway. Storage is a per-principal
+set of four subject sets — an
 `Allows` check is one dictionary lookup plus a `HashSet` membership test,
 allocation-free and O(1).
 
@@ -351,6 +359,7 @@ they hold no `Drive`); addons get NOTHING until granted.
 | Whole-document swap (`SubmitDefinition`/`world.load`) | `Mutate` | every `WorldSection` |
 | Journal undo (`world.undo`) | `Mutate` | every `WorldSection` |
 | Engage (`player.engage`, `WorldEngagement.Engage`) | `Control` | `screen:<index>` |
+| Profile-section edit (`SetPlayerSection` — `profile.section`, the `profile.save` fold) | `Edit` | `profile:<id>` (the seeded `Edit/all` wildcard passes for local play) |
 
 A denial is loud and DATA-shaped — never a new message kind — and the write
 drops: `[world.grant denied: <principal> cannot drive body:<n> —
@@ -367,7 +376,7 @@ command, never buffered to the tick boundary like a mutation:
 
 | Verb | Grammar | Effect |
 |---|---|---|
-| `world.grant <principal> <capability> <subject> [exclusive]` | principal = `seat1..seat4\|console\|addon:<name>\|peer:<n>`; capability = `drive\|control\|mutate\|edit`; subject = `body:<n>\|screen:<n>\|section:<name>\|all` | adds the grant; an exclusive acquisition a live holder owns is rejected loudly |
+| `world.grant <principal> <capability> <subject> [exclusive]` | principal = `seat1..seat4\|console\|addon:<name>\|peer:<n>`; capability = `drive\|control\|mutate\|edit`; subject = `body:<n>\|screen:<n>\|section:<name>\|profile:<id>\|all` | adds the grant; an exclusive acquisition a live holder owns is rejected loudly (the seeded permissive defaults never block one) |
 | `world.revoke <principal> <capability> <subject>` | same tokens, trailing `exclusive` is not accepted | removes the grant (a no-op reports "held no ...") |
 | `world.grants [principal]` | — | echoes the whole table, or one principal's rows (Immediate; the barrier reads the settled table after a pending grant) |
 
@@ -384,9 +393,9 @@ the driver discovers its body from the grant table
 (`WorldGrants.FirstDriveBody`) rather than a slot on the row. Once granted,
 the driver flips the body's `IntentSource` to `Live` (so the wander producer
 yields to the submitted stream) and, every tick, writes the ABI snapshot,
-ticks the guest, translates its virtual-pad commands into a `PlayerIntent`
-(the demo's `AddonCommand → PlayerIntent` shape, reimplemented for World's
-channel set), and submits it over the SAME `IServerLink` a human seat uses,
+ticks the guest, translates its decoded virtual-pad commands into a
+`PlayerIntent` over World's channel set, and submits it over the SAME
+`IServerLink` a human seat uses,
 principal `addon:<name>`. The SERVER decides whether it applies — capability
 checks live there, never on the client, so *where* an addon runs (beside the
 client or beside the server) is a hosting choice, not a contract change.
@@ -404,8 +413,8 @@ denies its next intent and freezes it (two more samples, identical) →
 loudly with `world.status`'s `dirty` counter unchanged, and a re-grant makes
 the identical command apply.
 
-**`WorldEngagement` is a view, not a table.** The former engagement latch is
-now read and written entirely through `WorldGrants`' `Control` capability
+**`WorldEngagement` is a view, not a table.** The engagement latch is
+read and written entirely through `WorldGrants`' `Control` capability
 (`SetControlRoute`/`ClearControlRoute`/`ControlRoute`/`CollectRouteHolders`)
 — one table, not two. `proof.cs screens` is the engagement regression
 coverage; `proof.cs grants` does not duplicate it.
@@ -416,77 +425,106 @@ Player-scoped state lives in its own document family, `puck.world.player.v1`
 (`WorldPlayerDocument`) — never a `puck.run.v1`/`WorldDefinition` section: a
 profile travels with a PERSON across worlds, a run/world document describes a
 WORLD. It is a **catalog**, exactly like the profile stack it absorbs: a
-monotonic `Revision` (bumped on every save — the cloud arc's future ordering
+monotonic `Revision` (bumped on every save — a future ordering
 key) plus `Profiles[]`, each a stable `Id` and four sections — `identity`
 (display name + `#RRGGBB` color), `motion` (speeds + look-invert),
 `bindings` (a `BindingProfileDocument?`, `null` = inherit the engine default),
 and an open `preferences` bag — plus a document-level `Extensions` bag, so
 unknown sections and unknown profile fields survive a round-trip untouched
-(the data-side plugin posture, the `PuckRunDocument` precedent).
+(the data-side plugin posture, matching `PuckRunDocument`'s convention).
 `WorldPlayerDocumentValidator` is the one thick gate (schema, non-negative
 revision, unique ids/names, parseable colors, finite positive speeds, and a
 non-null `bindings` section additionally gated through the existing
 `BindingProfile.Compile`); a malformed stored document falls back LOUDLY to
 the built-in default rather than taking the game down.
 
-**It absorbs and retires `puck.world.profiles.v1`.** `WorldProfileStore`
+**It discontinues `puck.world.profiles.v1`.** `WorldProfileStore`
 (`Server/WorldProfileStore.cs`) persists the catalog as a PER-PROFILE split
 layout — `world/player.json` (the catalog) plus one `world/profiles/<id>.json`
 blob per entry, with the machine-local boot-seat sidecar at `world/local.json`
 — the same address model the future cloud container uses (see **Storage**
 below for why the split and the ordering/version-token fields exist). Loading
-migrates the first retired layout it finds, ONCE: a Phase 3 single-file
+migrates the first legacy layout it finds, ONCE: a single-file
 `profiles/player.json` (the whole document in one blob) splits straight into
-the new layout, or a pre-Phase-3 `profiles/profiles.json` (name → id +
+the new layout, or the legacy `profiles/profiles.json` (name → id +
 identity, speeds → `motion`, bindings start `null`) migrates through the same
 validate-then-split path. Either way: validate → write the split layout →
-**delete the old file** — no read-side tolerance kept, one loud
+**delete its superseded file** — no read-side tolerance kept, one loud
 `[profiles] migrated the Phase 3 single-file layout (...) ...]` or
 `[profiles] migrated N profile(s) from the retired puck.world.profiles.v1 to
 <path>; the old profiles.json was deleted.]` line. A migration that fails to
-validate leaves the old file in place (for inspection) and seeds the built-in
+validate leaves its file in place (for inspection) and seeds the built-in
 default instead. Machine-local boot seating and the sync cursor (which
 profile player 1 wakes on, `LastSyncedRevision`) live ONLY in `world/local.json`
 — they must never roam to the cloud.
 
-**Bindings: layered resolution, per player AND per world.** `WorldSeatBindings`
-(one `PagedInputBindings` per local seat, replacing the former single shared
-`inputBindingTable`/`SharedInputBindings`) resolves every seat's input from a
-document PRE-MERGE, compiled once per seat on any change (never per frame):
+**Bindings: layered authoring, grouped resolution.** The binding document
+(`puck.bindings.v8`) is a list of CHORD ROWS — `(group, ordered chord) →
+meaning`, where the meaning is a discriminated union: a **page** (an entry
+table, `BindingPageDefinition`) or a **command** (a direct chord-to-command
+binding with full entry semantics — HoldRelease shape, constant value,
+label/icon; `BindingCommandDefinition`). Page switching is not privileged: it
+is one meaning a chord can carry. Two questions, two mechanisms:
 
-```
-effective document = engine default BindingProfileDocument   (WorldDefaultBindings — the player.* vocabulary)
-                   ⊕ world overlay(s)                        (puck.world.def.v1 bindingOverlays — a contextual page, e.g. a kart world's remap)
-                   ⊕ player profile bindings                 (the seat's selected profile, from puck.world.player.v1)
-                   ⊕ live rebinds                             (session layer; folded into the profile on profile.save)
-```
+- **Authoring is layers.** `WorldSeatBindings` (one `PagedInputBindings` per
+  local seat) resolves every seat's input from a document PRE-MERGE, compiled
+  once per seat on any change (never per frame):
 
-`WorldBindingComposer.Compose` merges layers with an explicit key —
-**`(page id + ordered chord, source)`** — where a later layer's entries for a
-source REPLACE the earlier layer's entries for that source within a matching
-page; new sources append; whole pages unknown to earlier layers append. This
-is the level the compiled `LayeredInputBindings` primitive cannot express (it
-composes wholesale per `(slot, source)`); document pre-merge can override ONE
-entry inside a shared page, which a per-world overlay needs. The merged
-document then goes through the existing `BindingProfile.Compile` once, and the
-compiled result hot-swaps in via `PagedInputBindings.Reload`. The console
-dispatch path (`BindingCommandSource`, dormant in World since the router owns
-all physical input) derives from the SAME composed base layers
-(`WorldSeatBindings.ConsoleBaseTable`) — no second authoring grammar.
+  ```
+  effective document = engine default BindingProfileDocument   (WorldDefaultBindings — the play group AND the editor group)
+                     ⊕ world overlay(s)                        (puck.world.def.v1 bindingOverlays — a contextual row, e.g. a kart world's remap)
+                     ⊕ player profile bindings                 (the seat's selected profile, from puck.world.player.v1)
+                     ⊕ live rebinds                            (session layer; folded into the profile on profile.save)
+  ```
+
+- **Runtime mode is the ACTIVE GROUP.** Every group is always compiled in; a
+  seat holds one active group (`play` by default) and
+  `WorldSeatBindings.SetActiveGroup` flips it as a POINTER-LEVEL switch on the
+  compiled profile — no recompose, no document churn, and the seat's press
+  latches, held chord, and armed command chords survive the flip. A mode is
+  one seat's state, never a world `bindingOverlays` mutation (which would
+  re-bind every seat).
+
+Resolution is group-scoped and prefix-deep: within the active group, the page
+row with the LONGEST chord that is a press-order prefix of the held modifiers
+answers the seat's sources (the empty-chord RESTING page is the fallback), and
+a command row fires its press edge on the very signal that completes its chord
+— release when any member releases — synthesized as chord edges the
+`InputRouter` folds with their own phase/value (`IChordEdgeSource`), so
+chord-fired commands are snapshot-visible and held-tracked like any bound
+press. Exactly one meaning per `(group, chord)` and exactly one resting page
+per group, rejected loudly at `BindingProfile.Compile` (engine-gated by
+Puck.Post's `binding-page` stage, group flips and the cross-flip latch
+included).
+
+`WorldBindingComposer.Compose` merges layers with explicit keys — chord rows
+on **`(group, ordered chord)`** (a later layer's row for the same key
+overrides: wholesale when the meaning kind or page id differs, entry-by-source
+when both are the SAME page — the single-lane remap a per-world overlay
+needs); modifiers union by id. This is the level the compiled
+`LayeredInputBindings` primitive cannot express (it composes wholesale per
+`(slot, source)`). The merged document then goes through
+`BindingProfile.Compile` once, and the compiled result hot-swaps in via
+`PagedInputBindings.Reload` (the seat's requested group carries over). The
+console dispatch path (`BindingCommandSource`, dormant in World since the
+router owns all physical input) derives from the SAME composed default-group
+resting page (`WorldSeatBindings.ConsoleBaseTable`) — no second authoring
+grammar.
 
 **Verbs** (`WorldBindingCommandModule`):
 
 | Verb | Effect |
 |---|---|
-| `player.bind <seat> <source> <command>` | live-remaps one input source into the seat's SESSION layer (unsaved until `profile.save`); recomposes and hot-reloads that seat at once (Simulation-routed) |
-| `player.bindings [seat]` | echoes the seat's composed ACTIVE mapping — the no-modifier base page's `source→command` entries after the full merge (Immediate) |
+| `player.bind <seat> <source> <command>` | live-remaps one binding into the seat's SESSION layer (unsaved until `profile.save`); `<source>` is an input source id for a resting-page entry, or a chord-row declaration: `chord:lt+rt` (the ordered chord, play group) / `chord:<group>:m1+m2` (an explicit group). Recomposes and hot-reloads that seat at once (Simulation-routed) |
+| `player.bindings [seat]` | echoes the seat's composed ACTIVE mapping — the play resting page's `source→command` entries, then every chord row with its meaning (`chord play:[lt+rt]→editor.enter`, `chord editor:[lt]→page editor-camera`) (Immediate) |
+| `player.signal <source> <press\|release\|value>` | synthesizes one raw input signal into the router on seat 1's device-neutral lane — the scripted twin of a physical pad, so chords are drivable over the pipe (a number is an analog Active sample; a trigger sweep `0.9`/`0` latches/releases a modifier through hysteresis; the signal folds into the NEXT tick's snapshot) (Simulation-routed) |
 | `profile.save [seat]` | folds the seat's session rebinds into its selected profile's durable `bindings` section and persists through `SetPlayerSection` (gated on the `Edit` capability), then empties the session layer (Simulation-routed) |
 | `profile.doc` | echoes the whole server-owned player document as JSON (`WorldQuery.PlayerDocument`) — the read-back an editor/agent pulls before editing a section (Immediate) |
 | `world.bindings.set <overlay-json>` / `world.bindings.remove <id>` | upsert/remove a per-world `WorldBindingOverlay` (§ **Moldable state**'s mutation vocabulary); recomposes every seat on apply |
 
 Live rebinding changes the input→command mapping mid-run — deliberately
-breaking replay-stable command streams (World is not determinism-gated by
-owner ruling, so this is accepted, not accidental). `player.bind`/
+breaking replay-stable command streams (World is not determinism-gated,
+so this is accepted, not accidental). `player.bind`/
 `profile.save` route `CommandRouting.Simulation`, so the stdin drain barrier
 serializes a following `player.bindings`/`profile.doc` read-after-write, the
 same pattern **Moldable state**'s mutate-then-`world.status` pairing uses.
@@ -504,21 +542,162 @@ asserts the engine-default composed mapping, live-rebinds a source
 (`puck.world.player.v1` persistence) and a plain boot does not itself bump the
 revision; session C boots `--world kart-remap.world.json`, asserts the overlay
 merges from tick 0, then `world.bindings.remove` live-recomposes every seat
-back to the engine default; sessions D and E each synthesize one retired
-layout — a pre-Phase-3 `profiles/profiles.json` and a Phase 3 single-file
+back to the engine default; sessions D and E each synthesize one legacy
+layout — the `profiles/profiles.json` catalog and a single-file
 `profiles/player.json` — and assert its one-time migration (the matching loud
 boot line, the split `world/player.json` + `world/profiles/*.json` +
 `world/local.json` written, the old file deleted, `profile.list` showing the
 migrated names). There is no CLI override for the store path, so the proof
-backs up and restores the owner's REAL `world/` + `profiles/` subtrees whole
+backs up and restores the REAL `world/` + `profiles/` subtrees whole
 (byte-for-byte) around every session — the real catalog is never destroyed.
+
+**Editor mode** is the editor
+GROUP's tenancy: a per-seat client mode entered with the ordered **LT-then-RT
+trigger chord** (a command-meaning chord row in the play group — pure binding
+data, the reference chord-command), **Gamepad Back / Keyboard Tab** (the
+assist twins), or `editor.enter [seat]`; exited with East / Back / Tab or
+`editor.exit [seat]`. Entering flips the seat's active group to `editor`
+(`WorldSeatBindings.SetActiveGroup` — a pointer switch, no recompose): the
+**editor resting page** (sticks fly, shoulders rise/sink, South toggles
+fly⇄orbit, D-pad steps speed, West echoes status) plus the **LT camera page**
+(explicit fly/orbit + speed; North picks the row under the crosshair so orbit
+has a pivot), the **RT select page**, and the **LT+RT place page** — the
+binding bar renders whatever page the group's chords select, with the play
+group's `LT+RT Editor` chord hint drawn above the modifier pips. The seat's
+intent diverts through the existing `player.control idle` contract on both
+halves (live devices mask; tapes and `player.press` still drive — script
+outranks idle), its camera swaps from the chase rig to the session's
+free-fly/orbit rig (seeded from the chase framing, restored by re-anchoring —
+neither edge pops), and when exactly ONE seat edits among 2+ players the
+layout gives it the full-height left 70% workbench with the playing seats
+stacked in a live right rail. `WorldEditorSession` owns all of it client-side;
+nothing crosses the wire beyond the existing `SetControl`. The console twins
+(`editor.status` — which echoes `group=` + `page=`, the flip's assertable
+truth — `editor.fly`/`editor.orbit`, `editor.cam.speed <v>`,
+`editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>]`) script every chord act.
+Proven on both backends by `proof.cs editor-mode` (group round trip, the
+chord-command fired from data over `player.signal`, camera in pixels,
+diversion honesty, the layout seam, the loud wire-level rule rejections).
+
+**Selection and manipulation** builds the targeting and drag layers over
+the mode. A selection is `(section, id-or-index)` — pure client state in
+`WorldEditorTargeting`, never protocol — over scene rows, screens, spawns, and
+cameras; it self-heals against every delivered definition, tints the selected
+scene row amber in the render (a material swap at rebuild cadence), and
+retargets the orbit pivot. Targeting is proximity (`editor.next`/`prev` cycle
+candidates nearest-first around the camera focus) or the look ray:
+`WorldEditorPicker` builds a fixed-point picking program from the DOCUMENT
+(one material per row, proxy spheres for spawns/fixed cameras) behind the
+existing `SdfFieldEvaluator`, rebuilt only on a definition delivery —
+`editor.pick` names the row under the crosshair in microseconds. The static
+scene itself generalized for this: `WorldScene.Rows` is a `$type`-discriminated
+row vocabulary (`boulder` | `slab` — a slab carries its material as data),
+addressed per-row by the `UpsertSceneRow`/`RemoveSceneRow` mutations, with the
+render-envelope probe reserving documented authoring headroom (32 rows + 4
+screen slots) so live placement works until the ceiling rejects loudly.
+
+Continuous edits ride `WorldEditorDrag`'s pending-row preview channel:
+`editor.grab` copies the selected scene row or screen client-side, the sticks
+(re-routed from flight while the drag lives) or `editor.drag <dx dy dz>` move
+it through `Puck.Authoring.GridSnap` (`editor.snap [on|off|<pitch>]`), the
+frame source composes the pending row over the delivered definition so the
+EXISTING rebuild path renders the preview, and release (`editor.grab` again /
+`editor.release`) submits exactly ONE whole-row mutation — a whole drag is one
+journal entry, one undo step; `editor.cancel` never existed. Ghost spawns
+(`editor.spawn.boulder`/`.slab`, D-pad on the place page) preview a NEW row the
+same way and enter the document only on commit. The discrete twins
+(`editor.select <section> <key>`, `editor.move`/`editor.nudge <x y z>`,
+`editor.place boulder|slab […]`, `editor.delete`) submit one mutation per act
+with the ACTING SEAT's principal, so grant denials land on the seat that asked
+and surface as toasts. The editor HUD (selection readout, candidate/snap
+context, drag line) is a new writer on the unified overlay — per-seat, scoped
+to each seat's viewport. Proven on both backends by `proof.cs editor-edit`
+(place = one journal entry, drag coalescing at the wire, undo restores the
+position, the look-ray pick, the highlight in pixels, capacity honesty).
+
+**Creations and placements** make sculpted content world DATA. Two
+sections in the whole-row pattern: `creations` — ASSET rows embedding a full
+`puck.creation.v1` document INLINE-CANONICAL with its SHA-256 pinned beside it
+(doc + hash always come from the same
+`CreationCanonicalizer.Canonicalize` result; the compose boundary re-derives
+and REJECTS any hash the pipeline did not itself compute, and the validator
+re-verifies the pin so a tampered world file falls back loudly at boot) — and
+`placements` — INSTANCE rows (`id`, `creationId`, position/yaw/scale, repeat +
+mirror facets as data, a reserved nullable `role` for the driven-body rung).
+Four mutations (`UpsertCreation`/`RemoveCreation`/`UpsertPlacement`/
+`RemovePlacement`); removing a creation with live placements rejects loudly
+(no cascade). Static stamps bake the full placement transform into every
+shape's own segment (repeat rows auto-split so instance bounds stay tight);
+placements of a FRAMED creation are ANIMATED — they replay their timeline
+hold-style at the fixed 8-tick cadence on the render clock through a
+reserved dynamic-transform pool (`WorldPlacementAnimator`, reconciled by
+stable id at each delivery: pose edits write in place, content changes
+release+recreate, removals release symmetrically). Every placement policy
+value (stamp budget, headroom, repeat split, animated pool, cadence) lives in
+ONE place — `WorldPlacementPolicy`, a candidate for future data-fication —
+and the probe reserves boot+headroom worst-case stamps plus the whole replay pool, so
+over-budget placements reject with the envelope's word-exact ceiling. The
+place page grows place-by-name: D-pad Left/Right cycle the armed creation,
+North ghosts a placement of it (commit = `editor.grab`, one mutation); the
+typed twins are `editor.import <path> [id]` (the strict canonicalizer is the
+only door in), `editor.creations`, `editor.place <creationId> [yawDeg
+[scale]]`, and the JSON row verbs `world.creation.set`/`.remove` +
+`world.placement.set`/`.remove`. Placements select, pick (reach-sized
+proxies), drag, move, nudge, and delete like every other row, shimmer on
+delivery like scene rows, and `world.save` re-canonicalizes every creation row
+so the persisted pin can never diverge from its embedded bytes. Proven on
+both backends by `proof.cs placements` (import/stamp in pixels, the corrupt
+hash pin, drag coalescing, undo, the no-cascade reject, the proof-authored
+animated probe's pixel motion, the capacity flood, and the save→reload→save
+byte ouroboros with creations embedded — the proof authors its OWN creations
+through the canonical pipeline; Demo content never ships as World content). Text runs COUNT against the per-stamp
+shape budget but do not render yet (World binds no world-space glyph
+atlas — the combined MTSDF decode is far too memory-heavy for a runtime bind; binding one later is emission-only).
+
+**The sculpt workbench** is the creation SUB-EDITOR: a per-seat
+`Puck.Authoring.SculptModel` (primitives, blends, the 16-slot palette,
+hold-style timeline frames, IK chains — the analytic two-bone/spine
+`ChainSolver`, deliberately float host-side math) edited inside a client-local
+bench (`WorldWorkbench`). The live preview composes a synthetic creation +
+placement over the delivered rows and renders through the SAME
+`WorldPlacementStamper`/`CreationGeometry` path a committed stamp uses — what
+you sculpt IS what stamps, byte-for-byte (the proof pins it in pixels). The
+bench is a page GROUP (`sculpt` — a mode within editor mode): the resting
+build page (South adds, North re-primitives, West/East walk the LOCAL undo
+ring, D-pad cycles the target through shapes AND chain goals), LT bench
+(Commit/Easel/zoom), RT style (blend/mirror/color/smooth/scale), LT+RT frames
+(record/play/step/delete), RT+LT rig (chain define/kind/cycle/delete); the
+move stick drives the sculpt target while the look stick orbits the bench.
+`editor.sculpt.new <rowId> [x y z]` opens blank, `editor.sculpt.edit <rowId>`
+loads an existing row (carried cameras/behavior/text-runs/extensions ride
+verbatim); `editor.sculpt.commit` canonicalizes and submits ONE
+`UpsertCreation` (doc + hash from the same `CanonicalCreation`) — live
+placements of the row refresh on delivery, animated ones through the
+animator's hash-diff release+recreate. UNDO HAS TWO HONEST DOMAINS, narrated
+distinctly: `editor.sculpt.undo`/`redo` walk the bounded local ring
+(mid-sculpt, gesture-coalesced, never touches the journal);
+`world.undo` reverts committed acts (the journal). `editor.sculpt.easel`
+authors the diegetic preview easel — a fixed bench camera plus an existing
+screen row re-pointed at its view, two ordinary mutations through the live
+camera/screen reconcile (the offscreen view renders the composed program,
+preview included — the first composed diegetic surface). Every chord act has
+an `editor.sculpt.*` typed twin (~40 verbs across four modules); the editor
+HUD narrates the bench target, the `shapes n/48` stamp budget, the timeline
+cursor, and the ring/uncommitted counts. Capacity: bench entry pre-verifies
+the composed candidate against the probed envelope (ghost spawns fold the
+bench in, so all client-local previews fit TOGETHER), and the model itself
+enforces the 48-shape stamp cap. Proven on both backends by `proof.cs sculpt`
+(sculpt-from-nothing over stdin, the stamp=preview pixel identity, the
+two-domain undo split, a sculpted 2-frame timeline animating its stamp,
+live refresh on re-commit — recreate on recolor, release when the frames
+delete — the carrier round-trip of cameras/behavior/extensions members, the
+easel's live screen bind, and the save→reload→save byte ouroboros).
 
 ## Storage (cloud-ready, local-proven)
 
-Phase 4 lands the **readiness** blueprint the eventual cloud arc executes
-(§2.5 of the moldable-state plan), proven so far against the local backend
-only — no live Azure wiring, by owner ruling; `storage.status` reports that
-truth rather than pretending otherwise.
+This is the readiness layer the eventual cloud backend will build on, proven
+against the local backend only — no live Azure wiring yet; `storage.status`
+reports that truth rather than pretending otherwise.
 
 **Three scopes, one persistence story.** World-scope state (`puck.world.def.v1`)
 lives in a data file, durable through `world.save`. Session-scope state (seat
@@ -526,8 +705,8 @@ lives in a data file, durable through `world.save`. Session-scope state (seat
 durable by itself — it survives only by folding into a `world.save` or a
 `profile.save`. Player-scope state (`puck.world.player.v1`) is what this
 section covers: server-owned at runtime, user-owned durably, routed through a
-local-always / cloud-per-user-when-identity-present store — this arc builds
-and proves the local half of that routing.
+local-always / cloud-per-user-when-identity-present store — the local half of
+that routing is built and proven today.
 
 **Per-profile blob layout.** `WorldProfileStore` (`Server/WorldProfileStore.cs`)
 splits the catalog under the user's container (today a fixed local container,
@@ -540,7 +719,7 @@ splits the catalog under the user's container (today a fixed local container,
 | `world/local.json` | the machine-local sidecar: the boot-seat profile id + `LastSyncedRevision` — never roams |
 
 This is the SAME address model the future cloud container uses, so two
-devices editing DIFFERENT profiles are independent from day one; editing the
+devices editing DIFFERENT profiles are always independent; editing the
 SAME profile from two devices stays whole-profile last-writer-wins — detected
 (not merged) via the two mechanisms below.
 
@@ -556,7 +735,7 @@ plus the write result's `PreconditionFailed` flag). ETags are opaque: they
 can guard, they cannot order — the two mechanisms are never conflated. On the
 local backend the guard is best-effort within one process (an inherent
 read/write TOCTOU gap); true optimistic concurrency is an Azure-backend
-property the cloud arc turns on without reshaping this seam.
+property a cloud-backed store turns on without reshaping this seam.
 
 **Derived dirty, never a volatile flag.** `WorldProfiles.Dirty` is
 `Revision > LastSyncedRevision` — crash-safe by construction, since both
@@ -565,14 +744,14 @@ sidecar). With no cloud wired, `LastSyncedRevision` stays 0 forever, so
 `Dirty` is always true — the honest truth that the local copy has never
 synced.
 
-**Identity → container, this arc's two implementations only.**
+**Identity → container, exactly two implementations today.**
 `IPlayerStorageIdentityResolver` (`WorldStorageIdentity.cs`) resolves the
-acting principal to a per-user container id, or DECLINES. This arc ships
-exactly two: `ExplicitOverridePlayerStorageIdentityResolver` (a `--user-id`/
+acting principal to a per-user container id, or DECLINES. Exactly two
+exist: `ExplicitOverridePlayerStorageIdentityResolver` (a `--user-id`/
 data-file override — an Entra `oid`-shaped Guid; a non-Guid value declines
 loudly rather than inventing a container) and
 `DecliningPlayerStorageIdentityResolver` (the local-only default). NO token
-parsing, NO claims flow this arc — those are the cloud arc's, obtained from a
+parsing, NO claims flow yet — those require a
 real ID token, never a parsed storage access token (`DefaultAzureCredential`
 yields an opaque JWT; decoding it is unsupported-brittle, and under
 CI/managed-identity its `oid` would be the APP's, silently collapsing
@@ -580,12 +759,12 @@ per-user into per-app).
 
 **The reserved endpoint field + CLI reflections.** The world doc's `storage`
 host-section (`WorldStorageDefaults`: `endpoint`, `userId`) is RESERVED —
-nothing constructs an Azure target from it this arc. `--storage-uri` and
+nothing constructs an Azure target from it yet. `--storage-uri` and
 `--user-id` overlay the document defaults at boot
 (`WorldStorageSettings.Resolve`); `storage.status` echoes both.
 
 **`storage.status`** (`WorldStorageCommandModule`, Immediate — a pure local
-read, no protocol round-trip) is the one verb this arc's readiness surfaces
+read, no protocol round-trip) is the one verb this readiness surface acts
 through:
 
 ```
@@ -597,14 +776,14 @@ through:
 `identity` is one of `explicit override userId=<guid>`, `declined — no user
 identity (per-user sync off, local-only)`, or `declined — explicit override
 userId '<value>' is not a container Guid; declining (local-only)`. It always
-reports the TRUTH this arc: with no cloud wired, identity is absent or
+reports the honest truth: with no cloud wired, identity is absent or
 override-only, the endpoint is reserved, and the local copy is authoritative
 and (since `LastSyncedRevision` never advances) permanently unsynced.
 
-**Deferred to the cloud arc (nothing landed here needs reshaping):**
+**Not yet built (nothing here needs reshaping when it is):**
 constructing an `AzureBlobObjectStorageTarget`, the real claims-based identity
 implementation, the cloud-async sync policy + retry loop, `storage.sync`'s
-live round-trip, Azurite proofs, the owner-assisted smoke against
+live round-trip, Azurite proofs, a live smoke test against
 `blob.byteterrace.com`, and the optional `Puck.Storage` Post-stage question.
 
 Proven end to end by `proof.cs storage`: a fresh boot against the cleared REAL
@@ -616,7 +795,7 @@ with the on-disk split layout (`world/player.json` + `world/profiles/*.json`
 + `world/local.json`) present; a relaunch asserts the same persisted revision
 survives; a `--user-id <valid oid Guid>` boot asserts the explicit-override
 echo, and a `--user-id not-a-guid` boot asserts the declining echo. Like
-`proof.cs bindings`, it backs up and restores the owner's REAL `world/` +
+`proof.cs bindings`, it backs up and restores the REAL `world/` +
 `profiles/` subtrees whole around every session — the real catalog is never
 destroyed.
 
@@ -637,13 +816,13 @@ validated through the document's own thick validator with a LOUD baked-default
 fallback (`RecordingDocumentLoader`, mirroring the world-definition loader). The
 document carries the codec ladder (`["av1","h264"]` — the free-standard AV1
 preferred, H.264 the universal fallback), the audio topology (mic + loopback,
-mixed to one stereo track by default because a service such as YouTube reads one
-track; `"track":"isolated"` splits a row onto its own archival track), and
+mixed to one stereo track by default because most single-track upload workflows
+read one track; `"track":"isolated"` splits a row onto its own archival track), and
 **capture-only overlays** — text, rectangle, and running-timecode rows composited
 into the recording AFTER the render tap, so they exist in the file and **never in
 the game window** (the baked default carries a `PUCK WORLD - CAPTURE ONLY` label
 proving exactly that). The container is a hand-rolled Matroska/WebM muxer: `.webm`
-(doc type `webm`) when AV1 + Opus land, `.mkv` (`matroska`) for the H.264
+(doc type `webm`) when AV1 + Opus negotiate, `.mkv` (`matroska`) for the H.264
 fallback; Opus audio via the managed Concentus codec at 48 kHz; a `Colour` element
 signals BT.709 limited range so a player renders the stream correctly.
 
@@ -661,18 +840,18 @@ The control plane is three Immediate verbs (no simulation effect):
 
 | Verb | Effect |
 |---|---|
-| `capture.start [output-path]` | Resolves the encoder ladder + audio sources against THIS machine (opening only what it can encode and capture), arms the render tap, and echoes the codec that landed and any device declines (a mic privacy denial is a loud, honest decline — the loopback still records). |
-| `capture.stop` | Drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, landed codec, frames captured/dropped, audio drops, and byte size. |
-| `capture.status` | Reports running/idle, the codec landed, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document. |
+| `capture.start [output-path]` | Resolves the encoder ladder + audio sources against THIS machine (opening only what it can encode and capture), arms the render tap, and echoes the negotiated codec and any device declines (a mic privacy denial is a loud, honest decline — the loopback still records). |
+| `capture.stop` | Drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size. |
+| `capture.status` | Reports running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document. |
 
 The Media Foundation encoder ladder and WASAPI loopback/microphone sources are the
 Windows platform backend (`AddRecordingPlatform`); off Windows the factories
-decline honestly and `capture.start` echoes why. On this box the ladder lands the
+decline honestly and `capture.start` echoes why. On this box the ladder resolves to the
 NVIDIA AV1 hardware encoder → a true `.webm`.
 
 Proven end to end by `proof.cs record`: a real GPU-windowed boot arms a session,
 records ~5 s of the autonomous crowd, finalizes, and asserts the produced
-container — the EBML doc type matches the landed codec, an Opus audio track and a
+container — the EBML doc type matches the negotiated codec, an Opus audio track and a
 video track are present (audio asserts track presence, not loudness — a
 headless-ish run may capture silence), the file is non-trivial, `capture.status`
 reads idle before and after, and the recording document used carries the
@@ -696,7 +875,7 @@ fall through to the full System.CommandLine parse, so all error text stays
 identical.
 
 `wire.ack [on|quiet]` is the response contract. Default **on** echoes every
-accepted command (today's behavior). **quiet** drops the SUCCESS acks of the
+accepted command (the default). **quiet** drops the SUCCESS acks of the
 side-effecting wire verbs — so a 37k-line flood costs no acknowledgement bytes —
 while errors (a bad arg count, an unparsable value, an unknown target) and query
 verbs (`player.where`) ALWAYS echo, so a scripted run still reads back poses and
@@ -724,9 +903,9 @@ overrides its wander automatically (tape > submitted in the intent merge), so
 **Full range of motion (6DOF).** A player's pose is ALWAYS 6DOF — a free
 `Vector3` position and a `Quaternion` attitude — so the platform hosts space sims
 and momentum-heavy swimming, up to 128 craft flying with full 3D translation
-and orientation, through this same intent wire and renderer (the renderer was
-always 6DOF-native: `DynamicTransform` and camera `SdfAnchor` both take a
-quaternion, proven by the demo's planetoid walk). What changes per entity is the
+and orientation, through this same intent wire and renderer (the renderer is
+6DOF-native: `DynamicTransform` and camera `SdfAnchor` both take a
+quaternion). What changes per entity is the
 **motion model** the intent integrates under, set by `player.motion
 [grounded|free] [player]`:
 
@@ -823,18 +1002,16 @@ primitives, zero new engine kinds. Rise/fall gravity multipliers stay in the
 integrator/tuning: integration is mechanism, not policy.
 
 **The jump feel kit.** The jump composition's read of the `Primary`
-channel is a
-tight, responsive kit ported from `Puck.Demo`'s `PlatformerBody` /
-`PlatformerTuning`: a variable-height jump with asymmetric gravity (you fall
+channel is
+World's jump feel: a tight, responsive kit — a variable-height jump with asymmetric gravity (you fall
 faster than you rise), a jump **cut** (releasing while still rising multiplies
 up-velocity by `0.45`, so a tap is a short hop and a hold a full leap), and the
 two forgiveness windows — **coyote time** (`0.09 s` grace to still jump just after
 leaving ground) and **jump buffering** (`0.10 s` window before landing where a
 press is remembered and fires on touchdown). Every SPATIAL constant is scaled by
-one named factor — `MotionTuning.DefaultActionScale = 0.5`, because World runs at half the
-Demo's speed scale (`DefaultMoveSpeed 4` vs the Demo's `RunSpeed 8`) — so
+one named factor — `MotionTuning.DefaultActionScale = 0.5` (`DefaultMoveSpeed 4`) — so
 retuning the whole feel to a new scale is a single number. Linear scaling keeps
-the arc PROPORTIONS: `JumpSpeed 5.5 u/s`, `RiseGravity 14`, `FallGravity 23`
+the PROPORTIONS: `JumpSpeed 5.5 u/s`, `RiseGravity 14`, `FallGravity 23`
 give an apex of `≈1.08 u` over a `~1 u` avatar, rise `≈0.39 s`, total
 air `≈0.70 s`; the cut ratio and the (time-valued) forgiveness windows are NOT
 scaled. (The scale factor lives as `MotionTuning.DefaultActionScale` in
@@ -951,7 +1128,7 @@ remains the quality target above that floor.
 The Windows display query reads the active display path's physical signal rate, not the enumerated list of selectable
 desktop modes (which can otherwise misreport a 120 Hz Dynamic Refresh Rate signal as 60).
 
-The overhead and avatar-eye feeds are presentation views: their last images persist between refreshes, and
+The overhead and first-person feeds are presentation views: their last images persist between refreshes, and
 `world.view-refresh 1` restores full-rate offscreen rendering for an A/B.
 
 **Crowd shadows** are the 128-player lever: seats always cast soft shadows;
@@ -977,9 +1154,8 @@ Arming `world.timing` also publishes worst-of-60 CPU frame tiles (pump, clock, i
 simulation callback/overhead, output, GPU drain, produce, present, post-present, and pacer), CLR pause correlation, and a
 World-simulation split across population/roster/machines. That probe isolated a repeatable one-time 15–18 ms pump-thread
 suspension around 26–30 seconds to Dynamic PGO's mid-session tier transition—not GC or simulation work. Puck.World
-therefore sets `TieredPGO=false` in its generated runtime configuration while retaining ordinary tiered compilation. In
-the former placeholder-avatar diagnostic it removed the unrelated mid-session hitch; the heterogeneous-rig fleet
-numbers above supersede that old throughput result.
+therefore sets `TieredPGO=false` in its generated runtime configuration while retaining ordinary tiered compilation,
+removing the mid-session hitch.
 
 ## The diegetic screens
 
@@ -1096,10 +1272,9 @@ cartridge is inserted, live or via `screen.insert`), the webcam, and asynchronou
 self-window capture. Measure the complete default posture with the proof runner:
 its final rolling sample must keep both average and worst frame at or above 60
 FPS. With a cartridge live on screen 4 (`screen.insert 4 <path>
-advanced-gaming-brick`), the reference 1280x800 Direct3D run's July 15, 2026 final
-sample was **117.0 FPS average / 114.8 FPS worst**; the AGB reported 7,044
-completed fixed steps and **0 pending**, proving real-time emulation rather than
-render-only decoupling. When stepping, the native AGB owns a single ordered
+advanced-gaming-brick`), the reference 1280x800 Direct3D run holds comfortably
+above the floor; the AGB completes its fixed steps with **0 pending**, proving
+real-time emulation rather than render-only decoupling. When stepping, the native AGB owns a single ordered
 emulation worker and swaps complete 240x160 frames at the native ~59.7 Hz video
 cadence, preserving every exact tick/input segment without letting a cartridge
 stall presentation. The two 256x144 diegetic world-camera views hold their last
@@ -1107,14 +1282,7 @@ complete frames between the default every-fourth-frame refreshes. CPU-fed screen
 upload through `CpuSurfaceSource` or the machine's equivalent native-frame
 upload; window grabs stay on their dedicated latest-result-wins worker too.
 
-**Known screen limitations.** Two seams are declared but not implemented:
-**audio** — every `IScreenMachineEngine` host (`MachineHost`/`AdvancedMachineHost`)
-now implements the neutral `IAudioMachine` capability (gated on attachment, zero
-cost while no consumer reads it — the same capability the Demo's cabinets drain),
-but World has no engine-wide speaker/mixer device to drain it through yet, so a
-machine's audio routed to a spatialized SURFACE source (a cabinet you hear from
-across the plaza) is named-deferred, not built — `WorldScreenBinder.AdvanceMachines`
-marks the exact seam a future device hooks `IAudioMachine.ReadSamples` into; and
+**Known screen limitations.** One seam is declared but not implemented:
 **screen transforms** — a moving/re-posed screen slab is expressible (the surface carries a
 full world frame) but unused by World so far, so every screen is static and
 world-axis aligned. The neutral `MachineButtons` image already carries the
@@ -1122,6 +1290,182 @@ East/West/North/shoulder/Start/Back buttons the gaming-brick maps South→A / Ea
 Start / Back→Select; the growth point is the `PlayerIntent` action-lane vocabulary
 (only the Jump lane fills a button today — new lanes light up the rest in
 `WorldEngagement.Translate`, not a per-button verb).
+
+## Audio (the mixer core, the world data model, and the device)
+
+`Audio/` holds the pure mixing core; the world data model sits on top of it,
+and the WASAPI device (below) drives both without reshaping either — see
+`docs/reviews/2026-07-18-world-audio-arc-plan.md` for the design history.
+
+**The rate.** 48000 Hz, fixed: device-native, exactly **200 frames
+per 240 Hz sim step** (`WorldAudioMixer.FramesPerSimStep`), 21/20 engine ticks
+per audio frame. Machines configure to 48000 directly — the only resampler in
+the machine path is the core's own exact-rational one.
+
+**The mix law** (`WorldAudioMixer.MixBlock`) is fixed-point end to end:
+s16 samples × Q16 composite gains → int32 accumulate → a deterministic
+polynomial soft-clip → s16. Per block, each emitter derives TARGET
+coefficients from the `WorldAudioSnapshot` — finite-support squared-smoothstep
+attenuation (smoothstep over the SQUARED-distance ratio between
+`MinRadius²`/`MaxRadius²`: no square root, and the support's zero IS the
+cull — a fully-silent emitter is bit-identical to an absent one and its source
+is never pulled), equal-power pan from listener-relative azimuth (one
+`FixedQ4816.SinCos` per point emitter; beds center-pan with a
+`FadeFrames`-bounded presence slew) — and the LIVE coefficients ramp linearly
+across the block from the previous block's values (the zipper-noise killer;
+ramp state keys on stable emitter ids). Sources are shared identities: each
+distinct `WorldAudioSourceKey` is pulled ONCE per block through the
+`IAudioBlockSource` seam and every feed taps the scratch (`left|right|mix`) —
+a stereo pair is two rows sharing one source. The soft-clip is the smooth-knee
+cubic `y = H + G·(1 − (1 − t)³)`: bit-transparent to `H = 24575` (0.75 FS),
+C¹-saturating over `t = (|s| − H)/24576` into the `32767` ceiling at 1.5 FS —
+never a libm call.
+
+**The synth** (`WorldVoiceSynth`): 32 fixed-struct voices, zero
+steady-state alloc — sine as a `FixedComplex` rotor, Q32 phase-accumulator
+pulse/saw/triangle, seeded `Pcg32XshRr` noise with a one-pole tilt, ADSR in
+sample units, control-rate (64-sample) pitch sweep + triangle vibrato, one
+Chamberlin SVF per voice. Triggers ride snapshots with strictly increasing
+sequence numbers (once-only under snapshot hold); allocation steals the
+QUIETEST voice, oldest on ties. Patches arrive as post-`Normalize`
+`puck.synth.v1` documents, flattened once at registration
+(`WorldVoicePatch.FromDocument`).
+
+**The two-driver contract**: `MixBlock` is synchronous and owns no
+thread. The offline proof (`scripts/audio-mix.cs`) and the future device pump
+are two drivers of the same code — the proof drives tune audio through a
+SYNCHRONOUS headless Humble core (never `QueuedMachineWorker`), steps the
+scripted pose table at the sim cadence, and SHA-256-hashes the raw s16 PCM.
+
+**The golden-hash doctrine.** The proof's printed PCM hashes are
+self-referential: they prove the whole path is deterministic (two full fresh
+runs must agree bit for bit), never that history is preserved — a deliberate
+mix-law correction is EXPECTED to change them; re-run and take the new values.
+Verify with `dotnet run src/Puck.World/scripts/audio-mix.cs` (the two hash
+proofs plus structural batteries: pan geometry, the cull contract, single-pull,
+soft-clip exactness, ramp bounds, seeded-synth reproducibility, voice steal,
+SVF, bed fade, and the world-document fixture pipeline).
+
+**The world data model.** Sound is DOCUMENT data: `Speakers`
+(`WorldSpeaker`, `$type fixed|anchored|bed` — the camera family's audio
+sibling; a feed is a shared source identity + `mix|left|right` selector +
+gain, and anchored rows ride the shared `WorldAnchor` union, placements
+included), `Tunes` / `Patches` (inline-canonical `puck.audio.v1` /
+`puck.synth.v1` assets with pinned hashes — the same hash-pin/canonicalize
+contract as creation rows: a foreign hash rejects loudly at the compose boundary, the validator
+recomputes the pin, `world.save` re-canonicalizes), the `Audio` defaults row
+(master gain, attenuation coalescing, bed fade, the `focus|seat:<n>|<camera>`
+listener policy), nullable `Emission` facets on scene rows and placements
+(root-only under repeat), and `CreationBehaviorDocument.Sounds` (inline synth
+voices a placement auto-surfaces as emitters). `Client/WorldAudioDirector`
+derives the emitter table from the delivered definition with STABLE ids (a
+property edit keeps its id; a kind/anchor/source-identity change — asset hash
+included — re-enters from silence), resolves poses per produced frame (entity
+leaves from the REAL packed gait-swung transforms; placements from the
+stamped/animated transform), fires one seeded trigger per synth-fed emitter
+arrival (`SubmitTrigger` is the ONE trigger-production seam the cue
+producers reuse), and publishes `WorldAudioSnapshot`s over a 4-slab rotation.
+Tune hosting (`TuneMachineSource` — the `Puck.Forge` compile chain over a
+synchronous Humble core) acquires while referenced and releases when
+orphaned, active while a mixer is attached (the device pump live; the offline
+proof headlessly). Verbs: `world.speaker.set/remove`, `world.tune.set/remove`,
+`world.patch.set/remove`, `world.audio.set`, `world.speakers`,
+`audio.emitters` (the deterministic derived-table dump), `audio.state`
+(the live device echo, below), `speaker.state` (the per-row live status +
+transient-cue tail), and `world.volume` (the session lever). The
+document-side battery is
+`dotnet run src/Puck.World/scripts/proof.cs -- audio`.
+
+**The device.** `Audio/WorldAudioRenderService` is the world speaker —
+an `IHostedService` (one dedicated bounded-join worker owns the device
+lifecycle, never a bare DI singleton) owning ONE mixer and one **governor thread**: it opens the
+default render endpoint through the `Puck.Platform.Audio` factory seam
+(`AudioRenderPlatform.CreateFactory()` — `null` off Windows, and the service
+parks as `unsupported` without starting a thread), attaches the mixer to the
+director on success, and watches the stream. The Windows device
+(`WasapiAudioRenderDevice`, sharing its threading shape with the capture source)
+owns a second, dedicated MTA COM thread: enumerator → Activate →
+`Initialize(Shared, event-driven)` → `GetService(IAudioRenderClient)`, an
+init handshake, a bounded join on dispose. It requests OUR s16/stereo/48000
+format with `AUTOCONVERTPCM|SRC_DEFAULT_QUALITY` — on real endpoints 48000 is
+the shared-mode native rate so the convert is the trivial s16→float widen;
+the SRC flags are only the exotic-endpoint net. Per event wake the pump reads
+`GetCurrentPadding` and fills the free space in ≤256-frame quanta
+(`WorldAudioMixer.MaxBlockFrames`) DIRECTLY into `GetBuffer`'s mapping — zero
+copies, zero steady-state allocation — through
+`WorldAudioDirector.TryMixBlock` (latest-snapshot hold + `MixBlock` under the
+director's one reentrant gate; the gate also serializes reconciles and
+machine rebinds against the pump, uncontended in steady state).
+
+**Failure posture: plays silent, never crashes.** Any failing HRESULT
+(mid-stream device invalidation included) parks the device pump, the governor
+detaches the mixer, and the service retries the DEFAULT endpoint every ~1 s
+(`RebindPeriodMilliseconds` — a contract invariant); a fill-callback defect
+degrades to one silent quantum and a counted fault, never a dead stream.
+`audio.state` echoes the whole story — device token
+(`playing|silent|rebinding|unsupported|stopped`), frames delivered across
+device generations, rebind attempts, fill faults, bound sources, live
+voices, the monotone output-peak meter, dropped triggers, derived emitters,
+and the last fault.
+
+**Machine audio is ALWAYS ON** (a flagged engine seam):
+`IScreenMachineEngine.Create` carries `audioSampleRate` and World boots every
+screen machine at 48000, accepting ~192 KB of ring + low-single-digit % CPU
+per booted machine so speakers bind at ANY time without a machine reboot
+(emulator snapshots are provably unaffected — core audio carries no state).
+The director resolves the binder's live machines by REFERENCE each produced
+frame (`MachineSourceResolver` → `WorldScreenBinder.AudioMachine`): a
+boot/eject/live-swap rebinds the stable `machine:<slot>` source key, and a
+cartridge booting late into an already-referenced slot self-heals with no
+verb. The live smoke is
+`dotnet run src/Puck.World/scripts/audio-device.cs` — in-process failure
+paths against mock factories (unsupported / declining-with-rebinds /
+mid-stream fault + reattach), the real endpoint delivering frames, and the
+full session: speaker row first, cartridge second, `audio.state`'s sources
+and peak going live — structural liveness only (sample content stays the
+offline hash proof's job) — plus the `screen.boot` cue firing on the real
+cartridge boot.
+
+**THE CUE TABLE.** World events tie to sound as DATA: the
+`Audio` row's `cues` list — `(event, patchId, gainThousandths?, placement)`
+where placement is `at-site` (spatial, at the event's world position — the
+shimmer's audio twin; falls back to the listener when no site is derivable),
+`listener` (rides the listener pose: distance 0 = full gain, the mixer's
+on-top-of-listener pan hold centers it), or `emitter:<speaker>` (the named
+speaker's pose and support). Event tokens are a CLOSED published vocabulary
+(`WorldAudioCue.EventTokens`): `mutation.applied`,
+`mutation.rejected`, `grant.denied`, `player.footstep` (gait-phase derived,
+local seats, one footfall per half-cycle), `screen.boot`, `screen.fault`,
+`seat.join`, plus `player.jump`/`player.land` (RESERVED — no producer wired;
+the client view carries no grounded signal). Mechanics: each fired cue takes
+one slot of a **4-deep reserved transient-emitter pool** (charged off the
+32-row snapshot cap so a full plan can never starve a cue; nearest-expiry
+eviction at capacity), lives its patch's own envelope (looping patches take
+the 2 s invariant cap), and lands with its trigger in the SAME snapshot so
+voice release can never race. Producers feed
+`WorldAudioDirector.SubmitCue` — the edit-echo lane, the binder's machine
+lifecycle tap, the frame source's gait/roster edges. `speaker.state` echoes
+each speaker row's live status (bound/silent/faulted, resolved pos,
+`inMix`) plus the live transient tail (`cue:<token>=<patch>`).
+
+**Speakers in the editor.** `(speakers, name)` joins the selection
+vocabulary (Fixed/Bed pick by proxy spheres, drag through the selection/drag channel
+with whole-row `UpsertSpeaker` on release; anchored rows edit their OFFSET
+via `editor.move`/numeric verbs — they never drag), `editor.speaker.place/
+move/gain/channel/radius/delete` are the name-addressed numeric twins
+(console-only — every place-page chord slot is honestly spoken for), and
+editor mode renders overlay GIZMO chips at each speaker's resolved pose
+(the director's own anchor resolution; selection lights the accent tier, a
+change shimmer the held tier, beds carry a translucent radius ring) through
+`Puck.Overlays.EditorGizmoStore/Writer` — a new writer plus two grammar
+icons and one RING element kind, never a world-geometry marker (the frozen
+render envelope stays untouched).
+
+**The master-volume lever.** `world.volume <0..8>` is session state on
+the render-levers asymmetry: the document's `audio.masterGain` owns boot
+(and flows live until the lever first engages), the lever owns "now"
+thereafter, `world.save` folds it back into `audio.masterGain`
+(`WorldSessionCapture` — `world.status` names the `audio` drift dimension).
 
 ## Engine boundaries worth knowing
 
@@ -1209,17 +1553,17 @@ contract. Twelve subcommands:
   diegetic machine-screen route proof; it also checks that passive screen 0's
   overhead view rejects engagement.
 - **`worlddoc`** `[--no-build] [--width W] [--height H] [--exit-after-seconds
-  N]` — the Phase 1 exit bar for `puck.world.def.v1`: (a) the **ouroboros
+  N]` — the world-document proof for `puck.world.def.v1`: (a) the **ouroboros
   gate** — `world.save` on EVERY checked-in world (`default`, `kart-remap`, and
   `expo`) reproduces it byte-for-byte, and saving THAT copy again reproduces it a
-  second time (so a save that now folds session state stays idempotent on a
+  second time (so a save that folds session state stays idempotent on a
   fresh boot, for each); (b) **baked-default parity** — a `--kind hop` feeder run
   against the checked-in file and one against a nonexistent `--world` path
   (forcing the loud fallback) compare byte-identical on their final sweeps, with
   the `[world] definition: baked default (...)` line present only in the fallback
   run's transcript.
 - **`mutate`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
-  — the Phase 2a exit bar for the mutation vocabulary: (a) a scripted
+  — the mutation-vocabulary round-trip proof: (a) a scripted
   `world.kit.tune` → `world.status` (dirty 1) → `world.undo` → `world.status`
   (dirty 0) → `world.kit.tune` → `world.save <temp>` → `world.status` (dirty 0,
   compacted) round-trip, asserting the journal-length `dirty` counter at every
@@ -1231,10 +1575,9 @@ contract. Twelve subcommands:
   saved JSON carries the tuned value while untouched kits keep theirs. The
   protocol-version handshake's rejection path is proven by the implementing
   session, not re-covered here (no scripted `Join` exists over stdin without a
-  debug verb this brief declines to add).
+  debug verb this proof does not add).
 - **`grants`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
-  — the Phase 2b exit bar for principals/capability grants (§2.7 criterion
-  4): (a) `world.addon.set` mounts an authored `autopilot` `WorldAddonRow`
+  — the principals/capability-grants proof: (a) `world.addon.set` mounts an authored `autopilot` `WorldAddonRow`
   and `world.save` writes it (session A; data-only — the driver mounts
   enabled rows only at boot); (b) relaunching `--world <the saved file>`
   (session B) asserts the `[world.addon: mounted autopilot ...]` boot line,
@@ -1249,7 +1592,7 @@ contract. Twelve subcommands:
   over the same grant table) is `proof.cs screens`'s coverage, not
   duplicated here.
 - **`bindings`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
-  — the Phase 3 exit bar for the player document + layered binding resolution
+  — the player-document + layered binding-resolution proof
   (see **The player document + bindings**): (a) session A boots the REAL local
   player-document store fresh, asserts the engine-default composed mapping
   (`player.bindings`), live-rebinds a source (`player.bind`), and
@@ -1258,20 +1601,20 @@ contract. Twelve subcommands:
   survived and the revision did not bump again on a plain boot; (c) session C
   boots `--world kart-remap.world.json` and asserts its `bindingOverlays` entry
   merges over the engine default, then `world.bindings.remove` live-recomposes
-  it back; (d) a synthesized pre-Phase-3 `puck.world.profiles.v1`
+  it back; (d) a synthesized legacy `puck.world.profiles.v1`
   `profiles/profiles.json` proves that migration path (the loud `[profiles]
   migrated ... retired puck.world.profiles.v1 ...]` line, the split
   `world/player.json`/`world/profiles/*.json`/`world/local.json` written,
   `profiles/profiles.json` deleted, `profile.list` showing the migrated
-  names); (e) a synthesized Phase 3 single-file `profiles/player.json` proves
+  names); (e) a synthesized single-file `profiles/player.json` proves
   the OTHER migration path (the loud `[profiles] migrated ... Phase 3
   single-file layout ...]` line, the same split layout written,
   `profiles/player.json` deleted). There is no CLI override for the
-  player-document store path, so this proof backs up the owner's REAL
+  player-document store path, so this proof backs up the REAL
   `world/` + `profiles/` subtrees whole (byte-for-byte) before every session
   and restores them in a `finally` — the real catalog is never destroyed.
 - **`storage`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
-  — the Phase 4 exit bar for cloud-readiness (see **Storage**), proven against
+  — the cloud-readiness proof (see **Storage**), proven against
   the local backend only: (a) a fresh boot against the cleared REAL store
   asserts `storage.status`'s honest baseline (local authoritative/cloud
   unwired, identity declined, endpoint none, a present catalog revision +
@@ -1281,10 +1624,10 @@ contract. Twelve subcommands:
   persisted revision survives; (c) a `--user-id <valid oid Guid>` boot
   asserts the explicit-override identity echo; (d) a `--user-id not-a-guid`
   boot asserts the declining echo. Like `bindings`, it backs up and restores
-  the owner's REAL `world/` + `profiles/` subtrees whole around every
+  the REAL `world/` + `profiles/` subtrees whole around every
   session — the real catalog is never destroyed.
 - **`expo-author`** `[--no-build] [--width W] [--height H] [--exit-after-seconds
-  N] [--out PATH]` — regenerates the expo world reproducibly (Phase 5 §2.6).
+  N] [--out PATH]` — regenerates the expo world reproducibly.
   Boots a baked-default Puck.World, feeds the checked-in `scripts/expo-world.txt`
   authoring session (a new kit row + retunings + a `table` policy, a warmer
   four-pillar scene, staggered spawns, three asset-free screens, and live render/
@@ -1293,7 +1636,7 @@ contract. Twelve subcommands:
   into the document. The script and the artifact are the checked-in reproducible
   pair; the JSON is NEVER hand-edited.
 - **`expodoc`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
-  — the Phase 5 exit bar for the expo world + session write-back: (a) `--world
+  — the second-world + session-write-back proof: (a) `--world
   expo.world.json` boots the loud `[world] definition:` line; (b) a
   distinguishing `world.status` fact — expo's `kits 6 screens 3` differs from the
   default's `kits 5 screens 5`, a visibly different game with zero code, and a
@@ -1307,15 +1650,15 @@ contract. Twelve subcommands:
   into that screen row's `Machine` source. Expo's ouroboros is covered by
   `worlddoc`.
 - **`record`** `[--no-build] [--width W] [--height H] [--seconds S] [--out PATH]`
-  — the native-capture exit bar (see **Native capture**). Boots a real GPU-windowed
+  — the native-capture proof (see **Native capture**). Boots a real GPU-windowed
   Puck.World (the tap reads each captured frame back through the SDF engine, so a
   live present surface is required), asserts `capture.status` reads idle, arms a
-  `RecordingSession` with `capture.start` (echoing the codec that landed and any
+  `RecordingSession` with `capture.start` (echoing the negotiated codec and any
   device declines — a mic privacy denial is a PASS path), records ~`S` seconds of
   the autonomous crowd, finalizes with `capture.stop`, and walks the produced
-  container: the EBML doc type matches the landed codec (`webm` for AV1, `matroska`
+  container: the EBML doc type matches the negotiated codec (`webm` for AV1, `matroska`
   for the H.264 fallback), an Opus audio track is present (track presence, not
-  loudness), a video track is present when video landed, the file is non-trivial,
+  loudness), a video track is present when video negotiated, the file is non-trivial,
   and `capture.status` reads idle again. It also asserts the recording document the
   world resolved carries the capture-only overlay row. `--out` copies the artifact
   out for a real player to open.
@@ -1395,23 +1738,20 @@ journeys), not a World-only golden/hash gate. The engine contracts beneath them
 — fixed numerics, command snapshots, CLI routing, bindings, and record/replay —
 are enforced by Post Tier A.
 
-### Suite calibration notes (2026-07-17)
+### Known-marginal assertions
 
 The deterministic tableaux (parade 124/124, flight 124/124, hop landed 124/124,
-expo finale 75/75) are the byte-exact contract and hold through the
-client/server split. Three assertions are known-marginal at baseline — verified
-byte-identical on the pre-split tree, so treat a matching failure profile as
-environmental, not a regression:
+expo finale 75/75) are the byte-exact contract. Three assertions run marginal
+by nature — treat a matching failure profile as environmental, not a
+regression:
 
 - **FPS gate** — marginal at the proof default 2560×1440 (worst hovers 59–75).
   A run failing ONLY the FPS assertion with its tableau green: re-run once
   (`--no-build`) before treating it as a regression.
 - **hop/expo mid-air bands** — the wall-clock-paced mid-air sample lands out of
-  band for a machine-dependent subset (observed 74/124 hop, 14/25 expo,
-  identical numbers on the pre-split baseline); the landed/finale tableaux stay
+  band for a machine-dependent subset; the landed/finale tableaux stay
   exact.
 - **flood rerun envelope** — the ±0.75 u compare is session-phase marginal: the
   corpus's jitter-sensitive entities (p14/p17/p36/p70 at seed 128) drift between
-  wall-clock attractors on a loaded machine, on both the split and the baseline
-  build. Cross-check against a pristine-baseline pair before ruling a
-  regression.
+  wall-clock attractors on a loaded machine. Cross-check against a
+  pristine-baseline pair before ruling a regression.

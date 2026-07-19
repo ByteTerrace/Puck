@@ -1,11 +1,14 @@
 using System.CommandLine;
 using System.Numerics;
+using Puck.Authoring;
 using Puck.Commands;
-using Puck.Demo.Editing;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.SdfVm;
 using static Puck.Commands.CommandArgs;
+// Pins the console's creator.snap verb to Demo's own RotationSnap (Puck.Demo.Editing) — Puck.Authoring carries an
+// unrewired copy of the same name for World's future editor (see CreatorScene.cs's matching remark).
+using RotationSnap = Puck.Demo.Editing.RotationSnap;
 
 namespace Puck.Demo.Creator;
 
@@ -35,7 +38,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
     private IEnumerable<CommandDefinition> GetDocumentCommands() {
         yield return Plain(
             description: "Lists the saved creations under ./creations/.",
-            handler: _ => new CommandResult(((CreationStore.List() is { Count: > 0 } names)
+            handler: _ => new CommandResult(((CreationStore.List(creationsRoot: CreationStore.DefaultFolder) is { Count: > 0 } names)
                 ? $"[creator.list: {string.Join(separator: ", ", values: names)}]"
                 : "[creator.list: none saved yet — creator.save <name> writes one]")),
             name: "creator.list"
@@ -65,7 +68,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
 
                 scene.SetName(name: name);
 
-                return $"[creator.save: {CreationStore.Save(document: scene.ToDocument(), name: name)}]";
+                return $"[creator.save: {CreationStore.Save(document: scene.ToDocument(), name: name, creationsRoot: CreationStore.DefaultFolder, casRoot: CreationStore.DefaultCasRoot)}]";
             }),
             name: "creator.save"
         );
@@ -77,7 +80,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
                 }
 
                 try {
-                    return ((CreationStore.Load(nameOrPath: args[0]) is { } document)
+                    return ((CreationStore.Load(nameOrPath: args[0], creationsRoot: CreationStore.DefaultFolder) is { } document)
                         ? $"[creator.load: {scene.LoadDocument(document: document)} shape(s) from '{document.Name}' (style {document.BakeStyle}, intent {document.Intent})]"
                         : $"[creator.load: nothing readable at '{args[0]}']");
                 } catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {

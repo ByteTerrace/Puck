@@ -1,5 +1,5 @@
 using Puck.Assets;
-using Puck.Demo.Creator;
+using Puck.Authoring;
 using Puck.Demo.World;
 
 namespace Puck.Demo.Town;

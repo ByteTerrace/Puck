@@ -1,7 +1,7 @@
 namespace Puck.World.Protocol;
 
-/// <summary>What kind of actor a <see cref="WorldPrincipal"/> stands for — the one named primitive the three former
-/// ad-hoc ownership forms (the engagement latch, machine-input ownership, the addon slot owner) collapse into. A
+/// <summary>What kind of actor a <see cref="WorldPrincipal"/> stands for — the one named primitive that engagement,
+/// machine-input ownership, and addon slot ownership all reduce to. A
 /// principal acts through <see cref="IServerLink"/>; the server checks its grants (see
 /// <see cref="Puck.World.Server.WorldGrants"/>) before a write applies.</summary>
 internal enum PrincipalKind : byte {
@@ -17,7 +17,7 @@ internal enum PrincipalKind : byte {
     Addon,
 
     /// <summary>A network/population body — <see cref="WorldPrincipal.Index"/> is its 0-based entity index (4..127).
-    /// The engagement route of a population entry rides this identity; the socket arc reuses it for remote clients.</summary>
+    /// The engagement route of a population entry rides this identity; a socket transport reuses it for remote clients.</summary>
     Peer,
 }
 

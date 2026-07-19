@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Authoring;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Scene;
@@ -119,8 +120,8 @@ internal enum ActionFact : byte {
 
 /// <summary>A data-composable gate over facts and per-lane action state — the closed predicate vocabulary (records
 /// only; deliberately no expression language). A trigger fires only while its gate holds. The <c>$type</c> string is
-/// the JSON discriminator; a new predicate kind is a new derived record plus its <see cref="JsonDerivedTypeAttribute"/>
-/// line (the <see cref="Puck.Scene.SceneObject"/> precedent).</summary>
+/// the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new
+/// derived record plus its <see cref="JsonDerivedTypeAttribute"/> line.</summary>
 [JsonDerivedType(typeof(ActionPredicate.Now), typeDiscriminator: "now")]
 [JsonDerivedType(typeof(ActionPredicate.Recently), typeDiscriminator: "recently")]
 [JsonDerivedType(typeof(ActionPredicate.CooldownElapsed), typeDiscriminator: "cooldownElapsed")]
@@ -475,44 +476,145 @@ internal readonly record struct FixedWorldKit(
     );
 }
 
-/// <summary>One stone boulder in the world's static scene — a sphere smooth-unioned into the accumulated field. This
-/// World-local shape carries the position, radius, and smooth-blend radius directly.</summary>
-/// <param name="Id">The boulder's stable string id — its mutation address (unique within the scene). Presentation-only
-/// geometry; the id carries no meaning beyond identity.</param>
-/// <param name="Center">The boulder's world-space center (its translate offset from the origin).</param>
-/// <param name="Radius">The sphere radius.</param>
-/// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
-internal readonly record struct WorldBoulder(string Id, Vector3 Center, float Radius, float Smooth);
+/// <summary>
+/// One row of the world's static scene — a shape smooth-unioned into the accumulated field, addressed by its stable
+/// <paramref name="Id"/> (its mutation address; the <c>UpsertSceneRow</c>/<c>RemoveSceneRow</c> whole-row key).
+/// Presentation-only geometry; the id carries no meaning beyond identity. The <c>$type</c> string is the JSON
+/// discriminator, matching <see cref="WorldCamera"/>'s convention; a new row kind is a new derived record plus its
+/// <see cref="JsonDerivedTypeAttribute"/> line.
+/// </summary>
+/// <param name="Id">The row's stable string id (unique within the scene).</param>
+/// <param name="Center">The shape's world-space center (its translate offset from the origin) — the position every
+/// manipulation edits.</param>
+/// <param name="Emission">The row's emission facet (a synth voice the shape itself makes — see
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null, so
+/// emission-free rows stay byte-identical.</param>
+[JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
+[JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldSceneRow(
+    string Id,
+    Vector3 Center,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission
+) {
+    /// <summary>A stone boulder — a sphere carrying the scene's shared <see cref="WorldScene.StoneAlbedo"/>.</summary>
+    /// <param name="Id">The row's stable string id.</param>
+    /// <param name="Center">The sphere's world-space center.</param>
+    /// <param name="Radius">The sphere radius.</param>
+    /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
+    /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
+    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
 
-/// <summary>The world's static scene — a ground plane plus a loose cluster of stone boulders. The materials are inline
-/// albedo colors (not palette indices): the frame source allocates one grass and one stone material and iterates the
-/// <see cref="Boulders"/>.</summary>
+    /// <summary>A terrain slab — a rounded box patch (a plaza tile, a step, a wall segment) whose material is data on
+    /// the row.</summary>
+    /// <param name="Id">The row's stable string id.</param>
+    /// <param name="Center">The box's world-space center.</param>
+    /// <param name="HalfExtents">The box half-extents along the world axes.</param>
+    /// <param name="Round">The corner-rounding radius.</param>
+    /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
+    /// <param name="Albedo">The slab's own albedo (per-row material, unlike the shared boulder stone).</param>
+    /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
+    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
+
+    /// <summary>Returns this row with a replaced <see cref="Center"/> — the shape-preserving move every drag commit and
+    /// numeric move composes through.</summary>
+    /// <param name="center">The new world-space center.</param>
+    public WorldSceneRow WithCenter(Vector3 center) => this switch {
+        Boulder boulder => (boulder with { Center = center }),
+        Slab slab => (slab with { Center = center }),
+        _ => this,
+    };
+}
+
+/// <summary>The world's static scene — a ground plane plus the shape rows. The materials are inline albedo colors (not
+/// palette indices): the frame source allocates one grass material, one per-row material (a boulder's from
+/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>.</summary>
 /// <param name="GroundAlbedo">The grass ground plane's albedo.</param>
-/// <param name="StoneAlbedo">The shared albedo of every boulder.</param>
-/// <param name="Boulders">The boulder cluster, emitted in order after the ground plane.</param>
+/// <param name="StoneAlbedo">The shared albedo every boulder row renders with.</param>
+/// <param name="Rows">The scene's shape rows, emitted in order after the ground plane.</param>
 internal sealed record WorldScene(
     Vector3 GroundAlbedo,
     Vector3 StoneAlbedo,
-    IReadOnlyList<WorldBoulder> Boulders
+    IReadOnlyList<WorldSceneRow> Rows
 ) {
     /// <summary>The built-in default scene — the grass-and-boulders world.</summary>
     public static WorldScene Default { get; } = new WorldScene(
         GroundAlbedo: new Vector3(x: 0.33f, y: 0.52f, z: 0.24f),
         StoneAlbedo: new Vector3(x: 0.55f, y: 0.55f, z: 0.58f),
-        Boulders: [
-            new WorldBoulder(Id: "boulder-1", Center: new Vector3(x: -1.2f, y: 0.72f, z: -0.3f), Radius: 0.9f, Smooth: 0.5f),
-            new WorldBoulder(Id: "boulder-2", Center: new Vector3(x: 0.6f, y: 0.88f, z: 0.5f), Radius: 1.1f, Smooth: 0.5f),
-            new WorldBoulder(Id: "boulder-3", Center: new Vector3(x: 1.9f, y: 0.48f, z: -0.7f), Radius: 0.6f, Smooth: 0.4f),
-            new WorldBoulder(Id: "boulder-4", Center: new Vector3(x: -0.3f, y: 0.38f, z: 1.3f), Radius: 0.45f, Smooth: 0.35f),
-            new WorldBoulder(Id: "boulder-5", Center: new Vector3(x: 2.4f, y: 0.62f, z: 0.7f), Radius: 0.75f, Smooth: 0.4f),
+        Rows: [
+            new WorldSceneRow.Boulder(Id: "boulder-1", Center: new Vector3(x: -1.2f, y: 0.72f, z: -0.3f), Radius: 0.9f, Smooth: 0.5f),
+            new WorldSceneRow.Boulder(Id: "boulder-2", Center: new Vector3(x: 0.6f, y: 0.88f, z: 0.5f), Radius: 1.1f, Smooth: 0.5f),
+            new WorldSceneRow.Boulder(Id: "boulder-3", Center: new Vector3(x: 1.9f, y: 0.48f, z: -0.7f), Radius: 0.6f, Smooth: 0.4f),
+            new WorldSceneRow.Boulder(Id: "boulder-4", Center: new Vector3(x: -0.3f, y: 0.38f, z: 1.3f), Radius: 0.45f, Smooth: 0.35f),
+            new WorldSceneRow.Boulder(Id: "boulder-5", Center: new Vector3(x: 2.4f, y: 0.62f, z: 0.7f), Radius: 0.75f, Smooth: 0.4f),
         ]
     );
 }
 
 /// <summary>
+/// One creation ASSET row — a whole <c>puck.creation.v1</c> document embedded INLINE-CANONICAL in the world
+/// file with its identity hash pinned beside it. The document and hash MUST come from the SAME
+/// <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/>: the compose boundary canonicalizes on upsert
+/// and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a
+/// tampered world file rejects loudly. World files stay self-contained — the CAS is an authoring-time import/export
+/// cache, never a load-time dependency.
+/// </summary>
+/// <param name="Id">The row's stable string id — its mutation address and the handle placements reference.</param>
+/// <param name="Document">The canonical (validated + normalized) creation document.</param>
+/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Authoring.CanonicalDocument{TDocument}.Hash"/>
+/// on the canonical result the compose boundary produces).</param>
+internal sealed record WorldCreation(string Id, CreationDocument Document, string Hash);
+
+/// <summary>A placement's repeat facet — a row of copies IS a repeat (the Demo placement vocabulary, adopted): the
+/// stamp replays on a placement-local X/Z lattice. A row longer than <see cref="WorldAuthoringDefaults.MaxRepeatPerSegment"/>
+/// on an axis auto-splits into several emitted segments so each instance bound stays tight.</summary>
+/// <param name="SpacingX">The per-copy spacing along the placement's local X.</param>
+/// <param name="SpacingZ">The per-copy spacing along the placement's local Z.</param>
+/// <param name="CountX">The copy count along X (1 = no repeat on the axis).</param>
+/// <param name="CountZ">The copy count along Z.</param>
+internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int CountX, int CountZ) {
+    /// <summary>The total copy count across both axes.</summary>
+    public int TotalCount => (Math.Max(val1: CountX, val2: 1) * Math.Max(val1: CountZ, val2: 1));
+}
+
+/// <summary>
+/// One placement INSTANCE row — a creation asset stamped into the world by reference: transform + facets as
+/// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is
+/// ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (repeat/mirror
+/// facets are static-stamp-only and reject on an animated row). A wallpaper-pattern facet and cabinet role strings
+/// are deliberately not carried; <paramref name="Role"/> is the reserved nullable seam a future driven-body rung
+/// lands in without schema surgery.
+/// </summary>
+/// <param name="Id">The row's stable string id (its mutation address).</param>
+/// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
+/// creation rejects loudly).</param>
+/// <param name="Position">The stamp position, world space.</param>
+/// <param name="YawDegrees">The stamp yaw about +Y, degrees.</param>
+/// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
+/// <param name="Repeat">The repeat facet, or <see langword="null"/> for a single copy.</param>
+/// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame), or
+/// <see langword="null"/> for none.</param>
+/// <param name="Role">RESERVED for the driven-body rung (null = decoration). Carried, validated as free text, not
+/// yet consumed.</param>
+/// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Repeat"/> the emission
+/// binds to the placement ROOT only. Omitted from the wire when null.</param>
+internal sealed record WorldPlacement(
+    string Id,
+    string CreationId,
+    Vector3 Position,
+    float YawDegrees,
+    float Scale,
+    WorldPlacementRepeat? Repeat = null,
+    string? Mirror = null,
+    string? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null
+);
+
+/// <summary>
 /// The signal carried by a <see cref="WorldScreen"/>'s lit face. A source declares which provider feeds a slot; the
-/// engine resolves and samples it. The <c>$type</c> string is the JSON discriminator (the
-/// <see cref="Puck.Scene.ScreenSourceProvider"/> precedent); a new source kind is a new derived record plus its
+/// engine resolves and samples it. The <c>$type</c> string is the JSON discriminator, matching
+/// <see cref="Puck.Scene.ScreenSourceProvider"/>'s convention; a new source kind is a new derived record plus its
 /// <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
 [JsonDerivedType(typeof(WorldScreenSource.None), typeDiscriminator: "none")]
@@ -630,6 +732,7 @@ internal readonly record struct FixedMotionTuning(
     FixedQ4816 JumpBufferTime,
     FixedQ4816 JumpCutMultiplier
 ) {
+    /// <summary>Compiles the authored floating-point motion tuning to its fixed-point form.</summary>
     public static FixedMotionTuning Compile(in MotionTuning tuning) => new(
         MoveSpeed: FixedQ4816.FromDouble(value: tuning.MoveSpeed),
         TurnSpeed: FixedQ4816.FromDouble(value: tuning.TurnSpeed),
@@ -655,6 +758,7 @@ internal readonly record struct FixedWanderTuning(
     FixedQ4816 WeaveFrequencyBase,
     FixedQ4816 WeaveFrequencyRange
 ) {
+    /// <summary>Compiles the authored floating-point wander tuning to its fixed-point form.</summary>
     public static FixedWanderTuning Compile(in WanderTuning tuning) => new(
         DriftSpeed: FixedQ4816.FromDouble(value: tuning.DriftSpeed),
         SoftRadius: FixedQ4816.FromDouble(value: tuning.SoftRadius),
@@ -667,14 +771,15 @@ internal readonly record struct FixedWanderTuning(
     );
 }
 
-/// <summary>One placeable camera in the world — either a fixed look-at or a first-person mount on an avatar's eyeballs.
-/// A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view offscreen.</summary>
+/// <summary>One placeable camera in the world — either a fixed look-at or an anchored mount riding a world entity's
+/// live pose. A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view
+/// offscreen.</summary>
 /// <param name="Name">The camera's stable name — the handle a View screen samples by.</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
 /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
 [JsonDerivedType(typeof(WorldCamera.Fixed), typeDiscriminator: "fixed")]
-[JsonDerivedType(typeof(WorldCamera.AvatarEye), typeDiscriminator: "avatarEye")]
+[JsonDerivedType(typeof(WorldCamera.Anchored), typeDiscriminator: "anchored")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians) {
     /// <summary>A camera posed directly in world space.</summary>
@@ -687,15 +792,16 @@ internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderH
     internal sealed record Fixed(string Name, Vector3 Position, Vector3 LookAt, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 
-    /// <summary>A first-person camera mounted at one population avatar's eyeballs. The avatar root supplies the live
-    /// position and orientation; <paramref name="EyeOffset"/> is the exact anchor-local attachment point.</summary>
+    /// <summary>A camera anchored to a <see cref="WorldAnchor"/> — the entity/leaf/placement pose it rides supplies
+    /// the live position and orientation; <paramref name="Offset"/> is the exact attachment point in the anchor's
+    /// local axes on top of that — an anchor can carry a camera anywhere.</summary>
     /// <param name="Name">The camera's stable name.</param>
-    /// <param name="AvatarIndex">The population avatar to ride, zero based.</param>
-    /// <param name="EyeOffset">The eyeball attachment point relative to the avatar root, in avatar-local axes.</param>
+    /// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>).</param>
+    /// <param name="Offset">The attachment point relative to the anchor's resolved pose, in anchor-local axes.</param>
     /// <param name="RenderWidth">The offscreen render width in pixels.</param>
     /// <param name="RenderHeight">The offscreen render height in pixels.</param>
     /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record AvatarEye(string Name, int AvatarIndex, Vector3 EyeOffset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
+    internal sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 }
 
@@ -705,13 +811,13 @@ internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderH
 /// <param name="NetworkPlayers">The number of active network-human stand-ins at boot.</param>
 /// <param name="DefaultPeerSource">The boot intent-source template every network stand-in wakes on (<see
 /// cref="IntentSource.Wander"/> in the built-in world): the durable home for the session peer-source default the
-/// <c>world.population idle|wander</c> verb moves live and <c>world.save</c> folds back (§2.1 session write-back).</param>
+/// <c>world.population idle|wander</c> verb moves live and <c>world.save</c> folds back into session write-back.</param>
 internal readonly record struct WorldPopulationDefaults(int LocalPlayers, int NetworkPlayers, IntentSource DefaultPeerSource);
 internal static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
     /// (the "durable config lives in the data file" doctrine); the <c>puck.world.def.v1</c> loader
-    /// (<see cref="WorldDefinitionLoader"/>) now reads one, but the checked-in default file authors an empty content
+    /// (<see cref="WorldDefinitionLoader"/>) reads one, but the checked-in default file authors an empty content
     /// path, so the native-AGB screen boots unconfigured (a graceful fault, never a crash) until a real deployment
     /// supplies <see cref="WorldScreenSource.Machine.ContentPath"/>.</summary>
     public const string DefaultAgbCartridgePath = "";
@@ -785,31 +891,27 @@ internal sealed record WorldRenderDefaults(
 /// <param name="Position">The seat's spawn position (X/Z used; Y rides the ground plane).</param>
 internal readonly record struct WorldSpawnPoint(string Id, Vector3 Position);
 
-/// <summary>The definition's kit→entity assignment policy — the realized policy-as-data seam that replaces the former
-/// hard-coded R1 hash on <see cref="WorldPopulation.KitFor"/>. Resolved ONCE at <see cref="WorldPopulation"/>
-/// construction into each entry's fixed kit index (precompute; zero steady-state cost). SIM-AFFECTING: it selects which
-/// kit — and thus which fixed-point tuning/action bindings — an entity compiles.</summary>
-/// <param name="Policy">The assignment policy: <see cref="HashPolicy"/> (the default R1 low-discrepancy mapping) or
+/// <summary>The kit-to-entity assignment policy, resolved once at construction into each entry's fixed kit index
+/// (precompute; zero steady-state cost). SIM-AFFECTING: it selects which kit — and thus which fixed-point
+/// tuning/action bindings — an entity compiles.</summary>
+/// <param name="Policy">The assignment policy: <see cref="HashPolicy"/> (the R1 low-discrepancy mapping) or
 /// <see cref="TablePolicy"/> (<c>kit = Table[index % Table.Count]</c>).</param>
 /// <param name="Table">The kit-name cycle for <see cref="TablePolicy"/> (entries resolve to kit rows at compile); empty
 /// and ignored under <see cref="HashPolicy"/>.</param>
 internal sealed record WorldKitAssignment(string Policy, IReadOnlyList<string> Table) {
-    /// <summary>The default policy token — today's R1 low-discrepancy mapping (<see cref="WorldPopulation.KitFor"/>),
-    /// verbatim.</summary>
+    /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.KitFor"/>).</summary>
     public const string HashPolicy = "hash";
 
     /// <summary>The table policy token — <c>kit = Table[index % Table.Count]</c>, a pure function of the stable
     /// population index.</summary>
     public const string TablePolicy = "table";
 
-    /// <summary>The built-in default assignment: the hash policy with an empty table (byte-identical to the former
-    /// hard-coded <see cref="WorldPopulation.KitFor"/> distribution).</summary>
+    /// <summary>The built-in default assignment: the hash policy with an empty table.</summary>
     public static WorldKitAssignment Hash { get; } = new WorldKitAssignment(Policy: HashPolicy, Table: []);
 }
 
-/// <summary>One data-side addon descriptor the world carries — a World-local row mirroring the field vocabulary of
-/// <see cref="Puck.Scene.AddonDocument"/> (no Puck.Scripting reference this phase). Consumed in Phase 2b when addons
-/// mount as principals through <c>IServerLink</c>.</summary>
+/// <summary>One data-side addon descriptor the world carries — a World-local row carrying Name/ModulePath/Hash/Fuel/
+/// Enabled, with no Puck.Scripting reference. Consumed when addons mount as principals through <c>IServerLink</c>.</summary>
 /// <param name="Name">The addon's identifying name — unique within the definition; used by console verbs and logging.</param>
 /// <param name="ModulePath">The WASM module file path (machine-local; existence/hash verification is the run path's job).</param>
 /// <param name="Hash">The content-address integrity pin, or empty to skip the check.</param>
@@ -817,7 +919,7 @@ internal sealed record WorldKitAssignment(string Policy, IReadOnlyList<string> T
 /// <param name="Enabled">Whether the addon starts enabled.</param>
 internal sealed record WorldAddonRow(string Name, string ModulePath, string Hash, ulong Fuel, bool Enabled);
 
-/// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered (§2.4) over the engine
+/// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered over the engine
 /// default beneath every seat's profile bindings, so a world can contextualize the controls (a kart world remapping a
 /// lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result
 /// (default ⊕ every overlay) is what the validator compiles.</summary>
@@ -827,9 +929,9 @@ internal sealed record WorldAddonRow(string Name, string ModulePath, string Hash
 internal sealed record WorldBindingOverlay(string Id, BindingProfileDocument Document);
 
 /// <summary>
-/// The world's storage host-section defaults (§2.5.5) — the per-user cloud endpoint and an explicit user-id override,
+/// The world's storage host-section defaults — the per-user cloud endpoint and an explicit user-id override,
 /// authored as DATA so durable configuration lives in the world file (never a <c>PUCK_*</c> env var; World has no such
-/// surface). Both fields are RESERVED this arc: nothing constructs an Azure target from <see cref="Endpoint"/>, and
+/// surface). Both fields are RESERVED: nothing constructs an Azure target from <see cref="Endpoint"/>, and
 /// <see cref="UserId"/> only feeds the identity resolver's explicit-override source. A <c>--storage-uri</c> /
 /// <c>--user-id</c> CLI reflection overrides each at boot. <c>storage.status</c> echoes the resolved values.
 /// </summary>
@@ -841,6 +943,76 @@ internal sealed record WorldBindingOverlay(string Id, BindingProfileDocument Doc
 internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
     /// <summary>The built-in default: no endpoint, no user-id (cloud unwired, identity declined — local-only).</summary>
     public static WorldStorageDefaults None { get; } = new WorldStorageDefaults(Endpoint: null, UserId: null);
+}
+
+/// <summary>
+/// World-varying editor/authoring policy values, authored as data rather than compile-time constants. Two
+/// consumption classes share this one row (whole-row mutable like every other section — never split into two
+/// sections for a consumption nuance that consumers already handle honestly):
+/// <list type="bullet">
+/// <item><description><b>BOOT-CONSUMED</b> (<see cref="AuthoringHeadroomRows"/>, <see cref="AuthoringHeadroomScreens"/>,
+/// <see cref="AuthoringHeadroomPlacements"/>, <see cref="MaxRepeatPerSegment"/>): read exactly ONCE, at
+/// <see cref="Client.WorldFrameSource"/> construction, into the frozen render-envelope capacity floor (the probe's
+/// worst-case word/instance reservation). The one honest exception: a live edit to these capacity-floor fields is
+/// journaled but the running session's floor cannot retroactively grow — it applies at the next boot (the validator
+/// still gates the new value against engine caps immediately, so a bad authored value never reaches a boot).</description></item>
+/// <item><description><b>LIVE-CONSUMED</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
+/// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>, <see cref="WorkbenchFraction"/>,
+/// <see cref="PreviewDeadlineFrames"/>): read fresh from the delivered definition at each use site (a candidate
+/// gather, a layout resolve, a drag-freeze tick) — a mutation takes effect at the very next tick/frame, no restart.
+/// </description></item>
+/// </list>
+/// </summary>
+/// <param name="AuthoringHeadroomRows">BOOT-CONSUMED. The scene rows of authoring headroom the construction probe
+/// reserves beyond the boot scene, captured once into <see cref="Client.WorldFrameSource"/>'s frozen field at
+/// construction.</param>
+/// <param name="AuthoringHeadroomScreens">BOOT-CONSUMED. The extra screen slots the probe reserves, bounded by the
+/// engine's <see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
+/// <param name="AuthoringHeadroomPlacements">BOOT-CONSUMED. The placement rows of headroom the probe reserves beyond
+/// the boot placements (see <see cref="Client.WorldPlacementStamper.StaticStampSegments"/>).</param>
+/// <param name="MaxRepeatPerSegment">BOOT-CONSUMED. The largest per-axis repeat count one emitted placement segment
+/// carries before auto-splitting — frozen at construction because it feeds the same
+/// probe segment math as the headroom fields (the probe-vs-measure word-count constancy is load-bearing; see
+/// <see cref="Client.WorldFrameSource"/>'s placement-reservation remarks).</param>
+/// <param name="MinPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's floor — a pure validator
+/// bound, revalidated on every placement mutation.</param>
+/// <param name="MaxPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's ceiling — also the worst-case
+/// scale <see cref="Client.WorldPlacementAnimator"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
+/// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
+/// <param name="CandidateRadius">LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat's editor
+/// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
+/// <param name="CandidateCap">LIVE-CONSUMED. The candidate-count cap: at most this many nearest in-radius rows enter
+/// the cycle ring.</param>
+/// <param name="WorkbenchFraction">LIVE-CONSUMED. The full-height fraction a SOLE editing seat's viewport takes when
+/// 2+ seats are joined (the remaining width splits as a live rail among the playing seats) — read fresh each captured
+/// frame by <see cref="Client.WorldFrameSource.LayoutRegion(int, int, int, float)"/>.</param>
+/// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
+/// released overlay with no definition delivery after this many produced frames drops honestly.</param>
+internal sealed record WorldAuthoringDefaults(
+    int AuthoringHeadroomRows,
+    int AuthoringHeadroomScreens,
+    int AuthoringHeadroomPlacements,
+    int MaxRepeatPerSegment,
+    float MinPlacementScale,
+    float MaxPlacementScale,
+    float CandidateRadius,
+    int CandidateCap,
+    float WorkbenchFraction,
+    int PreviewDeadlineFrames
+) {
+    /// <summary>The built-in default authoring policy.</summary>
+    public static WorldAuthoringDefaults Default { get; } = new WorldAuthoringDefaults(
+        AuthoringHeadroomRows: 32,
+        AuthoringHeadroomScreens: 4,
+        AuthoringHeadroomPlacements: 8,
+        MaxRepeatPerSegment: 8,
+        MinPlacementScale: 0.2f,
+        MaxPlacementScale: 5.0f,
+        CandidateRadius: 32f,
+        CandidateCap: 16,
+        WorkbenchFraction: 0.70f,
+        PreviewDeadlineFrames: 12
+    );
 }
 
 /// <summary>
@@ -865,12 +1037,29 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// <see cref="Assignment"/> policy distributes entities across the rows.</param>
 /// <param name="DefaultSeatKit">The kit row (by name) every seat body constructs from.</param>
 /// <param name="Assignment">The kit→entity assignment policy (the realized policy-as-data seam).</param>
-/// <param name="Addons">The data-side addon descriptors (default empty), consumed in Phase 2b when addons mount as
+/// <param name="Addons">The data-side addon descriptors (default empty), consumed when addons mount as
 /// principals.</param>
 /// <param name="BindingOverlays">The per-world binding overlays (default empty) layered over the engine default beneath
-/// each seat's profile bindings (§2.4).</param>
-/// <param name="Storage">The storage host-section defaults (§2.5.5) — the reserved per-user cloud endpoint and explicit
+/// each seat's profile bindings.</param>
+/// <param name="Storage">The storage host-section defaults — the reserved per-user cloud endpoint and explicit
 /// user-id override, authored as data.</param>
+/// <param name="Creations">The creation ASSET rows (default empty) — whole <c>puck.creation.v1</c> documents
+/// embedded inline-canonical with their identity hashes pinned (see <see cref="WorldCreation"/>).</param>
+/// <param name="Placements">The placement INSTANCE rows (default empty) — creations stamped by reference (see
+/// <see cref="WorldPlacement"/>).</param>
+/// <param name="Authoring">The editor/authoring policy row — headroom, placement
+/// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
+/// (see <see cref="WorldAuthoringDefaults"/>). <see langword="null"/> in JSON coalesces to
+/// <see cref="WorldAuthoringDefaults.Default"/> (the same absence-coalesce convention <see cref="WorldStorageDefaults"/> uses).</param>
+/// <param name="Speakers">The placeable speaker rows (default empty) — the camera family's audio sibling (see
+/// <see cref="WorldSpeaker"/>): name-keyed transducers whose feeds tap shared sources.</param>
+/// <param name="Tunes">The tune ASSET rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
+/// inline-canonical with pinned hashes (see <see cref="WorldTune"/>).</param>
+/// <param name="Patches">The synth-patch ASSET rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
+/// inline-canonical with pinned hashes (see <see cref="WorldPatch"/>).</param>
+/// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
+/// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
+/// <see cref="WorldAudioDefaults.Default"/>.</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -885,7 +1074,14 @@ internal sealed record WorldDefinition(
     WorldKitAssignment Assignment,
     IReadOnlyList<WorldAddonRow> Addons,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
-    WorldStorageDefaults Storage
+    WorldStorageDefaults Storage,
+    IReadOnlyList<WorldCreation> Creations,
+    IReadOnlyList<WorldPlacement> Placements,
+    WorldAuthoringDefaults Authoring,
+    IReadOnlyList<WorldSpeaker> Speakers,
+    IReadOnlyList<WorldTune> Tunes,
+    IReadOnlyList<WorldPatch> Patches,
+    WorldAudioDefaults Audio
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -894,9 +1090,10 @@ internal sealed record WorldDefinition(
     /// <summary>The document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
     public string Schema { get; init; } = SchemaVersion;
 
-    /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture (the
-    /// <see cref="Puck.Scene.PuckRunDocument"/> precedent). Null when the document carries no unknown members. A
-    /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
+    /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture,
+    /// matching <see cref="Puck.Scene.PuckRunDocument"/>'s JsonExtensionData round-trip convention. Null when the
+    /// document carries no unknown members. A settable (not <c>init</c>) accessor is required: System.Text.Json
+    /// appends to it during deserialization.</summary>
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
@@ -905,7 +1102,7 @@ internal sealed record WorldDefinition(
         Motion: MotionTuning.Default,
         Wander: WanderTuning.Default,
         Scene: WorldScene.Default,
-        // The five built-in locomotion kits — the former archetype constants extracted verbatim as rows. The R1-hash
+        // The five built-in locomotion kits. The R1-hash
         // assignment walks these in order, so row order is census identity. Grounded kits bind the jump composition on
         // Primary and the dash on Secondary; free kits leave Primary unbound and bind the surge on Secondary.
         Kits: [
@@ -950,7 +1147,7 @@ internal sealed record WorldDefinition(
                 SecondaryAction: ActionSpec.Dash(tuning: MotionTuning.Default)
             ),
         ],
-        // The seat rows' kit: seats keep today's behavior — the default grounded tuning (profile speeds override) with
+        // Seats use the default grounded tuning (profile speeds override) with
         // the vertical impulse bound.
         DefaultSeatKit: "runner",
         // Staggered around the origin, all facing -Z toward the boulder cluster, so a fresh join never lands on top of
@@ -1001,7 +1198,7 @@ internal sealed record WorldDefinition(
                 Route: WorldScreenRoute.Passive
             ),
             // Screen 2 — THE JUMBOTRON: a big billboard high behind the boulder cluster showing this same world through
-            // player one's literal avatar-eye camera. A View source, so
+            // the first-person camera anchored to player one's entity. A View source, so
             // the binder registers one offscreen camera render per produced frame. Passive: a jumbotron is watched, not
             // engaged. Its own face binds 0 inside its render (ViewStack's self-reference rule), so no feedback compounds.
             new WorldScreen(
@@ -1013,7 +1210,7 @@ internal sealed record WorldDefinition(
                 HalfHeight: 1.4f,
                 HalfDepth: 0.14f,
                 Round: 0.1f,
-                Source: new WorldScreenSource.View(CameraName: "avatar-eye"),
+                Source: new WorldScreenSource.View(CameraName: "first-person"),
                 Route: WorldScreenRoute.Passive
             ),
             // Screen 3 — THE CAMERA: a live webcam feed on the broadcast wall's left. Faults gracefully to the procedural
@@ -1056,13 +1253,13 @@ internal sealed record WorldDefinition(
                 Route: WorldScreenRoute.Passive
             ),
         ],
-        // The two live world cameras: one attached to player one's eyeballs for the jumbotron, and one fixed high above
+        // The two live world cameras: one anchored to player one's entity for the jumbotron, and one fixed high above
         // the plaza for the separate overhead monitor.
         Cameras: [
-            new WorldCamera.AvatarEye(
-                Name: "avatar-eye",
-                AvatarIndex: 0,
-                EyeOffset: WorldAvatarCatalog.EyeOffset(avatar: 0),
+            new WorldCamera.Anchored(
+                Name: "first-person",
+                Anchor: new WorldAnchor.Entity(Index: 0),
+                Offset: WorldAvatarCatalog.EyeOffset(avatar: 0),
                 RenderWidth: 256,
                 RenderHeight: 144,
                 FieldOfViewRadians: (68f * (MathF.PI / 180f))
@@ -1076,16 +1273,27 @@ internal sealed record WorldDefinition(
                 FieldOfViewRadians: (55f * (MathF.PI / 180f))
             ),
         ],
-        // The kit→entity assignment: the hash policy (today's R1 low-discrepancy mapping) with an empty table —
-        // byte-identical to the former hard-coded WorldPopulation.KitFor distribution.
+        // The kit→entity assignment: the R1 low-discrepancy hash policy with an empty table.
         Assignment: WorldKitAssignment.Hash,
-        // No data-side addons in the built-in world; a deployment authors them and Phase 2b mounts them as principals.
+        // No data-side addons in the built-in world; a deployment authors them and the addon driver mounts them as principals.
         Addons: [],
         // No per-world binding overlays in the built-in world — every seat rides the engine default (plus its profile
         // bindings). A world contextualizes the controls by authoring rows here (see kart-remap.world.json).
         BindingOverlays: [],
         // Storage host-section defaults: no cloud endpoint, no explicit user-id — cloud unwired, identity declined,
         // local-only. A deployment authors these (or passes --storage-uri / --user-id) to reserve the per-user seam.
-        Storage: WorldStorageDefaults.None
+        Storage: WorldStorageDefaults.None,
+        // No creation assets or placements in the built-in world — the editor stamps them live (editor.import /
+        // editor.place) and world.save persists them.
+        Creations: [],
+        Placements: [],
+        // The built-in authoring policy.
+        Authoring: WorldAuthoringDefaults.Default,
+        // The built-in world is silent: no speaker rows, no tune/patch assets, the stock audio defaults. A deployment
+        // (or the live editor) authors sound; the audio verbs and world.save persist it.
+        Speakers: [],
+        Tunes: [],
+        Patches: [],
+        Audio: WorldAudioDefaults.Default
     );
 }

@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Demo.Creator;
+using Puck.Authoring;
 using Puck.Demo.Forge;
 
 namespace Puck.Demo.World;

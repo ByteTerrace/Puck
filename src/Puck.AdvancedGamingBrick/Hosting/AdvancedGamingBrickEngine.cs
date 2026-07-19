@@ -12,10 +12,10 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
     public string Id => "advanced-gaming-brick";
 
     /// <inheritdoc/>
-    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null) {
+    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         var bios = ResolveBios(options: options);
 
-        return new AdvancedMachineHost(cartridgeRom: contentBytes, savePath: savePath, biosImage: bios);
+        return new AdvancedMachineHost(cartridgeRom: contentBytes, savePath: savePath, biosImage: bios, audioSampleRate: audioSampleRate);
     }
 
     private static byte[] ResolveBios(string? options) {

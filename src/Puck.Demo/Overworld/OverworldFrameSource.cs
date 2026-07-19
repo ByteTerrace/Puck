@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Puck.Abstractions.Gpu;
 using Puck.Assets;
+using Puck.Authoring;
 using Puck.Cameras;
 using Puck.Compositing;
 using Puck.Demo.Configuration;
@@ -2397,7 +2398,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     /// <param name="nameOrPath">The save handle or file path.</param>
     /// <returns>A one-line status for the console.</returns>
     public string LoadCreationFile(string nameOrPath) {
-        if (CreationStore.Load(nameOrPath: nameOrPath) is not { } document) {
+        if (CreationStore.Load(nameOrPath: nameOrPath, creationsRoot: CreationStore.DefaultFolder) is not { } document) {
             return $"[creator.load: nothing readable at '{nameOrPath}']";
         }
 

@@ -10,7 +10,7 @@ namespace Puck.World;
 /// The ENGAGE route — where a player's resolved intent GOES, distinct from the <see cref="IntentSource"/> axis (what
 /// fills it). It is a VIEW over the server's ONE capability table (<see cref="WorldGrants"/>): a player's engagement is
 /// an exclusive-per-body <see cref="WorldCapability.Control"/> route grant over a screen subject — no parallel route
-/// table (§0.1 dedup). While a player is engaged its per-tick <see cref="WorldBody.EngagedIntent"/> is translated to a
+/// table. While a player is engaged its per-tick <see cref="WorldBody.EngagedIntent"/> is translated to a
 /// neutral <see cref="MachinePadState"/> and delivered to that screen's machine (the binder pulls <see cref="MergedPad"/>
 /// each host tick), and the avatar stands idle. The translation is generic (an intent → a standard-controller image);
 /// each machine's engine maps that image to its own buttons.
@@ -21,7 +21,7 @@ namespace Puck.World;
 /// (<see cref="PrincipalKind.Seat"/> / <see cref="PrincipalKind.Peer"/>) and is re-resolved to a live
 /// <see cref="WorldBody"/> each read; a seat that leaves, an entry that deactivates, or a newly-created body at the same
 /// index whose <see cref="WorldBody.Engaged"/> latch is clear is PRUNED (its route grant cleared) rather than inheriting
-/// a stale route — the per-body <see cref="WorldBody.Engaged"/> latch is the liveness gate, exactly as before.
+/// a stale route — the per-body <see cref="WorldBody.Engaged"/> latch is the liveness gate.
 /// LOOPBACK-ONLY: the grant reads/writes and the <see cref="WorldBody.SetEngaged"/>/<see cref="WorldBody.EngagedIntent"/>
 /// touches here are in-process; a socket transport replaces them with engage/disengage commands over
 /// <see cref="Protocol.IServerLink"/> and a per-tick engaged-intent lane on the snapshot.</remarks>
@@ -247,8 +247,8 @@ internal sealed class WorldEngagement {
     }
 
     // A display index is only a live route while the body it resolves to owns the matching engagement latch. Population
-    // reactivation deliberately mints a fresh, disengaged WorldBody at the same index; the old index-only route must not
-    // transfer to that new lifetime.
+    // reactivation deliberately mints a fresh, disengaged WorldBody at the same index; a route resolved by index alone
+    // must not transfer to that new lifetime.
     private bool TryResolveEngaged(int index, out WorldBody player) {
         if (Resolve(index: index) is { Engaged: true } resolved) {
             player = resolved;

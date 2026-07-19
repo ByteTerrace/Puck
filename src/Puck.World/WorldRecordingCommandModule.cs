@@ -12,7 +12,7 @@ namespace Puck.World;
 /// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.v1</c>, host-scope data) and
 /// the platform's Media Foundation encoder ladder + WASAPI audio sources against real hardware, opening only what this
 /// machine can encode and capture, and arms the render tap. Every verb is Immediate (no simulation effect) and echoes
-/// honestly: the codec that landed, frames captured/dropped, audio track count and drops, bytes, and the output path;
+/// honestly: the negotiated codec, frames captured/dropped, audio track count and drops, bytes, and the output path;
 /// declines are loud. A SEPARATE module to keep each class under its analyzer ceilings.
 /// </summary>
 /// <remarks>The live windowed present path hands GPU surfaces, so the capture tap reads each captured frame back to CPU
@@ -38,17 +38,17 @@ internal sealed class WorldRecordingCommandModule(
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "capture.start",
-            description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms the render tap, and echoes the codec that landed and any declines.",
+            description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms the render tap, and echoes the negotiated codec and any declines.",
             handler: (_, args) => Start(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "capture.stop",
-            description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, landed codec, frames captured/dropped, audio drops, and byte size.",
+            description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "capture.status",
-            description: "Reports the recording state (Immediate): running/idle, the codec landed, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
+            description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
             handler: (_, args) => Status(args: args)
         );
     }

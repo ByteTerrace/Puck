@@ -9,9 +9,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The dev reflection of the world-mutation protocol — the console surface an agent (or a deterministic test) molds a
-/// running world through over stdin, reusing the SAME <see cref="WorldMutation"/> messages the editor arc will drive
-/// tomorrow. Every row-valued verb takes ONE inline-JSON argument in the exact wire shape of the document section (no
-/// second grammar, parsed through the Phase 1 <see cref="WorldJsonContext"/>); a parse error echoes inline and submits
+/// running world through over stdin, reusing the SAME <see cref="WorldMutation"/> messages the editor drives. Every
+/// row-valued verb takes ONE inline-JSON argument in the exact wire shape of the document section (no
+/// second grammar, parsed through <see cref="WorldJsonContext"/>); a parse error echoes inline and submits
 /// nothing. Every mutation verb routes <see cref="CommandRouting.Simulation"/>, so it buffers on the server and the
 /// stdin barrier serializes a following <c>world.status</c> read-after-write for free; the server's own loud accept/
 /// reject line is printed when the buffered edit applies at the tick boundary. <c>world.status</c> and <c>world.save</c>
@@ -21,7 +21,7 @@ namespace Puck.World;
 /// <remarks>JSON arguments must be a single whitespace-free token (compact JSON): the console tokenizer that identifies
 /// the verb would otherwise split the object, and the raw line the handler parses is reconstructed from the submitted
 /// text. The verbs read that raw line, so quotes survive.</remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Row(
@@ -116,13 +116,13 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.camera.set",
-            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|avatarEye): world.camera.set <camera-json>. Document-only this phase (applies at next boot — the offscreen view pool is boot-sized).",
+            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|anchored): world.camera.set <camera-json>. Applies LIVE: a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension or kind change recreates it, and every jumbotron filming it updates without a restart.",
             info: WorldJsonContext.Default.WorldCamera,
             toMutation: static camera => new WorldMutation.UpsertCamera(Principal: WorldPrincipal.Console, Camera: camera)
         );
         yield return Simulation(
             name: "world.camera.remove",
-            description: "Removes a camera by name: world.camera.remove <name>. Rejected if a View screen still references it.",
+            description: "Removes a camera by name: world.camera.remove <name>. Rejected if a View screen still references it; a runtime screen.view of it unbinds and its offscreen render is released live.",
             handler: (context, args) => {
                 if (args.Length != 1) {
                     return Usage(verb: "world.camera.remove", form: "<name>");
@@ -133,9 +133,26 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.scene.set",
-            description: "Replaces the static scene (ground albedos + boulders) from one inline-JSON WorldScene: world.scene.set <scene-json>. Geometry rebuilds live within the probed render envelope; an over-envelope scene is rejected loudly.",
+            description: "Replaces the static scene (ground albedos + shape rows) from one inline-JSON WorldScene: world.scene.set <scene-json>. Geometry rebuilds live within the probed render envelope; an over-envelope scene is rejected loudly.",
             info: WorldJsonContext.Default.WorldScene,
             toMutation: static scene => new WorldMutation.SetScene(Principal: WorldPrincipal.Console, Scene: scene)
+        );
+        yield return Row(
+            name: "world.scene.row.set",
+            description: "Upserts one static-scene shape row (whole-row, keyed by id) from one inline-JSON WorldSceneRow ($type boulder|slab): world.scene.row.set <row-json>. The editor's per-act scene grain; the typed editor.place/editor.move verbs are its shaped twins.",
+            info: WorldJsonContext.Default.WorldSceneRow,
+            toMutation: static row => new WorldMutation.UpsertSceneRow(Principal: WorldPrincipal.Console, Row: row)
+        );
+        yield return Simulation(
+            name: "world.scene.row.remove",
+            description: "Removes a static-scene shape row by id: world.scene.row.remove <id>. Rejected if no row declares that id.",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.scene.row.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemoveSceneRow(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
         );
         yield return Row(
             name: "world.spawns.set",
@@ -195,7 +212,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.bindings.set",
-            description: "Upserts a per-world binding overlay (whole-row, keyed by id) from one inline-JSON WorldBindingOverlay: world.bindings.set <overlay-json>. Layered (§2.4) over the engine default beneath every seat's profile bindings; rejected loudly if the composed mapping then fails to compile. Recomposes every seat on apply.",
+            description: "Upserts a per-world binding overlay (whole-row, keyed by id) from one inline-JSON WorldBindingOverlay: world.bindings.set <overlay-json>. Layered over the engine default beneath every seat's profile bindings; rejected loudly if the composed mapping then fails to compile. Recomposes every seat on apply.",
             info: WorldJsonContext.Default.WorldBindingOverlay,
             toMutation: static overlay => new WorldMutation.UpsertBindingOverlay(Principal: WorldPrincipal.Console, Overlay: overlay)
         );
@@ -210,9 +227,49 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return Submit(mutation: new WorldMutation.RemoveBindingOverlay(Principal: WorldPrincipal.Console, Id: args[0]));
             }
         );
+        yield return Row(
+            name: "world.creation.set",
+            description: "Upserts a creation ASSET row (whole-row, keyed by id) from one inline-JSON WorldCreation {id, document, hash}: world.creation.set <json>. The compose boundary re-canonicalizes the document and REJECTS a hash the pipeline did not itself compute; editor.import <path> is the file-reading twin.",
+            info: WorldJsonContext.Default.WorldCreation,
+            toMutation: static creation => new WorldMutation.UpsertCreation(Principal: WorldPrincipal.Console, Creation: creation)
+        );
+        yield return Simulation(
+            name: "world.creation.remove",
+            description: "Removes a creation asset row by id: world.creation.remove <id>. Rejected loudly while live placements still reference it (no cascade — remove them first).",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.creation.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemoveCreation(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
+        );
+        yield return Row(
+            name: "world.placement.set",
+            description: "Upserts a placement INSTANCE row (whole-row, keyed by id) from one inline-JSON WorldPlacement {id, creationId, position, yawDegrees, scale, repeat?, mirror?, role?}: world.placement.set <json>. Must name an existing creation row; capacity-checked against the probed render envelope; a framed creation replays its timeline (repeat/mirror are static-only).",
+            info: WorldJsonContext.Default.WorldPlacement,
+            toMutation: static placement => new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: placement)
+        );
+        yield return Simulation(
+            name: "world.placement.remove",
+            description: "Removes a placement row by id: world.placement.remove <id>.",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.placement.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemovePlacement(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
+        );
+        yield return Row(
+            name: "world.authoring.set",
+            description: "Replaces the whole editor/authoring policy row from one inline-JSON WorldAuthoringDefaults: world.authoring.set <json>. The candidate radius/cap, sole-editor layout split, and drag-preview deadline apply LIVE (next tick, no restart); the authoring headroom and max-repeat-per-segment feed the frozen render-envelope probe and apply at the NEXT boot (the accept echo narrates the split).",
+            info: WorldJsonContext.Default.WorldAuthoringDefaults,
+            toMutation: static authoring => new WorldMutation.SetAuthoringDefaults(Principal: WorldPrincipal.Console, Authoring: authoring)
+        );
         yield return Simulation(
             name: "world.load",
-            description: "Loads a world file through the Phase 1 loader and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",
+            description: "Loads a world file and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",
             handler: (context, args) => {
                 var path = RawArgument(context: context, args: args);
 
@@ -248,7 +305,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources (§2.1 write-back). No argument writes back to the loaded --world file; booted from the baked default with no path is an error.",
+            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded --world file; booted from the baked default with no path is an error.",
             handler: (_, args) => {
                 var target = ((args.Length >= 1) ? string.Join(separator: ' ', values: args) : definitionSource.SourcePath);
 
@@ -259,7 +316,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 try {
-                    var snapshot = WorldSessionCapture.Capture(definition: server.Definition, render: renderSettings, population: server.Population, binder: screenBinder);
+                    var snapshot = WorldSessionCapture.Capture(definition: server.Definition, render: renderSettings, population: server.Population, binder: screenBinder, audio: audioDirector);
                     var bytes = WorldDefinitionSerialization.Save(definition: snapshot, path: target);
 
                     server.Compact();
@@ -279,9 +336,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var definition = server.Definition;
                 var source = (definitionSource.SourcePath ?? "baked default");
                 var dirty = server.JournalLength;
-                var drift = WorldSessionCapture.DescribeDrift(definition: definition, render: renderSettings, population: server.Population, binder: screenBinder);
+                var drift = WorldSessionCapture.DescribeDrift(definition: definition, render: renderSettings, population: server.Population, binder: screenBinder, audio: audioDirector);
 
-                return new CommandResult(Output: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} session-drift {drift} dirty {dirty} undoable {dirty}]");
+                return new CommandResult(Output: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} session-drift {drift} dirty {dirty} undoable {dirty}]");
             }
         );
     }

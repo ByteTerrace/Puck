@@ -19,6 +19,7 @@ maintainability gaps that compilation does not detect.
 | CR-3 | P1 | Screen lifecycle | Removing a screen leaves its live binder slot running. | **Closed (2nd pass) 2026-07-18** — camera views released with the last wired slot |
 | CR-4 | P2 | Source hygiene | Two C# files contain literal NUL bytes and appear binary to Git. | **Closed and independently verified 2026-07-18** |
 | CR-5 | P1 | Player bindings | Raw binding-section edits persist but do not update active seat mappings. | **Closed 2026-07-18** — seats sharing the profile refresh on ack |
+| CR-6 | P1 | Screen lifecycle | Changing a live screen away from `View` leaves the old view bound and rendering. | **Open 2026-07-18** |
 
 ## Resolution — second pass, 2026-07-18 (re-audit findings closed, full suite green)
 
@@ -40,6 +41,28 @@ maintainability gaps that compilation does not detect.
   routes through the same helper (dedup — and it now refreshes couch co-op seats sharing the
   profile, which the old single-seat inline refresh missed). Proof: `bindings` asserts a raw
   `profile.section … bindings …` edit shows in `player.bindings` immediately, no reseat.
+
+## Follow-up audit — CR-6 remains open
+
+The three second-pass fixes above are correct and their targeted proof cases pass, but the same
+view-lifecycle machinery still misses a supported source-transition path. `ApplySourceChange`
+routes a surviving screen changed from `View` to `None` through `TryEject`, which calls
+`ScreenSlot.ClearLive`; `ClearLive` clears machine/camera/capture state but never clears
+`ScreenSlot.View`, and no source-change path releases the old camera registration from
+`ViewStack`. The mutation therefore acknowledges and logs `screen 2 unbound` while the old view
+handle remains selected and its offscreen SDF engine keeps rendering.
+
+Manual reproduction against the built-in world:
+
+1. `world.view-refresh` reported `2 camera view(s) registered`.
+2. `world.screen.set` replaced screen 2's source with `{ "$type": "none" }` and reported the
+   mutation applied plus `screen 2 unbound`.
+3. A settled `world.view-refresh` still reported `2 camera view(s) registered`, and
+   `screen.state 2` reported `empty bound engaged=none` rather than unbound.
+
+Make every producer transition clear the prior `View` reference and reconcile/release its camera
+registration when no remaining slot uses it (including View A → View B), then add source-change
+proof cases alongside the removal proof.
 
 ## Independent re-audit of closure commit `3d0a53f`
 

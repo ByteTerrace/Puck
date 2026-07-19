@@ -18,6 +18,10 @@ public interface IScreenMachineEngine {
     /// <param name="options">The engine-specific options string (e.g. <c>agb dmgspeed</c>), or <see langword="null"/>.</param>
     /// <param name="contentBytes">The content image, or <see langword="null"/> to create an empty machine.</param>
     /// <param name="savePath">The content's persistent-save path, or <see langword="null"/> for an in-memory-only save.</param>
+    /// <param name="audioSampleRate">The <see cref="IAudioMachine"/> output rate in frames per emulated second, or 0
+    /// (the default) when no consumer will drain audio. Construction-fixed by design: the rate sizes the host's audio
+    /// ring and configures the core's resampler exactly once, so a machine created at 0 answers
+    /// <see cref="IAudioMachine.SampleRate"/> 0 forever and performs zero presentation-side audio work.</param>
     /// <returns>The created machine.</returns>
-    IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null);
+    IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0);
 }

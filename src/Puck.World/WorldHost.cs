@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.Abstractions.Gpu;
 using Puck.DirectX.Presentation;
 using Puck.Launcher;
 using Puck.Memory;
@@ -9,8 +11,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The GPU-host registration for Puck.World: the launcher terminal, platform windowing, the unmanaged allocator, and
-/// the launch-selected Vulkan or Direct3D 12 presenter. Adapted from the demo's <c>GpuHostComposition</c> without
-/// referencing it (Puck.World must not depend on Puck.Demo) and without the demo-only camera-capture concern.
+/// the launch-selected Vulkan or Direct3D 12 presenter. Registers the GPU-host block (windowing, allocator, one
+/// launch-selected backend) directly; Puck.World must not depend on Puck.Demo, and this omits the demo-only
+/// camera-capture concern.
 /// </summary>
 internal static class WorldHost {
     /// <summary>Registers the shared GPU-host block: launcher terminal, windowing, allocator, and the selected
@@ -43,6 +46,11 @@ internal static class WorldHost {
             ));
         } else {
             services.AddVulkanPresenter();
+            // The Vulkan block publishes its device context in DI as IVulkanDeviceContext only (the neutral
+            // interface rides a HostCapabilityContribution instead). Alias the neutral seam here so backend-neutral
+            // consumers (the unified overlay's OverlayServices) resolve the SAME device either backend registers —
+            // the DirectX block already registers IGpuDeviceContext itself.
+            services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
             services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
                 Name: "vulkan",
                 Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()

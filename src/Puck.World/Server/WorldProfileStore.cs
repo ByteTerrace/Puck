@@ -13,21 +13,21 @@ internal readonly record struct WorldPlayerLoad(WorldPlayerDocument Document, st
 
 /// <summary>
 /// Loads and saves the world's <see cref="WorldPlayerDocument"/> through <see cref="IJsonObjectBlobStore"/> (a
-/// local-file target under the user's application-data directory) as a PER-PROFILE blob layout (§2.5.3): a catalog blob
+/// local-file target under the user's application-data directory) as a PER-PROFILE blob layout: a catalog blob
 /// at <c>world/player.json</c> plus one <c>world/profiles/&lt;id&gt;.json</c> per profile — the same address model the
 /// cloud uses, so two devices editing DIFFERENT profiles are independent. The machine-local <c>world/local.json</c>
-/// sidecar (boot seating + sync cursor, which must NOT roam) sits beside it. A one-time migration absorbs BOTH the Phase
-/// 3 single-file layout (<c>profiles/player.json</c>) and the retired <c>puck.world.profiles.v1</c>
-/// (<c>profiles/profiles.json</c>), reading each old blob once, writing the split layout, then deleting the old key
-/// (loud line). The routed store carries an Azure backend behind the same seam.
+/// sidecar (boot seating + sync cursor, which must NOT roam) sits beside it. A one-time migration absorbs BOTH the
+/// pre-split single-file layout (<c>profiles/player.json</c>) and the discontinued <c>puck.world.profiles.v1</c>
+/// catalog (<c>profiles/profiles.json</c>), reading each superseded blob once, writing the split layout, then
+/// deleting its key (loud line). The routed store carries an Azure backend behind the same seam.
 /// </summary>
 internal sealed class WorldProfileStore {
     // Blob-storage identity of the local player catalog; the files land under <BasePath>/<LocalProfilesId>/world/.
     private static readonly Guid LocalProfilesId = new(g: "b1d5c0de-0002-4000-8000-000000000001");
-    // The per-profile split layout (§2.5.3): a catalog blob plus one blob per profile, and the machine-local sidecar.
+    // The per-profile split layout: a catalog blob plus one blob per profile, and the machine-local sidecar.
     private static readonly ObjectBlobAddress CatalogAddress = new(Key: "world/player.json", ObjectId: LocalProfilesId);
     private static readonly ObjectBlobAddress LocalAddress = new(Key: "world/local.json", ObjectId: LocalProfilesId);
-    // The retired single-file layouts, each read once by the migrator then deleted (not compat paths).
+    // The pre-split single-file layouts, each read once by the migrator then deleted (not compat paths).
     private static readonly ObjectBlobAddress PhaseThreeDocAddress = new(Key: "profiles/player.json", ObjectId: LocalProfilesId);
     private static readonly ObjectBlobAddress PhaseThreeLocalAddress = new(Key: "profiles/local.json", ObjectId: LocalProfilesId);
     private static readonly ObjectBlobAddress LegacyAddress = new(Key: "profiles/profiles.json", ObjectId: LocalProfilesId);
@@ -35,8 +35,8 @@ internal sealed class WorldProfileStore {
     private readonly ProfileDocumentStore<WorldPlayerLocal> m_local;
     private readonly LocalFileObjectStorageTarget m_target;
 
-    // The retired puck.world.profiles.v1 on-disk shape — read ONLY by the migrator (not a compat path; it is deleted
-    // after the one-time read). Mirrors the former WorldProfileDocument/WorldProfileDefinition fields.
+    // The discontinued puck.world.profiles.v1 on-disk shape — read ONLY by the migrator (not a compat path; it is
+    // deleted after the one-time read). Carries Name/Color/MoveSpeed/TurnSpeed/InvertLookX per profile.
     private sealed record LegacyDocument(string Version, string LastUsed, IReadOnlyList<LegacyProfile> Profiles);
     private sealed record LegacyProfile(string Name, string Color, float MoveSpeed = 4f, float TurnSpeed = 2.5f, bool InvertLookX = false);
 
@@ -54,8 +54,8 @@ internal sealed class WorldProfileStore {
     /// <summary>Gets the on-disk path of the catalog blob (for diagnostics — "edit this file").</summary>
     public string FilePath => PathOf(address: CatalogAddress);
 
-    /// <summary>Loads the player document, seeding the default on first run and MIGRATING a retired single-file layout
-    /// once (read old → write the split layout → delete old, loud note). Assembles the document from the catalog blob and
+    /// <summary>Loads the player document, seeding the default on first run and migrating a pre-split single-file layout
+    /// once (read it → write the split layout → delete it, loud note). Assembles the document from the catalog blob and
     /// its per-profile blobs.</summary>
     /// <param name="default">The built-in default document to seed when nothing exists.</param>
     /// <param name="cancellationToken">A token to observe.</param>
@@ -73,7 +73,7 @@ internal sealed class WorldProfileStore {
             return new WorldPlayerLoad(Document: document, LastUsedId: lastUsedId, LastSyncedRevision: lastSynced, VersionToken: catalog.VersionToken);
         }
 
-        // 2. The Phase 3 single-file layout: a whole document at profiles/player.json → split it into the new layout.
+        // 2. The pre-split single-file layout: a whole document at profiles/player.json → split it into the new layout.
         var phaseThree = await m_store.ReadAsync<WorldPlayerDocument>(address: PhaseThreeDocAddress, cancellationToken: cancellationToken, target: m_target);
 
         if (phaseThree is { Found: true, Value: { Profiles: not null } single }) {
@@ -92,7 +92,7 @@ internal sealed class WorldProfileStore {
             Console.Error.WriteLine(value: $"[profiles] the Phase 3 profiles/player.json did not migrate cleanly ({reason}); seeding the built-in default and leaving the old file in place for inspection.");
         }
 
-        // 3. The retired puck.world.profiles.v1 catalog.
+        // 3. The discontinued puck.world.profiles.v1 catalog.
         var legacy = await m_store.ReadAsync<LegacyDocument>(address: LegacyAddress, cancellationToken: cancellationToken, target: m_target);
 
         if (legacy is { Found: true, Value: { Profiles: not null } old }) {
@@ -122,8 +122,8 @@ internal sealed class WorldProfileStore {
     }
 
     /// <summary>Saves the player document as the split layout — the catalog blob plus every per-profile blob — returning
-    /// the catalog write result (the ordering anchor, carrying the new version token). Unconditional overwrite this arc:
-    /// the local backend is last-writer-wins; the cloud arc adds the if-match round-trip on top of this same seam.</summary>
+    /// the catalog write result (the ordering anchor, carrying the new version token). Unconditional overwrite on the
+    /// local backend (last-writer-wins); a cloud-backed store layers an if-match round-trip on the same seam.</summary>
     /// <param name="document">The document to persist.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The catalog blob write result.</returns>
@@ -176,8 +176,8 @@ internal sealed class WorldProfileStore {
         var result = await m_store.WriteAsync(address: CatalogAddress, cancellationToken: cancellationToken, mode: mode, target: m_target, value: catalog);
 
         // Human-cadence save of a tiny catalog (four profiles by default): writing every profile blob each save is
-        // trivially cheap and keeps the on-disk split a faithful snapshot; the per-profile grain is what buys the cloud
-        // arc changed-only uploads, not a local write-skip.
+        // trivially cheap and keeps the on-disk split a faithful snapshot; the per-profile grain is what buys a
+        // cloud-backed store's changed-only uploads, not a local write-skip.
         foreach (var profile in document.Profiles) {
             _ = await m_store.WriteAsync(address: ProfileAddress(id: profile.Id), cancellationToken: cancellationToken, mode: mode, target: m_target, value: profile);
         }
@@ -207,7 +207,7 @@ internal sealed class WorldProfileStore {
         return migrated.Profiles[0].Id;
     }
 
-    // Map a retired catalog to the new shape: each name becomes the stable id + identity name, speeds map to Motion,
+    // Map the discontinued catalog shape to the current one: each name becomes the stable id + identity name, speeds map to Motion,
     // bindings start null (the engine default), revision starts at 1, stamp at the epoch default.
     private static WorldPlayerDocument Migrate(LegacyDocument legacy) {
         var profiles = new List<WorldPlayerProfile>(capacity: legacy.Profiles.Count);
@@ -223,7 +223,7 @@ internal sealed class WorldProfileStore {
         return new WorldPlayerDocument(Schema: WorldPlayerDocument.SchemaVersion, Revision: 1L, UpdatedAtUtc: WorldPlayerDocument.DefaultUpdatedAtUtc, Profiles: profiles);
     }
 
-    // A Phase 3 document deserialized from disk predates the UpdatedAtUtc field, so STJ leaves it null — coalesce it to
+    // A pre-split document deserialized from disk predates the UpdatedAtUtc field, so STJ leaves it null — coalesce it to
     // the epoch default so the migrated document validates and round-trips.
     private static WorldPlayerDocument NormalizeStamp(WorldPlayerDocument document) {
         return (string.IsNullOrWhiteSpace(value: document.UpdatedAtUtc)
@@ -231,8 +231,8 @@ internal sealed class WorldProfileStore {
             : document);
     }
 
-    // Resolve the boot seat and sync cursor from the local sidecar, migrating the Phase 3 sidecar (profiles/local.json)
-    // to the new key once. An absent/empty sidecar falls back to the first catalog entry and revision 0.
+    // Resolve the boot seat and sync cursor from the local sidecar, migrating the pre-split sidecar (profiles/local.json)
+    // to the current key once. An absent/empty sidecar falls back to the first catalog entry and revision 0.
     private async ValueTask<(string LastUsedId, long LastSyncedRevision)> ResolveLocalAsync(WorldPlayerDocument document, CancellationToken cancellationToken) {
         var sidecar = await m_store.ReadAsync<WorldPlayerLocal>(address: LocalAddress, cancellationToken: cancellationToken, target: m_target);
 
@@ -240,7 +240,7 @@ internal sealed class WorldProfileStore {
             return (id, value.LastSyncedRevision);
         }
 
-        // Try the Phase 3 sidecar once, migrate it forward, and delete the old key.
+        // Try the pre-split sidecar once, migrate it forward, and delete its key.
         var legacySidecar = await m_store.ReadAsync<WorldPlayerLocal>(address: PhaseThreeLocalAddress, cancellationToken: cancellationToken, target: m_target);
 
         if (legacySidecar is { Found: true, Value: { LastUsedId: { } legacyId } legacyValue } && !string.IsNullOrEmpty(value: legacyId)) {

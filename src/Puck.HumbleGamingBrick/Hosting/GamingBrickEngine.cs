@@ -17,10 +17,10 @@ public sealed class GamingBrickEngine : IScreenMachineEngine {
     public string Id => "gaming-brick";
 
     /// <inheritdoc/>
-    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null) {
+    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         var (model, dmgSpeed) = ParseOptions(options: options);
 
-        return new MachineHost(model: model, cartridgeRom: contentBytes, savePath: savePath, dmgSpeed: dmgSpeed);
+        return new MachineHost(model: model, cartridgeRom: contentBytes, savePath: savePath, dmgSpeed: dmgSpeed, audioSampleRate: audioSampleRate);
     }
 
     // Parse the space-separated options string (order-independent): a model keyword sets the console costume; the

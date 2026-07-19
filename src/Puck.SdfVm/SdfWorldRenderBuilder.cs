@@ -12,7 +12,7 @@ public sealed record SdfWorldRender(
 ) {
     /// <summary>The outermost decorator's capture capability, when the decorated chain has one — set by
     /// <see cref="SdfWorldRenderBuilder.Build"/> right after building the decorator chain, before it is wrapped for
-    /// the caller. <see langword="null"/> when no decorator is present (a Direct3D 12 host, or resources absent).</summary>
+    /// the caller. <see langword="null"/> when no decorator is present (none specified, or resources absent).</summary>
     internal ICaptureRequestTarget? CaptureTarget { get; init; }
 
     /// <summary>Arms a one-shot capture of the NEXT produced frame on the OUTERMOST decorator (the console overlay,
@@ -32,9 +32,9 @@ public sealed record SdfWorldRender(
 
 /// <summary>
 /// The ONE assembly path from an <see cref="SdfWorldRenderSpec"/> to a runnable SDF world render host. Every
-/// backend-specific choice lives here: kernel bytecode selection (SPIR-V vs DXIL) and decorator availability derive
-/// from the spec's resolved host backend — a caller never names a bytecode extension, and Vulkan-service decorators
-/// are explicitly skipped (with a notice) on a Direct3D 12 host rather than silently bound.
+/// backend-specific choice lives here: kernel bytecode selection (SPIR-V vs DXIL) derives from the spec's resolved
+/// host backend — a caller never names a bytecode extension. The spec's <c>Decorate</c> seam applies on EVERY
+/// backend (decorators are backend-neutral; the caller hands them backend-selected bytecode).
 /// </summary>
 public static class SdfWorldRenderBuilder {
     /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child
@@ -81,13 +81,7 @@ public static class SdfWorldRenderBuilder {
         var root = (IRenderNode)producer;
 
         if (spec.Decorate is { } decorate) {
-            if (spec.HostsOnDirectX) {
-                // The current decorators (the binding-bar overlay) bind Vulkan services and SPIR-V bytecode; on a
-                // Direct3D 12 host the world renders undecorated rather than binding the wrong backend's modules.
-                Console.Error.WriteLine(value: "[sdf-world] the render decorator is Vulkan-only; skipping it on the Direct3D 12 host.");
-            } else {
-                root = decorate(producer);
-            }
+            root = decorate(producer);
         }
 
         // Captured BEFORE root is wrapped in SdfWorldRenderRoot below: `root` here is the actual decorated chain

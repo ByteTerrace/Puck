@@ -442,7 +442,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         m_disposed = true;
 
+        // Drain only while the context is alive — at host shutdown it may already be disposed (CommandQueueHandle
+        // throws), and a dead queue has nothing left in flight (see DirectXGpuExportableStorageImage.Dispose).
         if (
+            m_deviceContext.IsInitialized &&
             (0 != m_deviceContext.CommandQueueHandle) &&
             (0 != m_fence)
         ) {

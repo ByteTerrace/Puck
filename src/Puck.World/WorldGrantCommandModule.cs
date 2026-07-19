@@ -6,7 +6,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The capability-grant console surface — the dev reflection of the §2.7 principal/grant model: <c>world.grant</c> and
+/// The capability-grant console surface — the dev reflection of the principal/grant model: <c>world.grant</c> and
 /// <c>world.revoke</c> mutate the server's ONE grant table over the wire, and <c>world.grants</c> echoes it. Grant
 /// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply SYNCHRONOUSLY at submit
 /// (like a command), so a following <c>world.grants</c> read behind the stdin barrier sees the settled table; the
@@ -15,14 +15,15 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>Principal tokens: <c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> | <c>peer:&lt;n&gt;</c>
 /// (a population entity index). Capability tokens: <c>drive</c> | <c>control</c> | <c>mutate</c> | <c>edit</c>. Subject
-/// tokens: <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> | <c>section:&lt;name&gt;</c> | <c>all</c>. A trailing
-/// <c>exclusive</c> on <c>world.grant</c> requests an exclusive hold (rejected if a live holder owns it).</remarks>
+/// tokens: <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> | <c>section:&lt;name&gt;</c> | <c>profile:&lt;id&gt;</c> |
+/// <c>all</c>. A trailing <c>exclusive</c> on <c>world.grant</c> requests an exclusive hold (rejected if a live holder
+/// owns it).</remarks>
 internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.grant",
-            description: "Grants a capability to a principal: world.grant <principal> <capability> <subject> [exclusive]. principal = seat1..seat4|console|addon:<name>|peer:<n>; capability = drive|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|all. Applies at submit; an exclusive grant a live holder owns is rejected loudly.",
+            description: "Grants a capability to a principal: world.grant <principal> <capability> <subject> [exclusive]. principal = seat1..seat4|console|addon:<name>|peer:<n>; capability = drive|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|profile:<id>|all. Applies at submit; an exclusive grant a live holder owns is rejected loudly (the seeded permissive defaults never block one).",
             handler: (_, args) => Handle(args: args, exclusiveAllowed: true, revoke: false),
             routing: CommandRouting.Simulation
         );
@@ -80,7 +81,7 @@ internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink li
         }
 
         if (!TryParseSubject(token: args[2], subject: out var subject)) {
-            return new CommandResult(Output: $"[{verb}: unknown subject '{args[2]}' — body:<n>|screen:<n>|section:<name>|all]") {
+            return new CommandResult(Output: $"[{verb}: unknown subject '{args[2]}' — body:<n>|screen:<n>|section:<name>|profile:<id>|all]") {
                 IsError = true,
             };
         }
@@ -194,6 +195,12 @@ internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink li
         if (token.StartsWith(value: "section:", comparisonType: StringComparison.OrdinalIgnoreCase) &&
             Enum.TryParse<WorldSection>(value: token[8..], ignoreCase: true, result: out var section)) {
             subject = GrantSubject.Section(section: section);
+
+            return true;
+        }
+
+        if (token.StartsWith(value: "profile:", comparisonType: StringComparison.OrdinalIgnoreCase) && (token.Length > 8)) {
+            subject = GrantSubject.Profile(id: token[8..]);
 
             return true;
         }

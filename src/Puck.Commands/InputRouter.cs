@@ -22,6 +22,7 @@ namespace Puck.Commands;
 /// </remarks>
 public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
     private readonly IInputBindings m_bindings;
+    private readonly IChordEdgeSource? m_chordEdges;
     private readonly Lock m_captureGate = new();
     private readonly List<Captured> m_captured = [];
     // Simulation-thread scratch retained across ticks. Idle snapshots then allocate nothing; active snapshots allocate
@@ -59,6 +60,7 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         ArgumentNullException.ThrowIfNull(registry);
 
         m_bindings = bindings;
+        m_chordEdges = (bindings as IChordEdgeSource);
         m_clock = clock;
         m_registry = registry;
         m_slotResolver = (slotResolver ?? (static _ => 0));
@@ -91,6 +93,26 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         lock (m_captureGate) {
             m_captured.Add(item: new Captured(Sequence: m_sequence++, CaptureTick: signal.CaptureTick, Signal: signal, Injection: null));
         }
+    }
+
+    /// <summary>Whether a logical command is currently carried held for a slot — a bound digital pressed and not yet
+    /// released, or an analog channel with an active carried sample. The read seam an input-state UI (a binding bar's
+    /// pressed chips) lights from, so held truth has ONE owner instead of a parallel tracker per consumer.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="command">The command name to test.</param>
+    /// <returns><see langword="true"/> when the slot carries the command held.</returns>
+    /// <remarks>Pump-thread only: the held tables mutate inside <see cref="SnapshotForTick"/> and the focus-loss
+    /// release on the same single thread that produces frames, so this read is safe there and nowhere else.</remarks>
+    public bool IsCommandHeld(int slot, string command) {
+        return (m_registry.TryGetId(
+            name: command,
+            id: out var commandId
+        )
+            && m_heldBySlot.TryGetValue(
+                key: slot,
+                value: out var held
+            )
+            && held.ContainsKey(key: commandId));
     }
 
     /// <summary>Queues one deterministic cancellation per carried logical command, then clears every carried digital
@@ -318,6 +340,14 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
 
         var bindings = m_bindings.Resolve(slot: slot, signal: signal);
 
+        if (m_chordEdges is not null) {
+            // Chord-command edges synthesized by this signal's resolve fold into the same lane with their OWN
+            // phase and value (the physical signal's phase may be a mid-sweep Active) — see IChordEdgeSource.
+            foreach (var edge in m_chordEdges.DrainChordEdges(slot: slot)) {
+                ApplyChordEdge(workingBySlot: workingBySlot, slot: slot, device: signal.DeviceId, edge: in edge);
+            }
+        }
+
         if (bindings is null) {
             return;
         }
@@ -411,6 +441,43 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
                         _ = m_heldBySlot.Remove(key: slot);
                     }
                 }
+            }
+        }
+    }
+    // Folds one synthesized chord-command edge into the slot's lane. The press carries held bookkeeping (so
+    // IsCommandHeld lights and focus-loss cancellation covers a chord-held command); the release clears it. The
+    // command-availability gate matches the bound path — an inactive-map command's chord is inert, not an error.
+    private void ApplyChordEdge(Dictionary<int, List<CommandEntry>> workingBySlot, int slot, InputDeviceId device, in BindingChordEdge edge) {
+        if (!m_registry.TryGetId(
+            name: edge.Command,
+            id: out var commandId
+        ) || !m_registry.IsSourceCommandActive(commandId: commandId)) {
+            return;
+        }
+
+        var entry = new CommandEntry(
+            CommandId: commandId,
+            Device: device,
+            Dispatch: edge.Dispatch,
+            Phase: edge.Phase,
+            Value: edge.Value
+        );
+
+        WorkingFor(workingBySlot: workingBySlot, slot: slot).Add(item: entry);
+
+        if (edge.Phase == CommandPhase.Started) {
+            HeldFor(slot: slot)[commandId] = (entry with {
+                Dispatch = false,
+                Phase = CommandPhase.Active,
+            });
+        } else if (m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        )) {
+            _ = held.Remove(key: commandId);
+
+            if (held.Count == 0) {
+                _ = m_heldBySlot.Remove(key: slot);
             }
         }
     }

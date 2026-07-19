@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Authoring;
 using Puck.Cameras;
 using Puck.Demo.Creator;
 using Puck.SdfVm;

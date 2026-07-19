@@ -1,8 +1,8 @@
 namespace Puck.World;
 
 /// <summary>
-/// The world's EFFECTIVE storage host-section values after the CLI reflection overrides the world-doc defaults (§2.5.5):
-/// the per-user cloud endpoint and the explicit user-id override. Both are RESERVED this arc — nothing constructs an
+/// The world's EFFECTIVE storage host-section values after the CLI reflection overrides the world-doc defaults:
+/// the per-user cloud endpoint and the explicit user-id override. Both are RESERVED — nothing constructs an
 /// Azure target from <see cref="Endpoint"/>, and <see cref="UserId"/> only feeds the identity resolver's
 /// explicit-override source. <c>storage.status</c> echoes them.
 /// </summary>
@@ -26,12 +26,12 @@ internal sealed record WorldStorageSettings(string? Endpoint, string? UserId) {
 }
 
 /// <summary>
-/// Resolves the acting user to a per-user container id, or DECLINES (§2.5.4). This arc ships exactly two
-/// implementations — <see cref="ExplicitOverridePlayerStorageIdentityResolver"/> (a data-file / CLI <c>userId</c>) and
+/// Resolves the acting user to a per-user container id, or DECLINES. Exactly two
+/// implementations exist today — <see cref="ExplicitOverridePlayerStorageIdentityResolver"/> (a data-file / CLI <c>userId</c>) and
 /// <see cref="DecliningPlayerStorageIdentityResolver"/> (the local-only default) — and NO token parsing or claims flow
-/// (that is the cloud arc's, obtained from a real ID token, never a parsed storage access token). The Entra <c>oid</c>
-/// claim is a Guid and <c>Guid.ToString()</c> is a valid container name (§6.5), so oid-as-container stays the target
-/// mapping. The resolver's result feeds <c>storage.status</c>; nothing constructs an Azure target from it this arc.
+/// (that requires a real ID token, not a parsed storage access token — unimplemented). The Entra <c>oid</c>
+/// claim is a Guid and <c>Guid.ToString()</c> is a valid container name, so oid-as-container stays the target
+/// mapping. The resolver's result feeds <c>storage.status</c>; nothing constructs an Azure target from it today.
 /// </summary>
 internal interface IPlayerStorageIdentityResolver {
     /// <summary>Attempts to resolve the acting user to a per-user container id.</summary>
@@ -54,7 +54,7 @@ internal interface IPlayerStorageIdentityResolver {
     }
 }
 
-/// <summary>The explicit-override resolver (§2.5.4): a data-file / CLI <c>userId</c> for dev boxes and agents. The value
+/// <summary>The explicit-override resolver: a data-file / CLI <c>userId</c> for dev boxes and agents. The value
 /// must be an Entra <c>oid</c>-shaped Guid (a valid container name); a non-Guid override declines loudly rather than
 /// inventing a container.</summary>
 internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userId) : IPlayerStorageIdentityResolver {
@@ -75,7 +75,7 @@ internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userI
     }
 }
 
-/// <summary>The declining resolver — the local-only default (§2.5.4): no user identity, per-user sync off. The honest
+/// <summary>The declining resolver — the local-only default: no user identity, per-user sync off. The honest
 /// state <c>storage.status</c> reports when no override or credential is present.</summary>
 internal sealed class DecliningPlayerStorageIdentityResolver : IPlayerStorageIdentityResolver {
     /// <inheritdoc/>

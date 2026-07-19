@@ -6,9 +6,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The serializable root of a user's player-scoped state (<c>puck.world.player.v1</c>): a CATALOG of profiles every
-/// participant seats on, carried with a monotonic <see cref="Revision"/> so cloud sync can order two copies (§2.5) and
-/// an <see cref="Extensions"/> bag so unknown sections survive a round-trip (the data-side plugin posture). It absorbs
-/// and retires <c>puck.world.profiles.v1</c>: the store migrates the old file once at load, then deletes it.
+/// participant seats on, carried with a monotonic <see cref="Revision"/> so cloud sync can order two copies and
+/// an <see cref="Extensions"/> bag so unknown sections survive a round-trip (the data-side plugin posture). It
+/// discontinues <c>puck.world.profiles.v1</c>: the store migrates its file once at load, then deletes it.
 /// </summary>
 /// <remarks>Persisted through the reflection-based <c>JsonObjectBlobStore</c> (Web defaults), so every member is a
 /// property of a primitive/string/nested-record type — no <see cref="System.Numerics.Vector3"/> field STJ would
@@ -16,11 +16,11 @@ namespace Puck.World;
 /// this reason). Machine-local boot seating (which profile player 1 wakes on) does NOT live here — it must not roam to
 /// the cloud — but in a small local-only sidecar (<see cref="WorldPlayerLocal"/>).</remarks>
 /// <param name="Schema">The document schema tag; <see cref="SchemaVersion"/> for a well-formed document.</param>
-/// <param name="Revision">The monotonic save counter (§2.5 ordering key) — bumped on every persist. Starts at 1. It
+/// <param name="Revision">The monotonic save counter (the ordering key) — bumped on every persist. Starts at 1. It
 /// ORDERS two copies; it never guards against a clobber (that is the storage version token's job — the two are
-/// deliberately separate mechanisms, §6.4).</param>
+/// deliberately separate mechanisms).</param>
 /// <param name="UpdatedAtUtc">The wall-clock instant of the last persist (ISO-8601 round-trip "O"), the Revision
-/// tiebreak for the cloud arc. Persistence sits OUTSIDE the sim-determinism contract, so wall clock is legal here (§2.5).</param>
+/// tiebreak. Persistence sits outside the sim-determinism contract, so a wall-clock read is legal here.</param>
 /// <param name="Profiles">The stored profile catalog; ids and names are each unique (case-insensitive on names).</param>
 internal sealed record WorldPlayerDocument(
     string Schema,
@@ -37,15 +37,15 @@ internal sealed record WorldPlayerDocument(
     public const string DefaultUpdatedAtUtc = "1970-01-01T00:00:00.0000000+00:00";
 
     /// <summary>The wall-clock stamp for a fresh persist — <see cref="DateTimeOffset.UtcNow"/> in ISO-8601 round-trip
-    /// form. Persistence is outside the sim-determinism contract (§2.5), so a real clock read is legal here.</summary>
+    /// form. Persistence is outside the sim-determinism contract, so a real clock read is legal here.</summary>
     /// <returns>The current UTC instant as an ISO-8601 round-trip string.</returns>
     public static string StampNow() {
         return DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Unknown sections preserved across a round-trip — the data-side extensibility posture (the
-    /// <see cref="Puck.Scene.PuckRunDocument"/> precedent). A settable accessor is required: STJ appends to it during
-    /// deserialization.</summary>
+    /// <summary>Unknown sections preserved across a round-trip — the data-side extensibility posture, matching
+    /// <see cref="Puck.Scene.PuckRunDocument"/>'s JsonExtensionData round-trip convention. A settable accessor is
+    /// required: STJ appends to it during deserialization.</summary>
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
@@ -107,24 +107,24 @@ internal sealed record WorldPlayerMotion(float MoveSpeed = 4f, float TurnSpeed =
 /// <summary>
 /// The small machine-LOCAL sidecar beside the player document (<c>local.json</c>): boot-seating and sync-cursor state
 /// that must NOT roam to the cloud. It carries which profile player 1 wakes on plus the last-synced revision cursor,
-/// kept a separate blob so the cloud arc syncs the roaming <see cref="WorldPlayerDocument"/> without dragging per-machine
-/// state along.
+/// kept a separate blob so a cloud-backed store can sync the roaming <see cref="WorldPlayerDocument"/> without
+/// dragging per-machine state along.
 /// </summary>
 /// <param name="LastUsedId">The <see cref="WorldPlayerProfile.Id"/> player 1 seats on at boot.</param>
 /// <param name="LastSyncedRevision">The highest document <see cref="WorldPlayerDocument.Revision"/> a cloud sync has
-/// confirmed uploaded (§2.5.1). Sync state is DERIVED — <c>document.Revision &gt; LastSyncedRevision</c> means dirty —
+/// confirmed uploaded. Sync state is DERIVED — <c>document.Revision &gt; LastSyncedRevision</c> means dirty —
 /// never a volatile flag, so it is crash-safe. Stays 0 while no cloud is wired, so <c>storage.status</c> reports the
-/// local copy as unsynced (the honest truth this arc).</param>
+/// local copy as unsynced (the honest state while no cloud target is wired).</param>
 internal sealed record WorldPlayerLocal(string LastUsedId, long LastSyncedRevision = 0L);
 
 /// <summary>
 /// The catalog-level projection persisted at the per-user container's <c>world/player.json</c> — the document minus the
-/// profile bodies, which live in one <c>world/profiles/&lt;id&gt;.json</c> blob each (§2.5.3). Splitting the store this
+/// profile bodies, which live in one <c>world/profiles/&lt;id&gt;.json</c> blob each. Splitting the store this
 /// way makes two devices' edits to DIFFERENT profiles independent (the same address model the cloud uses); the catalog
 /// carries the ordering key and the ordered id list a load re-assembles the document from.
 /// </summary>
 /// <param name="Schema">The document schema tag, mirroring <see cref="WorldPlayerDocument.Schema"/>.</param>
-/// <param name="Revision">The document revision (§2.5 ordering key).</param>
+/// <param name="Revision">The document revision (the ordering key).</param>
 /// <param name="UpdatedAtUtc">The last-persist wall-clock stamp (the Revision tiebreak).</param>
 /// <param name="ProfileIds">The ordered profile ids — the catalog order a load walks to read each profile blob.</param>
 internal sealed record WorldPlayerCatalog(

@@ -7,9 +7,16 @@ play inside one running overworld:
 sculpt or compose → preview → bake → link → self-verify → hot-swap → play
 ```
 
-Authored content remains greenfield `Puck.Demo` data and is verified by running
-the demo and by each forge's machine-level self-check. Reusable engine
-mechanisms belong in their natural split project once their contract is clear.
+The DESTINATION for studio work is `Puck.World` and the shared libraries —
+`Puck.Authoring` already owns the creation-document contracts
+(`puck.creation.v1`, `CreationStore`, edit history, grid snap) both roots
+consume, `Puck.Overlays` owns the screen-space editor UI surface, and the
+World editor (per-seat sessions, selection/drag over the mutation protocol) is
+the live authoring seam. `Puck.Demo` remains the staging ground only for
+surfaces not yet lifted (the Demo is being ported into World/libraries and
+will be removed); new destination work lands in World or a shared library,
+never as new Demo-only machinery. Authored content is verified by running the
+host that owns it and by each forge's machine-level self-check.
 
 ## Product goal
 
@@ -206,10 +213,13 @@ documented rather than accidental.
 
 ## Working rules
 
-- Build authored content and studio UX in `Puck.Demo`; move only proven,
-  content-neutral mechanisms into engine projects.
-- Verify studio changes by running the demo and exercising save/load and
-  forge/hot-swap. Do not add a `Puck.Post` stage for game-specific behavior.
+- Build destination studio UX in `Puck.World` on the shared authoring
+  libraries (`Puck.Authoring`, `Puck.Overlays`); `Puck.Demo` hosts only
+  not-yet-lifted surfaces, and lifting means moving machinery into a library,
+  never adding Demo references.
+- Verify studio changes by running the owning host and exercising save/load
+  and forge/hot-swap. Do not add a `Puck.Post` stage for game-specific
+  behavior.
 - Keep source documents deterministic and reviewable. Generated previews and
   caches never become the only copy of authored work.
 - Preserve the forge's independent machine-level verification. The builder and

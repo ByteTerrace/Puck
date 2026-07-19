@@ -49,7 +49,7 @@ internal static class GamepadDemoRegistration {
                     document = @default;
                 }
 
-                Console.Error.WriteLine(value: $"[bindings] profile loaded ({document.Pages.Count} pages); edit {store.FilePath} to customize.");
+                Console.Error.WriteLine(value: $"[bindings] profile loaded ({document.Chords.Count} chord rows); edit {store.FilePath} to customize.");
 
                 return new PagedInputBindings(profile: BindingProfile.Compile(document: document));
             } catch (Exception exception) {

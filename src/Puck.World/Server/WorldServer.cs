@@ -3,14 +3,42 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
+/// <summary>What kind of edit boundary a <see cref="WorldEditEcho"/> narrates — the class the editor HUD tags.</summary>
+internal enum WorldEditEchoKind {
+    /// <summary>A world-document mutation that applies LIVE on delivery (cameras included).</summary>
+    Mutation,
+
+    /// <summary>A DOCUMENT-DEFAULTS mutation — it changes what the next boot wakes on while the live session levers
+    /// keep their values (<c>world.render.defaults</c> / <c>world.population.defaults</c>).</summary>
+    DocumentDefaults,
+
+    /// <summary>A grant-table change (<c>world.grant</c>/<c>world.revoke</c>) — runtime capability state, not a
+    /// document edit.</summary>
+    GrantTable,
+}
+
+/// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
+/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag, the drag
+/// channel's frozen-preview retirement) narrates outcomes without scraping stderr.</summary>
+/// <param name="Message">The human-readable outcome line (no brackets).</param>
+/// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
+/// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
+/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
+/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>) and the at-site position source the
+/// applied-cue lane derives from; <see langword="null"/> otherwise.</param>
+/// <param name="Denied">Whether the rejection was a CAPABILITY denial (a missing mutate grant, a refused grant
+/// acquisition) rather than a validator/guard rejection — the discriminator the cue lane's <c>grant.denied</c> vs
+/// <c>mutation.rejected</c> tokens ride.</param>
+internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false);
+
 /// <summary>
 /// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Commands, session requests,
 /// and queries apply synchronously at submit (the host guarantees submissions arrive inside the command-apply window
 /// immediately preceding the tick's <see cref="Step"/>, so every mutation lands before that tick's advance in stdin
 /// FIFO order). Live world EDITS — mutations, definition swaps, and journal undo — instead BUFFER and drain at
-/// <see cref="Step"/>, before the intent drain, so they are tick-aligned (settled question 9: they buffer like intents,
-/// they are not synchronous like commands). Per-tick intents also buffer and drain at <see cref="Step"/>, which then
+/// <see cref="Step"/>, before the intent drain, so they are tick-aligned: they buffer like intents,
+/// they are not synchronous like commands. Per-tick intents also buffer and drain at <see cref="Step"/>, which then
 /// advances every body and pushes the tick's <see cref="WorldSnapshot"/> — plus, in any step that applied at least one
 /// edit, the new definition — to the attached <see cref="IClientSink"/>.
 /// </summary>
@@ -69,12 +97,17 @@ internal sealed class WorldServer {
     public WorldProfiles Profiles => m_profiles;
 
     /// <summary>The capability table — the ONE grant primitive the engagement view, the addon driver, and the grant
-    /// verbs read/write. Reads are loopback-local this arc; a socket transport moves grant changes onto the wire.</summary>
+    /// verbs read/write. Reads are loopback-local today; a socket transport moves grant changes onto the wire.</summary>
     public WorldGrants Grants => m_grants;
 
     /// <summary>The journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
+
+    /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
+    /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
+    /// narrates them without scraping stderr. Runs on the server's step thread.</summary>
+    public Action<WorldEditEcho>? EchoTap { get; set; }
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
@@ -135,10 +168,14 @@ internal sealed class WorldServer {
     /// checks observe it). A rejected exclusive acquisition prints a loud line and changes nothing.</summary>
     /// <param name="grant">The grant to add.</param>
     public void Grant(WorldGrant grant) {
+        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
+
         if (m_grants.TryGrant(grant: grant, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}{(grant.Exclusive ? " exclusive" : string.Empty)}]");
+            Console.Error.WriteLine(value: $"[world.grant: {label}{(grant.Exclusive ? " exclusive" : string.Empty)}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label}{(grant.Exclusive ? " exclusive" : string.Empty)}", Rejected: false, Kind: WorldEditEchoKind.GrantTable));
         } else {
-            Console.Error.WriteLine(value: $"[world.grant rejected: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} — {reason}]");
+            Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
         }
     }
 
@@ -146,10 +183,12 @@ internal sealed class WorldServer {
     /// <param name="grant">The grant (capability + subject) to revoke.</param>
     public void Revoke(WorldGrant grant) {
         var removed = m_grants.Revoke(principal: grant.Principal, capability: grant.Capability, subject: grant.Subject);
+        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
 
         Console.Error.WriteLine(value: removed
-            ? $"[world.revoke: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}]"
+            ? $"[world.revoke: {label}]"
             : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: (removed ? $"revoke {label}" : $"revoke {label} — nothing held"), Rejected: !removed, Kind: WorldEditEchoKind.GrantTable));
     }
 
     /// <summary>Applies an authority command to its target body. Synchronous at submit (see the class summary), so a
@@ -264,10 +303,11 @@ internal sealed class WorldServer {
 
                 return new SessionReply(Accepted: true, AssignedIndex: -1, RosterEcho: string.Empty, Reason: string.Empty);
             case SessionRequest.SetPlayerSection setSection: {
-                // The server owns the durable player document: gate on Edit (permissive local default — every seat and
-                // the console hold Edit/all until revoked), apply/validate the section, bump the revision, and persist.
-                if (!m_grants.Allows(principal: setSection.Principal, capability: WorldCapability.Edit, subject: GrantSubject.All)) {
-                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{setSection.Principal.Describe()} cannot edit player profiles");
+                // The server owns the durable player document: gate on Edit over the CONCRETE profile subject (the
+                // permissive Edit/all seed passes via the wildcard path, so local play is unchanged; a profile:<id>
+                // grant narrows trust to named profiles), apply/validate the section, bump the revision, and persist.
+                if (!m_grants.Allows(principal: setSection.Principal, capability: WorldCapability.Edit, subject: GrantSubject.Profile(id: setSection.ProfileId))) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{setSection.Principal.Describe()} cannot edit profile:{setSection.ProfileId}");
                 }
 
                 if (!m_profiles.ApplySection(id: setSection.ProfileId, section: setSection.Section, payload: setSection.Payload, reason: out var sectionReason)) {
@@ -315,7 +355,7 @@ internal sealed class WorldServer {
                 continue;
             }
 
-            // Server-side Drive enforcement on the per-tick path (the §2.7 keystone): a submission whose principal does
+            // Server-side Drive enforcement on the per-tick path: a submission whose principal does
             // not hold Drive over the target body is dropped, loud ONCE per denial episode (a revoked driver keeps
             // submitting; we log its first refused tick, then the body idles until re-granted). Allocation-free O(1).
             if (!m_grants.Allows(principal: submission.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: submission.EntityIndex))) {
@@ -365,11 +405,12 @@ internal sealed class WorldServer {
     // unchanged) → on success swap the live definition, rebuild the changed section's derived state, and journal it.
     private bool TryApplyMutation(WorldMutation mutation, ulong tick) {
         // Server-side Mutate enforcement: the principal must hold Mutate over the mutation's section. A denial is
-        // data-shaped (a missing grant row), never a new message kind — and it is loud and dropped (§2.6 audit).
+        // data-shaped (a missing grant row), never a new message kind — and it is loud and dropped.
         var section = SectionOf(mutation: mutation);
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation, Denied: true));
 
             return false;
         }
@@ -386,7 +427,7 @@ internal sealed class WorldServer {
             return false;
         }
 
-        if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(scene: candidate.Scene, screens: candidate.Screens, reason: out var capacityReason)) {
+        if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
             Reject(mutation: mutation, reason: capacityReason);
 
             return false;
@@ -394,13 +435,21 @@ internal sealed class WorldServer {
 
         Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
-        Console.Error.WriteLine(value: $"[world.mutation: {Describe(mutation: mutation)} applied]");
 
-        if (mutation is WorldMutation.UpsertCamera or WorldMutation.RemoveCamera) {
-            // The offscreen view pool is sized/registered at boot from the probed render envelope; a live camera pool
-            // rebuild is out of scope this phase, so a camera edit is document-only and takes effect at the next boot.
-            Console.Error.WriteLine(value: "[world.camera: applies at next boot]");
-        }
+        // A defaults-class mutation edits what the NEXT boot wakes on while the live
+        // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
+        // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
+        // classes at once (WorldAuthoringDefaults' own remarks name which field is which) — the headroom/repeat-cap
+        // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
+        // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
+        // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
+        var documentOnly = IsDocumentDefaults(mutation: mutation);
+        var message = (mutation is WorldMutation.SetAuthoringDefaults
+            ? $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot"
+            : $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}");
+
+        Console.Error.WriteLine(value: $"[world.mutation: {message}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation), Mutation: mutation));
 
         return true;
     }
@@ -422,7 +471,7 @@ internal sealed class WorldServer {
             return false;
         }
 
-        if (!m_envelope.TryFit(scene: definition.Scene, screens: definition.Screens, reason: out var capacityReason)) {
+        if (!m_envelope.TryFit(candidate: definition, reason: out var capacityReason)) {
             Console.Error.WriteLine(value: $"[world.definition rejected: {capacityReason}]");
 
             return false;
@@ -494,7 +543,13 @@ internal sealed class WorldServer {
 
     private void Reject(WorldMutation mutation, string reason) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation));
     }
+
+    // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
+    // Everything else, cameras included, applies live on delivery.
+    private static bool IsDocumentDefaults(WorldMutation mutation) => mutation is
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
     // compiled tuning/actions). Scene/screen/camera/render/population-default/addon edits do not.
@@ -502,9 +557,13 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
 
-    // Whether a mutation can grow the SDF program past the probed render envelope (scene boulders / screen slabs).
+    // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs /
+    // creation stamps — an UpsertCreation re-shapes every live placement of it, so it measures too).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => mutation is
-        WorldMutation.SetScene or WorldMutation.UpsertScreen or WorldMutation.RemoveScreen;
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
@@ -512,7 +571,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or WorldMutation.SetKitAssignment => WorldSection.Kits,
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen => WorldSection.Screens,
         WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
-        WorldMutation.SetScene => WorldSection.Scene,
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow => WorldSection.Scene,
         WorldMutation.SetSpawns => WorldSection.Spawns,
         WorldMutation.SetMotion => WorldSection.Motion,
         WorldMutation.SetWander => WorldSection.Wander,
@@ -520,8 +579,66 @@ internal sealed class WorldServer {
         WorldMutation.SetRenderDefaults => WorldSection.Render,
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
         WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => WorldSection.Creations,
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => WorldSection.Placements,
+        WorldMutation.SetAuthoringDefaults => WorldSection.Authoring,
+        WorldMutation.UpsertSpeaker or WorldMutation.RemoveSpeaker => WorldSection.Speakers,
+        WorldMutation.UpsertTune or WorldMutation.RemoveTune => WorldSection.Tunes,
+        WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
+        WorldMutation.SetAudioDefaults => WorldSection.Audio,
         _ => WorldSection.Kits,
     };
+
+    // The dependents a placement-removal guard names: every speaker anchored to the placement (null = none).
+    private static string? DescribeSpeakersAnchoredTo(IReadOnlyList<WorldSpeaker> speakers, string placementId) {
+        List<string>? names = null;
+
+        foreach (var speaker in speakers) {
+            if ((speaker is WorldSpeaker.Anchored { Anchor: WorldAnchor.Placement anchor }) &&
+                string.Equals(a: anchor.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                (names ??= new List<string>()).Add(item: $"'{speaker.Name}'");
+            }
+        }
+
+        return ((names is null) ? null : string.Join(separator: ", ", values: names));
+    }
+
+    // The dependents a tune/patch-removal guard names among speaker feeds (null = none).
+    private static string? DescribeSpeakersSourcing(IReadOnlyList<WorldSpeaker> speakers, Func<WorldSpeakerSource, bool> matches) {
+        List<string>? names = null;
+
+        foreach (var speaker in speakers) {
+            if ((speaker.Feed?.Source is { } source) && matches(arg: source)) {
+                (names ??= new List<string>()).Add(item: $"'{speaker.Name}'");
+            }
+        }
+
+        return ((names is null) ? null : string.Join(separator: ", ", values: names));
+    }
+
+    // Every dependent a patch-removal guard names: synth-sourced speakers plus scene-row/placement emission facets
+    // (creation sounds carry their patches INLINE, so they can never dangle). Null = none.
+    private static string? DescribePatchDependents(WorldDefinition current, string patchId) {
+        List<string>? dependents = null;
+
+        if (DescribeSpeakersSourcing(speakers: current.Speakers, matches: source => ((source is WorldSpeakerSource.Synth synth) && string.Equals(a: synth.PatchId, b: patchId, comparisonType: StringComparison.Ordinal))) is { } speakers) {
+            (dependents ??= new List<string>()).Add(item: $"speaker(s) {speakers}");
+        }
+
+        foreach (var row in current.Scene.Rows) {
+            if ((row.Emission is { } emission) && string.Equals(a: emission.PatchId, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                (dependents ??= new List<string>()).Add(item: $"scene row '{row.Id}'");
+            }
+        }
+
+        foreach (var placement in current.Placements) {
+            if ((placement.Emission is { } emission) && string.Equals(a: emission.PatchId, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                (dependents ??= new List<string>()).Add(item: $"placement '{placement.Id}'");
+            }
+        }
+
+        return ((dependents is null) ? null : string.Join(separator: ", ", values: dependents));
+    }
 
     // A short mutation label for the accept/reject console line — the kind plus its stable-id subject.
     private static string Describe(WorldMutation mutation) => mutation switch {
@@ -534,6 +651,8 @@ internal sealed class WorldServer {
         WorldMutation.UpsertCamera m => $"UpsertCamera '{m.Camera.Name}'",
         WorldMutation.RemoveCamera m => $"RemoveCamera '{m.Name}'",
         WorldMutation.SetScene => "SetScene",
+        WorldMutation.UpsertSceneRow m => $"UpsertSceneRow '{m.Row.Id}'",
+        WorldMutation.RemoveSceneRow m => $"RemoveSceneRow '{m.Id}'",
         WorldMutation.SetSpawns => "SetSpawns",
         WorldMutation.SetMotion => "SetMotion",
         WorldMutation.SetWander => "SetWander",
@@ -543,6 +662,18 @@ internal sealed class WorldServer {
         WorldMutation.RemoveAddon m => $"RemoveAddon '{m.Name}'",
         WorldMutation.UpsertBindingOverlay m => $"UpsertBindingOverlay '{m.Overlay.Id}'",
         WorldMutation.RemoveBindingOverlay m => $"RemoveBindingOverlay '{m.Id}'",
+        WorldMutation.UpsertCreation m => $"UpsertCreation '{m.Creation.Id}'",
+        WorldMutation.RemoveCreation m => $"RemoveCreation '{m.Id}'",
+        WorldMutation.UpsertPlacement m => $"UpsertPlacement '{m.Placement.Id}'",
+        WorldMutation.RemovePlacement m => $"RemovePlacement '{m.Id}'",
+        WorldMutation.SetAuthoringDefaults => "SetAuthoringDefaults",
+        WorldMutation.UpsertSpeaker m => $"UpsertSpeaker '{m.Speaker.Name}'",
+        WorldMutation.RemoveSpeaker m => $"RemoveSpeaker '{m.Name}'",
+        WorldMutation.UpsertTune m => $"UpsertTune '{m.Tune.Id}'",
+        WorldMutation.RemoveTune m => $"RemoveTune '{m.Id}'",
+        WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Id}'",
+        WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
+        WorldMutation.SetAudioDefaults => "SetAudioDefaults",
         _ => "unknown",
     };
 
@@ -609,6 +740,21 @@ internal sealed class WorldServer {
                 candidate = (current with { Scene = m.Scene });
 
                 return true;
+            case WorldMutation.UpsertSceneRow m:
+                candidate = (current with { Scene = (current.Scene with { Rows = Upsert(list: current.Scene.Rows, item: m.Row, keyOf: static row => row.Id) }) });
+
+                return true;
+            case WorldMutation.RemoveSceneRow m:
+                if (!Remove(list: current.Scene.Rows, key: m.Id, keyOf: static row => row.Id, result: out var sceneRows)) {
+                    candidate = current;
+                    reason = $"no scene row with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Scene = (current.Scene with { Rows = sceneRows }) });
+
+                return true;
             case WorldMutation.SetSpawns m:
                 candidate = (current with { SpawnPoints = m.Spawns });
 
@@ -644,8 +790,198 @@ internal sealed class WorldServer {
                 candidate = (current with { Addons = addons });
 
                 return true;
+            case WorldMutation.UpsertCreation m: {
+                // The hash contract at the compose boundary: canonicalize (validate + normalize + hash) the
+                // carried document, REJECT a hash the pipeline did not itself compute, and store the canonical pair —
+                // so a stored row's doc and hash always come from the SAME canonical result.
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.CreationDocument> canonical;
+
+                try {
+                    canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: m.Creation.Document, source: m.Creation.Id);
+                } catch (Puck.Authoring.DocumentValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Creation.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"creation '{m.Creation.Id}' hash '{m.Creation.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Creations = Upsert(list: current.Creations, item: (m.Creation with { Document = canonical.Document }), keyOf: static creation => creation.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemoveCreation m: {
+                // The conservative no-cascade ruling: a creation with live placements rejects loudly rather than
+                // silently unstamping the world (remove the placements first; undo replay stays order-honest).
+                var referencing = 0;
+
+                foreach (var placement in current.Placements) {
+                    if (string.Equals(a: placement.CreationId, b: m.Id, comparisonType: StringComparison.Ordinal)) {
+                        referencing++;
+                    }
+                }
+
+                if (referencing > 0) {
+                    candidate = current;
+                    reason = $"creation '{m.Id}' has {referencing} live placement(s) — remove them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Creations, key: m.Id, keyOf: static creation => creation.Id, result: out var creations)) {
+                    candidate = current;
+                    reason = $"no creation with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Creations = creations });
+
+                return true;
+            }
+            case WorldMutation.UpsertPlacement m:
+                candidate = (current with { Placements = Upsert(list: current.Placements, item: m.Placement, keyOf: static placement => placement.Id) });
+
+                return true;
+            case WorldMutation.RemovePlacement m: {
+                // The no-cascade guard: a placement a speaker anchors to rejects loudly naming the dependents, never
+                // silently unanchoring the speaker (full-document revalidation would also catch the dangling anchor,
+                // but the guard names WHO depends rather than echoing a validator path).
+                if (DescribeSpeakersAnchoredTo(speakers: current.Speakers, placementId: m.Id) is { } anchored) {
+                    candidate = current;
+                    reason = $"placement '{m.Id}' anchors speaker(s) {anchored} — remove or re-anchor them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Placements, key: m.Id, keyOf: static placement => placement.Id, result: out var placements)) {
+                    candidate = current;
+                    reason = $"no placement with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Placements = placements });
+
+                return true;
+            }
+            case WorldMutation.UpsertSpeaker m:
+                candidate = (current with { Speakers = Upsert(list: current.Speakers, item: m.Speaker, keyOf: static speaker => speaker.Name) });
+
+                return true;
+            case WorldMutation.RemoveSpeaker m:
+                if (!Remove(list: current.Speakers, key: m.Name, keyOf: static speaker => speaker.Name, result: out var speakers)) {
+                    candidate = current;
+                    reason = $"no speaker named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Speakers = speakers });
+
+                return true;
+            case WorldMutation.UpsertTune m: {
+                // The hash contract at the compose boundary, identical to UpsertCreation's: canonicalize
+                // the carried puck.audio.v1 document, REJECT a hash the pipeline did not itself compute, store the pair.
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.AudioDocument> canonical;
+
+                try {
+                    canonical = Puck.Authoring.AudioCanonicalizer.Canonicalize(document: m.Tune.Document, source: m.Tune.Id);
+                } catch (Puck.Authoring.DocumentValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Tune.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"tune '{m.Tune.Id}' hash '{m.Tune.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Tunes = Upsert(list: current.Tunes, item: (m.Tune with { Document = canonical.Document }), keyOf: static tune => tune.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemoveTune m: {
+                if (DescribeSpeakersSourcing(speakers: current.Speakers, matches: source => ((source is WorldSpeakerSource.Tune tune) && string.Equals(a: tune.TuneId, b: m.Id, comparisonType: StringComparison.Ordinal))) is { } dependents) {
+                    candidate = current;
+                    reason = $"tune '{m.Id}' feeds speaker(s) {dependents} — remove or re-source them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Tunes, key: m.Id, keyOf: static tune => tune.Id, result: out var tunes)) {
+                    candidate = current;
+                    reason = $"no tune with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Tunes = tunes });
+
+                return true;
+            }
+            case WorldMutation.UpsertPatch m: {
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.SynthPatchDocument> canonical;
+
+                try {
+                    canonical = Puck.Authoring.SynthPatchCanonicalizer.Canonicalize(document: m.Patch.Document, source: m.Patch.Id);
+                } catch (Puck.Authoring.DocumentValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Patch.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"patch '{m.Patch.Id}' hash '{m.Patch.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Patches = Upsert(list: current.Patches, item: (m.Patch with { Document = canonical.Document }), keyOf: static patch => patch.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemovePatch m: {
+                if (DescribePatchDependents(current: current, patchId: m.Id) is { } dependents) {
+                    candidate = current;
+                    reason = $"patch '{m.Id}' is referenced by {dependents} — remove or re-source them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Patches, key: m.Id, keyOf: static patch => patch.Id, result: out var patches)) {
+                    candidate = current;
+                    reason = $"no patch with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Patches = patches });
+
+                return true;
+            }
+            case WorldMutation.SetAudioDefaults m:
+                candidate = (current with { Audio = m.Audio });
+
+                return true;
             case WorldMutation.UpsertBindingOverlay m:
                 candidate = (current with { BindingOverlays = Upsert(list: current.BindingOverlays, item: m.Overlay, keyOf: static overlay => overlay.Id) });
+
+                return true;
+            case WorldMutation.SetAuthoringDefaults m:
+                candidate = (current with { Authoring = m.Authoring });
 
                 return true;
             case WorldMutation.RemoveBindingOverlay m:

@@ -32,46 +32,50 @@
       0.5,
       0.38
     ],
-    "boulders": [
+    "rows": [
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-n",
         "center": [
           0,
           0.7,
           -2.4
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-e",
         "center": [
           2.4,
           0.7,
           0
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-s",
         "center": [
           0,
           0.7,
           2.4
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-w",
         "center": [
           -2.4,
           0.7,
           0
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       }
     ]
   },
@@ -216,7 +220,7 @@
       "round": 0.1,
       "source": {
         "$type": "view",
-        "cameraName": "avatar-eye"
+        "cameraName": "first-person"
       },
       "route": {
         "engageable": false,
@@ -226,14 +230,17 @@
   ],
   "cameras": [
     {
-      "$type": "avatarEye",
-      "avatarIndex": 0,
-      "eyeOffset": [
+      "$type": "anchored",
+      "anchor": {
+        "$type": "entity",
+        "index": 0
+      },
+      "offset": [
         -0.012012234,
         1.4752654,
         -0.15992874
       ],
-      "name": "avatar-eye",
+      "name": "first-person",
       "renderWidth": 256,
       "renderHeight": 144,
       "fieldOfViewRadians": 1.1868238
@@ -713,6 +720,30 @@
   "storage": {
     "endpoint": null,
     "userId": null
+  },
+  "creations": [],
+  "placements": [],
+  "authoring": {
+    "authoringHeadroomRows": 32,
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "maxRepeatPerSegment": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus"
   },
   "schema": "puck.world.def.v1"
 }

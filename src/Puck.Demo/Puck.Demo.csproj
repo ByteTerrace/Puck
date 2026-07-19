@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Authoring\Puck.Authoring.csproj" />
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />

@@ -1,5 +1,5 @@
 using Puck.Abstractions.Gpu;
-using Puck.Demo.Creator;
+using Puck.Authoring;
 using Puck.Demo.Overworld;
 using Puck.Demo.Tracker;
 using Puck.Hosting;

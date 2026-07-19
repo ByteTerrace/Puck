@@ -21,7 +21,7 @@ world.kit.tune runner moveSpeed 7
 world.kit.default jumper
 world.kit.assign table jumper flyer runner glider
 # --- Scene: warmer albedos and a four-pillar ring (a different boulder layout) ---
-world.scene.set {"groundAlbedo":[0.42,0.3,0.2],"stoneAlbedo":[0.62,0.5,0.38],"boulders":[{"id":"pillar-n","center":[0,0.7,-2.4],"radius":0.8,"smooth":0.45},{"id":"pillar-e","center":[2.4,0.7,0],"radius":0.8,"smooth":0.45},{"id":"pillar-s","center":[0,0.7,2.4],"radius":0.8,"smooth":0.45},{"id":"pillar-w","center":[-2.4,0.7,0],"radius":0.8,"smooth":0.45}]}
+world.scene.set {"groundAlbedo":[0.42,0.3,0.2],"stoneAlbedo":[0.62,0.5,0.38],"rows":[{"$type":"boulder","id":"pillar-n","center":[0,0.7,-2.4],"radius":0.8,"smooth":0.45},{"$type":"boulder","id":"pillar-e","center":[2.4,0.7,0],"radius":0.8,"smooth":0.45},{"$type":"boulder","id":"pillar-s","center":[0,0.7,2.4],"radius":0.8,"smooth":0.45},{"$type":"boulder","id":"pillar-w","center":[-2.4,0.7,0],"radius":0.8,"smooth":0.45}]}
 # --- Spawns: a diagonal stagger (order maps seats) ---
 world.spawns.set [{"id":"seat-1","position":[0,0,0]},{"id":"seat-2","position":[2,0,-2]},{"id":"seat-3","position":[4,0,-4]},{"id":"seat-4","position":[6,0,-6]}]
 # --- Screens: trim to three asset-free displays (drop the webcam + native machine; retile screen 1 to a deterministic test pattern) ---

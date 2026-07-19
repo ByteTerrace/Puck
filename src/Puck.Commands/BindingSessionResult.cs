@@ -42,7 +42,7 @@ public sealed record BindingSessionResult(
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageId);
 
-        if (!document.Pages.Any(predicate: page => string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal))) {
+        if (!document.Chords.Any(predicate: row => string.Equals(a: row.Page?.Id, b: pageId, comparisonType: StringComparison.Ordinal))) {
             throw new ArgumentException(message: $"the document has no page \"{pageId}\"", paramName: nameof(pageId));
         }
 
@@ -55,11 +55,11 @@ public sealed record BindingSessionResult(
         }
 
         var displacedEntries = new List<BindingPageEntryDefinition>();
-        var pages = new List<BindingPageDefinition>(capacity: document.Pages.Count);
+        var rows = new List<BindingChordDefinition>(capacity: document.Chords.Count);
 
-        foreach (var page in document.Pages) {
-            if (!string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal)) {
-                pages.Add(item: page);
+        foreach (var row in document.Chords) {
+            if (row.Page is not { } page || !string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal)) {
+                rows.Add(item: row);
 
                 continue;
             }
@@ -95,11 +95,11 @@ public sealed record BindingSessionResult(
                 }
             }
 
-            pages.Add(item: page with { Entries = entries, });
+            rows.Add(item: row with { Page = (page with { Entries = entries, }), });
         }
 
         displaced = displacedEntries;
 
-        return document with { Pages = pages, };
+        return document with { Chords = rows, };
     }
 }

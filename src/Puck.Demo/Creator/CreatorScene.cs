@@ -1,7 +1,16 @@
 using System.Numerics;
+using System.Text.Json;
+using Puck.Authoring;
 using Puck.Demo.Editing;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
+// Puck.Authoring carries its OWN copy of the grid-snap/undo primitives for World's future editor (owner-scoped:
+// Demo's copies die with Demo, unrewired). Explicit aliases pin these four names to Demo's own Puck.Demo.Editing
+// copies so the plain `using Puck.Authoring;` above (needed for the creation document family) never shadows them.
+using GridSnap = Puck.Demo.Editing.GridSnap;
+using RotationSnap = Puck.Demo.Editing.RotationSnap;
+using SnapConfig = Puck.Demo.Editing.SnapConfig;
+using SnapReference = Puck.Demo.Editing.SnapReference;
 
 namespace Puck.Demo.Creator;
 
@@ -25,26 +34,31 @@ public sealed class CreatorScene {
     /// full pool up front (the frame source probes the worst case at construction), so authoring up to here never
     /// grows a GPU buffer.</summary>
     public const int Capacity = 64;
-    /// <summary>The material palette's slot count.</summary>
-    public const int PaletteSize = 16;
+    /// <summary>The material palette's slot count. Library-owned (<see cref="CreationDocument.PaletteSize"/>) — this
+    /// is a const-to-const forward, not a copy, so the document schema stays the one definition.</summary>
+    public const int PaletteSize = CreationDocument.PaletteSize;
     /// <summary>The scale envelope a single shape may be grown/shrunk to — clamps keep a shape from vanishing to a
     /// point or ballooning past its instance's bound headroom.</summary>
     public const float MinScale = 0.2f;
     public const float MaxScale = 3.0f;
-    /// <summary>The largest smooth-blend radius (the STYLE page's d-pad sweep clamps here).</summary>
-    public const float MaxSmooth = 0.5f;
+    /// <summary>The largest smooth-blend radius (the STYLE page's d-pad sweep clamps here). Library-owned
+    /// (<see cref="ShapeDocument.MaxSmooth"/>).</summary>
+    public const float MaxSmooth = ShapeDocument.MaxSmooth;
     /// <summary>The largest twist rate, in radians per unit of local Y (the STYLE page's d-pad sweep clamps here;
-    /// NOT an isometry, so this stays moderate — see <see cref="Puck.SdfVm.SdfProgramBuilder.TwistY"/>).</summary>
-    public const float MaxTwist = 3.0f;
-    /// <summary>The largest onion shell thickness (the STYLE page's d-pad sweep clamps here).</summary>
-    public const float MaxOnion = 0.2f;
+    /// NOT an isometry, so this stays moderate — see <see cref="Puck.SdfVm.SdfProgramBuilder.TwistY"/>). Library-owned
+    /// (<see cref="ShapeDocument.MaxTwist"/>).</summary>
+    public const float MaxTwist = ShapeDocument.MaxTwist;
+    /// <summary>The largest onion shell thickness (the STYLE page's d-pad sweep clamps here). Library-owned
+    /// (<see cref="ShapeDocument.MaxOnion"/>).</summary>
+    public const float MaxOnion = ShapeDocument.MaxOnion;
     /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp (a console-only knob;
-    /// see <see cref="SetDilate"/>).</summary>
-    public const float MaxDilate = 0.2f;
+    /// see <see cref="SetDilate"/>). Library-owned (<see cref="ShapeDocument.MaxDilate"/>).</summary>
+    public const float MaxDilate = ShapeDocument.MaxDilate;
     /// <summary>The largest bend rate, in radians per unit of local Y — a console-only knob (see
     /// <see cref="SetBend"/>) moderated below <see cref="MaxTwist"/>'s ceiling: the bend operator's Lipschitz factor
-    /// is worse than twist's (see <see cref="Puck.SdfVm.SdfProgramBuilder.BendZ"/>'s remarks).</summary>
-    public const float MaxBend = 1.5f;
+    /// is worse than twist's (see <see cref="Puck.SdfVm.SdfProgramBuilder.BendZ"/>'s remarks). Library-owned
+    /// (<see cref="ShapeDocument.MaxBend"/>).</summary>
+    public const float MaxBend = ShapeDocument.MaxBend;
     /// <summary>The number of primitives in the cycle (the <see cref="AvatarPrimitive"/> set).</summary>
     public const int PrimitiveCount = 7;
     /// <summary>The bounded undo/redo history's snapshot capacity (see <see cref="EditHistory{T}"/>).</summary>
@@ -137,6 +151,13 @@ public sealed class CreatorScene {
     private readonly EditHistory<CreatorSnapshot> m_history;
     private bool m_dragOpen;
     private bool m_dragTouchedThisFrame;
+    // Carried, editor-opaque document members (P0 round-trip fix): the editor authors none of these today, so it
+    // stashes whatever the loaded document carried and hands it straight back on save, byte-for-byte. Load-immutable
+    // between loads/Clear — NEVER part of CreatorSnapshot, since undo/redo must not touch what no verb here can edit.
+    private IReadOnlyList<CreationCameraDocument>? m_loadedCameras;
+    private CreationBehaviorDocument? m_loadedBehavior;
+    private IReadOnlyList<TextRunDocument>? m_loadedTextRuns;
+    private IDictionary<string, JsonElement>? m_loadedExtensions;
 
     /// <summary>Initializes an empty scene clamped to the given workbench region.</summary>
     /// <param name="workbench">The authoring region (also the ghost spawn + group bound source).</param>
@@ -865,6 +886,12 @@ public sealed class CreatorScene {
         m_goalChainIndex = -1;
         m_chains.Clear();
         m_name = "creation";
+        // A fresh creation carries no editor-opaque state (see LoadDocument's remarks) — it authors none of it,
+        // so there is nothing left to hand back.
+        m_loadedCameras = null;
+        m_loadedBehavior = null;
+        m_loadedTextRuns = null;
+        m_loadedExtensions = null;
         MarkProgramChanged();
         PushUndo();
 
@@ -2038,19 +2065,26 @@ public sealed class CreatorScene {
 
         return new CreationDocument(
             BakeStyle: m_bakeStyle,
+            Behavior: m_loadedBehavior,
+            Cameras: m_loadedCameras,
             Chains: chains,
             Frames: frames,
             Intent: m_intent,
             Name: m_name,
             Palette: palette,
             Schema: CreationDocument.CurrentSchema,
-            Shapes: shapes
-        );
+            Shapes: shapes,
+            TextRuns: m_loadedTextRuns
+        ) {
+            Extensions = m_loadedExtensions,
+        };
     }
 
     /// <summary>Replaces the scene's content from a NORMALIZED document (see <see cref="CreationStore.Load"/>):
     /// shapes clamp into the workbench, ids/groups resequence their counters, the selection clears. Rebuilds the
-    /// program.</summary>
+    /// program. <see cref="CreationDocument.Cameras"/>/<see cref="CreationDocument.Behavior"/>/
+    /// <see cref="CreationDocument.TextRuns"/>/<see cref="CreationDocument.Extensions"/> are editor-opaque — no verb
+    /// here authors them, so they are stashed verbatim and handed back unchanged by <see cref="ToDocument"/>.</summary>
     /// <param name="document">The normalized document.</param>
     /// <returns>How many shapes loaded (the pool capacity truncates a larger document).</returns>
     public int LoadDocument(CreationDocument document) {
@@ -2062,6 +2096,10 @@ public sealed class CreatorScene {
         m_name = (document.Name ?? "creation");
         m_bakeStyle = (document.BakeStyle ?? "classic");
         m_intent = (document.Intent ?? CreatorIntent.Object);
+        m_loadedCameras = document.Cameras;
+        m_loadedBehavior = document.Behavior;
+        m_loadedTextRuns = document.TextRuns;
+        m_loadedExtensions = document.Extensions;
 
         if (document.Palette is { } palette) {
             for (var index = 0; ((index < palette.Count) && (index < PaletteSize)); index++) {

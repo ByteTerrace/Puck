@@ -2,8 +2,10 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Cameras;
 using Puck.Compositing;
+using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -20,20 +22,61 @@ namespace Puck.World.Client;
 /// simulated count changes). A construction probe emits the complete 128-rig catalog and freezes the word, instance,
 /// and dynamic-transform envelopes; live programs contain active avatars only.</remarks>
 internal sealed class WorldFrameSource : ISdfFrameSource {
+    // BOOT-CONSUMED authoring policy (WorldAuthoringDefaults): captured ONCE at construction into the fields
+    // below, from the boot definition's Authoring row — never re-read live. These feed the frozen render-envelope
+    // probe (scene-row/screen-slot/placement-segment reservation), so a later SetAuthoringDefaults mutation is
+    // journaled but cannot retroactively grow a running session's capacity floor; it narrates "next boot" honestly.
+    private readonly int m_authoringHeadroomRows;
+    private readonly int m_authoringHeadroomScreens;
+    private readonly int m_authoringHeadroomPlacements;
+    private readonly int m_maxRepeatPerSegment;
+    // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
+    // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
+    private static readonly Vector3 s_shimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
+    private const float ShimmerBlendMax = DesignTokens.Feedback.ChangeShimmerBlendMax;
+    private static readonly Vector3 s_selectionTint = DesignTokens.Feedback.SelectionTint.Rgb;
+    private const float SelectionTintBlend = DesignTokens.Feedback.SelectionTintBlend;
+
     private readonly FrameRateMonitor m_frameRate;
     private readonly PlayerRoster m_roster;
     private readonly WorldClient m_client;
     private readonly WorldSimulation m_simulation;
-    // One over-the-shoulder chase rig per local seat: its defaults (eye up-and-back along the anchor's +Z, target lifted
-    // a touch) frame that seat's avatar from behind, tracking its heading. Only local seats get cameras/views.
-    private readonly OrientedFollowRig[] m_cameraRigs;
+    // The editor's client-side render seams: the drag channel's pending-row overlay (composed over the delivered
+    // definition each rebuild), the sculpt workbench's preview creation/placement overlay, and the targeting
+    // state's selection highlight. All fold into the rebuild watch.
+    private readonly WorldEditorTargeting m_targeting;
+    private readonly WorldChangeShimmer m_shimmer = new();
+    private readonly WorldEditorDrag m_drag;
+    private readonly WorldWorkbench m_workbench;
+    // The animated-placement replay pool: reconciled at the delivery boundary, ticked on the render clock,
+    // packed after the avatar transforms every frame.
+    private readonly WorldPlacementAnimator m_animator;
+    // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
+    // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
+    private readonly WorldAudioDirector m_audio;
+    // The editor-gizmo feed: geometry-less rows (speakers) projected into each EDITING seat's viewport as
+    // overlay chips — published every produced frame (leaving editor mode clears the chips), consumed by the
+    // unified overlay's gizmo writer the same frame (CaptureFrame runs before the overlay's FeedTick/writers).
+    private readonly EditorGizmoStore m_gizmos;
+    private readonly OverlayGizmoSeat[] m_gizmoSeats = new OverlayGizmoSeat[PlayerRoster.MaxSlots];
+    private readonly OverlayGizmoChip[][] m_gizmoChips = new OverlayGizmoChip[PlayerRoster.MaxSlots][];
+    // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
+    private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
+    // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
+    // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
+    // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
+    private readonly ISdfCameraRig[] m_cameraRigs;
+    // The per-seat editor mode: camera rig swap + the sole-editor layout policy, both read during produce.
+    private readonly WorldEditorSession m_editor;
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
     // catalog, plus movement-driven gait state per avatar and the joined seats' views. Live programs address only the
     // active avatars' stable slot ranges; stale inactive slots are unreachable.
-    private readonly DynamicTransform[] m_transforms = new DynamicTransform[WorldAvatarCatalog.DynamicTransformCapacity];
+    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount)];
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
+    // The seat.join cue's edge detector: a slot's roster presence last frame.
+    private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private readonly WorldRenderSettings m_settings;
     // The binder that owns the diegetic screens' CPU-fed GPU sources. The scene (ground + boulders) and the screens are
@@ -43,6 +86,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private SdfProgram m_program;
     private int m_builtRevision;
     private int m_builtDefinitionRevision;
+    // The placement capacity reservation, in worst-case stamp SEGMENTS: boot static segments + the authoring
+    // headroom. Frozen at construction; the apply-time measure charges max(candidate segments, this).
+    private readonly int m_placementReservation;
     private float m_elapsedSeconds;
     private bool m_uploaded;
 
@@ -56,22 +102,54 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
     /// <param name="envelope">The render-capacity oracle configured here with the probed floors and a candidate
     /// measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
+    /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
+    /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
+    /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
+    /// <param name="animator">The animated-placement replay pool.</param>
+    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch).</param>
+    /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
+    /// per-frame snapshot publisher.</param>
+    /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
+        ArgumentNullException.ThrowIfNull(argument: editor);
+        ArgumentNullException.ThrowIfNull(argument: targeting);
+        ArgumentNullException.ThrowIfNull(argument: drag);
+        ArgumentNullException.ThrowIfNull(argument: animator);
+        ArgumentNullException.ThrowIfNull(argument: workbench);
+        ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: gizmos);
 
+        m_gizmos = gizmos;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_gizmoChips[slot] = [];
+        }
+
+        m_audio = audio;
+        // The machine-source resolver: the director diffs the binder's LIVE machines by
+        // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
+        // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
+        // invoked from the director's pump-thread Publish.
+        audio.MachineSourceResolver = binder.AudioMachine;
         m_frameRate = frameRate;
         m_client = client;
         m_roster = client.Roster;
         m_simulation = simulation;
         m_settings = settings;
         m_binder = binder;
-        m_cameraRigs = new OrientedFollowRig[PlayerRoster.MaxSlots];
+        m_editor = editor;
+        m_targeting = targeting;
+        m_drag = drag;
+        m_animator = animator;
+        m_workbench = workbench;
+        m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_cameraRigs[slot] = new OrientedFollowRig();
@@ -81,31 +159,79 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
         m_client.UpdateRenderPoses(alpha: 0f);
 
-        var scene = m_client.Definition.Scene;
-        var screens = m_client.Definition.Screens;
+        var definition = m_client.Definition;
 
-        // The envelope probe (never rendered): a worst-case all-128-avatars build whose word/instance counts become the
-        // spec's capacity floors, so every active-only live rebuild fits.
-        var probe = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: true);
+        // Capture the BOOT-CONSUMED authoring policy once — every probe/measure/live build below reads these
+        // instance fields, never definition.Authoring again, so the frozen capacity floor and the placement-segment
+        // math stay mutually consistent for the life of this frame source (see the fields' remarks).
+        m_authoringHeadroomRows = definition.Authoring.AuthoringHeadroomRows;
+        m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
+        m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
+        m_maxRepeatPerSegment = definition.Authoring.MaxRepeatPerSegment;
+
+        // A booted world may already stamp animated placements — register them before the first build so the initial
+        // program emits their live pool slots.
+        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
+        // The boot emitter derivation (a booted world may already author speakers/facets/sounds).
+        m_audio.ReconcileSpeakers(definition: definition);
+        m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements, maxRepeatPerSegment: m_maxRepeatPerSegment) + m_authoringHeadroomPlacements);
+
+        // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
+        // documented authoring headroom (scene rows, screens, AND placement stamps), so a live editor can add rows up
+        // to the reserved ceilings. Its word/instance counts become the spec's capacity floors; every active-only
+        // live rebuild fits by construction.
+        var probe = Build(
+            scene: WithAuthoringHeadroom(scene: definition.Scene),
+            screens: WithAuthoringHeadroom(screens: definition.Screens),
+            placements: definition.Placements,
+            creations: definition.Creations,
+            probeWorstCase: true,
+            placementProbe: true,
+            highlight: null,
+            maxPlacementScale: definition.Authoring.MaxPlacementScale
+        );
 
         ProgramWordCapacity = probe.Words.Length;
         InstanceCapacity = probe.Instances.Count;
 
-        // Publish the probed envelope + a candidate measurer so a scene/screen mutation is capacity-checked at apply
-        // time against the SAME worst-case build (avatars are always at worst case; only scene/screens vary).
+        // Publish the probed envelope + a candidate measurer so a scene/screen/placement mutation is capacity-checked
+        // at apply time against the SAME worst-case build (avatars and the animated pool are always at worst case;
+        // scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room before the
+        // loud rejection). The candidate's OWN Authoring.MaxPlacementScale feeds the animated-pool bound radius (a
+        // live-consumed value; the segment/headroom math stays on the frozen m_maxRepeatPerSegment/m_authoringHeadroom* fields).
         envelope.Configure(
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
-            measure: (candidateScene, candidateScreens) => {
-                var candidate = BuildWorld(client: m_client, scene: candidateScene, screens: candidateScreens, probeWorstCase: true);
+            measure: candidate => {
+                var measured = Build(
+                    scene: candidate.Scene,
+                    screens: candidate.Screens,
+                    placements: candidate.Placements,
+                    creations: candidate.Creations,
+                    probeWorstCase: true,
+                    placementProbe: false,
+                    highlight: null,
+                    maxPlacementScale: candidate.Authoring.MaxPlacementScale
+                );
 
-                return (Words: candidate.Words.Length, Instances: candidate.Instances.Count);
+                return (Words: measured.Words.Length, Instances: measured.Instances.Count);
             }
         );
 
-        m_builtRevision = m_client.Revision;
+        m_builtRevision = RebuildRevision();
         m_builtDefinitionRevision = m_client.DefinitionRevision;
-        m_program = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: false);
+        m_program = Build(
+            scene: definition.Scene,
+            screens: definition.Screens,
+            placements: definition.Placements,
+            creations: definition.Creations,
+            probeWorstCase: false,
+            placementProbe: false,
+            highlight: m_targeting,
+            maxPlacementScale: definition.Authoring.MaxPlacementScale
+        );
+        // The boot scene + placements + speakers are the shimmer baseline — the first delivery pulses only what it changed.
+        m_shimmer.Observe(scene: definition.Scene, placements: definition.Placements, speakers: definition.Speakers, now: 0d);
     }
 
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
@@ -114,8 +240,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>
     public int InstanceCapacity { get; }
 
-    /// <summary>The frozen transform-slot count for every leaf in the all-128 avatar catalog.</summary>
-    public int DynamicTransformCapacity => WorldAvatarCatalog.DynamicTransformCapacity;
+    /// <summary>The frozen transform-slot count: every leaf in the all-128 avatar catalog plus the reserved
+    /// animated-placement replay pool.</summary>
+    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount);
 
     /// <inheritdoc/>
     public void NotifyDeviceLost() => m_binder.NotifyDeviceLost();
@@ -134,23 +261,63 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 
-        // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count change)
-        // rebuilds the program and marks ProgramChanged so the engine re-uploads it, always within the frozen
-        // capacities. The first frame also uploads (the initial program is not yet on the GPU).
-        var revision = m_client.Revision;
-        var programChanged = (!m_uploaded || (revision != m_builtRevision));
+        // Retire released drag overlays first (they freeze until their OWN act's apply/rejection resolves, or the
+        // missing-response deadline — see WorldEditorDrag), so the revision read below already reflects any retirement.
+        m_drag.Reconcile();
 
-        if (revision != m_builtRevision) {
+        // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
+        // program itself never rebuilds for a timeline step).
+        m_animator.Tick(deltaSeconds: deltaSeconds);
+
+        // Advance the sculpt workbench: playback ticks, drag-coalescer frame boundary, and its model revisions fold
+        // into the monotonic rebuild watch read below.
+        m_workbench.Tick(deltaSeconds: deltaSeconds);
+
+        // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count
+        // change), a selection change (the highlight tint), or a drag-overlay move rebuilds the program and marks
+        // ProgramChanged so the engine re-uploads it, always within the frozen capacities. The first frame also
+        // uploads (the initial program is not yet on the GPU).
+        var revision = RebuildRevision();
+        // A live shimmer pulse keeps the rebuild running so its decay animates — a bounded window at the proven
+        // drag-cadence rebuild cost, entered only when a delivery changed rows.
+        var shimmering = m_shimmer.HasLivePulse(now: m_elapsedSeconds);
+        var programChanged = (!m_uploaded || shimmering || (revision != m_builtRevision));
+
+        if (shimmering || (revision != m_builtRevision)) {
             // A definition delivery (scene/screen mutation, swap, or undo) landed since the last build: reconcile the
-            // binder's runtime source machinery to the new screens BEFORE rebuilding the program off the live geometry.
+            // binder's runtime source machinery to the new definition BEFORE rebuilding the program off the live
+            // geometry — cameras FIRST, so a same-delivery View source change resolves the new camera rows.
             var definitionRevision = m_client.DefinitionRevision;
 
             if (definitionRevision != m_builtDefinitionRevision) {
+                m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
+                // The animated-placement pool reconciles at the same delivery boundary: cheap pose
+                // edits write in place, creation-content changes release + recreate, removals release (symmetric).
+                m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
+                // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
+                // after the animator (placement-anchored emitters read its registrations).
+                m_audio.ReconcileSpeakers(definition: m_client.Definition);
+                m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, speakers: m_client.Definition.Speakers, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
 
-            m_program = BuildWorld(client: m_client, scene: m_client.Definition.Scene, screens: m_client.Definition.Screens, probeWorstCase: false);
+            // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
+            // preview at drag cadence, and release retires the overlay against the identical committed document — no
+            // second render path. The full-rebuild path stays: the evidence does not demand a cheaper preview transform.
+            m_program = Build(
+                scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
+                screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
+                // The sculpt preview composes OVER the drag-composed rows: the bench's synthetic creation +
+                // placement render through the same stamp path a committed row uses (stamp-equals-preview).
+                placements: m_workbench.ComposePlacements(live: m_drag.ComposePlacements(live: m_client.Definition.Placements)),
+                creations: m_workbench.ComposeCreations(live: m_client.Definition.Creations),
+                probeWorstCase: false,
+                placementProbe: false,
+                highlight: m_targeting,
+                maxPlacementScale: m_client.Definition.Authoring.MaxPlacementScale,
+                shimmerNow: m_elapsedSeconds
+            );
             m_builtRevision = revision;
         }
 
@@ -161,6 +328,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // by its position among the joined players. The MaxPopulation dynamic transforms are separate and always
         // supplied in full; the active-only program addresses only its avatars' stable leaf ranges.
         var joinedCount = m_roster.Count;
+
+        // Self-heal a seat that left the roster while editing (its mode layer and camera drop), then resolve this
+        // frame's layout policy: a SOLE editing seat among 2+ players takes the dominant workbench region.
+        m_editor.PruneDeparted();
+
+        var soleEditorViewIndex = m_editor.SoleEditorViewIndex();
 
         m_views.Clear();
 
@@ -194,8 +367,18 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 // Phase advances by DISTANCE, not wall time: idle avatars hold their pose; walking speed controls cadence.
                 // Clamp a teleport/server snap so it cannot spin the limbs through dozens of cycles in one frame.
                 var travelled = MathF.Min(x: Vector3.Distance(value1: position, value2: m_avatarPreviousPositions[index]), y: 0.25f);
+                var previousPhase = m_avatarGaitPhases[index];
 
                 m_avatarGaitPhases[index] += (travelled * 8.0f);
+
+                // The player.footstep cue: LOCAL seat avatars fire one at-site cue per gait-phase half-cycle
+                // wrap — one footfall per π of phase (a stride swings one leg through), so cadence follows walking
+                // speed and an idle avatar is silent. Presentation-side by design: the phase is the same
+                // distance-driven presentation state that swings the limbs.
+                if ((index < WorldPopulation.LocalSeatCount) &&
+                    (((int)(m_avatarGaitPhases[index] / MathF.PI)) > ((int)(previousPhase / MathF.PI)))) {
+                    m_audio.SubmitCue(eventToken: WorldAudioCue.PlayerFootstep, site: position);
+                }
             } else {
                 m_avatarPoseSeeded[index] = true;
             }
@@ -211,20 +394,59 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             );
         }
 
+        // The animated-placement pool packs after the avatar catalog (its reserved slots sit past the frozen avatar
+        // capacity); hidden slots park below the floor.
+        m_animator.PackTransforms(transforms: m_transforms);
+
+        Array.Clear(array: m_seatCameraPoses);
+
+        // The gizmo feed's per-frame accumulators (the composed speaker list resolves lazily on the first editing seat).
+        IReadOnlyList<WorldSpeaker>? gizmoSpeakers = null;
+        var gizmoSeatCount = 0;
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
+                m_seatWasJoined[slot] = false;
+
                 continue;
             }
 
-            var region = LayoutRegion(count: joinedCount, index: m_views.Count);
+            // The seat.join cue: the roster arrival edge, at the seat avatar's spawn pose.
+            if (!m_seatWasJoined[slot]) {
+                m_seatWasJoined[slot] = true;
+                m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: slot));
+            }
+
+            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
+            var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples.
-            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height), Region: region) {
+            m_views.Add(item: new SdfViewSnapshot(Camera: camera, Region: region) {
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
+            // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
+            // so "focus" listens where the active view looks.
+            m_seatCameraPoses[slot] = new WorldSeatCameraPose(Joined: true, Eye: eye, Forward: (target - eye));
+
+            // The speaker gizmos: EDITOR-MODE-ONLY chips at each speaker's resolved pose, projected through
+            // the SAME camera this seat renders with. Pending drag rows compose over the delivered truth, so a
+            // dragged chip tracks its snapped position live.
+            if (m_editor.IsEditing(slot: slot)) {
+                gizmoSpeakers ??= m_drag.ComposeSpeakers(live: m_client.Definition.Speakers);
+                m_gizmoSeats[gizmoSeatCount++] = ComposeGizmoSeat(slot: slot, region: region, camera: in camera, width: width, height: height, speakers: gizmoSpeakers);
+            }
         }
+
+        // Published EVERY frame: an empty frame clears the chips the moment no seat edits.
+        m_gizmos.Publish(frame: new OverlayGizmoFrame(Seats: m_gizmoSeats.AsMemory(start: 0, length: gizmoSeatCount)));
+
+        // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
+        // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
+        // frame, from the produce path where render poses are already resolved. The presentation delta ages the
+        // transient cue pool (visual-only clock use — audio is presentation).
+        _ = m_audio.Publish(transforms: m_transforms, seats: m_seatCameraPoses, deltaSeconds: deltaSeconds);
 
         return new SdfFrame(
             Program: m_program,
@@ -238,8 +460,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
             DisableSoftShadows = (m_settings.ShadowReach <= 0f),
             // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // Far-field isolators (world.far-field): both features ship ON, so the frame DISABLES only when the settings
-            // clear them — the "off" sides of the owner's paired A/B.
+            // Far-field isolators (world.far-field): both features ship ON, so the frame's flags are the negated
+            // "disable" side of each toggle.
             DisableFarBound = !m_settings.FarBound,
             DisableShadowFarExit = !m_settings.ShadowFarExit,
             DynamicTransforms = m_transforms,
@@ -283,6 +505,71 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_binder.RenderViews(context: in context, program: m_program, revision: m_builtRevision, transforms: m_transforms, time: m_elapsedSeconds);
     }
 
+    // One editing seat's gizmo set: every composed speaker row resolved to a world pose (the director's own anchor
+    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport.
+    // Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
+    // support-radius ring. Reuses the per-slot chip array (grown only when the speaker count does).
+    private OverlayGizmoSeat ComposeGizmoSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, IReadOnlyList<WorldSpeaker> speakers) {
+        if (m_gizmoChips[slot].Length < speakers.Count) {
+            m_gizmoChips[slot] = new OverlayGizmoChip[speakers.Count];
+        }
+
+        var chips = m_gizmoChips[slot];
+        var count = 0;
+        var selection = m_targeting.Selected(slot: slot);
+
+        foreach (var speaker in speakers) {
+            if (!m_audio.TryResolveSpeakerPose(speaker: speaker, transforms: m_transforms, position: out var world) ||
+                !TryProjectGizmo(camera: in camera, region: in region, width: width, height: height, world: world, px: out var px, py: out var py, pixelsPerUnit: out var pixelsPerUnit)) {
+                continue;
+            }
+
+            chips[count++] = new OverlayGizmoChip(
+                CenterX: px,
+                CenterY: py,
+                RingRadiusPx: ((speaker is WorldSpeaker.Bed bed) ? (bed.Radius * pixelsPerUnit) : 0f),
+                Bed: (speaker is WorldSpeaker.Bed),
+                Selected: ((selection is { Section: WorldSection.Speakers } selected) && string.Equals(a: selected.Id, b: speaker.Name, comparisonType: StringComparison.Ordinal)),
+                Pulse: (m_shimmer.SpeakerIntensity(name: speaker.Name, now: m_elapsedSeconds) > 0f)
+            );
+        }
+
+        return new OverlayGizmoSeat(Viewport: region, Chips: chips.AsMemory(start: 0, length: count));
+    }
+
+    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
+    // frame (the render camera's exact basis + FOV). False behind the near plane or generously outside the view
+    // (the clip rect would discard the pixels anyway — this just skips the record). pixelsPerUnit is the on-screen
+    // scale at the point's DEPTH (the bed ring's world-radius → px conversion; an approximation that reads as a
+    // radius indicator, not a perspective-correct 3D circle — deliberate, documented).
+    private static bool TryProjectGizmo(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
+        px = 0f;
+        py = 0f;
+        pixelsPerUnit = 0f;
+
+        var delta = (world - camera.Position);
+        var depth = Vector3.Dot(vector1: delta, vector2: camera.Forward);
+
+        if (depth < 0.05f) {
+            return false;
+        }
+
+        var ndcX = (Vector3.Dot(vector1: delta, vector2: camera.Right) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = (Vector3.Dot(vector1: delta, vector2: camera.Up) / (depth * camera.TanHalfFieldOfView));
+
+        if ((MathF.Abs(x: ndcX) > 1.5f) || (MathF.Abs(x: ndcY) > 1.5f)) {
+            return false;
+        }
+
+        var regionHeight = (region.Height * height);
+
+        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
+        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
+        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
+
+        return true;
+    }
+
     // Whether `position` lies within the crowd radius of any joined local seat (the stand-in soft-shadow gate). With no
     // joined seats or a zero radius, nothing qualifies.
     private static bool WithinCrowd(Vector3 position, ReadOnlySpan<Vector3> seats, float radiusSquared) {
@@ -295,14 +582,17 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         return false;
     }
 
-    // Frames the slot's avatar with its over-the-shoulder rig at the region's pixel size (region × window dims), so
-    // each split keeps its own aspect. The anchor is the seat's render pose (interpolated and error-eased, resolved by
-    // the client view this frame), so the camera tracks the pose the avatar is drawn at.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height) {
-        var (eye, target, fieldOfView) = m_cameraRigs[slot].Resolve(
-            anchor: new SdfAnchor(Position: m_client.Position(index: slot), Orientation: m_client.Orientation(index: slot)),
-            time: m_elapsedSeconds
-        );
+    // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
+    // The rig is the seat's chase rig by default; while the seat edits, the editor session's rig (advanced by this
+    // frame's presentation delta) frames it instead. The anchor is the seat's render pose (interpolated and
+    // error-eased, resolved by the client view this frame), so the chase camera tracks the pose the avatar is drawn
+    // at and the orbit pivot rides it live.
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, out Vector3 eye, out Vector3 target) {
+        var anchor = new SdfAnchor(Position: m_client.Position(index: slot), Orientation: m_client.Orientation(index: slot));
+        var rig = m_editor.ResolveRig(slot: slot, chase: m_cameraRigs[slot], anchor: in anchor, time: m_elapsedSeconds, deltaSeconds: deltaSeconds);
+        var fieldOfView = 0f;
+
+        (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
 
         return CameraSnapshot.LookAt(
             position: eye,
@@ -313,10 +603,33 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         );
     }
 
+    // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+
+    // joined), the editing view takes the full-height left `workbenchFraction` (LIVE-CONSUMED —
+    // WorldAuthoringDefaults.WorkbenchFraction, read fresh by the one caller each captured frame; the workbench wants
+    // width and an honest aspect) and the playing seats stack in a live right rail spanning the remaining width (each
+    // keeps a visible, playable view). All-playing, single-seat, and multi-editor sessions fall through to the
+    // standard ladder.
+    internal static NormalizedRect LayoutRegion(int count, int index, int soleEditorIndex, float workbenchFraction) {
+        if ((soleEditorIndex >= 0) && (count >= 2)) {
+            if (index == soleEditorIndex) {
+                return new NormalizedRect(X: 0f, Y: 0f, Width: workbenchFraction, Height: 1f);
+            }
+
+            var railCount = (count - 1);
+            var railIndex = ((index < soleEditorIndex) ? index : (index - 1));
+            var railWidth = (1f - workbenchFraction);
+
+            return new NormalizedRect(X: workbenchFraction, Y: ((float)railIndex / railCount), Width: railWidth, Height: (1f / railCount));
+        }
+
+        return LayoutRegion(count: count, index: index);
+    }
+
     // The viewport region for the player at slot-order position `index` of `count`. NormalizedRect convention: origin
     // top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top half) over two
-    // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR).
-    private static NormalizedRect LayoutRegion(int count, int index) {
+    // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR). Internal: the overlay feed scopes each seat's
+    // screen-space UI (binding bar, later the editor HUD) into the SAME rect the seat renders in.
+    internal static NormalizedRect LayoutRegion(int count, int index) {
         return count switch {
             1 => new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f),
             2 => new NormalizedRect(X: (0.5f * index), Y: 0f, Width: 0.5f, Height: 1f),
@@ -329,18 +642,84 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         };
     }
 
-    // The scene: a grass ground plane, then the stone boulders (each smooth-unioned into the accumulated field), then
-    // the view's active avatars as leaf-level dynamic instances riding frozen catalog slots. Active-only, never
-    // declared-but-parked: the per-tile instance mask width derives from the program's total declared instance count
-    // (SdfProgram.InstanceMaskWordCount), so parked avatar declarations widen every shadow-gather pixel's mask walk.
-    // Instead the program is rebuilt on population change (the revision watch), and the 128-avatar worst case is held
-    // by the spec's capacity floors (ProgramWordCapacity / InstanceCapacity / DynamicTransformCapacity), probed at
-    // construction. Every avatar keeps its own body + accent material (cheap constant words), so a recolor is data,
-    // not a resize. Unions only, so the accumulator stays additive.
-    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase) {
+    // The combined program-rebuild watch: the client's roster/snapshot/definition counters plus the editor's
+    // selection (highlight), drag-overlay, and sculpt-workbench counters — all monotonic, so the sum only stalls
+    // when none has changed.
+    private int RebuildRevision() => (((m_client.Revision + m_targeting.Revision) + m_drag.Revision) + m_workbench.Revision);
+
+    // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
+    // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.
+    // BOOT-CONSUMED: reads the frozen m_authoringHeadroomRows field (never definition.Authoring live).
+    private WorldScene WithAuthoringHeadroom(WorldScene scene) {
+        var rows = new List<WorldSceneRow>(capacity: (scene.Rows.Count + m_authoringHeadroomRows));
+
+        rows.AddRange(collection: scene.Rows);
+
+        for (var index = 0; (index < m_authoringHeadroomRows); index++) {
+            rows.Add(item: new WorldSceneRow.Slab(
+                Id: $"authoring-headroom-{index}",
+                Center: Vector3.Zero,
+                HalfExtents: Vector3.One,
+                Round: 0.05f,
+                Smooth: 0.3f,
+                Albedo: Vector3.One
+            ));
+        }
+
+        return (scene with { Rows = rows });
+    }
+
+    // The boot screens padded with headroom slabs at free engine indices (bounded by the engine surface ceiling), so a
+    // runtime UpsertScreen of a NEW index fits the probed envelope. BOOT-CONSUMED: reads the frozen
+    // m_authoringHeadroomScreens field.
+    private IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
+        var padded = new List<WorldScreen>(capacity: (screens.Count + m_authoringHeadroomScreens));
+        var used = new HashSet<int>();
+
+        foreach (var screen in screens) {
+            padded.Add(item: screen);
+            _ = used.Add(item: screen.Index);
+        }
+
+        var added = 0;
+
+        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (added < m_authoringHeadroomScreens)); index++) {
+            if (!used.Add(item: index)) {
+                continue;
+            }
+
+            padded.Add(item: new WorldScreen(
+                Index: index,
+                Origin: Vector3.Zero,
+                Right: Vector3.UnitX,
+                Up: Vector3.UnitY,
+                HalfWidth: 1f,
+                HalfHeight: 1f,
+                HalfDepth: 0.1f,
+                Round: 0.05f,
+                Source: new WorldScreenSource.None(),
+                Route: WorldScreenRoute.Passive
+            ));
+            added++;
+        }
+
+        return padded;
+    }
+
+    // The scene: a grass ground plane, then the scene rows (each smooth-unioned into the accumulated field), the
+    // static placement stamps + the animated replay pool, then the view's active avatars as leaf-level dynamic
+    // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
+    // derives from the program's total declared instance count (SdfProgram.InstanceMaskWordCount), so parked avatar
+    // declarations widen every shadow-gather pixel's mask walk. Instead the program is rebuilt on population change
+    // (the revision watch), and the 128-avatar worst case is held by the spec's capacity floors (ProgramWordCapacity /
+    // InstanceCapacity / DynamicTransformCapacity), probed at construction. Every avatar keeps its own body + accent
+    // material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces the static stamps
+    // with the reserved worst case (construction only); the animated pool and the avatars follow `probeWorstCase`
+    // (worst case for both the construction probe AND the apply-time measure).
+    private SdfProgram Build(WorldScene scene, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, float maxPlacementScale, double shimmerNow = 0d) {
+        var client = m_client;
         var builder = new SdfProgramBuilder();
         var grass = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.GroundAlbedo));
-        var stone = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.StoneAlbedo));
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
@@ -354,16 +733,34 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Nose(body: bodyColor)));
         }
 
-        // The static field from the scene data: the grass ground plane, then each boulder (a sphere smooth-unioned into
-        // the field) translated to its center and reset back for the next (see WorldBoulder for the Puck.Scene
-        // convergence note).
+        var shimmer = ((highlight is not null) ? m_shimmer : null);
+
+        // The static field from the scene data: the grass ground plane, then each scene row (its shape smooth-unioned
+        // into the field) translated to its center and reset back for the next. Every row carries its OWN material —
+        // uniformly, so the probe's capacity math and a live highlighted build count identical words — with the
+        // selected row's albedo pulled toward the selection tint (the editor's material-swap highlight).
         _ = builder.Plane(normal: Vector3.UnitY, offset: 0f, material: grass);
 
-        foreach (var boulder in scene.Boulders) {
-            _ = builder
-                .Translate(offset: boulder.Center)
-                .Sphere(radius: boulder.Radius, material: stone, blend: SdfBlendOp.SmoothUnion, smooth: boulder.Smooth)
-                .ResetPoint();
+        foreach (var row in scene.Rows) {
+            var albedo = ((row is WorldSceneRow.Slab slabRow) ? slabRow.Albedo : scene.StoneAlbedo);
+
+            if ((highlight is { } targeting) && targeting.IsSceneRowSelected(id: row.Id)) {
+                albedo = Vector3.Lerp(value1: albedo, value2: s_selectionTint, amount: SelectionTintBlend);
+            }
+
+            if ((shimmer is { } pulses) && (pulses.Intensity(id: row.Id, now: shimmerNow) is > 0f and var pulse)) {
+                albedo = Vector3.Lerp(value1: albedo, value2: s_shimmerTint, amount: (pulse * ShimmerBlendMax));
+            }
+
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: albedo));
+
+            _ = builder.Translate(offset: row.Center);
+            _ = (row switch {
+                WorldSceneRow.Boulder boulder => builder.Sphere(radius: boulder.Radius, material: material, blend: SdfBlendOp.SmoothUnion, smooth: boulder.Smooth),
+                WorldSceneRow.Slab slab => builder.Box(halfExtents: slab.HalfExtents, round: slab.Round, material: material, blend: SdfBlendOp.SmoothUnion, smooth: slab.Smooth),
+                _ => builder,
+            });
+            _ = builder.ResetPoint();
         }
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's
@@ -388,6 +785,41 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 )
                 .ResetPoint();
         }
+
+        // The placement stamps: the construction probe reserves (boot static segments + the authoring headroom)
+        // worst-case stamps, and the APPLY-TIME MEASURE charges a candidate's static placements at that same
+        // worst-case unit — max(candidate segments, the reservation) — so the placement term stays CONSTANT between
+        // probe and measure while placements are inside their headroom. That constancy is load-bearing: a cheaper
+        // as-authored measure would hand the reservation's word slack to SCENE/SCREEN floods (their ceilings would
+        // silently widen by thousands of words), and a placement flood still rejects exactly one segment past the
+        // headroom. Only the LIVE build emits the rows as authored — static stamps baked into instructions, animated
+        // rows through the replay pool (worst-case under any probe). Selection amber and the change shimmer tint a
+        // stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
+        if (placementProbe || probeWorstCase) {
+            var candidateSegments = WorldPlacementStamper.StaticStampSegments(creations: creations, placements: placements, maxRepeatPerSegment: m_maxRepeatPerSegment);
+
+            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: Math.Max(val1: candidateSegments, val2: m_placementReservation), maxRepeatPerSegment: m_maxRepeatPerSegment);
+        } else {
+            WorldPlacementStamper.EmitStatic(
+                builder: builder,
+                creations: creations,
+                placements: placements,
+                maxRepeatPerSegment: m_maxRepeatPerSegment,
+                tintFor: ((highlight is null) ? null : id => {
+                    if (highlight.IsPlacementSelected(id: id)) {
+                        return (s_selectionTint, SelectionTintBlend);
+                    }
+
+                    if ((shimmer is { } pulses) && (pulses.PlacementIntensity(id: id, now: shimmerNow) is > 0f and var pulse)) {
+                        return (s_shimmerTint, (pulse * ShimmerBlendMax));
+                    }
+
+                    return null;
+                })
+            );
+        }
+
+        m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase, maxPlacementScale: maxPlacementScale);
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
         // each. The probe emits every catalog range; a live build emits only active ranges without renumbering slots.

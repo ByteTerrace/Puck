@@ -9,7 +9,7 @@ namespace Puck.World.Server;
 /// <summary>
 /// One authoritative entity body: a full 6DOF pose (a free position and a <see cref="System.Numerics.Quaternion"/>
 /// attitude) advanced from a single merged <see cref="PlayerIntent"/> every host-owned fixed simulation step under its
-/// <see cref="MotionModel"/> — grounded (the ground avatar) or free (space-sim / Subnautica flight). A scripted tape of
+/// <see cref="MotionModel"/> — grounded (the ground avatar) or free (space-sim full 6DOF flight). A scripted tape of
 /// timed segments (a <c>player.run</c>/<c>player.fly</c> command) takes precedence while a segment is live; with the
 /// tape empty the per-tick submitted intent drives instead (a seat's device image or the server-side wander producer,
 /// via <see cref="SubmitIntent"/>). Replaying the same tape reproduces the same run. Every entity in the server's table
@@ -727,8 +727,8 @@ internal sealed class WorldBody {
 
         m_orientation = orientation;
 
-        // --- The bound actions: latch/clock upkeep and trigger evaluation at the same point the vertical edge
-        // handling always ran (after the planar step, before gravity), so a fired effect shapes this tick's motion. ---
+        // --- The bound actions: latch/clock upkeep and trigger evaluation run after the planar step and before
+        // gravity, so a fired effect shapes this tick's motion. ---
         ProcessLaneActions(intent: in intent, stepTicks: stepTicks);
 
         // Asymmetric gravity (heavier falling) + terminal velocity, then integrate and land on the ground crossing.
@@ -920,8 +920,8 @@ internal sealed class WorldBody {
     // The per-tick action machinery: for each bound lane, refresh the recency clocks (a Recently window refills while
     // its fact holds and decays otherwise), decay the cooldown, latch a press edge (the buffer), then fire the press
     // trigger while its latch is pending and its gate holds, and the release trigger on its edge — each fire applying
-    // its compiled effects in order and consuming the latch. Runs inside the model integration at the historical
-    // vertical-action point, so effects shape the same tick.
+    // its compiled effects in order and consuming the latch. Runs after attitude/planar integration and before
+    // gravity/vertical resolution, so effects shape the same tick.
     private void ProcessLaneActions(in PlayerIntent intent, ulong stepTicks) {
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             if (m_laneBindings[lane] is not { } binding) {

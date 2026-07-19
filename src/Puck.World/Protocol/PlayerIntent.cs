@@ -76,7 +76,7 @@ internal enum MotionModel {
     /// <see cref="PlayerIntent.MoveUp"/>/<see cref="PlayerIntent.Pitch"/>/<see cref="PlayerIntent.Roll"/> channels.</summary>
     Grounded,
 
-    /// <summary>The space-sim / Subnautica free-flight model — all six channels integrate in the body frame: linear
+    /// <summary>The free-flight model — all six channels integrate in the body frame: linear
     /// velocity is <c>(forward·facing + strafe·bodyRight + up·bodyUp) · MoveSpeed</c> with no ground pin and no gravity,
     /// and the angular yaw/pitch/roll rates compose into the orientation quaternion per sub-step about the body's own
     /// axes.</summary>

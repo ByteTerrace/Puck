@@ -40,7 +40,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed class SdfEngineNode : IRenderNode, IPassTimingSource {
+public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
     private const ulong TimingReportInterval = 60;
 
     private readonly record struct CpuFrameTiming(
@@ -210,9 +210,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource {
         m_timingEnabled = timingEnabled;
         m_width = width;
 
-        // Seed the shared arming control from the resolved host.timing toggle (the finished timing-promotion story):
-        // it claims GpuTimingControl.Shared only when nothing higher-precedence already has (a programmatic SetArmed,
-        // or the run-doc composition seed, outrank it — see GpuTimingControl). Live arming (bench.run, the demo's
+        // Seed the shared arming control from the resolved host.timing toggle (the lowest-precedence seed — a
+        // programmatic arm or the run-doc composition seed outrank it): it claims GpuTimingControl.Shared only when
+        // nothing higher-precedence already has — see GpuTimingControl. Live arming (bench.run, the demo's
         // gpu.timing switch, Puck.World's world.timing verb) works regardless of this seed. Idempotent, so seeding
         // here and at composition with the same value is harmless.
         _ = GpuTimingControl.Shared.TrySeed(armed: (m_timingEnabled ?? false));
@@ -322,7 +322,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource {
             return default;
         }
 
-        // Drive the carve-bake settle planner BEFORE this frame's capture (carve-bake plan §3/§4): the frame source's
+        // Drive the carve-bake settle planner BEFORE this frame's capture: the frame source's
         // planner polls bake states + requests newly-settled bakes against the live engine, and a Ready→brick flip bumps
         // its content revision so the CaptureFrame just below rebuilds emitting the brick THIS frame. The engine is null
         // only on the very first frame (built by EnsureEngine after the first capture), where there is nothing to bake.
@@ -641,7 +641,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource {
         }
     }
 
-    // Fleet stepping, task-per-node (machine-fleet-plan.md lever 1). The split enforces the timeline-access rule:
+    // Fleet stepping, task-per-node. The split enforces the timeline-access rule:
     // PrepareStep runs SERIALLY here on the render thread (shared-timeline cursors and shared input drainers), then
     // ExecuteStep — the simulation itself, the expensive half — fans out one task per node. Steppable children share
     // nothing, ExecuteStep touches only each node's private state, and Parallel.For is a barrier, so every child's

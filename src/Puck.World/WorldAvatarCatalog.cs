@@ -21,6 +21,29 @@ internal static class WorldAvatarCatalog {
     private static readonly AvatarLeaf[] s_leaves;
     private static readonly ulong[] s_identityHashes;
 
+    /// <summary>
+    /// The closed 12-token humanoid role vocabulary <see cref="WorldAnchor.EntityLeaf.Leaf"/> addresses — kebab-case,
+    /// index-for-index the same order <see cref="HumanoidAnchor"/> switches on (role = bone % 12). This is the DATA
+    /// vocabulary a leaf anchor names; the underlying dynamic-transform slot (<see cref="AvatarRange.First"/> + role)
+    /// is an engine packing detail that stays frozen across population rebuilds but is never itself exposed to
+    /// authored data. Every avatar carries all 12 roles (leaf counts vary 12..20; only the first 12 — one per role —
+    /// are guaranteed present).
+    /// </summary>
+    public static readonly IReadOnlyList<string> HumanoidAnchorRoles = [
+        "pelvis",
+        "abdomen",
+        "chest",
+        "head",
+        "left-upper-arm",
+        "right-upper-arm",
+        "left-hand",
+        "right-hand",
+        "left-thigh",
+        "right-thigh",
+        "left-shin",
+        "right-shin",
+    ];
+
     static WorldAvatarCatalog() {
         s_ranges = new AvatarRange[WorldPopulation.MaxPopulation];
         s_identityHashes = new ulong[WorldPopulation.MaxPopulation];
@@ -68,6 +91,54 @@ internal static class WorldAvatarCatalog {
         var head = s_leaves[s_ranges[avatar].First + 3];
 
         return (head.Anchor + head.AuthoredOffset + new Vector3(x: 0f, y: 0.015f, z: -0.12f));
+    }
+
+    /// <summary>Resolves a <see cref="HumanoidAnchorRoles"/> token to its 0..11 role index (bone = role, since every
+    /// avatar's first 12 leaves are one per role).</summary>
+    /// <param name="token">The kebab-case role token.</param>
+    /// <param name="role">The resolved role index, or -1 when unmatched.</param>
+    /// <returns><see langword="true"/> when <paramref name="token"/> names a role.</returns>
+    public static bool TryHumanoidRole(string token, out int role) {
+        for (var index = 0; (index < HumanoidAnchorRoles.Count); index++) {
+            if (string.Equals(a: HumanoidAnchorRoles[index], b: token, comparisonType: StringComparison.Ordinal)) {
+                role = index;
+
+                return true;
+            }
+        }
+
+        role = -1;
+
+        return false;
+    }
+
+    /// <summary>Returns a humanoid role's avatar-local STATIC offset (the authored rest anchor — no gait swing). The
+    /// honest minimal leaf-pose approximation the CAMERA path (<see cref="WorldScreenBinder"/>) resolves an anchored
+    /// row against: exact for the torso/head roles (0..3, which never swing) and an unanimated approximation for the
+    /// swinging limb roles (4..11). The audio director resolves the REAL packed pose instead
+    /// (<see cref="LeafPose"/>) — lifting cameras onto that seam means swapping the binder's anchor-source path.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="role">The 0..11 role index (see <see cref="TryHumanoidRole"/>).</param>
+    public static Vector3 RoleOffset(int avatar, int role) {
+        var leaf = s_leaves[s_ranges[avatar].First + role];
+
+        return (leaf.Anchor + leaf.AuthoredOffset);
+    }
+
+    /// <summary>Resolves a humanoid role's REAL leaf pose for this frame from the packed dynamic transforms — the
+    /// exact position and gait-swung orientation the leaf renders at (the anchor-point pose composed with the
+    /// authored leaf offset), valid only for an avatar <see cref="PackTransforms"/> wrote this frame.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="role">The 0..11 role index (see <see cref="TryHumanoidRole"/>).</param>
+    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
+    public static (Vector3 Position, Quaternion Orientation) LeafPose(int avatar, int role, ReadOnlySpan<DynamicTransform> transforms) {
+        var slot = (s_ranges[avatar].First + role);
+        var packed = transforms[slot];
+
+        return (
+            Position: (packed.Position + Vector3.Transform(value: s_leaves[slot].AuthoredOffset, rotation: packed.Orientation)),
+            Orientation: packed.Orientation
+        );
     }
 
     /// <summary>Counts the active catalog leaves and their authored VM instructions for diagnostics.</summary>

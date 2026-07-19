@@ -20,7 +20,7 @@ namespace Puck.World;
 /// environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, PlayerRoster roster, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldDefinition definition, WorldScreenBinder screens, WorldEngagement engagement, IServerLink link) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, PlayerRoster roster, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, WorldEngagement engagement, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
@@ -287,9 +287,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeQuality());
                 }
 
-                // The preset table is world data (WorldDefinition.Render): look the named tier up and write its three
-                // levers into the live settings.
-                if (definition.Render.Preset(name: args[0]) is not { } preset) {
+                // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
+                // preset table applies immediately: look the named tier up and write its three levers into the live
+                // settings.
+                if (server.Definition.Render.Preset(name: args[0]) is not { } preset) {
                     return new CommandResult(Output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
                 }
 
@@ -443,14 +444,17 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             };
         }
 
-        if (definition.Screens.Count == 0) {
+        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly.
+        var declaredScreens = server.Definition.Screens;
+
+        if (declaredScreens.Count == 0) {
             return new CommandResult(Output: "[world.screens: none declared]");
         }
 
         var builder = new StringBuilder(value: "[world.screens:");
 
-        for (var index = 0; (index < definition.Screens.Count); index++) {
-            var screen = definition.Screens[index];
+        for (var index = 0; (index < declaredScreens.Count); index++) {
+            var screen = declaredScreens[index];
             var bound = (screens.CurrentHandle(index: screen.Index) != 0);
             // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
             // proof regexes are undisturbed.
@@ -689,7 +693,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         var workload = WorldAvatarCatalog.ActiveWorkload(isActive: population.IsActive);
         // The per-kit census derives its names and counts from the definition rows, in row order.
         var counts = population.ActiveKitCounts();
-        var kits = string.Join(separator: " ", values: definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}"));
+        var kits = string.Join(separator: " ", values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}"));
 
         return $"[world.population: {simulated} network-human stand-ins active (0..{WorldPopulation.MaxSimulated}), behavior {behavior} | {local} local + {simulated} = {(local + simulated)}/{WorldPopulation.MaxPopulation} avatars rendered | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
     }
@@ -713,6 +717,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
         for (var index = 0; (index < passCount); index++) {
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | {labels[index]} {passMilliseconds[index]:0.00}");
+        }
+
+        // The unified overlay decorator's own pass (a separate submit after the engine's) — appended once the
+        // overlay has drawn a timed frame.
+        if (renderProbe.Overlay is { } overlay) {
+            Span<double> overlayMilliseconds = stackalloc double[1];
+
+            if (overlay.TryReadPassTimings(passMilliseconds: overlayMilliseconds, passCount: out var overlayCount, frameMilliseconds: out _) && (overlayCount > 0)) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | overlay {overlayMilliseconds[0]:0.000}");
+            }
         }
 
         return builder.Append(value: ']').ToString();

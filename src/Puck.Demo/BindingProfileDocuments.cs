@@ -43,9 +43,13 @@ internal static class BindingProfileDocuments {
                 new BindingModifierDefinition(Icon: "modifier.leftTrigger", Id: LeftModifier, Label: "LT", Source: InputSources.Gamepad.LeftTrigger),
                 new BindingModifierDefinition(Icon: "modifier.rightTrigger", Id: RightModifier, Label: "RT", Source: InputSources.Gamepad.RightTrigger),
             ],
-            Pages: [
-                new BindingPageDefinition(
+            // One "overworld" group: the demo predates the runtime group switch, so every page rides the default
+            // group and chords alone select pages (the v8 chord-row wrap is mechanical).
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "overworld",
                     Chord: [],
+                    Page: new BindingPageDefinition(
                     Entries: [
                         new BindingPageEntryDefinition(Command: "overworld.jump", Icon: "action.jump", Label: "Jump", Source: InputSources.Gamepad.ButtonSouth),
                         // The overworld deliberately interacts on NORTH (East is the GB joypad B, so booting a
@@ -66,11 +70,14 @@ internal static class BindingProfileDocuments {
                     ],
                     Id: "movement",
                     Label: "Movement"
+                    )
                 ),
                 // The two chord pages are the DEBUG surface. Keep ENGINE second-to-last and GamingBrick controls LAST
                 // in the profile order; chord order still determines which page is active at runtime.
-                new BindingPageDefinition(
+                new BindingChordDefinition(
+                    Group: "overworld",
                     Chord: [RightModifier, LeftModifier],
+                    Page: new BindingPageDefinition(
                     Entries: [
                         new BindingPageEntryDefinition(Command: DebugViewModes.Command(mode: 1), Icon: "action.1", Label: "Depth", Source: InputSources.Gamepad.DpadUp),
                         new BindingPageEntryDefinition(Command: DebugViewModes.Command(mode: 3), Icon: "action.2", Label: "Ray dir", Source: InputSources.Gamepad.DpadRight),
@@ -81,9 +88,12 @@ internal static class BindingProfileDocuments {
                     ],
                     Id: "debug-engine",
                     Label: "Debug: Engine"
+                    )
                 ),
-                new BindingPageDefinition(
+                new BindingChordDefinition(
+                    Group: "overworld",
                     Chord: [LeftModifier, RightModifier],
+                    Page: new BindingPageDefinition(
                     Entries: [
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickSpeedToggleCommand, Icon: "action.1", Label: "Speed pin", Source: InputSources.Gamepad.ButtonWest),
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickModeDmgCommand, Icon: "action.2", Label: "Mode DMG", Source: InputSources.Gamepad.DpadLeft),
@@ -97,6 +107,7 @@ internal static class BindingProfileDocuments {
                     ],
                     Id: "debug-bricks",
                     Label: "Debug: Bricks"
+                    )
                 ),
             ],
             Version: BindingProfileDocument.CurrentVersion

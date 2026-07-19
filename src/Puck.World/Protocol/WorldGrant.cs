@@ -2,7 +2,7 @@ namespace Puck.World.Protocol;
 
 /// <summary>The coarse capability verbs a <see cref="WorldGrant"/> confers — the closed set the server checks a
 /// submission's <see cref="WorldPrincipal"/> against at each write boundary. A genre world arrives as different DATA
-/// (new subjects, new sections), never a new capability (the §2.6 audit).</summary>
+/// (new subjects, new sections), never a new capability.</summary>
 internal enum WorldCapability : byte {
     /// <summary>The right to DRIVE a body — submit its per-tick intents and authority commands. Checked at the intent
     /// drain and <c>ApplyCommand</c>.</summary>
@@ -17,8 +17,9 @@ internal enum WorldCapability : byte {
     Mutate,
 
     /// <summary>The right to EDIT a player-profile section — apply a <c>SetPlayerSection</c> (the <c>profile.save</c>
-    /// fold path). Checked where the server applies the section; granted over <see cref="GrantSubject.All"/> by the
-    /// permissive local defaults (per-profile subjects are a future refinement).</summary>
+    /// fold path). Checked against the CONCRETE <see cref="GrantSubject.Profile"/> subject of the edited profile;
+    /// granted over <see cref="GrantSubject.All"/> by the permissive local defaults, so local play is unchanged until
+    /// someone narrows the trust to named profiles.</summary>
     Edit,
 }
 
@@ -59,6 +60,29 @@ internal enum WorldSection : byte {
     /// <summary>The per-world binding overlays — targeted by the <see cref="WorldMutation.UpsertBindingOverlay"/> /
     /// <see cref="WorldMutation.RemoveBindingOverlay"/> mutations.</summary>
     Bindings,
+
+    /// <summary>The creation ASSET rows — inline-canonical <c>puck.creation.v1</c> documents with pinned hashes.</summary>
+    Creations,
+
+    /// <summary>The placement INSTANCE rows — creations stamped into the world by reference.</summary>
+    Placements,
+
+    /// <summary>The editor/authoring policy row — headroom, placement scale envelope, candidate targeting,
+    /// the sole-editor layout split, and the drag-preview deadline (see <see cref="WorldAuthoringDefaults"/>).</summary>
+    Authoring,
+
+    /// <summary>The placeable speaker rows (the audio arc) — targeted by <see cref="WorldMutation.UpsertSpeaker"/> /
+    /// <see cref="WorldMutation.RemoveSpeaker"/>.</summary>
+    Speakers,
+
+    /// <summary>The tune ASSET rows — inline-canonical <c>puck.audio.v1</c> documents with pinned hashes.</summary>
+    Tunes,
+
+    /// <summary>The synth-patch ASSET rows — inline-canonical <c>puck.synth.v1</c> documents with pinned hashes.</summary>
+    Patches,
+
+    /// <summary>The audio host-section defaults (master gain, attenuation coalescing, the listener policy).</summary>
+    Audio,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
@@ -74,14 +98,20 @@ internal enum GrantSubjectKind : byte {
 
     /// <summary>A single world-document section.</summary>
     Section,
+
+    /// <summary>A single player profile, by its stable string id (<see cref="GrantSubject.Id"/>).</summary>
+    Profile,
 }
 
-/// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, or a document
-/// section. A zero-alloc value key into the grant table's per-capability subject sets.</summary>
+/// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
+/// or a player profile. A zero-alloc value key into the grant table's per-capability subject sets: profile ids are
+/// strings, so the subject matches <see cref="WorldPrincipal"/>'s shape (an index lane plus a nullable string lane;
+/// record-struct equality covers both).</summary>
 /// <param name="Kind">The subject flavor.</param>
 /// <param name="Value">The 0-based body/screen index, or the <see cref="WorldSection"/> ordinal for a section; zero for
-/// <see cref="GrantSubjectKind.All"/>.</param>
-internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value) {
+/// <see cref="GrantSubjectKind.All"/> and <see cref="GrantSubjectKind.Profile"/>.</param>
+/// <param name="Id">The profile id for <see cref="GrantSubjectKind.Profile"/>; <see langword="null"/> otherwise.</param>
+internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, string? Id = null) {
     /// <summary>The wildcard subject — the capability over its whole domain.</summary>
     public static GrantSubject All { get; } = new(Kind: GrantSubjectKind.All, Value: 0);
 
@@ -97,14 +127,19 @@ internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value) {
     /// <param name="section">The section.</param>
     public static GrantSubject Section(WorldSection section) => new(Kind: GrantSubjectKind.Section, Value: (int)section);
 
+    /// <summary>A single player profile by its stable string id.</summary>
+    /// <param name="id">The profile id.</param>
+    public static GrantSubject Profile(string id) => new(Kind: GrantSubjectKind.Profile, Value: 0, Id: id);
+
     /// <summary>A short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
-    /// <c>section:&lt;name&gt;</c>.</summary>
+    /// <c>section:&lt;name&gt;</c>, <c>profile:&lt;id&gt;</c>.</summary>
     /// <returns>The label.</returns>
     public string Describe() => Kind switch {
         GrantSubjectKind.All => "all",
         GrantSubjectKind.Body => $"body:{Value}",
         GrantSubjectKind.Screen => $"screen:{Value}",
         GrantSubjectKind.Section => $"section:{((WorldSection)Value).ToString().ToLowerInvariant()}",
+        GrantSubjectKind.Profile => $"profile:{Id}",
         _ => "?",
     };
 }

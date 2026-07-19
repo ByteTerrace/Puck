@@ -19,15 +19,15 @@
 //   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
 //       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
 //   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 1 exit-bar proofs for the world document (puck.world.def.v1): (a) the ouroboros
+//       The world-document proofs (puck.world.def.v1): (a) the ouroboros
 //       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) round-trips
-//       world.save byte-for-byte, twice over, so a save that now folds session state (§2.1) stays
+//       world.save byte-for-byte, twice over, so a save that folds session state stays
 //       idempotent on a fresh boot; (b) baked-default parity — a checked-in-world run and a
 //       missing-world (baked-default fallback) run of the same short hop corpus compare
 //       byte-identical, and the loud "[world] definition: baked default (...)" line appears only
 //       in the fallback run.
 //   mutate [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 2a exit-bar proof for the mutation vocabulary: (a) a scripted world.kit.tune / world.undo /
+//       The mutation-vocabulary round-trip proof: (a) a scripted world.kit.tune / world.undo /
 //       world.save round-trip over stdin, asserting the journal-length dirty counter at each step and the
 //       server's loud accept/undo lines; (b) rejection honesty — world.kit.remove on the defaultSeatKit is
 //       rejected loudly and the document is unchanged; (c) survival — relaunching with --world <the saved
@@ -35,31 +35,39 @@
 //       protocol-version handshake is proven by the implementing session, not re-covered here (no scripted
 //       Join path exists over stdin without inventing a debug verb).
 //   grants [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 2b exit-bar proof for principals/capability grants (§2.7 criterion 4): (a) world.addon.set mounts an
+//       The principals/capability-grants proof: (a) world.addon.set mounts an
 //       autopilot WorldAddonRow (data-only — the driver mounts enabled addon rows only at BOOT) and world.save writes
 //       it; (b) relaunching --world <the saved file> asserts the "[world.addon: mounted autopilot ...]" boot line,
 //       then world.grant addon:autopilot drive body:<n> exclusive is asserted to move the granted body (two
 //       player.where samples a second apart); (c) world.revoke mid-run asserts the edge-latched
 //       "[world.grant denied: ...]" line and that the body then holds perfectly still (two more samples, identical);
 //       (d) denied-mutation honesty — world.revoke console mutate section:kits makes world.kit.tune fail loudly with
-//       world.status's dirty counter unchanged, and re-granting makes the same command apply.
+//       world.status's dirty counter unchanged, and re-granting makes the same command apply; (e)/(f) exclusivity in
+//       both orders plus the exclusive-wildcard outright rejection; (g) EXCLUSIVE SECTION ACQUISITION — the
+//       seeded per-section Mutate defaults never block, so world.grant seat1 mutate section:scene exclusive succeeds
+//       on a default table, the console's scene mutation is then denied at the grant boundary, and revoking the hold
+//       restores it; (h) PROFILE SUBJECT — Edit is checked against the concrete profile:<id> subject: the
+//       seeded Edit/all wildcard passes, revoking it denies profile.section, and a narrow profile:amber grant
+//       restores exactly amber while cobalt stays denied. (h) writes the player store, so this proof now backs up +
+//       restores the REAL world/ + profiles/ subtrees like the bindings proof (the cleared store reseeds the
+//       deterministic amber/cobalt catalog ids).
 //   bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 3 exit-bar proof for the player document + layered binding resolution (§2.4): (a) session A boots the
+//       The player-document + layered binding-resolution proof (engine default ⊕ world overlay ⊕ profile ⊕ session): (a) session A boots the
 //       REAL local player-document store fresh, asserts the engine-default composed mapping (player.bindings), live-
 //       rebinds keyboard.e -> player.forward (player.bind), and profile.save folds+persists it into the boot profile
 //       (revision bumps, read back through profile.doc); (b) session B relaunches and asserts the rebind survived and
 //       the revision did not bump again on a plain boot; (c) session C boots --world kart-remap.world.json and asserts
 //       the world's bindingOverlays entry merges over the engine default (gamepad.buttonEast -> player.primary), then
-//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized pre-Phase-3
+//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized legacy
 //       puck.world.profiles.v1 profiles.json migrates once at boot (the loud "... retired puck.world.profiles.v1 ..."
 //       line, world/player.json + world/local.json written, profiles/profiles.json deleted, profile.list showing the
-//       migrated names); (e) a synthesized Phase 3 single-file profiles/player.json migrates once at boot the other
+//       migrated names); (e) a synthesized single-file profiles/player.json migrates once at boot the other
 //       migration path (the loud "... Phase 3 single-file layout ..." line, the split world/ layout written,
 //       profiles/player.json deleted). There is no CLI override for the player-document store path (see
-//       WorldProfileStore), so this proof backs up the owner's REAL world/ + profiles/ subtrees (whole directories,
+//       WorldProfileStore), so this proof backs up the REAL world/ + profiles/ subtrees (whole directories,
 //       byte-for-byte) before every session and restores them in a finally — the real catalog is never destroyed.
 //   storage [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 4 exit-bar proof for cloud-readiness (§2.5, local backend only): (a) a fresh boot against the REAL
+//       The cloud-readiness proof, proven against the local backend only: (a) a fresh boot against the REAL
 //       cleared local store asserts storage.status's honest baseline (tier local authoritative/cloud unwired,
 //       identity declined, endpoint none, a present catalog revision + version token), then the cheapest
 //       revision-bumping verb (profile.set speed 7 1) is asserted to bump the revision, change the version token, and
@@ -69,23 +77,123 @@
 //       boot with --user-id not-a-guid asserts the declining echo. Backs up + restores the REAL world/ + profiles/
 //       subtrees exactly like the bindings proof — the real catalog is never destroyed.
 //   expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]
-//       Regenerates the second world reproducibly (Phase 5 §2.6). Boots a baked-default Puck.World, feeds the checked-in
+//       Regenerates the second world reproducibly. Boots a baked-default Puck.World, feeds the checked-in
 //       scripts/expo-world.txt authoring session (a new kit row + retunings + a table policy, a warmer four-pillar scene,
 //       staggered spawns, three asset-free screens) over stdin, then world.save-s to Assets/worlds/expo.world.json
-//       (--out overrides) — the trailing save FOLDS the live render levers + census into the document (§2.1). The
+//       (--out overrides) — the trailing save FOLDS the live render levers + census into the document. The
 //       artifact and this script are the checked-in, reproducible pair; NEVER hand-edit the JSON.
 //   record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]
-//       Native-capture proof (the recording arc). Boots Puck.World (a real GPU window — the tap reads each captured
+//       Native-capture proof. Boots Puck.World (a real GPU window — the tap reads each captured
 //       frame back to CPU pixels through the SDF engine, so a live present surface is required), asserts capture.status
-//       reads idle, capture.start arms a RecordingSession (echoing the codec that landed and any device declines — a
+//       reads idle, capture.start arms a RecordingSession (echoing the negotiated codec and any device declines — a
 //       mic privacy denial is a PASS path), lets ~S seconds of the autonomous crowd move, capture.stop finalizes, and
-//       then walks the produced container: the EBML doc type matches the landed codec (webm for AV1, matroska for the
+//       then walks the produced container: the EBML doc type matches the negotiated codec (webm for AV1, matroska for the
 //       H.264 fallback), the audio track is present (loopback in a headless-ish run may be silence — track presence, not
-//       loudness, is asserted), a video track is present when video landed, the file is non-trivial, and capture.status
+//       loudness, is asserted), a video track is present when video negotiated, the file is non-trivial, and capture.status
 //       reads idle again. --out copies the artifact somewhere for a real player to open. Asserts the overlay row is
-//       present in the recording document used (the capture-only text the owner asked for).
+//       present in the recording document used (the capture-only text).
+//   ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The unified-overlay proof, run on BOTH backends (Direct3D 12 first, then --backend vulkan). Each session
+//       boots, waits for the console, then world.screenshot-s three composed frames over the outermost-decorator
+//       capture chain: (a) console panel ON — its stage region must be visibly SCRIM-DARKENED versus (b) a
+//       world.console off control shot (mean-luminance drop, robust against the moving world beneath); (c) a
+//       deliberately invalid mutation (world.kit.remove on the defaultSeatKit) must surface as the danger-hued
+//       TOAST — asserted as a danger-red pixel population in the toast strip that the control shot lacks — beside
+//       its loud '[world.mutation rejected: ...]' stderr line. Decodes the engine's own PNGs (filter-0 RGBA)
+//       inline; no image dependency.
+//   editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The editor-mode proof, run on BOTH backends like ui-floor. Each session boots, asserts the mode
+//       round trip over stdin (editor.enter/status/exit echoes; the seat's active binding GROUP flips play→editor
+//       and back — a pointer-level switch, editor.status echoes group= + page=; player.control reads idle while
+//       editing and the prior source after), asserts THE REFERENCE CHORD-COMMAND end to end from data
+//       (player.signal synthesizes the LT-then-RT trigger sweep; the ordered [lt, rt] chord row fires editor.enter;
+//       held/released chords walk the editor pages; a session-rebind chord row binds via player.bind chord:m+m and
+//       echoes in player.bindings; the resting-page and undeclared-modifier rules reject loudly at the wire — the
+//       one-meaning rule and the press latch across group flips are engine-gated in Puck.Post's binding-page
+//       stage), asserts the CAMERA in pixels
+//       (console panel off; a screenshot after editor.cam.pose must differ decisively from the seeded shot, while
+//       the seeded shot ~= the pre-enter chase shot and the post-exit shot ~= it again — no pose pop on either
+//       edge), then asserts the diversion honestly: the avatar drives again after exit (player.run + where delta),
+//       two idle where samples match exactly (nothing held leaked across the mode flip), and a tape STILL drives
+//       the avatar while editing (the player.control idle contract — script outranks idle). The sole-editor LAYOUT
+//       policy is asserted positively: a second seat joins, seat 1 enters the editor, and the 50%→70% split seam
+//       band must repaint. The roster is pinned to seat 1 first (dev-machine pads auto-seat extra players). Decodes
+//       the engine's own PNGs inline like ui-floor.
+//   editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The camera live-apply proof, run on BOTH backends like editor-mode. Each session boots the
+//       baked default (two declared View screens → two registered camera views, witnessed by world.view-refresh's
+//       count echo) and asserts: (a) a fixed-camera pose/aim edit applies LIVE — the '[world.camera: ... pose updated
+//       live]' reconcile line, and a stale "applies at next boot" narration must NOT appear; (b) the anchored
+//       camera's pose edit takes the same live lane; (c) a NEW camera row + a screen re-point (View→View) binds the
+//       new camera and releases the orphaned one, the pool count holding; (d) a dimension change recreates the
+//       offscreen view ('recreated live (WxH)'); (e) THE VIEW→NONE TRANSITION — re-sourcing the screen View→None unbinds
+//       the slot AND releases the camera registration (view-refresh count drops, world.screens reads none/unbound —
+//       no stale offscreen render); (f) world.camera.remove of the now-unreferenced row applies document-side.
+//   editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
+//       (player.leave 2..4) AND the census (world.population 0 — a static world so pixel diffs read the highlight,
+//       not the crowd), enters the editor, and asserts: (a) editor.place authors one scene row = EXACTLY one
+//       world.status dirty increment; (b) THE HEADLINE — a grab + multi-step drag produces ZERO wire traffic (dirty
+//       unchanged mid-drag) and release commits EXACTLY one more journal entry with the position moved (editor.status
+//       echoes the committed center); the coalescing is driven over editor.drag, the typed twin of stick motion (the
+//       same pending-row channel the analog latch feeds — the latch itself needs a physical pad and is hand-verified);
+//       (c) world.undo restores the pre-drag position; (d) the look-ray pick names the aimed row (camera posed at
+//       boulder-2, editor.pick echoes it); (e) the selection highlight is VISIBLE — select/deselect screenshots over a
+//       static central band differ decisively while a deselected control pair does not; (f) capacity honesty —
+//       flooding placements past the authoring headroom hits the loud '[world.mutation rejected: ...]' envelope line,
+//       a further placement leaves dirty UNCHANGED, and the rejection surfaces as the danger-hued toast;
+//       (g) every editor-local typed float surface rejects NaN/Infinity loudly; (h) exit or seat
+//       departure mid-drag drops the pending row AND the selection (re-entry/rejoin starts clean, the abandoned drag
+//       is uncommittable, dirty unchanged); (i) a frozen released preview resolves independently on ITS OWN result: apply
+//       narrates 'retired: applied', a revoked-grant rejection batched WITH an unrelated console mutation narrates
+//       'retired: rejected' (never an apply/deadline retire — the unrelated delivery leaves the preview alone) and
+//       the row snaps back to its document pose; (j) the candidate ring is bounded and narrated (cap 16
+//       engages near the flooded scene, an empty ring far away, editor.status carries the policy). Decodes the
+//       engine's own PNGs inline like ui-floor. A second NARROW pair of sessions (640x480, four seats, two editors)
+//       is the seat-clip proof: the seat-1 HUD paints inside its own 320px viewport and does NOT bleed past the
+//       2x2 seam into seat 2 (control-bounded pixel bands on both backends).
+//   placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The creations/placements proof, run on BOTH backends like editor-mode. Each session pins the roster
+//       (player.leave 2..4) and census (world.population 0), aims the editor camera at empty grass (so the ONLY pixel
+//       motion in the asserted band is the placement under test), and asserts: (a) editor.import of a committed
+//       PROOF-AUTHORED probe creation (Demo content never ships as World content — the proof owns
+//       its art) crosses the strict canonicalizer and lands as EXACTLY one UpsertCreation journal entry; (b) the STAMP is visible — editor.place'ing the imported creation repaints a static central
+//       band decisively versus a control pair's noise floor; (c) THE HASH PIN — world.creation.set with a corrupted
+//       hash rejects loudly naming the canonical sha256, dirty unchanged (and the load-time half is covered by the
+//       validator: a tampered saved file falls back loudly at boot); (d) the drag channel works on placements —
+//       grab + multi-step editor.drag moves the dirty counter NOT AT ALL mid-drag and release commits EXACTLY one
+//       more journal entry ('retired: applied'); (e) world.undo restores the pre-drag position (editor.select echoes
+//       the original coordinates); (f) RemoveCreation with live placements rejects loudly (the no-cascade ruling);
+//       (g) the proof-authored ANIMATED probe (4 frames) walks its timeline — two shots 0.7 s apart over its band
+//       differ decisively while a static-control pair does not; (h) capacity honesty — flooding placements past
+//       the reserved headroom hits the loud '[world.mutation rejected: ...] ... exceed the probed render envelope'
+//       ceiling and a further placement leaves dirty unchanged; (i) THE OUROBOROS WITH CREATIONS — world.save of the
+//       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
+//       canonical embeds and the world.save hash recompute are byte-stable). Decodes the engine's own PNGs
+//       inline like ui-floor.
+//   audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
+//       patches/tune through the HASH-PIN handshake (a bogus hash rejects loudly NAMING the canonical sha256, which
+//       the proof then submits — the pin proven and satisfied in one gesture), every speaker $type (fixed stereo
+//       pair, a bed, an entityLeaf-anchored row on a published role token, a placement-anchored row), a scene-row
+//       emission facet, the audio defaults, and a sound-bearing proof-authored creation placed — asserting the
+//       journal dirty counter at every step and the audio.emitters derivation listing. Then the VALIDATOR REJECTION
+//       TABLE (unknown patch/tune ids, an undeclared screen, a bad leaf token, an unknown placement anchor, the bed
+//       radius rule, the gain ceiling, a bogus listener policy, an emission facet naming no patch — each loud, dirty
+//       unchanged), the NO-CASCADE GUARDS (RemoveTune/RemovePatch naming their dependents; RemovePlacement while a
+//       speaker anchors to it), an undo round (the departed speaker leaves the derivation), and a grants round
+//       (revoking console mutate section:speakers denies the mutation loudly; re-granting restores it). world.save
+//       compacts; session B relaunches --world <the saved file>, PINS the fresh-boot audio.emitters listing exactly
+//       (stable ids in document order), and a second save byte-compares — the ouroboros with audio sections.
+//       The cue/speaker/volume rounds ride the same sessions: THE CUE TABLE (authored as data, its validator table, the producer
+//       lanes — an applied mutation's at-site chime, a grant denial, gait-derived footsteps under player.run, the
+//       binder's screen.fault lane — each asserted through speaker.state's live transient tail), speakers through
+//       the editor (select/grab/drag/release/undo + the editor.speaker.* numeric twins, dirty-count disciplined),
+//       the world.volume session lever (document read → lever engage → 'audio' drift → the save FOLDS it into
+//       audio.masterGain), and the ouroboros now carries the cue table + folded volume — with the rebooted cue
+//       table still FIRING (the behavioral half). speaker.state itself is exercised throughout.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
+//       The second world + session write-back proof: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
 //       from the default's (kits 6 screens 3 vs kits 5 screens 5), a visibly different game with zero code; (c) the
 //       write-back SLICE not covered by the mutate proof — a live SESSION lever (world.population count) is changed, the
@@ -147,8 +255,15 @@ static class ProofApp {
                 "expo-author" => ExpoProof.RunExpoAuthor(opts: opts),
                 "expodoc" => ExpoProof.RunExpoDoc(opts: opts),
                 "record" => RecordProof.RunRecord(opts: opts),
+                "ui-floor" => UiFloorProof.RunUiFloor(opts: opts),
+                "editor-mode" => EditorModeProof.RunEditorMode(opts: opts),
+                "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
+                "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
+                "placements" => PlacementsProof.RunPlacements(opts: opts),
+                "sculpt" => SculptProof.RunSculpt(opts: opts),
+                "audio" => AudioProof.RunAudio(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt|audio)"),
             };
         }
         catch (ArgException ex) {
@@ -174,6 +289,13 @@ static class ProofApp {
         Console.WriteLine(value: "  expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]");
         Console.WriteLine(value: "  expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]");
+        Console.WriteLine(value: "  ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -791,7 +913,7 @@ static class Generators {
     public static List<string> Hop(int population) {
         var lines = new List<string>();
 
-        // The ported jump kit (WorldBody constants) — the bands are DERIVED from these, never hard-coded.
+        // The jump kit, matching WorldBody's constants — the bands are DERIVED from these, never hard-coded.
         const double actionScale = 0.5;
         var jumpSpeed = (11.0 * actionScale);   // 5.5 u/s launch
         var riseGravity = (28.0 * actionScale); // 14 u/s^2 rising
@@ -900,8 +1022,8 @@ static class MixtureModel {
     const double MoveSpeed = Generators.MoveSpeed;
     const double TurnSpeed = Generators.TurnSpeed;
 
-    // State table: target forward deflection + mean dwell seconds + selection weight (Demo PlatformerTuning tempo,
-    // deflections mapped onto the body's 4 u/s scale so the sprint:run ratio 1.6 is preserved).
+    // State table: target forward deflection + mean dwell seconds + selection weight (deflections mapped onto the
+    // body's 4 u/s scale; sprint:run ratio held at 1.6).
     static readonly (string Name, double Deflection, double MeanDwell, int Weight)[] States = {
         ("Idle", 0.0, 1.2, 15),
         ("Walk", 0.35, 2.5, 30),
@@ -1439,7 +1561,7 @@ static class ExpoBuilder {
     }
 
     // SUBMARINES — a slow damped glide with gentle pitch undulation (report-only), then a closed-form straight
-    // finale on the low band. The Subnautica tempo: small deflections (<=0.4), lazy motion.
+    // finale on the low band. A damped-glide tempo: small deflections (<=0.4), lazy motion.
     static void BuildSubs(List<TimedCommand> timed, List<string> directives, List<int> subs) {
         var count = subs.Count;
         const int cols = 6;
@@ -1504,11 +1626,11 @@ readonly record struct Pose(double X, double Y, double Z, int Yaw, int Pitch, in
 // Shared player-document store paths + directory backup — used by BindingsProof and StorageProof, the two
 // suites that boot against the REAL local player-document store (WorldProfileStore has no CLI override; no
 // --user-id, no env var). Both back up the FULL world/ + profiles/ subtrees before touching anything and
-// restore them in a finally, so the owner's real catalog is never left mutated.
+// restore them in a finally, so the real catalog is never left mutated.
 // ============================================================================================
 
-// The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths (§2.5.3)
-// under it, mirrored from WorldProfileStore.cs's private address table.
+// The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths
+// under it, matching WorldProfileStore.cs's private address table.
 static class PlayerStorePaths {
     static readonly Guid LocalProfilesId = new(g: "b1d5c0de-0002-4000-8000-000000000001");
 
@@ -1531,8 +1653,8 @@ static class PlayerStorePaths {
     public static string ProfilesDir() {
         return Path.Combine(path1: WorldDir(), path2: "profiles");
     }
-    // The two retired single-file layouts, both under the shared "profiles/" directory: the Phase 3 whole-document
-    // pair (profiles/player.json + profiles/local.json) and the pre-Phase-3 puck.world.profiles.v1 catalog
+    // The two legacy single-file layouts this store migrates away from, both under the shared "profiles/" directory:
+    // the whole-document pair (profiles/player.json + profiles/local.json) and the puck.world.profiles.v1 catalog
     // (profiles/profiles.json).
     public static string PhaseThreeDir() {
         return Path.Combine(path1: StoreRoot(), path2: "profiles");
@@ -1551,7 +1673,7 @@ static class PlayerStorePaths {
 readonly record struct DirectorySnapshot(string Root, IReadOnlyList<(string RelativePath, byte[] Bytes)> Files);
 
 // Whole-subtree snapshot/clear/restore, byte-for-byte — the store's per-profile blob count is not known ahead of
-// time, so a proof clearing/restoring individual filenames would miss any real profile the owner has beyond the
+// time, so a proof clearing/restoring individual filenames would miss any real profile beyond the
 // four seeded defaults. Restoring means "the directory looks EXACTLY like it did" (including deleting anything the
 // proof itself created that did not exist before).
 static class DirectoryBackup {
@@ -2289,7 +2411,7 @@ static class Comparer {
 }
 
 // ============================================================================================
-// WORLDDOC — the Phase 1 exit-bar proofs for the world document (puck.world.def.v1):
+// WORLDDOC — the world-document proofs (puck.world.def.v1):
 //   (a) the ouroboros gate: the checked-in Assets/worlds/default.world.json round-trips
 //       world.save byte-for-byte, twice over (load->save->load reproduces the file exactly).
 //   (b) baked-default parity: booting from the checked-in file and booting from a missing
@@ -2338,7 +2460,7 @@ static class WorldDocProof {
         Console.WriteLine(value: "[proof] === worlddoc (a): the ouroboros gate (every checked-in world) ===");
 
         // Cover EVERY checked-in world (default, kart-remap, and — once authored — expo): a save that folds session state
-        // (§2.1) must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
+        // must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
         // authoring) are skipped with a note rather than failing the gate.
         var worldsDir = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds");
         var ouroborosPassed = true;
@@ -2544,8 +2666,8 @@ static class WorldDocProof {
 
     sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
 
-    // Wait for the router to be live: player.stop is idempotent at boot, so its echo is the readiness signal (mirrors
-    // ScreensProof.WaitForConsole — cold shader compilation can exceed an individual assertion's deadline).
+    // Wait for the router to be live: player.stop is idempotent at boot, so its echo is the readiness signal, matching
+    // ScreensProof.WaitForConsole — cold shader compilation can exceed an individual assertion's deadline.
     static bool WaitForConsole(Ctx ctx) {
         var mark = ctx.Collector.Count;
 
@@ -2615,7 +2737,7 @@ static class WorldDocProof {
 }
 
 // ============================================================================================
-// EXPO — the Phase 5 second world (§2.6 genre-neutrality proof artifact) + session write-back:
+// EXPO — the second world (a genre-neutrality proof artifact) + session write-back:
 //   expo-author regenerates Assets/worlds/expo.world.json THE HONEST WAY (a scripted stdin
 //     session of mutations + live session levers fed to a booted baked-default world, then
 //     world.save folds the render levers + census into the saved document).
@@ -2626,7 +2748,7 @@ static class WorldDocProof {
 // ============================================================================================
 static class ExpoProof {
     // The distinguishing world.status counts the authoring session produces (5 default kits + "glider" = 6; 5 default
-    // screens minus indices 4 and 3 = 3) — a visibly different world with zero code, the §2.6 audit made observable.
+    // screens minus indices 4 and 3 = 3) — a visibly different world with zero code.
     const string ExpoStatusNeedle = "kits 6 screens 3";
     // The census the authoring session bakes in (world.population 32), and the distinct value the write-back slice sets
     // to prove a live session lever survives world.save + a relaunch (48 != 32 != the default's 124).
@@ -2935,7 +3057,7 @@ static class ExpoProof {
     // The third write-back dimension, positively (expo/default are asset-free, so the ouroboros only exercises the
     // no-live-machine no-op). Boot expo, boot a REAL joypad-echo ROM onto a declared screen via screen.insert, assert
     // world.status now names the 'screens' drift dimension, then world.save and assert the saved JSON carries a machine
-    // source referencing that ROM — the live binder insert folded into the screen row (§2.1). One self-contained session.
+    // source referencing that ROM — the live binder insert folded into the screen row. One self-contained session.
     static bool RunScreenInsertFold(string exe, string repoRoot, string expoPath, int width, int height, int exitAfterSeconds) {
         const int insertScreen = 1;
         var romPath = Path.Combine(Path.GetTempPath(), $"puck-world-expo-insert-{Environment.ProcessId}.gb");
@@ -3044,7 +3166,7 @@ static class ExpoProof {
     }
 
     // The population block's networkPlayers value — the canonical writer's stable order puts it right after localPlayers,
-    // so this first-after-"networkPlayers" number is unambiguous without a full parse (mirrors ExtractKitMoveSpeed).
+    // so this first-after-"networkPlayers" number is unambiguous without a full parse (the same approach ExtractKitMoveSpeed uses).
     static int? ExtractNetworkPlayers(string json) {
         var match = Regex.Match(input: json, pattern: @"""networkPlayers""\s*:\s*(\d+)");
 
@@ -3196,7 +3318,7 @@ static class ScreensProof {
 
     static readonly Regex PeekEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.peek: (\d+) 0x([0-9A-Fa-f]+)=0x([0-9A-Fa-f]+)\]");
     static readonly Regex StateEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.state: (\d+) (.+?)\]");
-    // The world.view-refresh echo carries the count of camera views registered in the offscreen pool — the CR-3b witness.
+    // The world.view-refresh echo carries the count of camera views registered in the offscreen pool.
     static readonly Regex ViewRefreshEcho = new(options: RegexOptions.Compiled, pattern: @"\[world\.view-refresh: every \d+ produced frame\(s\); (\d+) camera view\(s\) registered\]");
 
     public static int RunScreens(ArgMap opts) {
@@ -3307,7 +3429,7 @@ static class ScreensProof {
             passed &= PollState(ctx: ctx, name: "state-assigned-bound", index: machineScreen,
                 predicate: body => (body.Contains(value: "assigned") && body.Contains(value: "bound")));
 
-            // (3) PASSIVE VIEW ENGAGE — screen 2 is the avatar-eye jumbotron, not an interactive machine: its
+            // (3) PASSIVE VIEW ENGAGE — screen 2 is the first-person jumbotron, not an interactive machine: its
             // route rejects engagement before the producer kind matters.
             passed &= ExpectEcho(ctx: ctx, name: "engage-jumbotron-view-errors", command: "player.engage 2",
                 predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "not engageable")));
@@ -3356,7 +3478,7 @@ static class ScreensProof {
 
             // (10) POPULATION LIFETIME — an engagement route belongs to one WorldBody lifetime, not merely its
             // reusable display index. Queue deactivate + reactivate + query in one pump batch: p7's newly-minted,
-            // disengaged player must not inherit the old route or remain in screen diagnostics.
+            // disengaged player must not inherit a stale route or remain in screen diagnostics.
             passed &= PopulationReactivationDropsEngagement(ctx: ctx, screenIndex: machineScreen);
 
             // (11) EJECT — the slot reveals its declared overhead view again (no machine to peek).
@@ -3370,13 +3492,13 @@ static class ScreensProof {
             _ = PollState(ctx: ctx, name: "state-reboot", index: machineScreen, predicate: body => body.Contains(value: "bound"));
             ReportEvidence(ctx: ctx);
 
-            // (12) REMOVE A VIEW SCREEN (CR-3b) — screen 2 is the avatar-eye jumbotron, a pure View source whose camera
+            // (12) REMOVE A VIEW SCREEN — screen 2 is the first-person jumbotron, a pure View source whose camera
             // render lives in the offscreen ViewStack pool (its own SDF engine spending refresh budget every few frames).
             // Removing the last screen wired to that camera must RELEASE its view, witnessed by the registered camera-view
             // count in world.view-refresh dropping by one (the co-existing 'overhead' view survives, so it drops 2 -> 1).
             passed &= RemoveViewScreenReleasesCameraView(ctx: ctx, viewScreen: 2);
 
-            // (13) REMOVE AN ENGAGED MACHINE SCREEN (CR-3) — engage p1 on the running brick, then world.screen.remove the
+            // (13) REMOVE AN ENGAGED MACHINE SCREEN — engage p1 on the running brick, then world.screen.remove the
             // whole screen row: the binder must disengage the player (avatar resumes normal intent), dispose the slot, and
             // drop its provider entry, so every screen command reports the index absent.
             passed &= RemoveEngagedScreenDropsEverything(ctx: ctx, screenIndex: machineScreen);
@@ -3520,7 +3642,7 @@ static class ScreensProof {
         return passed;
     }
 
-    // (CR-3) Engage p1 on a running machine screen, remove the whole screen row, and assert the binder torn everything
+    // Engage p1 on a running machine screen, remove the whole screen row, and assert the binder torn everything
     // down: the mutation applies, every screen command then reports the index absent (slot + provider entry gone), and
     // the disengaged avatar resumes normal intent (it is not held idle against a machine that no longer exists).
     static bool RemoveEngagedScreenDropsEverything(Ctx ctx, int screenIndex) {
@@ -3566,7 +3688,7 @@ static class ScreensProof {
         return passed;
     }
 
-    // (CR-3b) Remove a View screen and prove its offscreen camera render is released: the registered camera-view count
+    // Remove a View screen and prove its offscreen camera render is released: the registered camera-view count
     // (read off world.view-refresh) drops by one, and screen.state reports the removed index absent. The camera's
     // offscreen SDF engine was spending refresh budget until the removal; the count is the pipe-observable witness that
     // it stopped (a surviving jumbotron sharing a DIFFERENT camera keeps its own view, so the count drops by exactly one).
@@ -3821,7 +3943,7 @@ static class ScreensProof {
 }
 
 // ============================================================================================
-// MUTATE — the Phase 2a scripted mutation round-trip proof: world.kit.tune / world.undo / world.save
+// MUTATE — the scripted mutation round-trip proof: world.kit.tune / world.undo / world.save
 // journal discipline (dirty = journal length), rejection honesty (the defaultSeatKit invariant), and
 // survival through a relaunch against the saved file. This is a SEPARATE session per (a)+(b) vs. (c):
 // session A drives the round-trip and saves to a temp file; session B relaunches --world <that file>
@@ -3880,7 +4002,7 @@ static class MutateProof {
         Console.WriteLine();
         Console.WriteLine(value: "[proof] === mutate (d): protocol-version handshake ===");
         Console.WriteLine(value: "[proof]   SKIPPED by design — no scripted Join path exists over stdin (SessionRequest.Join is not a console");
-        Console.WriteLine(value: "[proof]            verb), and this brief forbids inventing a debug verb to exercise it. The rejecting handshake");
+        Console.WriteLine(value: "[proof]            verb), and this proof does not invent a debug verb to exercise it. The rejecting handshake");
         Console.WriteLine(value: "[proof]            (Accepted: false + reason on a version mismatch) was proven by the implementing session.");
 
         var passed = (roundTripPassed && rejectionPassed && survivalPassed);
@@ -4199,8 +4321,8 @@ static class MutateProof {
 }
 
 // ============================================================================================
-// GRANTS — the Phase 2b principals/grants keystone proof (§2.7 criterion 4, the plan's exit-bar
-// criterion 4): mount an authored autopilot addon as a data-side WorldAddonRow, grant it Drive
+// GRANTS — the principals/grants keystone proof: mount an authored autopilot addon as a data-side
+// WorldAddonRow, grant it Drive
 // over a body and watch it move, revoke mid-run and watch the server's edge-latched denial freeze
 // it, then prove Mutate-section enforcement (console loses/regains world.kit.tune) with
 // world.status's dirty counter as the honest witness. Two sessions, mirroring MutateProof's shape:
@@ -4255,15 +4377,33 @@ static class GrantsProof {
         var pid = Environment.ProcessId;
         var worldPath = Path.Combine(Path.GetTempPath(), $"puck-world-grants-{pid}.world.json");
 
-        Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
-        var mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
+        // The (h) profile-subject round edits the player document, so the REAL store is backed up whole and restored
+        // in the finally (the bindings-proof discipline); the cleared store reseeds deterministic catalog ids.
+        var worldDir = PlayerStorePaths.WorldDir();
+        var phaseDir = PlayerStorePaths.PhaseThreeDir();
+        var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
+        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
+        bool mountedSaved;
+        bool sessionPassed;
 
-        Console.WriteLine();
-        Console.WriteLine(value: "[proof] === grants (b)-(d): relaunch --world <saved> — mount, drive/revoke, mutate-denial ===");
-        var sessionPassed = (File.Exists(path: worldPath) && RunGrantSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath));
+        try {
+            DirectoryBackup.Clear(dir: worldDir);
+            DirectoryBackup.Clear(dir: phaseDir);
 
-        if (!File.Exists(path: worldPath)) {
-            Console.WriteLine(value: $"[proof]   FAIL relaunch: {worldPath} was never written (grants (a) did not reach world.save)");
+            Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
+            mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === grants (b)-(h): relaunch --world <saved> — mount, drive/revoke, mutate-denial, exclusivity, profile subject ===");
+            sessionPassed = (File.Exists(path: worldPath) && RunGrantSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath));
+
+            if (!File.Exists(path: worldPath)) {
+                Console.WriteLine(value: $"[proof]   FAIL relaunch: {worldPath} was never written (grants (a) did not reach world.save)");
+            }
+        }
+        finally {
+            DirectoryBackup.Restore(snapshot: worldBackup);
+            DirectoryBackup.Restore(snapshot: phaseBackup);
         }
 
         var passed = (mountedSaved && sessionPassed);
@@ -4430,9 +4570,15 @@ static class GrantsProof {
             // document (world.status's dirty counter) is genuinely unchanged, then re-grant and prove it applies.
             passed &= RunMutateDenialRoundTrip(ctx: ctx);
 
-            // (e) EXCLUSIVITY (§CR-1): the two grant orders both reject a conflicting second grant, and an exclusively
+            // (e) EXCLUSIVITY: the two grant orders both reject a conflicting second grant, and an exclusively
             // held body has exactly one effective driver — the exclusive holder overrides even the console's Drive/all.
             passed &= RunExclusivityOrders(ctx: ctx);
+
+            // (g) EXCLUSIVE SECTION ACQUISITION: the seeded per-section Mutate defaults never block a hold.
+            passed &= RunExclusiveSectionRound(ctx: ctx);
+
+            // (h) PROFILE SUBJECT: Edit checks the concrete profile:<id> subject.
+            passed &= RunProfileSubjectRound(ctx: ctx);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -4496,7 +4642,7 @@ static class GrantsProof {
     }
 
     // (e): exclusivity must actually exclude, in BOTH grant orders, and the exclusive holder must be the SOLE effective
-    // driver (§CR-1). The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
+    // driver. The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
     // starts clean; the two order tests use fresh bodies so they never interfere with each other.
     static bool RunExclusivityOrders(Ctx ctx) {
         var passed = true;
@@ -4537,10 +4683,9 @@ static class GrantsProof {
 
         Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
 
-        // (f) EXCLUSIVE WILDCARD (§CR-1b): an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
-        // reservation must name a concrete subject. First on a table with only the seeded defaults (a fresh table must
-        // ALSO reject per the new rule), then in the reviewer's exact order with a concrete ordinary hold present (where
-        // it previously slipped past acquisition and then denied every seat at enforcement). Both orders reject now.
+        // (f) EXCLUSIVE WILDCARD: an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
+        // reservation must name a concrete subject, checked on a fresh table AND with a concrete ordinary hold
+        // already present.
         passed &= ExpectGrant(ctx: ctx, name: "exclusive-all-rejected-fresh-table",
             line: $"world.grant addon:{AutopilotName} drive all exclusive",
             needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
@@ -4551,6 +4696,83 @@ static class GrantsProof {
             line: $"world.grant addon:{AutopilotName} drive all exclusive",
             needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
         Send(ctx: ctx, line: $"world.revoke seat2 drive body:{OrdinaryBodyIndex}");
+
+        return passed;
+    }
+
+    // (g): an exclusive SECTION hold must be acquirable on a DEFAULT table — the seeded per-section Mutate rows
+    // are the permissive backdrop's concrete spelling and never block a reservation. While seat1 holds section:scene
+    // exclusively, the console's scene mutation is denied AT THE GRANT BOUNDARY (before compose; the denial also rides
+    // the EchoTap toast channel ui-floor proved). Revoking the hold restores the console: the identical command then
+    // fails at COMPOSE instead (no such row id), proving the grant boundary passed.
+    static bool RunExclusiveSectionRound(Ctx ctx) {
+        var passed = true;
+
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-section-accepted-on-default-table",
+            line: "world.grant seat1 mutate section:scene exclusive",
+            needle: "[world.grant: seat1 mutate section:scene exclusive]");
+
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.grants seat1");
+
+        var grantsLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.grants:"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "exclusive-section-marked", ok: ((grantsLine is not null) && grantsLine.Contains(value: "mutate/section:scene(x)")),
+            detail: (grantsLine?.Trim() ?? "(no world.grants echo)"));
+
+        mark = ctx.Collector.Count;
+        Send(ctx: ctx, line: "world.scene.row.remove missing-row");
+
+        var deniedLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => (l.Contains(value: "[world.grant denied: console cannot mutate section:scene") && l.Contains(value: "RemoveSceneRow 'missing-row' dropped")),
+            deadlineSeconds: 15.0);
+
+        passed &= Check(name: "exclusive-section-denies-console", ok: (deniedLine is not null),
+            detail: (deniedLine?.Trim() ?? "(no '[world.grant denied: console ... section:scene ...]' line)"));
+
+        Send(ctx: ctx, line: "world.revoke seat1 mutate section:scene");
+        mark = ctx.Collector.Count;
+        Send(ctx: ctx, line: "world.scene.row.remove missing-row");
+
+        var composeLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => l.Contains(value: "[world.mutation rejected: RemoveSceneRow 'missing-row'"),
+            deadlineSeconds: 15.0);
+
+        passed &= Check(name: "revoke-restores-console-mutate", ok: (composeLine is not null),
+            detail: (composeLine?.Trim() ?? "(no compose-stage '[world.mutation rejected: ...]' line — the grant boundary still denies)"));
+
+        return passed;
+    }
+
+    // (h): SetPlayerSection is gated on the CONCRETE profile:<id> Edit subject. The seeded Edit/all wildcard
+    // keeps local play unchanged (the baseline edit applies); revoking it denies every profile edit; a narrow
+    // profile:amber grant restores exactly amber while cobalt stays denied. The store was cleared before launch, so
+    // the seeded catalog ids (amber, cobalt) are deterministic; RunGrants restores the real store afterward.
+    static bool RunProfileSubjectRound(Ctx ctx) {
+        var passed = true;
+
+        passed &= ExpectGrant(ctx: ctx, name: "edit-all-wildcard-baseline",
+            line: "profile.section amber preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: amber preferences applied]");
+        passed &= ExpectGrant(ctx: ctx, name: "console-loses-edit-all",
+            line: "world.revoke console edit all",
+            needle: "[world.revoke: console edit all]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-denied-without-grant",
+            line: "profile.section amber preferences {\"theme\":\"light\",\"hud\":true}",
+            needle: "[profile.section: console cannot edit profile:amber]");
+        passed &= ExpectGrant(ctx: ctx, name: "profile-grant-accepted",
+            line: "world.grant console edit profile:amber",
+            needle: "[world.grant: console edit profile:amber]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-applies-with-profile-grant",
+            line: "profile.section amber preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: amber preferences applied]");
+        passed &= ExpectGrant(ctx: ctx, name: "other-profile-still-denied",
+            line: "profile.section cobalt preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: console cannot edit profile:cobalt]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-all-restored",
+            line: "world.grant console edit all",
+            needle: "[world.grant: console edit all]");
 
         return passed;
     }
@@ -4741,13 +4963,13 @@ static class GrantsProof {
 }
 
 // ============================================================================================
-// BINDINGS — the Phase 3 exit-bar proof for the player document + layered binding resolution
-// (§2.4: engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
+// BINDINGS — the player-document + layered binding-resolution proof
+// (engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
 // (player.bind / player.bindings / profile.save / profile.doc), persistence through
-// puck.world.player.v1, and the one-time migration off the retired puck.world.profiles.v1. Four
+// puck.world.player.v1, and the one-time migration off the legacy puck.world.profiles.v1. Four
 // sessions against the REAL local player-document store — there is no CLI override for its path
 // (WorldProfileStore addresses a fixed %LOCALAPPDATA% location) — so this proof backs up whatever
-// the owner's real player.json/local.json/profiles.json hold (or their absence) before touching
+// the real player.json/local.json/profiles.json hold (or their absence) before touching
 // anything, and restores them in a finally no matter how the sessions finish. Never delete or
 // revert files this proof did not itself create.
 // ============================================================================================
@@ -4783,8 +5005,8 @@ static class BindingsProof {
             return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
         }
 
-        // The current split layout (world/) plus the shared directory the two retired single-file layouts land in
-        // (profiles/ — the Phase 3 whole-document pair AND the pre-Phase-3 puck.world.profiles.v1 catalog).
+        // The current split layout (world/) plus the shared directory the two legacy single-file layouts land in
+        // (profiles/ — the whole-document pair AND the puck.world.profiles.v1 catalog).
         var worldDir = PlayerStorePaths.WorldDir();
         var phaseDir = PlayerStorePaths.PhaseThreeDir();
         var catalogPath = PlayerStorePaths.CatalogPath();
@@ -4792,7 +5014,7 @@ static class BindingsProof {
         var legacyPath = PlayerStorePaths.LegacyPath();
         var phaseThreePlayerPath = PlayerStorePaths.PhaseThreePlayerPath();
 
-        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
         // -byte) before this proof touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
         var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
@@ -4828,12 +5050,12 @@ static class BindingsProof {
             passed &= RunSessionC(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: kartRemapPath);
 
             Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (d): the pre-Phase-3 puck.world.profiles.v1 migration ===");
+            Console.WriteLine(value: "[proof] === bindings (d): the legacy puck.world.profiles.v1 migration ===");
             passed &= RunMigrationLegacy(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
                 worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, legacyPath: legacyPath);
 
             Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (e): the Phase 3 single-file player.json migration ===");
+            Console.WriteLine(value: "[proof] === bindings (e): the single-file player.json migration ===");
             passed &= RunMigrationPhaseThree(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
                 worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, phaseThreePlayerPath: phaseThreePlayerPath);
         }
@@ -5055,7 +5277,7 @@ static class BindingsProof {
         return passed;
     }
 
-    // Session D: synthesize a PRE-PHASE-3 puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
+    // Session D: synthesize a legacy puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
     // the store's migration precondition), boot, and assert the one-time migration: the loud "... retired
     // puck.world.profiles.v1 ..." boot line, the split world/ layout written (world/player.json + world/local.json),
     // profiles/profiles.json deleted, and profile.list showing the migrated names.
@@ -5091,7 +5313,7 @@ static class BindingsProof {
         Console.CancelKeyPress += cancelHandler;
         AppDomain.CurrentDomain.ProcessExit += exitHandler;
 
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized pre-Phase-3 profiles.json at {legacyPath})");
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized legacy profiles.json at {legacyPath})");
 
         try {
             _ = process.Start();
@@ -5140,8 +5362,8 @@ static class BindingsProof {
         return passed;
     }
 
-    // Session E: synthesize a PHASE 3 single-file profiles/player.json (world/ absent — the store's migration
-    // precondition once the catalog blob and the pre-Phase-3 legacy file are both cleared), boot, and assert the
+    // Session E: synthesize a single-file profiles/player.json (world/ absent — the store's migration
+    // precondition once the catalog blob and the legacy multi-file schema are both cleared), boot, and assert the
     // OTHER migration path: the loud "... Phase 3 single-file layout ..." boot line, the split world/ layout written,
     // and profiles/player.json deleted.
     static bool RunMigrationPhaseThree(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
@@ -5177,7 +5399,7 @@ static class BindingsProof {
         Console.CancelKeyPress += cancelHandler;
         AppDomain.CurrentDomain.ProcessExit += exitHandler;
 
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized Phase 3 player.json at {phaseThreePlayerPath})");
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized single-file player.json at {phaseThreePlayerPath})");
 
         try {
             _ = process.Start();
@@ -5226,7 +5448,7 @@ static class BindingsProof {
         return passed;
     }
 
-    // (b2): the identity/motion/preferences SetPlayerSection variants (CR-2). Boots against the persisted store from
+    // (b2): the identity/motion/preferences SetPlayerSection variants. Boots against the persisted store from
     // session A/B (boot profile = amber), and drives every declared section through the raw profile.section reflection:
     // each POSITIVE edit applies + bumps the revision + shows up in profile.doc, an IDENTITY edit LIVE-refreshes the
     // seated participant (profile.show reads the roster's shared handle — not stale), and each MALFORMED payload rejects
@@ -5325,24 +5547,22 @@ static class BindingsProof {
             passed &= ExpectSection(ctx: ctx, name: "preferences-malformed-rejects", line: "profile.section amber preferences [1,2,3]", needle: "did not parse");
             passed &= ExpectRevisionUnchanged(ctx: ctx, name: "preferences-malformed-no-bump", before: revBeforeBadPrefs);
 
-            // --- BINDINGS (positive, §CR-5): a raw profile.section bindings edit on the SEATED profile 'amber' must reach
+            // --- BINDINGS (positive): a raw profile.section bindings edit on the SEATED profile 'amber' must reach
             // seat 1's ACTIVE mapping LIVE — no reseat, no restart. keyboard.q is unbound by default; this remaps it to
-            // player.forward through the durable section, and player.bindings 1 must show it IMMEDIATELY afterwards. This
-            // is the gap the closure commit left: the generic section handler persisted the edit but did not refresh the
-            // per-seat compiled layer, so a seated player kept old controls until reseat.
+            // player.forward through the durable section, and player.bindings 1 must show it IMMEDIATELY afterwards.
             passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-absent-before", seat: 1, needle: "keyboard.q→player.forward", wantPresent: false);
 
             var revBeforeBindings = ReadRevision(ctx: ctx, name: "rev-before-bindings");
 
             passed &= ExpectSection(ctx: ctx, name: "bindings-section-applies",
-                line: "profile.section amber bindings {\"version\":\"puck.bindings.v7\",\"modifiers\":[],\"pages\":[{\"id\":\"base\",\"chord\":[],\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}]}",
+                line: "profile.section amber bindings {\"version\":\"puck.bindings.v8\",\"modifiers\":[],\"chords\":[{\"group\":\"play\",\"chord\":[],\"page\":{\"id\":\"base\",\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}}]}",
                 needle: "amber bindings applied");
 
             var revAfterBindings = ReadRevision(ctx: ctx, name: "rev-after-bindings");
 
             passed &= Check(name: "bindings-bumps-revision", ok: ((revBeforeBindings is { } bb0) && (revAfterBindings is { } bb1) && (bb1 > bb0)),
                 detail: $"{revBeforeBindings?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterBindings?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
-            // THE CR-5 WITNESS: the seated player's composed mapping now carries the durable rebind, with no reseat.
+            // The seated player's composed mapping now carries the durable rebind, with no reseat.
             passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-live-no-reseat", seat: 1, needle: "keyboard.q→player.forward", wantPresent: true);
         }
         finally {
@@ -5587,9 +5807,9 @@ static class BindingsProof {
 }
 
 // ============================================================================================
-// Phase 4 exit-bar proof: cloud-readiness (§2.5), proven against the local backend only. storage.status is the
+// Cloud-readiness proof, proven against the local backend only. storage.status is the
 // control surface; the honest baseline (cloud unwired, identity declined/override, endpoint reflection) and the
-// Revision/version-token ordering + clobber-guard fields (§2.5.1/.2) it reports are the whole surface this arc ships.
+// Revision/version-token ordering + clobber-guard fields it reports are the whole surface today.
 // ============================================================================================
 
 static class StorageProof {
@@ -5630,7 +5850,7 @@ static class StorageProof {
         var worldLocalPath = PlayerStorePaths.LocalPath();
         var profilesDir = PlayerStorePaths.ProfilesDir();
 
-        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
         // -byte) before this proof touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
         var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
@@ -5820,7 +6040,7 @@ static class StorageProof {
     }
 
     // Session (c): boot with --user-id <a valid oid-shaped Guid>. Asserts the explicit-override identity echo
-    // (§2.5.4's ExplicitOverridePlayerStorageIdentityResolver path).
+    // (the ExplicitOverridePlayerStorageIdentityResolver path).
     static bool RunUserIdOverride(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
         const string userId = "11112222-3333-4444-5555-666677778888";
 
@@ -5829,7 +6049,7 @@ static class StorageProof {
     }
 
     // Session (d): boot with --user-id not-a-guid. Asserts the resolver declines loudly rather than inventing a
-    // container (§2.5.4's non-Guid-override branch).
+    // container (the non-Guid-override branch).
     static bool RunUserIdDeclines(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
         const string userId = "not-a-guid";
 
@@ -5888,7 +6108,7 @@ static class StorageProof {
         return passed;
     }
 
-    // storage.status is an Immediate echo of the honest local storage state (§2.5.6) — one line, "[storage.status: ...]".
+    // storage.status is an Immediate echo of the honest local storage state — one line, "[storage.status: ...]".
     static (string Text, bool Ok) ReadStorageStatus(Ctx ctx, string tag) {
         var mark = ctx.Collector.Count;
 
@@ -6016,7 +6236,7 @@ static class StorageProof {
 }
 
 // ============================================================================================
-// record — native-capture proof (the recording arc)
+// record — native-capture proof
 // ============================================================================================
 static class RecordProof {
     public static int RunRecord(ArgMap opts) {
@@ -6108,7 +6328,7 @@ static class RecordProof {
             // (a) idle before start.
             passed &= ExpectStatus(ctx: ctx, needle: "idle", name: "status-idle-before-start");
 
-            // (b) start — arm the session; echo names the landed codec + resolved path (declines are loud).
+            // (b) start — arm the session; echo names the negotiated codec + resolved path (declines are loud).
             var startMark = collector.Count;
 
             Send(ctx: ctx, line: "capture.start");
@@ -6125,7 +6345,7 @@ static class RecordProof {
             var recordingPath = Extract(line: startLine!, after: "recording -> ", until: " |");
             var codec = Extract(line: startLine!, after: "codec ", until: " |");
 
-            Console.WriteLine(value: $"[proof]   landed codec: {codec} | path: {recordingPath}");
+            Console.WriteLine(value: $"[proof]   negotiated codec: {codec} | path: {recordingPath}");
 
             // (c) ~seconds of the autonomous crowd moving.
             Thread.Sleep(millisecondsTimeout: (seconds * 1000));
@@ -6175,7 +6395,7 @@ static class RecordProof {
         return (passed ? 0 : 1);
     }
 
-    // The recording document must carry the capture-only overlay the owner asked for — read the resolved file and assert
+    // The recording document must carry the capture-only overlay — read the resolved file and assert
     // a text overlay row is present. A baked-default fallback (no file) has no overlays; that is a FAIL of this proof's
     // premise (the checked-in asset should have loaded), reported honestly.
     static bool CheckOverlayPresence(string? docLine) {
@@ -6467,5 +6687,2727 @@ sealed class MiniEbml {
         }
 
         return value;
+    }
+}
+
+// ============================================================================================
+// COMPOSED-SHOT KIT — the shared session harness for the composed-frame proofs (ui-floor,
+// editor-mode): launch a windowed Puck.World with piped stdio, drive verbs, arm world.screenshot
+// captures through the outermost decorator, and decode the engine's own PNGs (8-bit RGBA,
+// filter 0, one zlib IDAT — anything else is loudly invalid; this is a proof harness, not an
+// image library).
+// ============================================================================================
+static class ComposedShotKit {
+    public sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Build (unless --no-build) and locate the freshest Release exe; null on failure (already reported).
+    public static string? BuildAndFindExe(string repoRoot, bool noBuild) {
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                Console.Error.WriteLine(value: $"[proof] build failed ({build.ExitCode})");
+
+                return null;
+            }
+        }
+
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+        var exe = (Directory.Exists(path: binRelease)
+            ? Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+                .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null);
+
+        if (exe is null) {
+            Console.Error.WriteLine(value: "[proof] Puck.World.exe not found under bin/Release — build first");
+        }
+
+        return exe;
+    }
+
+    // The shared launch shape: piped stdio, repo-root working directory, the standard size/backend/exit options.
+    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch, string[]? extraArgs = null) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        if (backend is not null) {
+            psi.ArgumentList.Add(item: "--backend");
+            psi.ArgumentList.Add(item: backend);
+        }
+
+        foreach (var extra in (extraArgs ?? [])) {
+            psi.ArgumentList.Add(item: extra);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+
+        Console.WriteLine(value: $"[proof] launching: {exe} {(backend is null ? "" : $"--backend {backend} ")}--width {width} --height {height}");
+        _ = process.Start();
+        stopwatch.Start();
+        collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+        collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+        var stdin = process.StandardInput;
+
+        stdin.AutoFlush = true;
+
+        return new Ctx(Process: process, Stdin: stdin, Collector: collector);
+    }
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    public static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    public static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    public static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+
+    // Send a line, await its echo, and record the check under one name — the every-verb round-trip shape.
+    public static bool SendAwait(Ctx ctx, string line, string expect, string name, double deadlineSeconds = 15.0) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: line);
+
+        var seen = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: expect), deadlineSeconds: deadlineSeconds);
+
+        return Check(name: name, ok: (seen is not null), detail: (seen?.Trim() ?? $"(no '{expect}' echo)"));
+    }
+
+    public static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+
+    // Arms world.screenshot and waits for the unified overlay's capture echo (the readback writes the file BEFORE
+    // echoing, so the echo implies the PNG is on disk).
+    public static bool Screenshot(Ctx ctx, string name, string path) {
+        var mark = ctx.Collector.Count;
+        var fileName = Path.GetFileName(path: path);
+
+        Send(ctx: ctx, line: $"world.screenshot {path}");
+
+        var captured = Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: "[capture] unified overlay ->") && l.Contains(value: fileName)), deadlineSeconds: 30.0);
+
+        return Check(name: name, ok: ((captured is not null) && File.Exists(path: path)), detail: (captured?.Trim() ?? "(no unified-overlay capture echo)"));
+    }
+
+    // Decodes the engine's own PngEncoder output: 8-bit RGBA, color type 6, every scanline filter 0, one zlib
+    // deflate stream across the IDAT chunks.
+    public static (int Width, int Height, byte[] Rgba) DecodePng(string path) {
+        var bytes = File.ReadAllBytes(path: path);
+        var offset = 8;
+        var width = 0;
+        var height = 0;
+
+        using var idat = new MemoryStream();
+
+        while (offset < bytes.Length) {
+            var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: bytes.AsSpan(start: offset, length: 4));
+            var type = Encoding.ASCII.GetString(bytes: bytes, index: (offset + 4), count: 4);
+            var data = bytes.AsSpan(start: (offset + 8), length: length);
+
+            if (type == "IHDR") {
+                width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: data[..4]);
+                height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: data.Slice(start: 4, length: 4));
+
+                if ((data[8] != 8) || (data[9] != 6)) {
+                    throw new InvalidDataException($"{path}: expected 8-bit RGBA (bit depth {data[8]}, color type {data[9]})");
+                }
+            } else if (type == "IDAT") {
+                idat.Write(buffer: data);
+            }
+
+            offset += (12 + length);
+
+            if (type == "IEND") {
+                break;
+            }
+        }
+
+        idat.Position = 0;
+
+        var rowBytes = (width * 4);
+        var raw = new byte[(height * (1 + rowBytes))];
+
+        using (var inflate = new System.IO.Compression.ZLibStream(stream: idat, mode: System.IO.Compression.CompressionMode.Decompress)) {
+            inflate.ReadExactly(buffer: raw);
+        }
+
+        var rgba = new byte[(height * rowBytes)];
+
+        for (var row = 0; (row < height); row++) {
+            if (raw[(row * (1 + rowBytes))] != 0) {
+                throw new InvalidDataException($"{path}: unexpected scanline filter {raw[(row * (1 + rowBytes))]} on row {row}");
+            }
+
+            Buffer.BlockCopy(src: raw, srcOffset: ((row * (1 + rowBytes)) + 1), dst: rgba, dstOffset: (row * rowBytes), count: rowBytes);
+        }
+
+        return (width, height, rgba);
+    }
+
+    // No loud GPU/runtime faults anywhere in the session (both streams).
+    public static bool FaultSweep(Ctx ctx) {
+        var faults = 0;
+
+        foreach (var line in ctx.Collector.Snapshot()) {
+            if (line.Contains(value: "Unhandled exception") || line.Contains(value: "Fatal error.") || line.Contains(value: "VUID-")) {
+                faults++;
+                Console.WriteLine(value: $"[proof]   fault line: {line.Trim()}");
+            }
+        }
+
+        return Check(name: "no-gpu-or-runtime-faults", ok: (faults == 0), detail: ((faults == 0) ? "clean" : $"{faults} fault line(s)"));
+    }
+
+    public static void TryDelete(string path) {
+        try {
+            File.Delete(path: path);
+        }
+        catch (IOException) {
+        }
+        catch (UnauthorizedAccessException) {
+        }
+    }
+
+    public static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// UI-FLOOR — the unified-overlay proof: the ONE screen-space overlay decorator (console
+// mirror + per-seat binding bars + mutation toasts) renders on BOTH backends and the
+// world.screenshot verb captures the final COMPOSED frame through the outermost decorator.
+// Three composed captures per backend session: overlay (console on), control (console off),
+// toast (after a deliberately invalid mutation). The overlay's presence is asserted in PIXELS,
+// never by file existence: the console panel's 0.90-alpha scrim must darken its stage region's
+// mean luminance versus the control (robust against the moving world beneath), and the
+// rejection toast must plant a danger-red pixel population in the toast strip that the control
+// lacks. Session/PNG machinery lives in ComposedShotKit.
+// ============================================================================================
+static class UiFloorProof {
+    public static int RunUiFloor(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        // D3D12 FIRST (World's default backend), then Vulkan.
+        Console.WriteLine(value: "[proof] === ui-floor (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === ui-floor (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] ui-floor proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // One scripted session on one backend: boot → overlay shot → console off → control shot → rejected
+    // mutation → toast shot → pixel assertions → loud-fault sweep.
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var overlayPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-overlay.png");
+        var controlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-control.png");
+        var toastPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-toast.png");
+        var gizmoPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-gizmo.png");
+        var gizmoControlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-gizmo-control.png");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (1) The composed frame with the console panel visible (the boot default).
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "overlay-shot", path: overlayPath);
+
+            // (2) The no-console control: the binding bars stay, but the assertion region is the console's stage
+            // corner, which they never enter.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot", path: controlPath);
+
+            // (3) The rejection toast: removing the defaultSeatKit fails validation loudly server-side AND must
+            // surface on screen. The screenshot rides the stdin barrier behind the Simulation-routed mutation.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.kit.remove runner", expect: "[world.mutation rejected:", name: "mutation-rejected-loudly");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "toast-shot", path: toastPath);
+
+            // (4) The pixel assertions — decode the three composed frames.
+            var overlay = ComposedShotKit.DecodePng(path: overlayPath);
+            var control = ComposedShotKit.DecodePng(path: controlPath);
+            var toast = ComposedShotKit.DecodePng(path: toastPath);
+
+            // Console presence: the panel's 0.90 dark scrim must pull the stage region's mean luminance well below
+            // the control's (the world beneath moves between shots; a scrim-sized drop dwarfs that noise).
+            var regionX = 48;
+            var regionY = 48;
+            var regionW = (width - 112);
+            var regionH = ((int)(height * 0.45) - 48);
+            var overlayLuma = MeanLuminance(image: overlay, x: regionX, y: regionY, w: regionW, h: regionH);
+            var controlLuma = MeanLuminance(image: control, x: regionX, y: regionY, w: regionW, h: regionH);
+
+            passed &= ComposedShotKit.Check(
+                name: "console-panel-darkens-stage",
+                ok: ((controlLuma - overlayLuma) > 15.0),
+                detail: $"mean luminance overlay {overlayLuma.ToString(format: "F1", provider: ProofApp.Inv)} vs control {controlLuma.ToString(format: "F1", provider: ProofApp.Inv)} (want a > 15 scrim drop)"
+            );
+
+            // Toast presence: a danger-red population (the state rail + Tier-1 ring in #F2565B) in the mid-right
+            // toast strip that the control shot lacks.
+            var stripX = (int)(width * 0.55);
+            var stripY = ((height / 2) - 16);
+            var stripW = ((width - 40) - stripX);
+            var stripH = 32;
+            var toastRed = CountDangerRed(image: toast, x: stripX, y: stripY, w: stripW, h: stripH);
+            var controlRed = CountDangerRed(image: control, x: stripX, y: stripY, w: stripW, h: stripH);
+
+            // Both backends measure ~190 danger-red pixels in the strip (the 2px rail + the ring arcs it clips)
+            // against a clean 0 in the control; 120/+100 keeps a decisive margin without riding exact ring geometry.
+            passed &= ComposedShotKit.Check(
+                name: "rejection-surfaces-as-toast",
+                ok: ((toastRed > (controlRed + 100)) && (toastRed > 120)),
+                detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
+            );
+
+            // (4c) THE SPEAKER GIZMO: a bed speaker dead ahead of the seat camera, SELECTED in editor mode —
+            // its accent-tier chip (accent bloom ring + halo) and accent radius ring put an accent-orange population
+            // in the central stage that leaving editor mode removes (gizmos are editor-mode-only). Screenshots ride
+            // the stdin barrier behind the Simulation-routed acts.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: """world.speaker.set {"$type":"bed","name":"gizmo-bed","center":[0,1.2,-5],"radius":2.5,"feed":{"source":{"$type":"none"},"channel":"mix","gain":1}}""", expect: "[world.mutation: UpsertSpeaker 'gizmo-bed' applied]", name: "gizmo-speaker-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "gizmo-editor-enters");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers gizmo-bed", expect: "speakers 'gizmo-bed'", name: "gizmo-selects");
+            // Let the upsert's change-shimmer pulse decay (0.9 s): the HELD tier would otherwise mask the ACCENT
+            // tier this round asserts (held wins over accent by the chip-state contract).
+            Thread.Sleep(millisecondsTimeout: 1500);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-shot", path: gizmoPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 1", expect: "[editor.exit: seat 1", name: "gizmo-editor-exits");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-control-shot", path: gizmoControlPath);
+
+            var gizmo = ComposedShotKit.DecodePng(path: gizmoPath);
+            var gizmoControl = ComposedShotKit.DecodePng(path: gizmoControlPath);
+            // The central stage (clear of the console corner, the mid-right toast strip, and the bottom binding bar).
+            var stageX = (int)(width * 0.32);
+            var stageY = (int)(height * 0.25);
+            var stageW = ((int)(width * 0.52) - stageX);
+            var stageH = ((int)(height * 0.68) - stageY);
+            var gizmoAccent = CountAccentOrange(image: gizmo, x: stageX, y: stageY, w: stageW, h: stageH);
+            var controlAccent = CountAccentOrange(image: gizmoControl, x: stageX, y: stageY, w: stageW, h: stageH);
+
+            passed &= ComposedShotKit.Check(
+                name: "gizmo-lights-editor-mode-only",
+                ok: ((gizmoAccent > (controlAccent + 25)) && (gizmoAccent > 40)),
+                detail: $"accent-orange pixels in the stage: editor {gizmoAccent} vs exited {controlAccent}"
+            );
+
+            // (5) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: overlayPath);
+            ComposedShotKit.TryDelete(path: controlPath);
+            ComposedShotKit.TryDelete(path: toastPath);
+            ComposedShotKit.TryDelete(path: gizmoPath);
+            ComposedShotKit.TryDelete(path: gizmoControlPath);
+        }
+
+        return passed;
+    }
+
+    static double MeanLuminance((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+
+                sum += (image.Rgba[i] + image.Rgba[(i + 1)] + image.Rgba[(i + 2)]);
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Danger-hue population: pixels whose red channel clearly dominates BOTH others — the toast's #F2565B rail/ring
+    // family reads true here while grass (green-dominant), scrims (near-neutral), and the purple avatars (blue-high)
+    // do not.
+    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // Accent-hue population: the token accent #FF6A2B (electric amber-orange) — red well over green AND green over
+    // blue, which the danger family (g ≈ b), grass (green-dominant), gray stone, and the purple/magenta avatars all
+    // fail. Thresholds calibrated against the chip's 0.55-alpha bloom ring blended over the world (a half-alpha
+    // accent stays decisively r>g+50/g>b+15; the 0.35-alpha radius ring only reads over darker ground).
+    static int CountAccentOrange((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 50)) && (g > (b + 15))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+}
+
+// ============================================================================================
+// EDITOR-MODE — a seat enters editor mode mid-session over stdin, its ACTIVE
+// binding GROUP flips play→editor (asserted through editor.status, which reads the SAME
+// PageView the bar renders — group= + page=), the reference [lt, rt] chord-command fires
+// editor.enter from pure binding data over synthesized pad signals (player.signal), the chord
+// walks the editor pages while held, the wire-reachable uniqueness rules reject loudly, a
+// session-rebind chord row binds and echoes, the seat's intent diverts to the honest idle
+// (player.control reads
+// idle while editing, the prior source after), the editor camera seeds at the chase framing and
+// flies on command (asserted in PIXELS: the console panel is hidden and a central world region
+// is mean-abs-diffed between shots — the flown shot must differ decisively while the seeded and
+// restored shots hug the pre-enter chase shot, so neither mode edge pops the camera), and the
+// diversion unwinds honestly (the avatar drives after exit, two idle where samples match
+// exactly, and a scripted tape STILL drives the avatar while editing — script outranks idle).
+// Runs on BOTH backends like ui-floor.
+// ============================================================================================
+static class EditorModeProof {
+    public static int RunEditorMode(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 150, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-mode (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-mode (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-mode proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var prePath = ShotPath(pid: pid, tag: tag, name: "pre");
+        var seedPath = ShotPath(pid: pid, tag: tag, name: "seed");
+        var flyPath = ShotPath(pid: pid, tag: tag, name: "fly");
+        var postPath = ShotPath(pid: pid, tag: tag, name: "post");
+        var duoPath = ShotPath(pid: pid, tag: tag, name: "duo");
+        var railPath = ShotPath(pid: pid, tag: tag, name: "rail");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // The console panel would repaint with every verb echo between shots — hide it so the pixel region
+            // reads the WORLD (the binding bars sit in the excluded bottom strip; no toasts fire in this script).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            // Pin the roster to seat 1: connected pads on a dev machine auto-seat extra players, and any second seat
+            // arms the sole-editor LAYOUT policy — which would swamp the camera pixel work below. The policy gets its
+            // own positive block later. player.leave is a friendly no-op echo for an unjoined seat.
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-roster-leave-{seat}");
+            }
+
+            // (1) The mode round trip, narrated: not editing (group=play — the resting group) → enter → the active
+            // GROUP flips to editor and its resting page answers (editor.status reads the same PageView the bar
+            // renders — the bar flip's assertable truth) → the seat's intent source reads idle (the diversion) —
+            // then the camera work — then exit → restored (group=play again).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play]", name: "status-before-enter");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "pre-shot", path: prePath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor 'Editor'", name: "bar-flips-to-editor-group");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control 1", expect: "[player.control: p1 is idle]", name: "intent-diverts-to-idle");
+
+            // (2) The camera: the first editor frame seeds at the chase framing (no pose pop), then the console twin
+            // of stick flight relocates it decisively.
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "seed-shot", path: seedPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 8 -18 140 -15", expect: "[editor.cam.pose: seat 1", name: "cam-pose-echo");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fly-shot", path: flyPath);
+
+            // (3) Exit restores: the prior source returns, the group flips back, the chase rig re-anchors (pixels below).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play]", name: "status-after-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control 1", expect: "[player.control: p1 is live]", name: "intent-restores-to-live");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "post-shot", path: postPath);
+
+            // (4) The pixel assertions over a central world band (below any console chrome, above the toast strip
+            // and the bottom binding bars — which DO legitimately change across the mode flip).
+            var pre = ComposedShotKit.DecodePng(path: prePath);
+            var seed = ComposedShotKit.DecodePng(path: seedPath);
+            var fly = ComposedShotKit.DecodePng(path: flyPath);
+            var post = ComposedShotKit.DecodePng(path: postPath);
+            var regionX = (int)(width * 0.10);
+            var regionY = (int)(height * 0.06);
+            var regionW = (int)(width * 0.80);
+            var regionH = (int)(height * 0.38);
+            var flyDiff = MeanAbsDiff(a: fly, b: seed, x: regionX, y: regionY, w: regionW, h: regionH);
+            var seedDiff = MeanAbsDiff(a: seed, b: pre, x: regionX, y: regionY, w: regionW, h: regionH);
+            var restoreDiff = MeanAbsDiff(a: post, b: pre, x: regionX, y: regionY, w: regionW, h: regionH);
+
+            // The flown shot must differ decisively (a relocated camera repaints the band); the seeded/restored
+            // shots must hug the pre-enter chase framing (relative guards, robust against ambient world motion).
+            passed &= ComposedShotKit.Check(
+                name: "camera-flies-on-pose",
+                ok: (flyDiff > 8.0),
+                detail: $"fly-vs-seed mean abs diff {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want > 8)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "enter-seeds-at-chase",
+                ok: (seedDiff < (flyDiff * 0.5)),
+                detail: $"seed-vs-pre {seedDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs fly {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want < half)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "exit-restores-chase",
+                ok: (restoreDiff < (flyDiff * 0.5)),
+                detail: $"post-vs-pre {restoreDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs fly {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want < half)"
+            );
+
+            // (5) The avatar drives again after exit — the diversion unwound.
+            var before = AwaitWhere(ctx: ctx, name: "where-before-run");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 0.8", expect: "[player.run:", name: "run-after-exit");
+            Thread.Sleep(millisecondsTimeout: 1400);
+
+            var after = AwaitWhere(ctx: ctx, name: "where-after-run");
+
+            passed &= ComposedShotKit.Check(
+                name: "avatar-drives-after-exit",
+                ok: ((before is { } b1) && (after is { } a1) && (Planar(a: b1, b: a1) > 0.5)),
+                detail: DeltaDetail(before: before, after: after)
+            );
+
+            // (6) Nothing held leaked across the mode flip: two idle samples half a second apart match exactly.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.stop 1", expect: "[player.stop:", name: "stop-after-run");
+            Thread.Sleep(millisecondsTimeout: 400);
+
+            var restA = AwaitWhere(ctx: ctx, name: "where-at-rest-a");
+
+            Thread.Sleep(millisecondsTimeout: 600);
+
+            var restB = AwaitWhere(ctx: ctx, name: "where-at-rest-b");
+
+            passed &= ComposedShotKit.Check(
+                name: "no-held-leak-after-exit",
+                ok: ((restA is { } r1) && (restB is { } r2) && (Planar(a: r1, b: r2) < 0.005)),
+                detail: DeltaDetail(before: restA, after: restB)
+            );
+
+            // (6b) THE REFERENCE CHORD-COMMAND, end to end from DATA: player.signal synthesizes the LT-then-RT
+            // trigger sweep on seat 1's lane; completing the ordered [lt, rt] chord fires editor.enter (a command
+            // chord row in the play group — pure binding data, no verb typed). While both triggers stay held the
+            // editor group's [lt, rt] PAGE row answers (the pass-through: the armed command chord rides above the
+            // deepest page prefix), and the releases walk select→resting. Signals fold on the next 32 Hz tick, so
+            // each status read follows a short settle. (The press-latch-across-the-flip mechanism itself is
+            // engine-gated in Puck.Post's binding-page stage; here the flip's PRODUCT truth is asserted.)
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0.9", expect: "[player.signal: gamepad.leftTrigger 0.9]", name: "chord-lt-signal");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.rightTrigger 0.9", expect: "[player.signal: gamepad.rightTrigger 0.9]", name: "chord-rt-signal");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-place", name: "chord-fires-editor-enter-from-data");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0", expect: "[player.signal: gamepad.leftTrigger 0]", name: "chord-lt-release");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-select", name: "held-rt-selects-select-page");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.rightTrigger 0", expect: "[player.signal: gamepad.rightTrigger 0]", name: "chord-rt-release");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor 'Editor'", name: "releases-walk-to-editor-resting");
+            // Fresh presses resolve in the NEW group: South on the editor resting page is the camera toggle.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.buttonSouth press", expect: "[player.signal: gamepad.buttonSouth press]", name: "south-press-signal");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.buttonSouth release", expect: "[player.signal: gamepad.buttonSouth release]", name: "south-release-signal");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "editing orbit", name: "fresh-press-uses-editor-group");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.fly", expect: "[editor.fly: seat 1 camera fly]", name: "restore-fly-mode");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "chord-block-exit");
+
+            // (6c) The uniqueness rules are LOUD at the wire: an overlay whose new group has no resting page is
+            // rejected by the composed compile inside the validator (surfacing as the mutation rejection), and a
+            // chord rebind on an undeclared modifier id rejects at player.bind. (One-meaning-per-(group, chord)
+            // duplication cannot be EXPRESSED through the composer — rows merge by that very key — so its loud
+            // rejection is engine-gated in Puck.Post's binding-page stage.)
+            passed &= ComposedShotKit.SendAwait(
+                ctx: ctx,
+                line: "world.bindings.set {\"id\":\"orphan\",\"document\":{\"version\":\"puck.bindings.v8\",\"modifiers\":[],\"chords\":[{\"group\":\"solo\",\"chord\":[\"lt\"],\"command\":{\"command\":\"editor.enter\"}}]}}",
+                expect: "no resting (empty-chord) page",
+                name: "resting-page-rule-rejects-loudly"
+            );
+            passed &= ComposedShotKit.SendAwait(
+                ctx: ctx,
+                line: "player.bind 1 chord:zz+rt editor.enter",
+                expect: "does not compile",
+                name: "undeclared-modifier-chord-rejects-loudly"
+            );
+            // The positive twin: a session-rebind chord row declares a meaning through the same grammar and echoes.
+            passed &= ComposedShotKit.SendAwait(
+                ctx: ctx,
+                line: "player.bind 1 chord:rt+lt editor.status",
+                expect: "[player.bind: seat 1 'chord:rt+lt' → 'editor.status'",
+                name: "session-chord-row-binds"
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.bindings", expect: "chord play:[rt+lt]→editor.status", name: "session-chord-row-echoes");
+
+            // (7) The sole-editor LAYOUT policy, positively: with a second seat joined the split is side-by-side;
+            // seat 1 entering the editor takes the full-height left 70% workbench and seat 2 moves into the right
+            // rail — so the band the seam crosses (x 52..68%) repaints decisively between the two shots.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join 2", expect: "[player.join: player 2 joined pending", name: "join-second-seat");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "duo-shot", path: duoPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-for-layout");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "rail-shot", path: railPath);
+
+            var duo = ComposedShotKit.DecodePng(path: duoPath);
+            var rail = ComposedShotKit.DecodePng(path: railPath);
+            var seamX = (int)(width * 0.52);
+            var seamY = (int)(height * 0.10);
+            var seamW = (int)(width * 0.16);
+            var seamH = (int)(height * 0.35);
+            var seamDiff = MeanAbsDiff(a: rail, b: duo, x: seamX, y: seamY, w: seamW, h: seamH);
+
+            passed &= ComposedShotKit.Check(
+                name: "sole-editor-takes-workbench",
+                ok: (seamDiff > 8.0),
+                detail: $"seam-band mean abs diff {seamDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want > 8 — the 50% split boundary moved to 70%)"
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-for-layout");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "leave-second-seat");
+
+            // (8) Re-enter and prove the idle contract's honest edge: a scripted TAPE still drives the avatar while
+            // its seat edits (script outranks idle — the player.control contract, unchanged by the mode), and the
+            // second enter/exit cycle works.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "re-enter-echo");
+
+            var tapeBefore = AwaitWhere(ctx: ctx, name: "where-before-tape");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 0.6", expect: "[player.run:", name: "tape-while-editing");
+            Thread.Sleep(millisecondsTimeout: 1200);
+
+            var tapeAfter = AwaitWhere(ctx: ctx, name: "where-after-tape");
+
+            passed &= ComposedShotKit.Check(
+                name: "tape-still-drives-in-editor",
+                ok: ((tapeBefore is { } t1) && (tapeAfter is { } t2) && (Planar(a: t1, b: t2) > 0.3)),
+                detail: DeltaDetail(before: tapeBefore, after: tapeAfter)
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "re-exit-echo");
+
+            // (9) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: prePath);
+            ComposedShotKit.TryDelete(path: seedPath);
+            ComposedShotKit.TryDelete(path: flyPath);
+            ComposedShotKit.TryDelete(path: postPath);
+            ComposedShotKit.TryDelete(path: duoPath);
+            ComposedShotKit.TryDelete(path: railPath);
+        }
+
+        return passed;
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-editor-mode-{pid}-{tag}-{name}.png");
+    }
+
+    // Sends player.where and parses player 1's echoed pose through the shared regex; null (and a FAIL line) when the
+    // echo never lands.
+    static (double X, double Z)? AwaitWhere(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.where 1");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => ProofApp.WhereEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no player.where echo)");
+
+            return null;
+        }
+
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return (
+            X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+            Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv)
+        );
+    }
+
+    static double Planar((double X, double Z) a, (double X, double Z) b) {
+        var dx = (a.X - b.X);
+        var dz = (a.Z - b.Z);
+
+        return Math.Sqrt(d: ((dx * dx) + (dz * dz)));
+    }
+
+    static string DeltaDetail((double X, double Z)? before, (double X, double Z)? after) {
+        if ((before is not { } b) || (after is not { } a)) {
+            return "(a player.where sample is missing)";
+        }
+
+        return $"({b.X.ToString(format: "F2", provider: ProofApp.Inv)}, {b.Z.ToString(format: "F2", provider: ProofApp.Inv)}) -> ({a.X.ToString(format: "F2", provider: ProofApp.Inv)}, {a.Z.ToString(format: "F2", provider: ProofApp.Inv)}), planar delta {Planar(a: b, b: a).ToString(format: "F3", provider: ProofApp.Inv)}";
+    }
+
+    // Mean absolute per-channel difference over a region of two same-sized frames — the camera-motion witness.
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+}
+
+// ============================================================================================
+// EDITOR-EDIT — the selection/manipulation proof (see the header's subcommand block for the
+// full assertion list). The wire-coalescing headline rides world.status's dirty counter: motion
+// inside a grab must not move it, release must move it by EXACTLY one. The world is pinned
+// static (roster to seat 1, census to 0) so the select/deselect pixel pair reads the amber
+// selection tint, not crowd motion. Runs on BOTH backends like editor-mode.
+// ============================================================================================
+static class EditorEditProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+
+    public static int RunEditorEdit(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-edit (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        // The seat-clip proof runs NARROW on purpose: 640x480 quad-split gives each seat 320px, well under the
+        // HUD's worst-case line width, so an unclipped panel would visibly cross the seam.
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (c): four-seat HUD viewport clipping, Direct3D 12 (640x480) ===");
+        var clipDirectXPassed = RunHudClipSession(exe: exe, repoRoot: repoRoot, backend: null, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (d): four-seat HUD viewport clipping, Vulkan (640x480) ===");
+        var clipVulkanPassed = RunHudClipSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (((directXPassed && vulkanPassed) && clipDirectXPassed) && clipVulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-edit proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // The seat-clip pixel proof: 4 seats in the 2x2 quad at 640x480 (320px per seat), seats 1 and 3 editing (TWO editors
+    // = the standard ladder, no sole-editor workbench). Seat 1's HUD panel would be ~480px wide unclipped; the clip
+    // contract must CUT it at the x=320 seam, so the band just right of the seam inside seat 2's region stays at the
+    // control image while the band left of the seam repaints decisively.
+    static bool RunHudClipSession(string exe, string repoRoot, string? backend, int exitAfterSeconds) {
+        const int width = 640;
+        const int height = 480;
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-clip");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var hudPath = ShotPath(pid: pid, tag: tag, name: "hud");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, exactly four console-joined seats, zero census (static world).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "clip-console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"clip-pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "clip-census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "clip-join-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join moss 3", expect: "[player.join:", name: "clip-join-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join violet 4", expect: "[player.join:", name: "clip-join-4");
+
+            // Controls first (no HUD): a pair bounds the static noise floor.
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-control-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-control-b", path: controlBPath);
+
+            // Two editors (seats 1 and 3) with live SPAWN selections: spawns render no geometry and take no
+            // selection tint, so the ONLY pixel change versus the controls is the HUD surface itself — and the
+            // spawn selection line is wide enough that an unclipped seat-1 panel would cross the x=320 seam.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "clip-enter-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 3", expect: "[editor.enter: seat 3 editing", name: "clip-enter-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select spawns seat-2 1", expect: "[editor.select: seat 1 spawns 'seat-2'", name: "clip-select-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select spawns seat-3 3", expect: "[editor.select: seat 3 spawns 'seat-3'", name: "clip-select-3");
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-hud-shot", path: hudPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var hud = ComposedShotKit.DecodePng(path: hudPath);
+            // The HUD band: y spans the panel rows under seat 1's top gutter. Left band = inside seat 1 where the
+            // panel must paint; right band = just past the x=320 seam inside seat 2, where an unclipped panel bleeds.
+            var bandY = 20;
+            var bandH = 120;
+            var leftX = 40;
+            var leftW = 270;
+            // The bleed zone: an unclipped ~380px panel would paint x 320..~390 in seat 2's region.
+            var rightX = 322;
+            var rightW = 56;
+            var noiseRight = MeanAbsDiff(a: controlB, b: controlA, x: rightX, y: bandY, w: rightW, h: bandH);
+            var hudLeft = MeanAbsDiff(a: hud, b: controlA, x: leftX, y: bandY, w: leftW, h: bandH);
+            var hudRight = MeanAbsDiff(a: hud, b: controlA, x: rightX, y: bandY, w: rightW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "hud-renders-inside-own-seat",
+                ok: (hudLeft > 2.0),
+                detail: $"left-of-seam band diff {hudLeft.ToString(format: "F2", provider: ProofApp.Inv)} (want > 2 — the seat-1 HUD panel is visible)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "hud-clips-at-seat-seam",
+                ok: (hudRight <= ((noiseRight * 4.0) + 0.5)),
+                detail: $"right-of-seam band diff {hudRight.ToString(format: "F2", provider: ProofApp.Inv)} vs static noise {noiseRight.ToString(format: "F2", provider: ProofApp.Inv)} (an unclipped 480px panel would repaint seat 2)"
+            );
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "clip-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: hudPath);
+        }
+
+        return passed;
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var deselectAPath = ShotPath(pid: pid, tag: tag, name: "deselect-a");
+        var selectedPath = ShotPath(pid: pid, tag: tag, name: "selected");
+        var deselectBPath = ShotPath(pid: pid, tag: tag, name: "deselect-b");
+        var rejectPath = ShotPath(pid: pid, tag: tag, name: "reject");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off (the pixel band must read the WORLD), roster to seat 1 (dev-machine
+            // pads auto-seat extras), census to 0 (a static world — the highlight diff's noise floor).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-roster-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "pin-census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+
+            // (a) A discrete place is EXACTLY one journal entry.
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder 0.5 0.3", expect: "one mutation submitted", name: "place-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "place-is-one-entry");
+
+            // (b) THE HEADLINE — drag coalescing at the wire: grab, move THREE times (client-local; dirty must not
+            // move), release = exactly ONE more entry, position committed.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "select-drag-subject");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "grab-begins");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 0", expect: "[editor.drag: seat 1 scene 'boulder-1' at (0.80, 0.72, -0.30)]", name: "drag-step-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1.5 0 0", expect: "[editor.drag: seat 1 scene 'boulder-1' at (2.30, 0.72, -0.30)]", name: "drag-step-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 0.5 0 1", expect: "[editor.drag: seat 1 scene 'boulder-1' at (2.80, 0.72, 0.70)]", name: "drag-step-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "drag-moves-no-wire");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "(-1.20, 0.72, -0.30) -> (2.80, 0.72, 0.70)", name: "release-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 2)} ", name: "release-is-one-entry");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "sel=scene 'boulder-1' at (2.80, 0.72, 0.70)", name: "position-committed");
+
+            // (c) Undo restores the pre-drag position (the journal replay) and the dirty count steps back.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "undo-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "sel=scene 'boulder-1' at (-1.20, 0.72, -0.30)", name: "undo-restores-position");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "undo-steps-dirty-back");
+
+            // (d) The look-ray pick: pose the camera 5.5u in front of boulder-2 (center (0.6, 0.88, 0.5), r 1.1),
+            // looking straight down +Z — the crosshair ray must name that row.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-for-pick");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.pick", expect: "selected scene 'boulder-2'", name: "look-ray-picks-aimed-row");
+
+            // (e) The highlight in pixels: from the same vantage, a deselected control pair bounds the static noise
+            // floor and the selected shot must clear it decisively (the amber tint on boulder-2). Let the last
+            // mutation toast expire first so the band reads geometry only.
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.deselect", expect: "[editor.deselect: seat 1 cleared]", name: "deselect-for-control");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "deselect-shot-a", path: deselectAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "deselect-shot-b", path: deselectBPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-2", expect: "[editor.select: seat 1 scene 'boulder-2'", name: "select-for-highlight");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "selected-shot", path: selectedPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: deselectAPath);
+            var controlB = ComposedShotKit.DecodePng(path: deselectBPath);
+            var selected = ComposedShotKit.DecodePng(path: selectedPath);
+            var bandX = (int)(width * 0.25);
+            var bandY = (int)(height * 0.25);
+            var bandW = (int)(width * 0.35);
+            var bandH = (int)(height * 0.50);
+            var noiseDiff = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var highlightDiff = MeanAbsDiff(a: selected, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "selection-highlight-visible",
+                ok: ((highlightDiff > 0.8) && (highlightDiff > ((noiseDiff * 4.0) + 0.4))),
+                detail: $"selected-vs-control band diff {highlightDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs static noise {noiseDiff.ToString(format: "F2", provider: ProofApp.Inv)}"
+            );
+
+            // (f) Capacity honesty: flood placements past the authoring headroom. The envelope must reject loudly,
+            // a further placement must leave dirty unchanged, and the rejection must surface as the danger toast.
+            var floodMark = ctx.Collector.Count;
+
+            for (var index = 0; (index < 40); index++) {
+                ComposedShotKit.Send(ctx: ctx, line: "editor.place slab");
+            }
+
+            var rejection = ComposedShotKit.Await(
+                collector: ctx.Collector,
+                mark: floodMark,
+                predicate: line => (line.Contains(value: "[world.mutation rejected: UpsertSceneRow") && line.Contains(value: "render envelope")),
+                deadlineSeconds: 60.0
+            );
+
+            passed &= ComposedShotKit.Check(name: "capacity-rejects-loudly", ok: (rejection is not null), detail: (rejection?.Trim() ?? "(no envelope rejection line)"));
+
+            var dirtyAtCeiling = ReadDirty(ctx: ctx, name: "dirty-at-ceiling");
+            var extraMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.place slab");
+            passed &= ComposedShotKit.Check(
+                name: "over-ceiling-place-rejected",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: extraMark, predicate: line => line.Contains(value: "[world.mutation rejected: UpsertSceneRow"), deadlineSeconds: 20.0) is not null),
+                detail: "the placement past the ceiling rejected"
+            );
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "reject-toast-shot", path: rejectPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyAtCeiling} ", name: "rejection-leaves-dirty-unchanged");
+
+            var reject = ComposedShotKit.DecodePng(path: rejectPath);
+            var stripX = (int)(width * 0.55);
+            var stripY = ((height / 2) - 16);
+            var stripW = ((width - 40) - stripX);
+            var stripH = 32;
+            var rejectRed = CountDangerRed(image: reject, x: stripX, y: stripY, w: stripW, h: stripH);
+            var controlRed = CountDangerRed(image: controlA, x: stripX, y: stripY, w: stripW, h: stripH);
+
+            passed &= ComposedShotKit.Check(
+                name: "capacity-rejection-surfaces-as-toast",
+                ok: ((rejectRed > (controlRed + 100)) && (rejectRed > 120)),
+                detail: $"danger-red pixels in the toast strip: reject {rejectRed} vs control {controlRed}"
+            );
+
+            // (g) every editor-local typed float surface rejects non-finite values loudly, before any local
+            // state can be poisoned (NaN slides past ordinary range guards; a non-finite center would rebuild the SDF).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.speed NaN", expect: "as a finite number", name: "finite-cam-speed");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose Infinity 0 0", expect: "as finite numbers", name: "finite-cam-pose");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.snap NaN", expect: "expected on|off|<pitch>", name: "finite-snap-pitch");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag NaN 0 0", expect: "as finite numbers", name: "finite-drag");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.move NaN 0 0", expect: "as finite numbers", name: "finite-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.nudge -Infinity 0 0", expect: "as finite numbers", name: "finite-nudge");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder NaN", expect: "bad radius", name: "finite-place");
+
+            // (h) editor deactivation owns the COMPLETE teardown: an exit mid-drag drops the pending row and
+            // the selection, so re-entry starts clean and the abandoned drag can never be committed.
+            var dirtyBeforeExit = ReadDirty(ctx: ctx, name: "dirty-before-exit-mid-drag");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "exit-mid-drag-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "exit-mid-drag-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 3 0 0", expect: "[editor.drag: seat 1", name: "exit-mid-drag-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-mid-drag-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "exit-mid-drag-reenter");
+
+            var statusMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.status");
+
+            var statusLine = ComposedShotKit.Await(collector: ctx.Collector, mark: statusMark, predicate: l => l.Contains(value: "[editor.status: seat 1 editing"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(
+                name: "reenter-starts-clean",
+                ok: ((statusLine is not null) && statusLine.Contains(value: "sel=none") && !statusLine.Contains(value: "drag=")),
+                detail: (statusLine?.Trim() ?? "(no editor.status echo)")
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "has no live drag", name: "abandoned-drag-not-committable");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "exit-mid-drag-no-wire");
+
+            // The departure variant: a seat that LEAVES mid-drag is pruned, and its slot's next occupant inherits
+            // neither the drag nor the selection.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "depart-join-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 2", expect: "[editor.enter: seat 2 editing", name: "depart-enter-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-2 2", expect: "[editor.select: seat 2 scene 'boulder-2'", name: "depart-select-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab 2", expect: "dragging scene 'boulder-2'", name: "depart-grab-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-leave-mid-drag");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "depart-rejoin-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 2", expect: "[editor.enter: seat 2 editing", name: "depart-reenter-seat2");
+
+            var rejoinMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.status 2");
+
+            var rejoinStatus = ComposedShotKit.Await(collector: ctx.Collector, mark: rejoinMark, predicate: l => l.Contains(value: "[editor.status: seat 2 editing"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(
+                name: "rejoined-slot-starts-clean",
+                ok: ((rejoinStatus is not null) && rejoinStatus.Contains(value: "sel=none") && !rejoinStatus.Contains(value: "drag=")),
+                detail: (rejoinStatus?.Trim() ?? "(no editor.status 2 echo)")
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release 2", expect: "has no live drag", name: "departed-drag-not-committable");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 2", expect: "[editor.exit: seat 2", name: "depart-cleanup-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-cleanup-leave");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "departed-drag-no-wire");
+
+            // (i) a frozen released preview resolves independently on ITS OWN result, with the honest reason narrated.
+            // Apply: the release's delivery carries exactly the expected row.
+            var applyMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "retire-apply-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "retire-apply-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1", name: "retire-apply-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "one mutation submitted", name: "retire-apply-release");
+            passed &= ComposedShotKit.Check(
+                name: "frozen-retires-on-own-apply",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: applyMark, predicate: l => l.Contains(value: "frozen scene 'boulder-1' retired: applied"), deadlineSeconds: 15.0) is not null),
+                detail: "the released preview retired against its own delivered row"
+            );
+
+            // Rejection with a SAME-BATCH unrelated delivery: the seat's release is denied (revoked grant) while a
+            // console kit mutation applies in the same drain — the retire reason must be the REJECTION correlation,
+            // never the unrelated delivery.
+            var preRejectStatus = ReadSelectionPosition(ctx: ctx, name: "document-pose-before-rejection");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke seat1 mutate section:scene", expect: "[world.revoke: seat1 mutate section:scene]", name: "retire-reject-revoke");
+
+            var rejectMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "retire-reject-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 0", expect: "[editor.drag: seat 1", name: "retire-reject-move");
+            ComposedShotKit.Send(ctx: ctx, line: "editor.release");
+            ComposedShotKit.Send(ctx: ctx, line: "world.kit.tune runner moveSpeed 7");
+            passed &= ComposedShotKit.Check(
+                name: "frozen-retires-on-own-rejection",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: rejectMark, predicate: l => l.Contains(value: "frozen scene 'boulder-1' retired: rejected"), deadlineSeconds: 15.0) is not null),
+                detail: "the rejected release correlated back to its frozen preview"
+            );
+
+            var retireLines = ctx.Collector.Snapshot();
+            var unrelatedRetire = false;
+
+            for (var i = rejectMark; (i < retireLines.Length); i++) {
+                if (retireLines[i].Contains(value: "retired: applied") || retireLines[i].Contains(value: "retired: deadline")) {
+                    unrelatedRetire = true;
+                }
+            }
+
+            passed &= ComposedShotKit.Check(
+                name: "unrelated-delivery-does-not-retire",
+                ok: !unrelatedRetire,
+                detail: "no apply/deadline retirement fired in the rejection round (the same-batch kit delivery left the preview to its own result)"
+            );
+
+            var postRejectStatus = ReadSelectionPosition(ctx: ctx, name: "document-pose-after-rejection");
+
+            passed &= ComposedShotKit.Check(
+                name: "rejected-row-snaps-back",
+                ok: ((preRejectStatus is not null) && string.Equals(a: preRejectStatus, b: postRejectStatus, comparisonType: StringComparison.Ordinal)),
+                detail: $"selection pose before '{preRejectStatus}' vs after '{postRejectStatus}'"
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "retire-reject-undo-kit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant seat1 mutate section:scene", expect: "[world.grant: seat1 mutate section:scene]", name: "retire-reject-regrant");
+
+            // (j) the candidate ring is explicit and bounded: near the flooded scene the ring caps at 16;
+            // far from everything it is honestly empty; editor.status narrates the policy.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-near");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "of 16 candidates (r 32u, cap 16)", name: "candidates-cap-engages");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 500 5 500 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-far");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "candidates-radius-bounds");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=0 (r 32u, cap 16)", name: "candidates-status-narrates");
+
+            // (l) the editor/authoring policy row is DATA, split honestly at apply: the candidate radius/cap
+            // are LIVE-CONSUMED (the very next chord reads the new value, no restart) while the headroom/repeat-cap
+            // fields are BOOT-CONSUMED (the running session's frozen render-envelope probe cannot retroactively
+            // grow — the accept echo narrates "next boot" for that half of the SAME whole-row mutation).
+            const string authoringDefault = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+            const string authoringHugeRadius = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":2000,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+            const string authoringTinyCap = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":3,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            // STILL at the far pose (500, 5, 500) from (j): the 32u-radius ring there is PROVEN empty
+            // ("candidates-radius-bounds" above). Growing the live radius past the ~700u distance to the flooded
+            // cluster must cross that distance boundary on the very next chord — no relaunch, no rebuild wait.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringHugeRadius}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-huge-radius");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "candidates (r 2000u, cap 16)", name: "authoring-live-radius-crosses-boundary");
+
+            // Restore the default radius — the far pose reads honestly empty again, proving the live read cuts both
+            // ways (no stale widened cache).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-restore-radius");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "authoring-live-radius-restores-empty");
+
+            // The candidate CAP is the second live lever: back at the near pose (the proven 16-candidate ring),
+            // shrinking the cap to 3 must shrink the ACTUAL ring (not just its echoed number) on the next chord —
+            // GatherCandidates' Math.Min(count, CandidateCap) reads the live cap every call.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "authoring-live-pose-near-for-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringTinyCap}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-tiny-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=3 (r 32u, cap 3)", name: "authoring-live-cap-shrinks-ring");
+
+            // Restore the default cap — the ring widens back to 16 on the next read.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-restore-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=16 (r 32u, cap 16)", name: "authoring-live-cap-restores-ring");
+
+            // The boot-consumed half of the SAME mutation kind: a headroom change narrates "next boot" in the SAME
+            // accept line as the live narration above — the honest split, never two separate mutations.
+            const string authoringGrownHeadroom = "{\"authoringHeadroomRows\":40,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringGrownHeadroom}", expect: "headroom + max-repeat-per-segment apply at next boot", name: "authoring-boot-consumed-narrates-next-boot");
+
+            // A malformed row (min scale above max) rejects loudly before it ever reaches the frozen probe.
+            const string authoringInvertedScale = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":6,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringInvertedScale}", expect: "exceeds authoring.maxPlacementScale", name: "authoring-validator-rejects-inverted-scale");
+
+            // Restore the byte-identical default row so the session's authoring policy ends where it started.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-final-restore");
+
+            // (k) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: deselectAPath);
+            ComposedShotKit.TryDelete(path: selectedPath);
+            ComposedShotKit.TryDelete(path: deselectBPath);
+            ComposedShotKit.TryDelete(path: rejectPath);
+        }
+
+        return passed;
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-editor-edit-{pid}-{tag}-{name}.png");
+    }
+
+    static readonly Regex SelectionEcho = new(pattern: @"sel=[^)]+\)", options: RegexOptions.Compiled);
+
+    // Sends editor.status and returns the seat-1 selection clause ("sel=scene 'x' at (a, b, c)") — the document-pose
+    // witness the rejection round compares before/after.
+    static string? ReadSelectionPosition(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "editor.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[editor.status: seat 1 editing"), deadlineSeconds: 15.0);
+        var clause = ((line is not null) ? SelectionEcho.Match(input: line) : null);
+        var value = (((clause is { Success: true })) ? clause.Value : null);
+
+        _ = ComposedShotKit.Check(name: name, ok: (value is not null), detail: (value ?? "(no selection clause in editor.status)"));
+
+        return value;
+    }
+
+    // Sends world.status and parses the journal dirty counter (the read-after-write barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+
+    // Mean absolute per-channel difference over a region (the highlight witness; the world is pinned static).
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // The danger-hue population (the ui-floor discriminator): red clearly dominating BOTH other channels.
+    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+}
+
+// ============================================================================================
+// EDITOR-CAMERAS — the camera live-apply proof: camera rows edit LIVE. The
+// baked default declares two View screens (0 → 'overhead' fixed, 2 → 'first-person' anchored),
+// so the offscreen pool boots with two registered camera views — world.view-refresh's count
+// echo is the pipe-observable witness. A pose/aim edit rewrites the running view's rig in
+// place ('pose updated live'), a dimension change recreates it ('recreated live (WxH)'), a
+// screen re-point (View→View) binds the new camera and releases the orphan, and the
+// View→None transition unbinds the slot AND releases the registration — the count drops and
+// no stale offscreen render survives. Runs on BOTH backends like editor-mode.
+// ============================================================================================
+static class EditorCamerasProof {
+    public static int RunEditorCameras(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 150, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-cameras (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-cameras (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-cameras proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Baseline: both declared View screens registered their cameras' offscreen renders at boot.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "boot-two-camera-views");
+
+            // (a) LIVE POSE EDIT (fixed): re-aim 'overhead'. The mutation applies, the client reconcile rewrites the
+            // running view's rig in place, and a stale "applies at next boot" narration must never appear.
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"fixed\",\"position\":[0,18,0],\"lookAt\":[0,0.5,-2.5],\"name\":\"overhead\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.96}");
+
+            var poseLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.camera: 'overhead' pose updated live]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "fixed-pose-updates-live", ok: (poseLine is not null),
+                detail: (poseLine?.Trim() ?? "(no reconcile line for 'overhead')"));
+            passed &= AssertNoNextBoot(ctx: ctx, mark: mark, name: "no-next-boot-narration");
+
+            // (b) The anchored camera's pose edit rides the same live lane (rig property writes + a fresh anchor id).
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"anchored\",\"anchor\":{\"$type\":\"entity\",\"index\":0},\"offset\":[0,1.5,0],\"name\":\"first-person\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":1.4}");
+
+            var anchoredLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.camera: 'first-person' pose updated live]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "anchored-pose-updates-live", ok: (anchoredLine is not null),
+                detail: (anchoredLine?.Trim() ?? "(no reconcile line for 'first-person')"));
+
+            // (c) NEW ROW + RE-POINT (View→View): 'birdseye' enters the document, then screen 0 films it. The new
+            // camera registers, the orphaned 'overhead' releases, and the pool count holds at 2.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.9}",
+                expect: "[world.mutation: UpsertCamera 'birdseye' applied]", name: "new-camera-row-applies");
+
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"view\",\"cameraName\":\"birdseye\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
+
+            var repointLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 showing camera 'birdseye']"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "screen0-repoints-live", ok: (repointLine is not null),
+                detail: (repointLine?.Trim() ?? "(no 'showing camera birdseye' line)"));
+
+            var orphanLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => (l.Contains(value: "[world.screen: camera view 'overhead' released") && l.Contains(value: "no remaining screen references it")), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "orphaned-overhead-released", ok: (orphanLine is not null),
+                detail: (orphanLine?.Trim() ?? "(no released line for 'overhead')"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "pool-count-holds-after-repoint");
+
+            // (d) DIMENSION CHANGE: an offscreen render target cannot resize — the registration recreates in place.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":320,\"renderHeight\":180,\"fieldOfViewRadians\":0.9}",
+                expect: "[world.camera: 'birdseye' recreated live (320x180)]", name: "dimension-change-recreates");
+
+            // (e) THE VIEW→NONE TRANSITION: the slot unbinds AND the camera registration releases — the pool
+            // count drops and world.screens reads the slot honestly none/unbound (no stale offscreen render).
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"none\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
+
+            var unboundLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 unbound]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "screen0-unbinds", ok: (unboundLine is not null),
+                detail: (unboundLine?.Trim() ?? "(no 'screen 0 unbound' line)"));
+
+            var releaseLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => (l.Contains(value: "[world.screen: camera view 'birdseye' released") && l.Contains(value: "no remaining screen references it")), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "cr6-transition-releases-view", ok: (releaseLine is not null),
+                detail: (releaseLine?.Trim() ?? "(no released line for 'birdseye' — the view stayed registered)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "1 camera view(s) registered", name: "pool-count-drops");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.screens", expect: "0 none unbound", name: "screen0-reads-none-unbound");
+
+            // (f) REMOVE: the row is unreferenced (validator-clean) and already released — the document-side removal
+            // applies with no view work left to do.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.camera.remove birdseye",
+                expect: "[world.mutation: RemoveCamera 'birdseye' applied]", name: "camera-remove-applies");
+
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // A stale camera "applies at next boot" narration must never resurface for a camera mutation.
+    static bool AssertNoNextBoot(ComposedShotKit.Ctx ctx, int mark, string name) {
+        var snapshot = ctx.Collector.Snapshot();
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: "[world.camera: applies at next boot]")) {
+                return ComposedShotKit.Check(name: name, ok: false, detail: snapshot[i].Trim());
+            }
+        }
+
+        return ComposedShotKit.Check(name: name, ok: true, detail: "no next-boot narration");
+    }
+}
+
+// ============================================================================================
+// PLACEMENTS — the creations/placements proof: import a PROOF-AUTHORED creation
+// through the strict canonicalizer, stamp it (pixel evidence over empty grass), corrupt the
+// hash pin (loud reject), drag it (one journal entry), undo it, reject the no-cascade
+// creation removal, walk the animated fixture's timeline (pixel motion), flood the reserved
+// headroom (the word-exact envelope ceiling), and prove the ouroboros WITH creations
+// (save -> reload -> save byte-identity of the inline-canonical embeds). Runs on BOTH
+// backends like editor-mode. See the header's subcommand block for the assertion list.
+// ============================================================================================
+static class PlacementsProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+    static readonly Regex AtEcho = new(pattern: @"at \((-?[0-9.]+), (-?[0-9.]+), (-?[0-9.]+)\)", options: RegexOptions.Compiled);
+
+    public static int RunPlacements(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === placements (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === placements (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] placements proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-placements");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var stampPath = ShotPath(pid: pid, tag: tag, name: "stamp");
+        var critterAPath = ShotPath(pid: pid, tag: tag, name: "critter-a");
+        var critterBPath = ShotPath(pid: pid, tag: tag, name: "critter-b");
+        var savedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-1.world.json");
+        var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-2.world.json");
+        // The proof AUTHORS its own creations — Demo content never ships as World content, so no
+        // docs/examples fixture enters a World proof. Both cross the same strict import door a player file would.
+        var stampFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-stamp.creation.json");
+        var critterFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-critter.creation.json");
+
+        File.WriteAllText(path: stampFixture, contents: StaticProbeCreationJson);
+        File.WriteAllText(path: critterFixture, contents: AnimatedProbeCreationJson);
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, roster to seat 1, zero census — the asserted bands must read ONLY
+            // the placements under test.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+
+            // (a) IMPORT: the proof-authored stamp probe crosses the strict canonicalizer — one UpsertCreation entry.
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {stampFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-stamp' applied]", name: "import-stamp-applies");
+            passed &= ComposedShotKit.Check(name: "import-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-import") == (dirty0 + 1)), detail: "import = one journal entry");
+
+            // (b) THE STAMP in pixels: aim at empty grass (+Z of the spawn plaza — no screens, no crowd), bound the
+            // static noise floor with a control pair, place, and demand a decisive central-band repaint.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-grass");
+            Thread.Sleep(millisecondsTimeout: 3400); // let the import toast + shimmer decay before the control pair
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-b", path: controlBPath);
+
+            var placeMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-stamp 0 1.5",
+                expect: "[world.mutation: UpsertPlacement 'place-1' applied]", name: "place-stamp-applies");
+
+            var placeEcho = ComposedShotKit.Await(collector: ctx.Collector, mark: placeMark,
+                predicate: l => (l.Contains(value: "[editor.place: seat 1 placement 'place-1'") && AtEcho.IsMatch(input: l)), deadlineSeconds: 15.0);
+            var placedAt = ((placeEcho is not null) ? AtEcho.Match(input: placeEcho).Value : null);
+
+            passed &= ComposedShotKit.Check(name: "place-echo-carries-position", ok: (placedAt is not null), detail: (placedAt ?? "(no position echo)"));
+            Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: the stamp shot reads geometry only
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "stamp-shot", path: stampPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var stamp = ComposedShotKit.DecodePng(path: stampPath);
+            // The stamp band sits ABOVE screen center: the level editor camera puts the horizon at mid-frame and a
+            // placed creation's body rises from its origin, so the upper-middle band is where the stamp paints.
+            var bandX = (int)(width * 0.375);
+            var bandY = (int)(height * 0.08);
+            var bandW = (int)(width * 0.25);
+            var bandH = (int)(height * 0.37);
+            var noise = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var stampDiff = MeanAbsDiff(a: stamp, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "stamp-visible",
+                // The MEAN over the whole band stays modest even for a bulky stamp; decisiveness comes from the
+                // 4x noise guard over a pinned-static control pair.
+                ok: ((stampDiff > 0.8) && (stampDiff > (noise * 4.0))),
+                detail: $"stamp band diff {stampDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x noise)"
+            );
+
+            // (c) THE HASH PIN: the same fixture with a zeroed hash must reject loudly naming the canonical sha256,
+            // and the journal must not move — a hash the pipeline did not itself compute is never accepted.
+            var dirtyBeforeBad = ReadDirty(ctx: ctx, name: "dirty-before-bad-hash");
+            var badRow = BuildCorruptCreationRow(fixturePath: stampFixture);
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.creation.set {badRow}",
+                expect: "does not match the canonical sha256", name: "corrupt-hash-rejects-loudly");
+            passed &= ComposedShotKit.Check(name: "corrupt-hash-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-bad-hash") == dirtyBeforeBad), detail: "journal unchanged");
+
+            // (d) THE DRAG CHANNEL on a placement: grab + multi-step motion crosses NO wire (dirty frozen), release
+            // commits EXACTLY one whole-row mutation and the frozen preview retires on its own apply.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select placements place-1", expect: "[editor.select: seat 1 placements 'place-1'", name: "select-placement");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging placements 'place-1'", name: "grab-placement");
+
+            var dirtyMidDragBase = ReadDirty(ctx: ctx, name: "dirty-at-grab");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 1", expect: "[editor.drag: seat 1", name: "drag-step-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1", name: "drag-step-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 0 0 -1", expect: "[editor.drag: seat 1", name: "drag-step-3");
+            passed &= ComposedShotKit.Check(name: "drag-motion-crosses-no-wire", ok: (ReadDirty(ctx: ctx, name: "dirty-mid-drag") == dirtyMidDragBase), detail: "dirty unchanged mid-drag");
+
+            var releaseMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "one mutation submitted", name: "release-commits");
+
+            var retired = ComposedShotKit.Await(collector: ctx.Collector, mark: releaseMark,
+                predicate: l => l.Contains(value: "frozen placement 'place-1' retired: applied"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "frozen-preview-retires-applied", ok: (retired is not null), detail: (retired?.Trim() ?? "(no retire line)"));
+            passed &= ComposedShotKit.Check(name: "release-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-release") == (dirtyMidDragBase + 1)), detail: "release = one journal entry");
+
+            // (e) UNDO restores the pre-drag position (the placement echo's exact coordinates).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1", name: "undo-drag");
+
+            if (placedAt is not null) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select placements place-1", expect: placedAt, name: "undo-restores-position");
+            }
+
+            // (f) NO CASCADE: removing a creation with a live placement rejects loudly.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.creation.remove probe-stamp",
+                expect: "has 1 live placement(s)", name: "remove-referenced-creation-rejects");
+
+            // (g) THE ANIMATED PROBE walks its timeline: stamp the 4-frame critter over its own patch of grass
+            // and demand pixel motion between two shots while a critter-free corner band stays at the noise floor.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {critterFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-critter' applied]", name: "import-critter-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-critter-grass");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-critter",
+                expect: "[world.mutation: UpsertPlacement 'place-2' applied]", name: "place-critter-applies");
+            Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: motion below is the timeline alone
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "critter-shot-a", path: critterAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "critter-shot-b", path: critterBPath);
+
+            var critterA = ComposedShotKit.DecodePng(path: critterAPath);
+            var critterB = ComposedShotKit.DecodePng(path: critterBPath);
+            var critterMotion = MeanAbsDiff(a: critterB, b: critterA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var cornerStill = MeanAbsDiff(a: critterB, b: critterA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
+
+            passed &= ComposedShotKit.Check(
+                name: "animated-fixture-walks-timeline",
+                ok: ((critterMotion > 0.8) && (critterMotion > (cornerStill * 4.0))),
+                detail: $"critter band motion {critterMotion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x the still band)"
+            );
+
+            // (i-1) SAVE the furnished world (2 creations, 2 placements) for the ouroboros half below.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {savedPath}", expect: "[world.save:", name: "save-furnished-world");
+
+            // (h) CAPACITY HONESTY: flood placements past the reserved headroom — the ceiling line is word-exact,
+            // and a further placement leaves the journal unchanged.
+            var floodMark = ctx.Collector.Count;
+
+            for (var extra = 0; (extra < 9); extra++) {
+                ComposedShotKit.Send(ctx: ctx, line: "editor.place probe-stamp");
+                Thread.Sleep(millisecondsTimeout: 250);
+            }
+
+            var ceiling = ComposedShotKit.Await(collector: ctx.Collector, mark: floodMark,
+                predicate: l => (l.Contains(value: "[world.mutation rejected: UpsertPlacement") && l.Contains(value: "exceed the probed render envelope")), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "flood-hits-envelope-ceiling", ok: (ceiling is not null), detail: (ceiling?.Trim() ?? "(no envelope rejection)"));
+
+            var dirtyAtCeiling = ReadDirty(ctx: ctx, name: "dirty-at-ceiling");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-stamp", expect: "exceed the probed render envelope", name: "past-ceiling-rejects-again");
+            passed &= ComposedShotKit.Check(name: "past-ceiling-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-past-ceiling") == dirtyAtCeiling), detail: "journal unchanged past the ceiling");
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "placements-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: stampPath);
+            ComposedShotKit.TryDelete(path: critterAPath);
+            ComposedShotKit.TryDelete(path: critterBPath);
+            ComposedShotKit.TryDelete(path: stampFixture);
+            ComposedShotKit.TryDelete(path: critterFixture);
+        }
+
+        // (i-2) THE OUROBOROS WITH CREATIONS: reload the furnished save and save again — byte identity proves the
+        // inline-canonical embeds and the world.save hash recompute are stable end to end.
+        passed &= RunReloadOuroboros(exe: exe, repoRoot: repoRoot, backend: backend, savedPath: savedPath, resavedPath: resavedPath, exitAfterSeconds: exitAfterSeconds);
+        ComposedShotKit.TryDelete(path: savedPath);
+        ComposedShotKit.TryDelete(path: resavedPath);
+
+        return passed;
+    }
+
+    static bool RunReloadOuroboros(string exe, string repoRoot, string? backend, string savedPath, string resavedPath, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: 640, height: 480, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savedPath]);
+        var process = ctx.Process;
+        var passed = true;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 2 placements 2", name: "reload-carries-creations");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-furnished-world");
+        }
+        finally {
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        if (!passed) {
+            return false;
+        }
+
+        var savedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: savedPath)));
+        var resavedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: resavedPath)));
+
+        return ComposedShotKit.Check(
+            name: "creations-ouroboros-byte-stable",
+            ok: string.Equals(a: savedHash, b: resavedHash, comparisonType: StringComparison.Ordinal),
+            detail: $"sha256 {savedHash[..12]} vs {resavedHash[..12]}"
+        );
+    }
+
+    // THE STATIC PROBE — a bulky three-primitive beacon authored HERE (Demo content never ships as
+    // World content; the proof owns its art). Vector3/Quaternion members use the creation serializer's field shape.
+    const string StaticProbeCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-stamp",
+          "palette": [
+            { "albedo": { "x": 0.8, "y": 0.3, "z": 0.2 } },
+            { "albedo": { "x": 0.9, "y": 0.7, "z": 0.2 } },
+            { "albedo": { "x": 0.2, "y": 0.6, "z": 0.9 }, "emissive": 0.4 },
+            { "albedo": { "x": 0.9, "y": 0.9, "z": 0.9 } }
+          ],
+          "shapes": [
+            { "id": 0, "type": "Box", "position": { "x": 0, "y": 0.3, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.6, "y": 0.8, "z": 1.6 }, "material": 1 },
+            { "id": 1, "type": "Sphere", "position": { "x": 0, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.4, "y": 2.4, "z": 2.4 }, "material": 2 },
+            { "id": 2, "type": "RoundCone", "position": { "x": 0, "y": 2.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.2, "y": 1.2, "z": 1.2 }, "material": 3 }
+          ]
+        }
+        """;
+
+    // THE ANIMATED PROBE — a body + two fins with a 4-frame timeline swinging the body: hold-style stepping at the
+    // 8-tick cadence lands a visibly different frame across the proof's 700 ms shot gap.
+    const string AnimatedProbeCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-critter",
+          "palette": [
+            { "albedo": { "x": 0.2, "y": 0.8, "z": 0.5 } },
+            { "albedo": { "x": 0.9, "y": 0.4, "z": 0.7 } }
+          ],
+          "shapes": [
+            { "id": 0, "type": "Sphere", "position": { "x": 0, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 }, "material": 0 },
+            { "id": 1, "type": "Ellipsoid", "position": { "x": -1.1, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }, "material": 1 },
+            { "id": 2, "type": "Ellipsoid", "position": { "x": 1.1, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }, "material": 1 }
+          ],
+          "frames": [
+            { "name": "f1", "transforms": [ { "id": 0, "position": { "x": 0.8, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f2", "transforms": [ { "id": 0, "position": { "x": 0, "y": 2.2, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f3", "transforms": [ { "id": 0, "position": { "x": -0.8, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f4", "transforms": [ { "id": 0, "position": { "x": 0, "y": 1.0, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] }
+          ]
+        }
+        """;
+
+    // One compact (single-token) WorldCreation JSON row wrapping the fixture's document with a ZEROED hash — the
+    // corrupt-hash probe world.creation.set must reject.
+    static string BuildCorruptCreationRow(string fixturePath) {
+        var document = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: fixturePath))!;
+        var row = new System.Text.Json.Nodes.JsonObject {
+            ["id"] = "bad-lamp",
+            ["document"] = document,
+            ["hash"] = new string(c: '0', count: 64),
+        };
+
+        return row.ToJsonString();
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-{name}.png");
+    }
+
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Sends world.status and parses the journal dirty counter (the stdin barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// sculpt — the creation sub-editor proof, on BOTH backends: sculpt a creation from NOTHING over stdin
+// (editor.sculpt.* — primitives, palette, a chain/IK pose), commit it as ONE canonicalized UpsertCreation, stamp it
+// at the exact bench origin, and demand PIXEL IDENTITY between the workbench preview and the committed stamp (the
+// same document at the same transform through the same emission path renders the same pixels — the
+// stamp-equals-preview contract). Then the two undo domains (local ring vs world journal) assert as distinct, a
+// second sculpt authors a 2-frame timeline whose stamp ANIMATES, re-sculpting it live-refreshes the placement
+// (recreate on a palette change — still animating; release when the frames delete — motion stops), an imported
+// carrier's cameras/behavior/extensions members survive a model round-trip, the easel
+// verb wires a bench camera onto a screen row, and the furnished save reloads byte-stably. DISPOSABLE probes only.
+static class SculptProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+    static readonly Regex HashEcho = new(pattern: @"sha256 ([0-9a-f]{12})", options: RegexOptions.Compiled);
+
+    public static int RunSculpt(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 300, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === sculpt (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === sculpt (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] sculpt proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-sculpt");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var previewPath = ShotPath(pid: pid, tag: tag, name: "preview");
+        var stampPath = ShotPath(pid: pid, tag: tag, name: "stamp");
+        var motionAPath = ShotPath(pid: pid, tag: tag, name: "motion-a");
+        var motionBPath = ShotPath(pid: pid, tag: tag, name: "motion-b");
+        var recolorAPath = ShotPath(pid: pid, tag: tag, name: "recolor-a");
+        var recolorBPath = ShotPath(pid: pid, tag: tag, name: "recolor-b");
+        var stillAPath = ShotPath(pid: pid, tag: tag, name: "still-a");
+        var stillBPath = ShotPath(pid: pid, tag: tag, name: "still-b");
+        var savedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-1.world.json");
+        var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-2.world.json");
+        // The carrier fixture is proof-authored (no external content enters a World proof): it exists
+        // ONLY to prove the cameras/behavior/extensions members survive a sculpt round-trip.
+        var carrierFixture = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-carrier.creation.json");
+
+        File.WriteAllText(path: carrierFixture, contents: CarrierCreationJson);
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, roster to seat 1, zero census, and the editor camera at a fixed
+            // vantage over empty grass BEFORE the bench opens (the workbench orbit seeds from this pose, so the
+            // preview/stamp shots share one deterministic camera).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-grass");
+
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            // (a) SCULPT FROM NOTHING: open the bench on empty grass, control-pair the empty bench (an empty model
+            // stamps no geometry), then build a small beacon — primitives, blend, palette, and a posed 2-bone limb.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.new probe-sculpt 0 0 16",
+                expect: "[editor.sculpt.new: seat 1 sculpting 'probe-sculpt'", name: "bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=sculpt page=sculpt 'Sculpt'", name: "bar-flips-to-sculpt-group");
+            Thread.Sleep(millisecondsTimeout: 2200); // let the entry toast decay before the control pair
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-b", path: controlBPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add box", expect: "shape 1 (Box)", name: "add-box");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 1.8 0.7 1.8", expect: "scale=(1.80, 0.70, 1.80)", name: "scale-box");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add sphere 0 1.7 0", expect: "shape 2 (Sphere)", name: "add-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 2.2", expect: "scale=(2.20, 2.20, 2.20)", name: "scale-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.blend smoothunion", expect: "SmoothUnion", name: "blend-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.smooth 0.3", expect: "0.30", name: "smooth-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 0 0.92 0.30 0.18", expect: "slot 0 rgb=(0.92, 0.30, 0.18)", name: "palette-0");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 1 0.20 0.55 0.95 0.4", expect: "slot 1 rgb=(0.20, 0.55, 0.95)", name: "palette-1");
+            // The limb: three capsules off to the side, chained root-to-tip and POSED through the analytic solver
+            // (the solved transforms land in ordinary shapes, so the commit carries the pose).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 0.4 0", expect: "shape 3 (Capsule)", name: "add-limb-root");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 1.4 0", expect: "shape 4 (Capsule)", name: "add-limb-mid");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 2.4 0", expect: "shape 5 (Capsule)", name: "add-limb-tip");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.chain arm 3 4 5 limb", expect: "chain 1 'arm' (limb, 3 shapes)", name: "define-limb");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.goal arm 3.4 1.2 0.6", expect: "goal=(3.40, 1.20, 0.60) — pose re-solved", name: "pose-goal");
+
+            // (b) THE TWO UNDO DOMAINS, mid-sculpt: a nudge + local undo restores the exact position while the world
+            // journal never moves; world.undo remains the journal's verb (asserted after commit below).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 2", expect: "shape 2 (Sphere) at (0.00, 1.70, 0.00)", name: "reselect-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.nudge 0.9 0 0", expect: "at (0.90, 1.70, 0.00)", name: "nudge-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.undo", expect: "local ring — restored", name: "local-undo-restores");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 2", expect: "shape 2 (Sphere) at (0.00, 1.70, 0.00)", name: "local-undo-exact-position");
+            passed &= ComposedShotKit.Check(name: "local-ring-never-touches-journal", ok: (ReadDirty(ctx: ctx, name: "dirty-mid-sculpt") == dirty0), detail: "dirty unchanged across sculpt edits + local undo");
+
+            // (c) THE PREVIEW in pixels, then COMMIT: one canonicalized UpsertCreation with the hash echo.
+            Thread.Sleep(millisecondsTimeout: 3400); // let toasts decay: the preview shot reads geometry only
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "preview-shot", path: previewPath);
+
+            var commitMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-sculpt' applied]", name: "commit-applies");
+
+            var commitEcho = ComposedShotKit.Await(collector: ctx.Collector, mark: commitMark,
+                predicate: l => (l.Contains(value: "[editor.sculpt.commit: seat 1 'probe-sculpt'") && HashEcho.IsMatch(input: l)), deadlineSeconds: 15.0);
+            var commitHash = ((commitEcho is not null) ? HashEcho.Match(input: commitEcho).Groups[1].Value : null);
+
+            passed &= ComposedShotKit.Check(name: "commit-echoes-canonical-hash", ok: (commitHash is not null), detail: (commitHash ?? "(no hash echo)"));
+            passed &= ComposedShotKit.Check(name: "commit-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-commit") == (dirty0 + 1)), detail: "commit = one journal entry");
+
+            // The world's creation catalog pins the SAME canonical hash and stamp cost the commit echoed.
+            if (commitHash is not null) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.creations", expect: $"probe-sculpt: 5 stamp shapes sha256 {commitHash}", name: "catalog-pins-commit-hash");
+            }
+
+            // (d) STAMP = PREVIEW, byte-for-byte in pixels: close the bench (the preview vanishes; the camera holds
+            // its trailing pose), stamp the committed row at the EXACT bench transform, and demand the stamp shot
+            // repaint the preview shot's pixels to the noise floor — same document, same transform, same emission.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-sculpt'", name: "bench-closes");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-sculpt","creationId":"probe-sculpt","position":[0,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-sculpt' applied]", name: "stamp-at-bench-origin");
+            Thread.Sleep(millisecondsTimeout: 3400); // change shimmer + toast decay
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "stamp-shot", path: stampPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var preview = ComposedShotKit.DecodePng(path: previewPath);
+            var stamp = ComposedShotKit.DecodePng(path: stampPath);
+            // The identity band: center-right, clear of the editor HUD (top-left), the binding bar (bottom), the
+            // toast strip (top edge), AND the default world's capture-fed screen slab (a LIVE desktop feed at the
+            // frame's right-middle under this vantage — measured at x 0.68..0.76, y 0.50..0.72 — which would leak
+            // real-time desktop change into a determinism band). The sculpt fills the frame center under the
+            // pivot-locked orbit camera.
+            var bandX = (int)(width * 0.46);
+            var bandY = (int)(height * 0.15);
+            var bandW = (int)(width * 0.28);
+            var bandH = (int)(height * 0.27);
+            var noise = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var previewDiff = MeanAbsDiff(a: preview, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var identityDiff = MeanAbsDiff(a: stamp, b: preview, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "preview-visible",
+                ok: ((previewDiff > 0.8) && (previewDiff > (noise * 4.0))),
+                detail: $"preview band diff {previewDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x noise)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "stamp-equals-preview-pixels",
+                // The stamp must repaint the preview's band at the static noise floor: a generous absolute ceiling
+                // plus a relative guard against the preview's own repaint magnitude.
+                ok: ((identityDiff < Math.Max(val1: (noise * 4.0), val2: 0.45)) && (identityDiff < (previewDiff * 0.10))),
+                detail: $"stamp-vs-preview band diff {identityDiff.ToString(format: "F2", provider: ProofApp.Inv)} (noise {noise.ToString(format: "F2", provider: ProofApp.Inv)}, preview repaint {previewDiff.ToString(format: "F2", provider: ProofApp.Inv)})"
+            );
+
+            // Post-commit undo is the JOURNAL's domain: world.undo drops the stamp placement (the last entry).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1", name: "world-undo-is-journal-domain");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-sculpt","creationId":"probe-sculpt","position":[0,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-sculpt' applied]", name: "restamp-after-undo");
+
+            // (e) A FRAMED TIMELINE sculpted from nothing (four vertical-bounce holds — four frames is the
+            // robust shot scheme at the FIXED 8-tick replay cadence: a ~700 ms shot gap crosses 5..7 holds, and any
+            // of those counts mod 4 is nonzero, so the second shot ALWAYS lands a different frame index; a
+            // 2-frame loop can land the same frame on an even crossing count).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-motion-grass");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.new probe-motion 12 0 16",
+                expect: "[editor.sculpt.new: seat 1 sculpting 'probe-motion'", name: "motion-bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add sphere 0 1.6 0", expect: "shape 1 (Sphere)", name: "motion-add-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 2.4", expect: "scale=(2.40, 2.40, 2.40)", name: "motion-scale-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 1/1 recorded", name: "record-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/1 (rest)", name: "back-to-rest-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 2.5 0", expect: "at (0.00, 2.50, 0.00)", name: "pose-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 2/2 recorded", name: "record-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/2 (rest)", name: "back-to-rest-f3");
+            // Every frame pose is DISTINCT (a repeated pose would let a frame-delta that maps it onto its twin
+            // render two identical shots and fake a stall).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 3.2 0", expect: "at (0.00, 3.20, 0.00)", name: "pose-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 3/3 recorded", name: "record-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/3 (rest)", name: "back-to-rest-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 0.9 0", expect: "at (0.00, 0.90, 0.00)", name: "pose-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 4/4 recorded", name: "record-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "motion-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "motion-bench-closes");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-motion","creationId":"probe-motion","position":[12,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-motion' applied]", name: "stamp-motion");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "motion-shot-a", path: motionAPath);
+            Thread.Sleep(millisecondsTimeout: 700); // crosses the 8-tick hold cadence: a different frame lands
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "motion-shot-b", path: motionBPath);
+
+            var motionA = ComposedShotKit.DecodePng(path: motionAPath);
+            var motionB = ComposedShotKit.DecodePng(path: motionBPath);
+            var motion = MeanAbsDiff(a: motionB, b: motionA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var cornerStill = MeanAbsDiff(a: motionB, b: motionA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
+
+            passed &= ComposedShotKit.Check(
+                name: "sculpted-timeline-animates",
+                ok: ((motion > 0.8) && (motion > (cornerStill * 4.0))),
+                detail: $"motion band {motion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x)"
+            );
+
+            // (f) LIVE REFRESH of the animated placement, twice over: a re-sculpted PALETTE (a content/hash change —
+            // the animator recreates the replay; the stamp keeps animating in its new skin), then FRAME DELETION
+            // (the row goes static — the replay releases and the motion STOPS). Both land through ordinary commits.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-motion 12 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-motion'", name: "reopen-motion");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 0 0.95 0.90 0.10", expect: "slot 0 rgb=(0.95, 0.90, 0.10)", name: "recolor-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "recolor-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "recolor-bench-closes");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "recolor-shot-a", path: recolorAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "recolor-shot-b", path: recolorBPath);
+
+            var recolorA = ComposedShotKit.DecodePng(path: recolorAPath);
+            var recolorB = ComposedShotKit.DecodePng(path: recolorBPath);
+            var recolorMotion = MeanAbsDiff(a: recolorB, b: recolorA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "recreated-replay-still-animates",
+                ok: ((recolorMotion > 0.8) && (recolorMotion > (cornerStill * 4.0))),
+                detail: $"post-recolor motion band {recolorMotion.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 — the hash-diff recreate kept the timeline live)"
+            );
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-motion 12 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-motion'", name: "reopen-motion-again");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 1", expect: "frame 1/4", name: "cursor-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 3 left", name: "delete-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 2 left", name: "delete-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 1 left", name: "delete-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 0 left", name: "delete-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "static-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "static-bench-closes");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "still-shot-a", path: stillAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "still-shot-b", path: stillBPath);
+
+            var stillA = ComposedShotKit.DecodePng(path: stillAPath);
+            var stillB = ComposedShotKit.DecodePng(path: stillBPath);
+            var stillness = MeanAbsDiff(a: stillB, b: stillA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "released-replay-stops-moving",
+                ok: ((stillness < Math.Max(val1: (noise * 4.0), val2: 0.45)) && ((motion <= 0) || (stillness < (motion * 0.10)))),
+                detail: $"post-release stillness {stillness.ToString(format: "F2", provider: ProofApp.Inv)} vs prior motion {motion.ToString(format: "F2", provider: ProofApp.Inv)} — the frames-deleted commit released the replay live"
+            );
+
+            // (g) THE CARRIER: cameras/behavior/extensions members survive a full sculpt
+            // round-trip — import, re-sculpt one nudge, commit; the saved world must still carry them verbatim.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {carrierFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-carrier' applied]", name: "import-carrier");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-carrier 20 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-carrier'", name: "carrier-bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 1", expect: "shape 1", name: "carrier-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.nudge 0.3 0 0", expect: "at (0.60, 0.90, 0.00)", name: "carrier-nudge");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-carrier' applied]", name: "carrier-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-carrier'", name: "carrier-bench-closes");
+
+            // (h) THE EASEL: a bench camera + an existing screen row re-pointed at its view — the first composed
+            // diegetic surface. Asserted over the live reconcile echo, the same mechanism editor-cameras proves; a
+            // fresh bench is opened for it and closed after.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-sculpt 0 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-sculpt'", name: "easel-bench-opens");
+
+            var easelMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.easel",
+                expect: "camera 'easel-1' + screen 0 re-pointed", name: "easel-authors");
+
+            var easelBound = ComposedShotKit.Await(collector: ctx.Collector, mark: easelMark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 showing camera 'easel-1']"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "easel-screen-binds-live", ok: (easelBound is not null), detail: (easelBound?.Trim() ?? "(no live screen bind echo)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.screens", expect: "0 view bound", name: "easel-screen-listed");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-sculpt'", name: "easel-bench-closes");
+
+            // (i) SAVE the furnished world for the ouroboros; the carrier's opaque members must persist verbatim.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {savedPath}", expect: "[world.save:", name: "save-sculpted-world");
+
+            var savedJson = File.ReadAllText(path: savedPath);
+
+            passed &= ComposedShotKit.Check(name: "carried-cameras-persist", ok: savedJson.Contains(value: "\"cameras\""), detail: "saved world carries the creation's cameras member");
+            passed &= ComposedShotKit.Check(name: "carried-behavior-persists", ok: savedJson.Contains(value: "\"swim\""), detail: "saved world carries the swim locomotion");
+            passed &= ComposedShotKit.Check(name: "carried-extension-persists", ok: savedJson.Contains(value: "proofExtension"), detail: "saved world carries the unknown extension member");
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "sculpt-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: previewPath);
+            ComposedShotKit.TryDelete(path: stampPath);
+            ComposedShotKit.TryDelete(path: motionAPath);
+            ComposedShotKit.TryDelete(path: motionBPath);
+            ComposedShotKit.TryDelete(path: recolorAPath);
+            ComposedShotKit.TryDelete(path: recolorBPath);
+            ComposedShotKit.TryDelete(path: stillAPath);
+            ComposedShotKit.TryDelete(path: stillBPath);
+            ComposedShotKit.TryDelete(path: carrierFixture);
+        }
+
+        // (j) THE OUROBOROS: reload the sculpted save and save again — byte identity proves the sculpted embeds
+        // (posed chains, carried members, the recomputed hash pins) are stable end to end.
+        passed &= RunReloadOuroboros(exe: exe, repoRoot: repoRoot, backend: backend, savedPath: savedPath, resavedPath: resavedPath, exitAfterSeconds: exitAfterSeconds);
+        ComposedShotKit.TryDelete(path: savedPath);
+        ComposedShotKit.TryDelete(path: resavedPath);
+
+        return passed;
+    }
+
+    static bool RunReloadOuroboros(string exe, string repoRoot, string? backend, string savedPath, string resavedPath, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: 640, height: 480, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savedPath]);
+        var process = ctx.Process;
+        var passed = true;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 3 placements 2", name: "reload-carries-sculpted-rows");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-sculpted-world");
+        }
+        finally {
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        if (!passed) {
+            return false;
+        }
+
+        var savedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: savedPath)));
+        var resavedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: resavedPath)));
+
+        return ComposedShotKit.Check(
+            name: "sculpt-ouroboros-byte-stable",
+            ok: string.Equals(a: savedHash, b: resavedHash, comparisonType: StringComparison.Ordinal),
+            detail: $"sha256 {savedHash[..12]} vs {resavedHash[..12]}"
+        );
+    }
+
+    // THE CARRIER — two shapes plus the members the sculpt model must carry verbatim: an
+    // anchored camera eye, a swim/face behavior manifest, and an unknown extension section. Proof-authored.
+    const string CarrierCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-carrier",
+          "shapes": [
+            { "id": 1, "type": "Ellipsoid", "position": { "x": 0.3, "y": 0.9, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.6, "y": 1.0, "z": 1.0 }, "material": 0 },
+            { "id": 2, "type": "Sphere", "position": { "x": 1.1, "y": 0.9, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 0.6, "y": 0.6, "z": 0.6 }, "material": 1 }
+          ],
+          "cameras": [
+            { "id": 1, "shapeId": 2, "position": { "x": 0.2, "y": 0.1, "z": 0 }, "yaw": 15, "fov": 70, "feed": "carrier-eye" }
+          ],
+          "behavior": { "locomotion": "swim", "faces": [ { "name": "face", "shapeId": 1, "defaultSource": "named:emotes" } ] },
+          "proofExtension": { "keeper": "round-trip witness" }
+        }
+        """;
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-{name}.png");
+    }
+
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Sends world.status and parses the journal dirty counter (the stdin barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+}
+
+// ============================================================================================
+// AUDIO — the audio document-side proof: the audio sections (speakers/tunes/patches/audio),
+// emission facets, creation sounds, the hash pins, the validator rejection table, the
+// no-cascade guards, undo/grants rounds, the audio.emitters derivation listing, and the
+// ouroboros with audio sections. Session/console machinery lives in ComposedShotKit.
+// ============================================================================================
+static class AudioProof {
+    static readonly Regex CanonicalSha = new(options: RegexOptions.Compiled, pattern: @"canonical sha256 '([0-9a-f]{64})'");
+    static readonly Regex DirtyEcho = new(options: RegexOptions.Compiled, pattern: @"\[world\.status:.*dirty (\d+) undoable");
+
+    const string ChirpDoc = """{"schema":"puck.synth.v1","oscillator":"Pulse","pitchMillihertz":1320000,"durationFrames":9600}""";
+    const string DroneDoc = """{"schema":"puck.synth.v1","oscillator":"Noise","polynomial":40,"pitchMillihertz":1000}""";
+    const string JingleDoc = """{"schema":"puck.audio.v1","name":"jingle"}""";
+    const string StatueDoc = """{"schema":"puck.creation.v1","name":"statue","shapes":[{"id":1,"type":"Sphere","position":{"x":0,"y":0.6,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1},"scale":{"x":1,"y":1,"z":1}}],"behavior":{"locomotion":"hover","sounds":[{"name":"hum","shapeId":1,"patch":{"schema":"puck.synth.v1","oscillator":"Sine","pitchMillihertz":220000},"level":1,"radius":6}]}}""";
+
+    // THE CUE TABLE: the full audio-defaults row re-asserted with cue rows — drone everywhere (a looping
+    // patch takes the 2 s transient cap, a reliable polling window), covering all three placements. Compact JSON
+    // (the console tokenizer rule).
+    const string CueTableLine =
+        """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","gainThousandths":800,"placement":"at-site"},{"event":"grant.denied","patchId":"drone","placement":"listener"},{"event":"player.footstep","patchId":"drone","gainThousandths":500,"placement":"at-site"},{"event":"screen.fault","patchId":"drone","placement":"listener"},{"event":"screen.boot","patchId":"drone","placement":"emitter:left"}]}""";
+    // The (b) boulder row resubmitted VERBATIM: the applied echo fires the mutation.applied cue while the document
+    // stays byte-identical (the later save/pin sees no drift from this round).
+    const string BoulderResubmitLine =
+        """world.scene.row.set {"$type":"boulder","id":"boulder-1","center":[-1.2,0.72,-0.3],"emission":{"patchId":"chirp","level":1,"radius":8},"radius":0.9,"smooth":0.5}""";
+
+    // The fresh-boot derivation pin (session B): stable ids in document order — the whole listing, byte-for-byte.
+    const string ExpectedEmittersAfterReboot =
+        "[audio.emitters: 1 speaker:left point tune:jingle left gain=1 min=0 max=8" +
+        " | 2 speaker:right point tune:jingle right gain=1 min=0 max=8" +
+        " | 3 speaker:wind bed synth:drone mix gain=0.7 min=2 max=5" +
+        " | 4 speaker:hand-bell point synth:chirp mix gain=1 min=0 max=8" +
+        " | 5 speaker:statue-voice point synth:chirp mix gain=1 min=0 max=8" +
+        " | 6 scene:boulder-1 point synth:chirp mix gain=1 min=0 max=8" +
+        " | 7 placement:statue-1 point synth:drone mix gain=0.5 min=0 max=8" +
+        " | 8 sound:statue-1:hum point synth:sound:statue-1:hum mix gain=1 min=0 max=6]";
+
+    public static int RunAudio(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 2;
+        }
+
+        var pid = Environment.ProcessId;
+        var savePath = Path.Combine(Path.GetTempPath(), $"puck-world-audio-{pid}.world.json");
+        var resavePath = Path.Combine(Path.GetTempPath(), $"puck-world-audio-resave-{pid}.world.json");
+        var passed = true;
+
+        try {
+            passed &= SessionA(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savePath: savePath);
+            passed &= (File.Exists(path: savePath)
+                ? SessionB(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savePath: savePath, resavePath: resavePath)
+                : ComposedShotKit.Check(name: "session-b", ok: false, detail: $"{savePath} was never written"));
+        }
+        finally {
+            ComposedShotKit.TryDelete(path: savePath);
+            ComposedShotKit.TryDelete(path: resavePath);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] audio proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool SessionA(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string savePath) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: ctx.Process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: ctx.Process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            Console.WriteLine(value: "[proof] === audio (a): the hash-pin handshake — a bogus pin rejects loudly naming the canonical sha256 ===");
+
+            var chirpHash = ProbeCanonicalHash(ctx: ctx, name: "patch-pin-rejects", line: WithHash(verb: "world.patch.set", id: "chirp", doc: ChirpDoc, hash: "0"), rejectNeedle: "UpsertPatch 'chirp'");
+            var droneHash = ProbeCanonicalHash(ctx: ctx, name: "patch-pin-rejects-drone", line: WithHash(verb: "world.patch.set", id: "drone", doc: DroneDoc, hash: "0"), rejectNeedle: "UpsertPatch 'drone'");
+            var jingleHash = ProbeCanonicalHash(ctx: ctx, name: "tune-pin-rejects", line: WithHash(verb: "world.tune.set", id: "jingle", doc: JingleDoc, hash: "0"), rejectNeedle: "UpsertTune 'jingle'");
+            var statueHash = ProbeCanonicalHash(ctx: ctx, name: "creation-pin-rejects", line: WithHash(verb: "world.creation.set", id: "statue", doc: StatueDoc, hash: "0"), rejectNeedle: "UpsertCreation 'statue'");
+
+            passed &= ((chirpHash is not null) && (droneHash is not null) && (jingleHash is not null) && (statueHash is not null));
+            passed &= ExpectDirty(ctx: ctx, name: "pins-changed-nothing", dirty: 0);
+
+            if (!passed) {
+                return false;
+            }
+
+            Console.WriteLine(value: "[proof] === audio (b): authoring the furnished set — every $type, all source kinds, facets, a sound-bearing creation ===");
+            passed &= Mutate(ctx: ctx, name: "patch-chirp", line: WithHash(verb: "world.patch.set", id: "chirp", doc: ChirpDoc, hash: chirpHash!), needle: "[world.mutation: UpsertPatch 'chirp' applied]", dirty: 1);
+            passed &= Mutate(ctx: ctx, name: "patch-drone", line: WithHash(verb: "world.patch.set", id: "drone", doc: DroneDoc, hash: droneHash!), needle: "[world.mutation: UpsertPatch 'drone' applied]", dirty: 2);
+            passed &= Mutate(ctx: ctx, name: "tune-jingle", line: WithHash(verb: "world.tune.set", id: "jingle", doc: JingleDoc, hash: jingleHash!), needle: "[world.mutation: UpsertTune 'jingle' applied]", dirty: 3);
+            passed &= Mutate(ctx: ctx, name: "speaker-left", line: """world.speaker.set {"$type":"fixed","name":"left","position":[-1.5,1,0],"feed":{"source":{"$type":"tune","tuneId":"jingle"},"channel":"left","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'left' applied]", dirty: 4);
+            passed &= Mutate(ctx: ctx, name: "speaker-right", line: """world.speaker.set {"$type":"fixed","name":"right","position":[1.5,1,0],"feed":{"source":{"$type":"tune","tuneId":"jingle"},"channel":"right","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'right' applied]", dirty: 5);
+            passed &= Mutate(ctx: ctx, name: "speaker-wind-bed", line: """world.speaker.set {"$type":"bed","name":"wind","center":[0,0,-6],"radius":5,"innerRadius":2,"feed":{"source":{"$type":"synth","patchId":"drone"},"channel":"mix","gain":0.7}}""", needle: "[world.mutation: UpsertSpeaker 'wind' applied]", dirty: 6);
+            passed &= Mutate(ctx: ctx, name: "speaker-leaf-anchor", line: """world.speaker.set {"$type":"anchored","name":"hand-bell","anchor":{"$type":"entityLeaf","index":0,"leaf":"left-hand"},"offset":[0,0.1,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'hand-bell' applied]", dirty: 7);
+            passed &= Mutate(ctx: ctx, name: "scene-emission-facet", line: """world.scene.row.set {"$type":"boulder","id":"boulder-1","center":[-1.2,0.72,-0.3],"emission":{"patchId":"chirp","level":1,"radius":8},"radius":0.9,"smooth":0.5}""", needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 8);
+            passed &= Mutate(ctx: ctx, name: "audio-defaults", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1"}""", needle: "[world.mutation: SetAudioDefaults applied]", dirty: 9);
+            passed &= Mutate(ctx: ctx, name: "creation-with-sounds", line: WithHash(verb: "world.creation.set", id: "statue", doc: StatueDoc, hash: statueHash!), needle: "[world.mutation: UpsertCreation 'statue' applied]", dirty: 10);
+            passed &= Mutate(ctx: ctx, name: "placement-with-emission", line: """world.placement.set {"id":"statue-1","creationId":"statue","position":[0,0,3],"yawDegrees":0,"scale":1,"emission":{"patchId":"drone","level":0.5}}""", needle: "[world.mutation: UpsertPlacement 'statue-1' applied]", dirty: 11);
+            passed &= Mutate(ctx: ctx, name: "speaker-placement-anchor", line: """world.speaker.set {"$type":"anchored","name":"statue-voice","anchor":{"$type":"placement","placementId":"statue-1","shapeId":1},"offset":[0,0.25,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'statue-voice' applied]", dirty: 12);
+
+            var emitters = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            passed &= ComposedShotKit.Check(name: "derivation-covers-every-family", ok: ((emitters is not null)
+                && emitters.Contains(value: "speaker:left point tune:jingle left")
+                && emitters.Contains(value: "speaker:wind bed synth:drone mix")
+                && emitters.Contains(value: "speaker:hand-bell point synth:chirp mix")
+                && emitters.Contains(value: "speaker:statue-voice point synth:chirp mix")
+                && emitters.Contains(value: "scene:boulder-1 point synth:chirp mix")
+                && emitters.Contains(value: "placement:statue-1 point synth:drone mix")
+                && emitters.Contains(value: "sound:statue-1:hum point synth:sound:statue-1:hum mix")), detail: (emitters?.Trim() ?? "(no audio.emitters echo)"));
+
+            Console.WriteLine(value: "[proof] === audio (c): the validator rejection table — each loud, the document unchanged ===");
+            passed &= Reject(ctx: ctx, name: "unknown-patch", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"nope"},"channel":"mix","gain":1}}""", needle: "names no patch row");
+            passed &= Reject(ctx: ctx, name: "unknown-tune", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"tune","tuneId":"nope"},"channel":"mix","gain":1}}""", needle: "names no tune row");
+            passed &= Reject(ctx: ctx, name: "undeclared-screen", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"machine","screenIndex":99},"channel":"mix","gain":1}}""", needle: "names no declared screen");
+            passed &= Reject(ctx: ctx, name: "bad-leaf-token", line: """world.speaker.set {"$type":"anchored","name":"bad","anchor":{"$type":"entityLeaf","index":0,"leaf":"tail"},"offset":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "names no humanoid role");
+            passed &= Reject(ctx: ctx, name: "unknown-placement-anchor", line: """world.speaker.set {"$type":"anchored","name":"bad","anchor":{"$type":"placement","placementId":"ghost"},"offset":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "names no placement row");
+            passed &= Reject(ctx: ctx, name: "bed-radius-rule", line: """world.speaker.set {"$type":"bed","name":"bad","center":[0,0,0],"radius":5,"innerRadius":5,"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "less than radius");
+            passed &= Reject(ctx: ctx, name: "gain-ceiling", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":99}}""", needle: "must be within [0, 8]");
+            passed &= Reject(ctx: ctx, name: "bad-channel", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"middle","gain":1}}""", needle: "must be 'mix', 'left', or 'right'");
+            passed &= Reject(ctx: ctx, name: "bogus-listener", line: """world.audio.set {"masterGain":1,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"moon"}""", needle: "is not 'focus', 'seat:<n>', or a declared camera name");
+            passed &= Reject(ctx: ctx, name: "facet-unknown-patch", line: """world.scene.row.set {"$type":"boulder","id":"boulder-2","center":[0.6,0.88,0.5],"emission":{"patchId":"nope","level":1},"radius":1.1,"smooth":0.5}""", needle: "names no patch row");
+            passed &= ExpectDirty(ctx: ctx, name: "rejections-changed-nothing", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (d): the no-cascade guards name their dependents ===");
+            passed &= Reject(ctx: ctx, name: "tune-remove-guard", line: "world.tune.remove jingle", needle: "feeds speaker(s) 'left', 'right'");
+            passed &= Reject(ctx: ctx, name: "patch-remove-guard", line: "world.patch.remove drone", needle: "referenced by speaker(s) 'wind', placement 'statue-1'");
+            passed &= Reject(ctx: ctx, name: "placement-remove-guard", line: "world.placement.remove statue-1", needle: "anchors speaker(s) 'statue-voice'");
+            passed &= ExpectDirty(ctx: ctx, name: "guards-changed-nothing", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (e): undo + grants rounds ===");
+            passed &= Mutate(ctx: ctx, name: "undo-drops-speaker", line: "world.undo", needle: "[world.undo: dropped 1, 11 remaining]", dirty: 11);
+
+            var afterUndo = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            passed &= ComposedShotKit.Check(name: "undo-leaves-derivation", ok: ((afterUndo is not null) && !afterUndo.Contains(value: "statue-voice")), detail: ((afterUndo is null) ? "(no echo)" : "statue-voice departed the derivation"));
+            passed &= Mutate(ctx: ctx, name: "speaker-reapplied", line: """world.speaker.set {"$type":"anchored","name":"statue-voice","anchor":{"$type":"placement","placementId":"statue-1","shapeId":1},"offset":[0,0.25,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'statue-voice' applied]", dirty: 12);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-speakers-section");
+            passed &= Reject(ctx: ctx, name: "denied-without-grant", line: "world.speaker.remove wind", needle: "cannot mutate section:speakers", rejectPrefix: "[world.grant denied:");
+            passed &= ExpectDirty(ctx: ctx, name: "denial-changed-nothing", dirty: 12);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant console mutate section:speakers", expect: "[world.grant: console mutate section:speakers]", name: "regrant-speakers-section");
+            passed &= Mutate(ctx: ctx, name: "applies-after-regrant", line: "world.speaker.remove wind", needle: "[world.mutation: RemoveSpeaker 'wind' applied]", dirty: 13);
+            passed &= Mutate(ctx: ctx, name: "undo-restores-wind", line: "world.undo", needle: "[world.undo: dropped 1, 12 remaining]", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (f): THE CUE TABLE — world events tie to sound as data ===");
+            passed &= Mutate(ctx: ctx, name: "cue-table-applies", line: CueTableLine, needle: "[world.mutation: SetAudioDefaults applied]", dirty: 13);
+
+            var idleState = AwaitEcho(ctx: ctx, line: "speaker.state", needle: "[speaker.state:");
+
+            passed &= ComposedShotKit.Check(name: "cues-idle-before-any-event", ok: ((idleState is not null) && idleState.Contains(value: "cues 0")), detail: (idleState?.Trim() ?? "(no speaker.state echo)"));
+            passed &= Mutate(ctx: ctx, name: "mutation-fires-cue", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 14);
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "mutation-applied-cue-lands", needle: "cue:mutation.applied=drone");
+
+            Console.WriteLine(value: "[proof] === audio (g): the cue validator table — each loud, the document unchanged ===");
+            passed &= Reject(ctx: ctx, name: "cue-bad-token", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"volcano.erupts","patchId":"drone","placement":"listener"}]}""", needle: "is not a published cue event token");
+            passed &= Reject(ctx: ctx, name: "cue-unknown-patch", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"nope","placement":"listener"}]}""", needle: "names no patch row");
+            passed &= Reject(ctx: ctx, name: "cue-unknown-emitter", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","placement":"emitter:ghost"}]}""", needle: "names no declared speaker");
+            passed &= Reject(ctx: ctx, name: "cue-bad-placement", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","placement":"sideways"}]}""", needle: "must be 'at-site', 'listener', or 'emitter:");
+            passed &= Reject(ctx: ctx, name: "cue-gain-ceiling", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","gainThousandths":9001,"placement":"listener"}]}""", needle: "must be within [0, 8000]");
+            passed &= ExpectDirty(ctx: ctx, name: "cue-rejections-changed-nothing", dirty: 14);
+
+            Console.WriteLine(value: "[proof] === audio (h): the cue producers — denial, footsteps, the binder fault lane ===");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-for-denied-cue");
+            passed &= Reject(ctx: ctx, name: "denied-mutation-rejects", line: "world.speaker.remove wind", needle: "cannot mutate section:speakers", rejectPrefix: "[world.grant denied:");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "grant-denied-cue-lands", needle: "cue:grant.denied=drone");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant console mutate section:speakers", expect: "[world.grant: console mutate section:speakers]", name: "regrant-after-denied-cue");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 1.5", expect: "[player.run:", name: "walk-for-footsteps");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "footstep-cues-advance", needle: "cue:player.footstep=drone");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.stop 1", expect: "[player.stop:", name: "walk-stops");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.insert 0 {Path.Combine(path1: Path.GetTempPath(), path2: "puck-audio-missing.gb")}", expect: "[screen.insert:", name: "insert-missing-content");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "screen-fault-cue-lands", needle: "cue:screen.fault=drone");
+            passed &= ExpectDirty(ctx: ctx, name: "producers-changed-nothing", dirty: 14);
+
+            Console.WriteLine(value: "[proof] === audio (i): speakers through the editor — select, drag, undo, the numeric twins ===");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "editor-enters");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers left", expect: "speakers 'left'", name: "speaker-selects");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab 1", expect: "dragging speakers 'left'", name: "speaker-grabs");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1 speaker 'left'", name: "speaker-drags");
+            passed &= Mutate(ctx: ctx, name: "speaker-release-commits", line: "editor.release 1", needle: "[world.mutation: UpsertSpeaker 'left' applied]", dirty: 15);
+            passed &= Mutate(ctx: ctx, name: "speaker-drag-undoes", line: "world.undo", needle: "[world.undo: dropped 1, 14 remaining]", dirty: 14);
+            passed &= Mutate(ctx: ctx, name: "speaker-place-verb", line: "editor.speaker.place probe synth:chirp 4", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 15);
+            passed &= Mutate(ctx: ctx, name: "speaker-gain-verb", line: "editor.speaker.gain probe 0.5", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 16);
+            passed &= Mutate(ctx: ctx, name: "speaker-delete-verb", line: "editor.speaker.delete probe", needle: "[world.mutation: RemoveSpeaker 'probe' applied]", dirty: 17);
+            passed &= Mutate(ctx: ctx, name: "speaker-verbs-unwind", line: "world.undo 3", needle: "[world.undo: dropped 3, 14 remaining]", dirty: 14);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 1", expect: "[editor.exit: seat 1", name: "editor-exits");
+
+            Console.WriteLine(value: "[proof] === audio (j): the master-volume session lever (the render-levers asymmetry) ===");
+
+            var volumeRead = AwaitEcho(ctx: ctx, line: "world.volume", needle: "[world.volume:");
+
+            passed &= ComposedShotKit.Check(name: "volume-reads-document", ok: ((volumeRead is not null) && volumeRead.Contains(value: "0.8 (document audio.masterGain)")), detail: (volumeRead?.Trim() ?? "(no world.volume echo)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.volume 0.5", expect: "[world.volume: 0.5 (session lever", name: "volume-lever-engages");
+
+            var driftStatus = AwaitEcho(ctx: ctx, line: "world.status", needle: "[world.status:");
+
+            passed &= ComposedShotKit.Check(name: "volume-names-audio-drift", ok: ((driftStatus is not null) && driftStatus.Contains(value: "session-drift audio ")), detail: (driftStatus?.Trim() ?? "(no world.status echo)"));
+
+            Console.WriteLine(value: "[proof] === audio (k): world.save compacts the furnished world (cues + the volume fold inside) ===");
+
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: $"world.save {savePath}");
+
+            var saveLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+            passed &= ExpectDirty(ctx: ctx, name: "save-compacts", dirty: 0);
+
+            var savedJson = (File.Exists(path: savePath) ? File.ReadAllText(path: savePath) : string.Empty);
+
+            passed &= ComposedShotKit.Check(name: "save-folds-volume-lever", ok: savedJson.Contains(value: "\"masterGain\": 0.5"), detail: (savedJson.Contains(value: "\"masterGain\": 0.5") ? "audio.masterGain carries the 0.5 lever" : "saved masterGain is not the lever value"));
+            passed &= ComposedShotKit.Check(name: "save-carries-cues", ok: (savedJson.Contains(value: "\"cues\":") && savedJson.Contains(value: "mutation.applied")), detail: "the cue table persisted in the audio section");
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: ctx.Process);
+        }
+
+        return passed;
+    }
+
+    static bool SessionB(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string savePath, string resavePath) {
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === audio (g): relaunch — the fresh-boot derivation pin + the ouroboros with audio sections ===");
+
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savePath]);
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: ctx.Process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: ctx.Process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            var bootLine = ComposedShotKit.Await(collector: ctx.Collector, mark: 0, predicate: l => (l.Contains(value: "[world] definition:") && l.Contains(value: savePath)), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "boots-from-saved-file", ok: (bootLine is not null), detail: (bootLine?.Trim() ?? "(no boot line naming the saved file)"));
+
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var emitters = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            // The collector stamps each line with its elapsed-time prefix, so the byte-exact pin matches the line TAIL.
+            passed &= ComposedShotKit.Check(name: "fresh-boot-derivation-pinned", ok: ((emitters is not null) && emitters.Trim().EndsWith(value: ExpectedEmittersAfterReboot, comparisonType: StringComparison.Ordinal)), detail: (emitters?.Trim() ?? "(no audio.emitters echo)"));
+
+            var speakers = AwaitEcho(ctx: ctx, line: "world.speakers", needle: "[world.speakers:");
+
+            passed &= ComposedShotKit.Check(name: "speakers-listing", ok: ((speakers is not null)
+                && speakers.Contains(value: "left fixed tune:jingle left gain=1")
+                && speakers.Contains(value: "wind bed synth:drone mix gain=0.7")
+                && speakers.Contains(value: "hand-bell anchored synth:chirp mix gain=1")
+                && speakers.Contains(value: "statue-voice anchored synth:chirp mix gain=1")), detail: (speakers?.Trim() ?? "(no world.speakers echo)"));
+
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: $"world.save {resavePath}");
+
+            var saveLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "resave-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+
+            var identical = (File.Exists(path: resavePath) && File.ReadAllBytes(path: savePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: resavePath)));
+
+            passed &= ComposedShotKit.Check(name: "ouroboros-with-audio-sections", ok: identical, detail: (identical ? "save -> reboot -> save byte-identical (cue table + the folded volume lever included)" : "byte mismatch between the two saves"));
+
+            // The folded lever is the REBOOTED document's master gain (the lever itself starts unengaged), and the
+            // persisted cue table still FIRES — the behavioral half of the ouroboros.
+            var volumeRead = AwaitEcho(ctx: ctx, line: "world.volume", needle: "[world.volume:");
+
+            passed &= ComposedShotKit.Check(name: "reboot-wakes-on-folded-volume", ok: ((volumeRead is not null) && volumeRead.Contains(value: "0.5 (document audio.masterGain)")), detail: (volumeRead?.Trim() ?? "(no world.volume echo)"));
+            passed &= Mutate(ctx: ctx, name: "reboot-mutation-applies", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 1);
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "reboot-cue-table-still-fires", needle: "cue:mutation.applied=drone");
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: ctx.Process);
+        }
+
+        return passed;
+    }
+
+    // One inline-JSON asset-row submission: {"id":..,"document":<doc>,"hash":..} — shared by the pin probes (hash "0")
+    // and the real submissions (the harvested canonical hash).
+    static string WithHash(string verb, string id, string doc, string hash) =>
+        (verb + " {\"id\":\"" + id + "\",\"document\":" + doc + ",\"hash\":\"" + hash + "\"}");
+
+    // Submit a *set verb carrying hash "0" and harvest the canonical sha256 the loud rejection names — the pin proven
+    // (a foreign hash never lands) and satisfied (the pipeline's own hash) in one gesture; dirty is unmoved.
+    static string? ProbeCanonicalHash(ComposedShotKit.Ctx ctx, string name, string line, string rejectNeedle) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var rejected = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: "[world.mutation rejected:") && l.Contains(value: rejectNeedle)), deadlineSeconds: 20.0);
+        var match = ((rejected is null) ? null : CanonicalSha.Match(input: rejected));
+        var hash = (((match is not null) && match.Success) ? match.Groups[1].Value : null);
+
+        _ = ComposedShotKit.Check(name: name, ok: (hash is not null), detail: ((hash is not null) ? $"canonical {hash[..12]}... harvested from the loud pin rejection" : (rejected?.Trim() ?? "(no rejection echo)")));
+
+        return hash;
+    }
+
+    // A mutation followed by the barrier-ordered dirty read: the loud needle appeared and the journal length matches.
+    static bool Mutate(ComposedShotKit.Ctx ctx, string name, string line, string needle, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var echoed = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 20.0);
+        var ok = ComposedShotKit.Check(name: name, ok: (echoed is not null), detail: (echoed?.Trim() ?? $"(no '{needle}' echo)"));
+
+        return (ok & ExpectDirty(ctx: ctx, name: $"{name}-dirty", dirty: dirty));
+    }
+
+    // A rejected submission: the loud line carries the needle (validator/guard/grant), and nothing applied.
+    static bool Reject(ComposedShotKit.Ctx ctx, string name, string line, string needle, string rejectPrefix = "[world.mutation rejected:") {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var rejected = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: rejectPrefix) && l.Contains(value: needle)), deadlineSeconds: 20.0);
+
+        return ComposedShotKit.Check(name: name, ok: (rejected is not null), detail: (rejected?.Trim() ?? $"(no '{rejectPrefix} ...{needle}' echo)"));
+    }
+
+    static string? AwaitEcho(ComposedShotKit.Ctx ctx, string line, string needle) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 20.0);
+    }
+
+    // Poll speaker.state for a live transient-cue token: a fired cue registers in the director SYNCHRONOUSLY with
+    // its producing event, but the loudest producers (footsteps mid-run) land between polls — a bounded re-read
+    // keeps the round honest without riding exact TTL timing (drone cues live the 2 s looping cap).
+    static bool AwaitSpeakerCue(ComposedShotKit.Ctx ctx, string name, string needle) {
+        for (var attempt = 0; (attempt < 10); attempt++) {
+            var echo = AwaitEcho(ctx: ctx, line: "speaker.state", needle: "[speaker.state:");
+
+            if ((echo is not null) && echo.Contains(value: needle)) {
+                return ComposedShotKit.Check(name: name, ok: true, detail: $"{needle} live in speaker.state");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: $"'{needle}' never appeared in speaker.state");
+    }
+
+    static bool ExpectDirty(ComposedShotKit.Ctx ctx, string name, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var statusLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => DirtyEcho.IsMatch(input: l), deadlineSeconds: 20.0);
+        var actual = ((statusLine is null) ? -1 : int.Parse(s: DirtyEcho.Match(input: statusLine).Groups[1].Value, provider: ProofApp.Inv));
+
+        return ComposedShotKit.Check(name: name, ok: (actual == dirty), detail: ((statusLine is null) ? "(no world.status echo)" : $"dirty {actual} (want {dirty})"));
     }
 }

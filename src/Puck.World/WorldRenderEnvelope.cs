@@ -14,15 +14,15 @@ namespace Puck.World;
 internal sealed class WorldRenderEnvelope {
     private int m_programWordCapacity;
     private int m_instanceCapacity;
-    private Func<WorldScene, IReadOnlyList<WorldScreen>, (int Words, int Instances)>? m_measure;
+    private Func<WorldDefinition, (int Words, int Instances)>? m_measure;
 
     /// <summary>Records the probed envelope floors and the worst-case program measurer.</summary>
-    /// <param name="programWordCapacity">The probed program-word ceiling (all avatars + the boot scene/screens).</param>
+    /// <param name="programWordCapacity">The probed program-word ceiling (all avatars + the boot scene/screens/placements).</param>
     /// <param name="instanceCapacity">The probed instance ceiling.</param>
-    /// <param name="measure">Measures a candidate scene/screens against the same worst-case avatar build, returning its
-    /// program-word and instance counts.</param>
+    /// <param name="measure">Measures a candidate definition's render-relevant sections (scene, screens, placements +
+    /// their creations) against the same worst-case avatar build, returning its program-word and instance counts.</param>
     /// <exception cref="ArgumentNullException"><paramref name="measure"/> is <see langword="null"/>.</exception>
-    public void Configure(int programWordCapacity, int instanceCapacity, Func<WorldScene, IReadOnlyList<WorldScreen>, (int Words, int Instances)> measure) {
+    public void Configure(int programWordCapacity, int instanceCapacity, Func<WorldDefinition, (int Words, int Instances)> measure) {
         ArgumentNullException.ThrowIfNull(argument: measure);
 
         m_programWordCapacity = programWordCapacity;
@@ -30,19 +30,18 @@ internal sealed class WorldRenderEnvelope {
         m_measure = measure;
     }
 
-    /// <summary>Tests whether a candidate scene/screens fits the probed render envelope.</summary>
-    /// <param name="scene">The candidate static scene.</param>
-    /// <param name="screens">The candidate diegetic screens.</param>
+    /// <summary>Tests whether a candidate definition's render-relevant sections fit the probed render envelope.</summary>
+    /// <param name="candidate">The composed candidate definition.</param>
     /// <param name="reason">On a miss, the loud ceiling reason; empty otherwise.</param>
     /// <returns><see langword="true"/> when the candidate fits (or the envelope is not yet configured).</returns>
-    public bool TryFit(WorldScene scene, IReadOnlyList<WorldScreen> screens, out string reason) {
+    public bool TryFit(WorldDefinition candidate, out string reason) {
         if (m_measure is not { } measure) {
             reason = string.Empty;
 
             return true;
         }
 
-        var (words, instances) = measure(arg1: scene, arg2: screens);
+        var (words, instances) = measure(arg: candidate);
 
         if (words > m_programWordCapacity) {
             reason = $"program words {words} exceed the probed render envelope {m_programWordCapacity}";
