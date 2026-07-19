@@ -4,12 +4,12 @@
 #:property JsonSerializerIsReflectionEnabledByDefault=true
 #:property EnforceCodeStyleInBuild=false
 #:property AnalysisLevel=none
-// audio-device — the AP3 live device smoke, one .NET 10 file-based app:
+// audio-device — the live device smoke, one .NET 10 file-based app:
 //
 //   dotnet run src/Puck.World/scripts/audio-device.cs [--no-build] [--width W] [--height H]
 //
 // STRUCTURAL LIVENESS ONLY — sample content is the offline hash proof's job (audio-mix.cs). Three batteries:
-//   (a) failure paths, in-process (the overlay-envelope pattern): the null platform factory parks the service
+//   (a) failure paths, in-process (the same in-process failure-injection technique overlay-envelope.cs uses): the null platform factory parks the service
 //       'unsupported'; a declining factory degrades silent, counts rebind attempts on the documented cadence, and
 //       stops cleanly without a throw; a mock device that faults mid-stream detaches the mixer, rebinds into a
 //       SECOND device generation (attach observed again), and folds its delivered-frame count into the totals.
@@ -20,8 +20,8 @@
 //       untouched default world mixes SILENCE (peak stays 0). Then the machine-audio path end to end IN THE
 //       SELF-HEAL ORDER — the speaker row lands FIRST (emitters derive, sources stay 0), the cartridge boots
 //       SECOND (screen.insert), and the director's per-frame reconcile binds the late machine without any further
-//       verb: sources goes to 1 and the running peak goes nonzero — the first sound World has ever made. A
-//       screen.boot CUE row (AP4) authored before the insert fires on the boot and reads in speaker.state's live
+//       verb: sources goes to 1 and the running peak goes nonzero. A
+//       screen.boot CUE row authored before the insert fires on the boot and reads in speaker.state's live
 //       transient tail — the one cue producer that needs a real cartridge. Without a device: audio.state reads
 //       silent/rebinding with counted rebinds and the session survives.
 using System.Diagnostics;
@@ -206,7 +206,7 @@ try {
 
         Check("speaker-derives-before-machine", ((derived is { } d) && (d.Emitters >= 1) && (d.Sources == 0) && (d.Peak == 0)), $"emitters={derived?.Emitters} sources={derived?.Sources} peak={derived?.Peak}");
 
-        // The screen.boot CUE row (AP4), authored data-first: a looping patch (the 2 s transient cap keeps the
+        // The screen.boot CUE row, authored data-first: a looping patch (the 2 s transient cap keeps the
         // polling window honest) through the hash-pin boundary — the in-process canonical hash IS the verb's, so
         // the pin lands in one submission — then the cue row bound to the boot event.
         var cueDrone = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(

@@ -4,14 +4,14 @@
 #:property JsonSerializerIsReflectionEnabledByDefault=true
 #:property EnforceCodeStyleInBuild=false
 #:property AnalysisLevel=none
-// audio-mix — the AP1 offline PCM hash proof, one .NET 10 file-based app (no device, no window, no thread):
+// audio-mix — the offline PCM hash proof, one .NET 10 file-based app (no device, no window, no thread):
 //
 //   dotnet run src/Puck.World/scripts/audio-mix.cs
 //
-// Drives WorldAudioMixer.MixBlock tick-synchronously (the same pure core the AP3 device pump will drive): N sim
+// Drives WorldAudioMixer.MixBlock tick-synchronously (the same pure core the live device pump drives): N sim
 // steps at 240 Hz, exactly 200 frames per step, against a scripted pose table — a listener orbit, a stereo pair
-// sharing ONE tune source (the checked-in docs/examples/tunes fixture through a synchronous headless Humble core —
-// the TuneRom.Verify pattern, never QueuedMachineWorker), a moving emitter that enters/leaves its cull radius, an
+// sharing ONE tune source (the checked-in docs/examples/tunes fixture through a synchronous headless Humble core,
+// like TuneRom.Verify, never QueuedMachineWorker), a moving emitter that enters/leaves its cull radius, an
 // ambient bed the orbit crosses, and seeded synth triggers. SHA-256 hashes the concatenated s16 PCM and asserts a
 // second full fresh run reproduces it bit for bit. The hash is SELF-REFERENTIAL per the determinism doctrine: a
 // deliberate mix-law change re-goldens it (re-run, take the new value) — it pins no historical bytes.
@@ -27,13 +27,13 @@
 //   (g) the synth — seeded reproducibility (bit-exact), envelope completion frees the voice, 40 triggers pin at 32
 //       voices (steal-quietest), the SVF low-pass measurably darkens noise, triggers are once-only under
 //       snapshot hold, and the bed fade bounds presence slew;
-//   (h) THE WORLD-DOCUMENT PIPELINE (AP2) — a proof-authored FIXTURE WORLD (every speaker $type, all four source
+//   (h) THE WORLD-DOCUMENT PIPELINE — a proof-authored FIXTURE WORLD (every speaker $type, all four source
 //       kinds, a scene-row + placement emission facet, a sound-bearing creation placed) serialized, reloaded through
 //       the strict loader/validator, derived by WorldAudioDirector (stable ids, arrival triggers, tune
 //       acquire/release hosting), published per step against a scripted listener orbit, and mixed — the
 //       document→derivation→MixBlock→hash pipeline end to end, its own golden PCM hash reproduced across two full
 //       fresh runs;
-//   (i) THE CUE TABLE (AP4/A11b) — a cue-bearing fixture document through the same loader: SubmitCue lands a
+//   (i) THE CUE TABLE — a cue-bearing fixture document through the same loader: SubmitCue lands a
 //       transient emitter AND its trigger in the SAME next snapshot (voice sounds, PCM nonzero), a listener-placed
 //       cue renders center-panned at full gain, the transient expires on its patch-derived TTL (voice released with
 //       the departed emitter), the reserved pool evicts nearest-expiry at capacity, and the whole cue-driven block
@@ -110,7 +110,7 @@ static void BuildSnapshot(WorldAudioSnapshot snapshot, int step, ref ulong seque
         Position: new FixedVector3(X: QRaw(cos.Value * 2), Y: FixedQ4816.Zero, Z: QRaw(sin.Value * 2)),
         Yaw: FixedComplex.FromAngle(angle)));
 
-    // The stereo pair: two rows, one tune source, separation by geometry (plan A7).
+    // The stereo pair: two rows, one tune source, separation by geometry.
     snapshot.TryAddEmitter(new WorldAudioEmitter(
         Id: 1, Kind: WorldAudioEmitterKind.Point, Position: new FixedVector3(X: QRaw(-98304), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
         MinRadius: QRaw(32768), MaxRadius: Q(8), FadeFrames: 0, GainQ16: UnityQ16,
@@ -485,7 +485,7 @@ short[] RenderSynth(WorldVoiceSynth synth, int totalFrames) {
     Check("bed-fade-bounds-presence-slew", (fadedPeak <= 700) && (instantPeak >= 11_000), $"faded peak={fadedPeak} (bound ~683), instant peak={instantPeak}");
 }
 
-// ---- (h) the world-document pipeline (AP2) -----------------------------------------------------------------------
+// ---- (h) the world-document pipeline -----------------------------------------------------------------------------
 Console.WriteLine("[proof] === audio-mix (h): the fixture WORLD DOCUMENT drives derivation -> MixBlock -> hash ===");
 
 {
@@ -625,7 +625,7 @@ Console.WriteLine("[proof] === audio-mix (h): the fixture WORLD DOCUMENT drives 
     }
 }
 
-// ---- (i) the cue table (AP4/A11b) --------------------------------------------------------------------------------
+// ---- (i) the cue table ----------------------------------------------------------------------------------------
 Console.WriteLine("[proof] === audio-mix (i): cues — transient emitters, listener placement, TTL expiry, eviction, determinism ===");
 
 {
@@ -770,8 +770,8 @@ return ((failures == 0) ? 0 : 1);
 
 // ---- the proof's block sources -----------------------------------------------------------------------------------
 
-// The synchronous headless tune host (the TuneRom.Verify pattern): one real Humble core run cycle-exactly inside
-// Pull — never QueuedMachineWorker (its worker thread is the one nondeterministic scheduling element, plan A12).
+// The synchronous headless tune host, like TuneRom.Verify: one real Humble core run cycle-exactly inside
+// Pull — never QueuedMachineWorker (its worker thread is the one nondeterministic scheduling element).
 // The exact-rational cycle accumulator (subtract-not-reset) keeps machine time locked to 48000 with zero drift.
 sealed class TuneSource : IDisposable, Puck.World.Audio.IAudioBlockSource {
     private const long CyclesPerSecond = 4_194_304L;
@@ -786,7 +786,7 @@ sealed class TuneSource : IDisposable, Puck.World.Audio.IAudioBlockSource {
             compose: static services => services.AddHumbleGamingBrickComponents());
         m_sink = m_machine.GetRequiredService<IAudioSink>();
         m_sink.Configure(sampleRate: WorldAudioMixer.SampleRate);
-        // Boot pre-roll: the jukebox reaches its play state within 8 frames (TuneVerify's boot bar); the buffered
+        // Boot pre-roll: the jukebox reaches its play state within 8 frames; the buffered
         // boot audio simply becomes the stream's deterministic head.
         m_machine.Machine.Run(tCycles: (8UL * 70224UL));
     }

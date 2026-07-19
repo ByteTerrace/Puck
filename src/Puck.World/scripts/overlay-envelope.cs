@@ -1,6 +1,6 @@
 #:project ../../Puck.Overlays/Puck.Overlays.csproj
 #:property JsonSerializerIsReflectionEnabledByDefault=true
-// overlay-envelope — the UIE-8 record-envelope proof, one .NET 10 file-based app:
+// overlay-envelope — a one .NET 10 file-based proof app:
 //
 //   dotnet run src/Puck.World/scripts/overlay-envelope.cs
 //

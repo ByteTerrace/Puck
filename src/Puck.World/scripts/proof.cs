@@ -19,15 +19,15 @@
 //   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
 //       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
 //   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 1 exit-bar proofs for the world document (puck.world.def.v1): (a) the ouroboros
+//       The world-document proofs (puck.world.def.v1): (a) the ouroboros
 //       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) round-trips
-//       world.save byte-for-byte, twice over, so a save that now folds session state (§2.1) stays
+//       world.save byte-for-byte, twice over, so a save that folds session state stays
 //       idempotent on a fresh boot; (b) baked-default parity — a checked-in-world run and a
 //       missing-world (baked-default fallback) run of the same short hop corpus compare
 //       byte-identical, and the loud "[world] definition: baked default (...)" line appears only
 //       in the fallback run.
 //   mutate [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 2a exit-bar proof for the mutation vocabulary: (a) a scripted world.kit.tune / world.undo /
+//       The mutation-vocabulary round-trip proof: (a) a scripted world.kit.tune / world.undo /
 //       world.save round-trip over stdin, asserting the journal-length dirty counter at each step and the
 //       server's loud accept/undo lines; (b) rejection honesty — world.kit.remove on the defaultSeatKit is
 //       rejected loudly and the document is unchanged; (c) survival — relaunching with --world <the saved
@@ -35,7 +35,7 @@
 //       protocol-version handshake is proven by the implementing session, not re-covered here (no scripted
 //       Join path exists over stdin without inventing a debug verb).
 //   grants [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 2b exit-bar proof for principals/capability grants (§2.7 criterion 4): (a) world.addon.set mounts an
+//       The principals/capability-grants proof: (a) world.addon.set mounts an
 //       autopilot WorldAddonRow (data-only — the driver mounts enabled addon rows only at BOOT) and world.save writes
 //       it; (b) relaunching --world <the saved file> asserts the "[world.addon: mounted autopilot ...]" boot line,
 //       then world.grant addon:autopilot drive body:<n> exclusive is asserted to move the granted body (two
@@ -43,31 +43,31 @@
 //       "[world.grant denied: ...]" line and that the body then holds perfectly still (two more samples, identical);
 //       (d) denied-mutation honesty — world.revoke console mutate section:kits makes world.kit.tune fail loudly with
 //       world.status's dirty counter unchanged, and re-granting makes the same command apply; (e)/(f) exclusivity in
-//       both orders plus the exclusive-wildcard outright rejection; (g) EXCLUSIVE SECTION ACQUISITION (§D8) — the
+//       both orders plus the exclusive-wildcard outright rejection; (g) EXCLUSIVE SECTION ACQUISITION — the
 //       seeded per-section Mutate defaults never block, so world.grant seat1 mutate section:scene exclusive succeeds
 //       on a default table, the console's scene mutation is then denied at the grant boundary, and revoking the hold
-//       restores it; (h) PROFILE SUBJECT (§D8) — Edit is checked against the concrete profile:<id> subject: the
+//       restores it; (h) PROFILE SUBJECT — Edit is checked against the concrete profile:<id> subject: the
 //       seeded Edit/all wildcard passes, revoking it denies profile.section, and a narrow profile:amber grant
 //       restores exactly amber while cobalt stays denied. (h) writes the player store, so this proof now backs up +
 //       restores the REAL world/ + profiles/ subtrees like the bindings proof (the cleared store reseeds the
 //       deterministic amber/cobalt catalog ids).
 //   bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 3 exit-bar proof for the player document + layered binding resolution (§2.4): (a) session A boots the
+//       The player-document + layered binding-resolution proof (engine default ⊕ world overlay ⊕ profile ⊕ session): (a) session A boots the
 //       REAL local player-document store fresh, asserts the engine-default composed mapping (player.bindings), live-
 //       rebinds keyboard.e -> player.forward (player.bind), and profile.save folds+persists it into the boot profile
 //       (revision bumps, read back through profile.doc); (b) session B relaunches and asserts the rebind survived and
 //       the revision did not bump again on a plain boot; (c) session C boots --world kart-remap.world.json and asserts
 //       the world's bindingOverlays entry merges over the engine default (gamepad.buttonEast -> player.primary), then
-//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized pre-Phase-3
+//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized legacy
 //       puck.world.profiles.v1 profiles.json migrates once at boot (the loud "... retired puck.world.profiles.v1 ..."
 //       line, world/player.json + world/local.json written, profiles/profiles.json deleted, profile.list showing the
-//       migrated names); (e) a synthesized Phase 3 single-file profiles/player.json migrates once at boot the other
+//       migrated names); (e) a synthesized single-file profiles/player.json migrates once at boot the other
 //       migration path (the loud "... Phase 3 single-file layout ..." line, the split world/ layout written,
 //       profiles/player.json deleted). There is no CLI override for the player-document store path (see
-//       WorldProfileStore), so this proof backs up the owner's REAL world/ + profiles/ subtrees (whole directories,
+//       WorldProfileStore), so this proof backs up the REAL world/ + profiles/ subtrees (whole directories,
 //       byte-for-byte) before every session and restores them in a finally — the real catalog is never destroyed.
 //   storage [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 4 exit-bar proof for cloud-readiness (§2.5, local backend only): (a) a fresh boot against the REAL
+//       The cloud-readiness proof, proven against the local backend only: (a) a fresh boot against the REAL
 //       cleared local store asserts storage.status's honest baseline (tier local authoritative/cloud unwired,
 //       identity declined, endpoint none, a present catalog revision + version token), then the cheapest
 //       revision-bumping verb (profile.set speed 7 1) is asserted to bump the revision, change the version token, and
@@ -77,23 +77,23 @@
 //       boot with --user-id not-a-guid asserts the declining echo. Backs up + restores the REAL world/ + profiles/
 //       subtrees exactly like the bindings proof — the real catalog is never destroyed.
 //   expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]
-//       Regenerates the second world reproducibly (Phase 5 §2.6). Boots a baked-default Puck.World, feeds the checked-in
+//       Regenerates the second world reproducibly. Boots a baked-default Puck.World, feeds the checked-in
 //       scripts/expo-world.txt authoring session (a new kit row + retunings + a table policy, a warmer four-pillar scene,
 //       staggered spawns, three asset-free screens) over stdin, then world.save-s to Assets/worlds/expo.world.json
-//       (--out overrides) — the trailing save FOLDS the live render levers + census into the document (§2.1). The
+//       (--out overrides) — the trailing save FOLDS the live render levers + census into the document. The
 //       artifact and this script are the checked-in, reproducible pair; NEVER hand-edit the JSON.
 //   record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]
-//       Native-capture proof (the recording arc). Boots Puck.World (a real GPU window — the tap reads each captured
+//       Native-capture proof. Boots Puck.World (a real GPU window — the tap reads each captured
 //       frame back to CPU pixels through the SDF engine, so a live present surface is required), asserts capture.status
-//       reads idle, capture.start arms a RecordingSession (echoing the codec that landed and any device declines — a
+//       reads idle, capture.start arms a RecordingSession (echoing the negotiated codec and any device declines — a
 //       mic privacy denial is a PASS path), lets ~S seconds of the autonomous crowd move, capture.stop finalizes, and
-//       then walks the produced container: the EBML doc type matches the landed codec (webm for AV1, matroska for the
+//       then walks the produced container: the EBML doc type matches the negotiated codec (webm for AV1, matroska for the
 //       H.264 fallback), the audio track is present (loopback in a headless-ish run may be silence — track presence, not
-//       loudness, is asserted), a video track is present when video landed, the file is non-trivial, and capture.status
+//       loudness, is asserted), a video track is present when video negotiated, the file is non-trivial, and capture.status
 //       reads idle again. --out copies the artifact somewhere for a real player to open. Asserts the overlay row is
-//       present in the recording document used (the capture-only text the owner asked for).
+//       present in the recording document used (the capture-only text).
 //   ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The P1 unified-overlay proof, run on BOTH backends (Direct3D 12 first, then --backend vulkan). Each session
+//       The unified-overlay proof, run on BOTH backends (Direct3D 12 first, then --backend vulkan). Each session
 //       boots, waits for the console, then world.screenshot-s three composed frames over the outermost-decorator
 //       capture chain: (a) console panel ON — its stage region must be visibly SCRIM-DARKENED versus (b) a
 //       world.console off control shot (mean-luminance drop, robust against the moving world beneath); (c) a
@@ -102,7 +102,7 @@
 //       its loud '[world.mutation rejected: ...]' stderr line. Decodes the engine's own PNGs (filter-0 RGBA)
 //       inline; no image dependency.
 //   editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The P2/P3.5 editor-mode proof, run on BOTH backends like ui-floor. Each session boots, asserts the mode
+//       The editor-mode proof, run on BOTH backends like ui-floor. Each session boots, asserts the mode
 //       round trip over stdin (editor.enter/status/exit echoes; the seat's active binding GROUP flips play→editor
 //       and back — a pointer-level switch, editor.status echoes group= + page=; player.control reads idle while
 //       editing and the prior source after), asserts THE REFERENCE CHORD-COMMAND end to end from data
@@ -120,17 +120,17 @@
 //       band must repaint. The roster is pinned to seat 1 first (dev-machine pads auto-seat extra players). Decodes
 //       the engine's own PNGs inline like ui-floor.
 //   editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The P4 camera live-apply proof (§D7 + §CR-6), run on BOTH backends like editor-mode. Each session boots the
+//       The camera live-apply proof, run on BOTH backends like editor-mode. Each session boots the
 //       baked default (two declared View screens → two registered camera views, witnessed by world.view-refresh's
 //       count echo) and asserts: (a) a fixed-camera pose/aim edit applies LIVE — the '[world.camera: ... pose updated
-//       live]' reconcile line, and the retired "applies at next boot" narration must NOT appear; (b) the anchored
+//       live]' reconcile line, and a stale "applies at next boot" narration must NOT appear; (b) the anchored
 //       camera's pose edit takes the same live lane; (c) a NEW camera row + a screen re-point (View→View) binds the
 //       new camera and releases the orphaned one, the pool count holding; (d) a dimension change recreates the
-//       offscreen view ('recreated live (WxH)'); (e) THE CR-6 TRANSITION — re-sourcing the screen View→None unbinds
+//       offscreen view ('recreated live (WxH)'); (e) THE VIEW→NONE TRANSITION — re-sourcing the screen View→None unbinds
 //       the slot AND releases the camera registration (view-refresh count drops, world.screens reads none/unbound —
 //       no stale offscreen render); (f) world.camera.remove of the now-unreferenced row applies document-side.
 //   editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The P3 selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
+//       The selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
 //       (player.leave 2..4) AND the census (world.population 0 — a static world so pixel diffs read the highlight,
 //       not the crowd), enters the editor, and asserts: (a) editor.place authors one scene row = EXACTLY one
 //       world.status dirty increment; (b) THE HEADLINE — a grab + multi-step drag produces ZERO wire traffic (dirty
@@ -142,25 +142,25 @@
 //       static central band differ decisively while a deselected control pair does not; (f) capacity honesty —
 //       flooding placements past the authoring headroom hits the loud '[world.mutation rejected: ...]' envelope line,
 //       a further placement leaves dirty UNCHANGED, and the rejection surfaces as the danger-hued toast;
-//       (g) UIE-2 — every editor-local typed float surface rejects NaN/Infinity loudly; (h) UIE-1 — exit or seat
+//       (g) every editor-local typed float surface rejects NaN/Infinity loudly; (h) exit or seat
 //       departure mid-drag drops the pending row AND the selection (re-entry/rejoin starts clean, the abandoned drag
-//       is uncommittable, dirty unchanged); (i) UIE-3 — a frozen released preview retires on ITS OWN result: apply
+//       is uncommittable, dirty unchanged); (i) a frozen released preview resolves independently on ITS OWN result: apply
 //       narrates 'retired: applied', a revoked-grant rejection batched WITH an unrelated console mutation narrates
 //       'retired: rejected' (never an apply/deadline retire — the unrelated delivery leaves the preview alone) and
-//       the row snaps back to its document pose; (j) UIE-10 — the candidate ring is bounded and narrated (cap 16
+//       the row snaps back to its document pose; (j) the candidate ring is bounded and narrated (cap 16
 //       engages near the flooded scene, an empty ring far away, editor.status carries the policy). Decodes the
 //       engine's own PNGs inline like ui-floor. A second NARROW pair of sessions (640x480, four seats, two editors)
-//       is the UIE-4 clip proof: the seat-1 HUD paints inside its own 320px viewport and does NOT bleed past the
+//       is the seat-clip proof: the seat-1 HUD paints inside its own 320px viewport and does NOT bleed past the
 //       2x2 seam into seat 2 (control-bounded pixel bands on both backends).
 //   placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The P5 creations/placements proof (§D6), run on BOTH backends like editor-mode. Each session pins the roster
+//       The creations/placements proof, run on BOTH backends like editor-mode. Each session pins the roster
 //       (player.leave 2..4) and census (world.population 0), aims the editor camera at empty grass (so the ONLY pixel
 //       motion in the asserted band is the placement under test), and asserts: (a) editor.import of a committed
-//       PROOF-AUTHORED probe creation (owner ruling: Demo content never ships as World content — the proof owns
+//       PROOF-AUTHORED probe creation (Demo content never ships as World content — the proof owns
 //       its art) crosses the strict canonicalizer and lands as EXACTLY one UpsertCreation journal entry; (b) the STAMP is visible — editor.place'ing the imported creation repaints a static central
 //       band decisively versus a control pair's noise floor; (c) THE HASH PIN — world.creation.set with a corrupted
 //       hash rejects loudly naming the canonical sha256, dirty unchanged (and the load-time half is covered by the
-//       validator: a tampered saved file falls back loudly at boot); (d) the P3 drag channel works on placements —
+//       validator: a tampered saved file falls back loudly at boot); (d) the drag channel works on placements —
 //       grab + multi-step editor.drag moves the dirty counter NOT AT ALL mid-drag and release commits EXACTLY one
 //       more journal entry ('retired: applied'); (e) world.undo restores the pre-drag position (editor.select echoes
 //       the original coordinates); (f) RemoveCreation with live placements rejects loudly (the no-cascade ruling);
@@ -169,10 +169,10 @@
 //       the reserved headroom hits the loud '[world.mutation rejected: ...] ... exceed the probed render envelope'
 //       ceiling and a further placement leaves dirty unchanged; (i) THE OUROBOROS WITH CREATIONS — world.save of the
 //       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
-//       canonical embeds and the §D6 world.save hash recompute are byte-stable). Decodes the engine's own PNGs
+//       canonical embeds and the world.save hash recompute are byte-stable). Decodes the engine's own PNGs
 //       inline like ui-floor.
 //   audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The AP2 audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
+//       The audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
 //       patches/tune through the HASH-PIN handshake (a bogus hash rejects loudly NAMING the canonical sha256, which
 //       the proof then submits — the pin proven and satisfied in one gesture), every speaker $type (fixed stereo
 //       pair, a bed, an entityLeaf-anchored row on a published role token, a placement-anchored row), a scene-row
@@ -185,7 +185,7 @@
 //       (revoking console mutate section:speakers denies the mutation loudly; re-granting restores it). world.save
 //       compacts; session B relaunches --world <the saved file>, PINS the fresh-boot audio.emitters listing exactly
 //       (stable ids in document order), and a second save byte-compares — the ouroboros with audio sections.
-//       AP4 rounds ride the same sessions: THE CUE TABLE (authored as data, its validator table, the producer
+//       The cue/speaker/volume rounds ride the same sessions: THE CUE TABLE (authored as data, its validator table, the producer
 //       lanes — an applied mutation's at-site chime, a grant denial, gait-derived footsteps under player.run, the
 //       binder's screen.fault lane — each asserted through speaker.state's live transient tail), speakers through
 //       the editor (select/grab/drag/release/undo + the editor.speaker.* numeric twins, dirty-count disciplined),
@@ -193,7 +193,7 @@
 //       audio.masterGain), and the ouroboros now carries the cue table + folded volume — with the rebooted cue
 //       table still FIRING (the behavioral half). speaker.state itself is exercised throughout.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
+//       The second world + session write-back proof: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
 //       from the default's (kits 6 screens 3 vs kits 5 screens 5), a visibly different game with zero code; (c) the
 //       write-back SLICE not covered by the mutate proof — a live SESSION lever (world.population count) is changed, the
@@ -913,7 +913,7 @@ static class Generators {
     public static List<string> Hop(int population) {
         var lines = new List<string>();
 
-        // The ported jump kit (WorldBody constants) — the bands are DERIVED from these, never hard-coded.
+        // The jump kit, matching WorldBody's constants — the bands are DERIVED from these, never hard-coded.
         const double actionScale = 0.5;
         var jumpSpeed = (11.0 * actionScale);   // 5.5 u/s launch
         var riseGravity = (28.0 * actionScale); // 14 u/s^2 rising
@@ -1022,8 +1022,8 @@ static class MixtureModel {
     const double MoveSpeed = Generators.MoveSpeed;
     const double TurnSpeed = Generators.TurnSpeed;
 
-    // State table: target forward deflection + mean dwell seconds + selection weight (Demo PlatformerTuning tempo,
-    // deflections mapped onto the body's 4 u/s scale so the sprint:run ratio 1.6 is preserved).
+    // State table: target forward deflection + mean dwell seconds + selection weight (deflections mapped onto the
+    // body's 4 u/s scale; sprint:run ratio held at 1.6).
     static readonly (string Name, double Deflection, double MeanDwell, int Weight)[] States = {
         ("Idle", 0.0, 1.2, 15),
         ("Walk", 0.35, 2.5, 30),
@@ -1561,7 +1561,7 @@ static class ExpoBuilder {
     }
 
     // SUBMARINES — a slow damped glide with gentle pitch undulation (report-only), then a closed-form straight
-    // finale on the low band. The Subnautica tempo: small deflections (<=0.4), lazy motion.
+    // finale on the low band. A damped-glide tempo: small deflections (<=0.4), lazy motion.
     static void BuildSubs(List<TimedCommand> timed, List<string> directives, List<int> subs) {
         var count = subs.Count;
         const int cols = 6;
@@ -1626,11 +1626,11 @@ readonly record struct Pose(double X, double Y, double Z, int Yaw, int Pitch, in
 // Shared player-document store paths + directory backup — used by BindingsProof and StorageProof, the two
 // suites that boot against the REAL local player-document store (WorldProfileStore has no CLI override; no
 // --user-id, no env var). Both back up the FULL world/ + profiles/ subtrees before touching anything and
-// restore them in a finally, so the owner's real catalog is never left mutated.
+// restore them in a finally, so the real catalog is never left mutated.
 // ============================================================================================
 
-// The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths (§2.5.3)
-// under it, mirrored from WorldProfileStore.cs's private address table.
+// The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths
+// under it, matching WorldProfileStore.cs's private address table.
 static class PlayerStorePaths {
     static readonly Guid LocalProfilesId = new(g: "b1d5c0de-0002-4000-8000-000000000001");
 
@@ -1653,8 +1653,8 @@ static class PlayerStorePaths {
     public static string ProfilesDir() {
         return Path.Combine(path1: WorldDir(), path2: "profiles");
     }
-    // The two retired single-file layouts, both under the shared "profiles/" directory: the Phase 3 whole-document
-    // pair (profiles/player.json + profiles/local.json) and the pre-Phase-3 puck.world.profiles.v1 catalog
+    // The two legacy single-file layouts this store migrates away from, both under the shared "profiles/" directory:
+    // the whole-document pair (profiles/player.json + profiles/local.json) and the puck.world.profiles.v1 catalog
     // (profiles/profiles.json).
     public static string PhaseThreeDir() {
         return Path.Combine(path1: StoreRoot(), path2: "profiles");
@@ -1673,7 +1673,7 @@ static class PlayerStorePaths {
 readonly record struct DirectorySnapshot(string Root, IReadOnlyList<(string RelativePath, byte[] Bytes)> Files);
 
 // Whole-subtree snapshot/clear/restore, byte-for-byte — the store's per-profile blob count is not known ahead of
-// time, so a proof clearing/restoring individual filenames would miss any real profile the owner has beyond the
+// time, so a proof clearing/restoring individual filenames would miss any real profile beyond the
 // four seeded defaults. Restoring means "the directory looks EXACTLY like it did" (including deleting anything the
 // proof itself created that did not exist before).
 static class DirectoryBackup {
@@ -2411,7 +2411,7 @@ static class Comparer {
 }
 
 // ============================================================================================
-// WORLDDOC — the Phase 1 exit-bar proofs for the world document (puck.world.def.v1):
+// WORLDDOC — the world-document proofs (puck.world.def.v1):
 //   (a) the ouroboros gate: the checked-in Assets/worlds/default.world.json round-trips
 //       world.save byte-for-byte, twice over (load->save->load reproduces the file exactly).
 //   (b) baked-default parity: booting from the checked-in file and booting from a missing
@@ -2460,7 +2460,7 @@ static class WorldDocProof {
         Console.WriteLine(value: "[proof] === worlddoc (a): the ouroboros gate (every checked-in world) ===");
 
         // Cover EVERY checked-in world (default, kart-remap, and — once authored — expo): a save that folds session state
-        // (§2.1) must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
+        // must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
         // authoring) are skipped with a note rather than failing the gate.
         var worldsDir = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds");
         var ouroborosPassed = true;
@@ -2666,8 +2666,8 @@ static class WorldDocProof {
 
     sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
 
-    // Wait for the router to be live: player.stop is idempotent at boot, so its echo is the readiness signal (mirrors
-    // ScreensProof.WaitForConsole — cold shader compilation can exceed an individual assertion's deadline).
+    // Wait for the router to be live: player.stop is idempotent at boot, so its echo is the readiness signal, matching
+    // ScreensProof.WaitForConsole — cold shader compilation can exceed an individual assertion's deadline.
     static bool WaitForConsole(Ctx ctx) {
         var mark = ctx.Collector.Count;
 
@@ -2737,7 +2737,7 @@ static class WorldDocProof {
 }
 
 // ============================================================================================
-// EXPO — the Phase 5 second world (§2.6 genre-neutrality proof artifact) + session write-back:
+// EXPO — the second world (a genre-neutrality proof artifact) + session write-back:
 //   expo-author regenerates Assets/worlds/expo.world.json THE HONEST WAY (a scripted stdin
 //     session of mutations + live session levers fed to a booted baked-default world, then
 //     world.save folds the render levers + census into the saved document).
@@ -2748,7 +2748,7 @@ static class WorldDocProof {
 // ============================================================================================
 static class ExpoProof {
     // The distinguishing world.status counts the authoring session produces (5 default kits + "glider" = 6; 5 default
-    // screens minus indices 4 and 3 = 3) — a visibly different world with zero code, the §2.6 audit made observable.
+    // screens minus indices 4 and 3 = 3) — a visibly different world with zero code.
     const string ExpoStatusNeedle = "kits 6 screens 3";
     // The census the authoring session bakes in (world.population 32), and the distinct value the write-back slice sets
     // to prove a live session lever survives world.save + a relaunch (48 != 32 != the default's 124).
@@ -3057,7 +3057,7 @@ static class ExpoProof {
     // The third write-back dimension, positively (expo/default are asset-free, so the ouroboros only exercises the
     // no-live-machine no-op). Boot expo, boot a REAL joypad-echo ROM onto a declared screen via screen.insert, assert
     // world.status now names the 'screens' drift dimension, then world.save and assert the saved JSON carries a machine
-    // source referencing that ROM — the live binder insert folded into the screen row (§2.1). One self-contained session.
+    // source referencing that ROM — the live binder insert folded into the screen row. One self-contained session.
     static bool RunScreenInsertFold(string exe, string repoRoot, string expoPath, int width, int height, int exitAfterSeconds) {
         const int insertScreen = 1;
         var romPath = Path.Combine(Path.GetTempPath(), $"puck-world-expo-insert-{Environment.ProcessId}.gb");
@@ -3166,7 +3166,7 @@ static class ExpoProof {
     }
 
     // The population block's networkPlayers value — the canonical writer's stable order puts it right after localPlayers,
-    // so this first-after-"networkPlayers" number is unambiguous without a full parse (mirrors ExtractKitMoveSpeed).
+    // so this first-after-"networkPlayers" number is unambiguous without a full parse (the same approach ExtractKitMoveSpeed uses).
     static int? ExtractNetworkPlayers(string json) {
         var match = Regex.Match(input: json, pattern: @"""networkPlayers""\s*:\s*(\d+)");
 
@@ -3318,7 +3318,7 @@ static class ScreensProof {
 
     static readonly Regex PeekEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.peek: (\d+) 0x([0-9A-Fa-f]+)=0x([0-9A-Fa-f]+)\]");
     static readonly Regex StateEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.state: (\d+) (.+?)\]");
-    // The world.view-refresh echo carries the count of camera views registered in the offscreen pool — the CR-3b witness.
+    // The world.view-refresh echo carries the count of camera views registered in the offscreen pool.
     static readonly Regex ViewRefreshEcho = new(options: RegexOptions.Compiled, pattern: @"\[world\.view-refresh: every \d+ produced frame\(s\); (\d+) camera view\(s\) registered\]");
 
     public static int RunScreens(ArgMap opts) {
@@ -3478,7 +3478,7 @@ static class ScreensProof {
 
             // (10) POPULATION LIFETIME — an engagement route belongs to one WorldBody lifetime, not merely its
             // reusable display index. Queue deactivate + reactivate + query in one pump batch: p7's newly-minted,
-            // disengaged player must not inherit the old route or remain in screen diagnostics.
+            // disengaged player must not inherit a stale route or remain in screen diagnostics.
             passed &= PopulationReactivationDropsEngagement(ctx: ctx, screenIndex: machineScreen);
 
             // (11) EJECT — the slot reveals its declared overhead view again (no machine to peek).
@@ -3492,13 +3492,13 @@ static class ScreensProof {
             _ = PollState(ctx: ctx, name: "state-reboot", index: machineScreen, predicate: body => body.Contains(value: "bound"));
             ReportEvidence(ctx: ctx);
 
-            // (12) REMOVE A VIEW SCREEN (CR-3b) — screen 2 is the first-person jumbotron, a pure View source whose camera
+            // (12) REMOVE A VIEW SCREEN — screen 2 is the first-person jumbotron, a pure View source whose camera
             // render lives in the offscreen ViewStack pool (its own SDF engine spending refresh budget every few frames).
             // Removing the last screen wired to that camera must RELEASE its view, witnessed by the registered camera-view
             // count in world.view-refresh dropping by one (the co-existing 'overhead' view survives, so it drops 2 -> 1).
             passed &= RemoveViewScreenReleasesCameraView(ctx: ctx, viewScreen: 2);
 
-            // (13) REMOVE AN ENGAGED MACHINE SCREEN (CR-3) — engage p1 on the running brick, then world.screen.remove the
+            // (13) REMOVE AN ENGAGED MACHINE SCREEN — engage p1 on the running brick, then world.screen.remove the
             // whole screen row: the binder must disengage the player (avatar resumes normal intent), dispose the slot, and
             // drop its provider entry, so every screen command reports the index absent.
             passed &= RemoveEngagedScreenDropsEverything(ctx: ctx, screenIndex: machineScreen);
@@ -3642,7 +3642,7 @@ static class ScreensProof {
         return passed;
     }
 
-    // (CR-3) Engage p1 on a running machine screen, remove the whole screen row, and assert the binder torn everything
+    // Engage p1 on a running machine screen, remove the whole screen row, and assert the binder torn everything
     // down: the mutation applies, every screen command then reports the index absent (slot + provider entry gone), and
     // the disengaged avatar resumes normal intent (it is not held idle against a machine that no longer exists).
     static bool RemoveEngagedScreenDropsEverything(Ctx ctx, int screenIndex) {
@@ -3688,7 +3688,7 @@ static class ScreensProof {
         return passed;
     }
 
-    // (CR-3b) Remove a View screen and prove its offscreen camera render is released: the registered camera-view count
+    // Remove a View screen and prove its offscreen camera render is released: the registered camera-view count
     // (read off world.view-refresh) drops by one, and screen.state reports the removed index absent. The camera's
     // offscreen SDF engine was spending refresh budget until the removal; the count is the pipe-observable witness that
     // it stopped (a surviving jumbotron sharing a DIFFERENT camera keeps its own view, so the count drops by exactly one).
@@ -3943,7 +3943,7 @@ static class ScreensProof {
 }
 
 // ============================================================================================
-// MUTATE — the Phase 2a scripted mutation round-trip proof: world.kit.tune / world.undo / world.save
+// MUTATE — the scripted mutation round-trip proof: world.kit.tune / world.undo / world.save
 // journal discipline (dirty = journal length), rejection honesty (the defaultSeatKit invariant), and
 // survival through a relaunch against the saved file. This is a SEPARATE session per (a)+(b) vs. (c):
 // session A drives the round-trip and saves to a temp file; session B relaunches --world <that file>
@@ -4002,7 +4002,7 @@ static class MutateProof {
         Console.WriteLine();
         Console.WriteLine(value: "[proof] === mutate (d): protocol-version handshake ===");
         Console.WriteLine(value: "[proof]   SKIPPED by design — no scripted Join path exists over stdin (SessionRequest.Join is not a console");
-        Console.WriteLine(value: "[proof]            verb), and this brief forbids inventing a debug verb to exercise it. The rejecting handshake");
+        Console.WriteLine(value: "[proof]            verb), and this proof does not invent a debug verb to exercise it. The rejecting handshake");
         Console.WriteLine(value: "[proof]            (Accepted: false + reason on a version mismatch) was proven by the implementing session.");
 
         var passed = (roundTripPassed && rejectionPassed && survivalPassed);
@@ -4321,8 +4321,8 @@ static class MutateProof {
 }
 
 // ============================================================================================
-// GRANTS — the Phase 2b principals/grants keystone proof (§2.7 criterion 4, the plan's exit-bar
-// criterion 4): mount an authored autopilot addon as a data-side WorldAddonRow, grant it Drive
+// GRANTS — the principals/grants keystone proof: mount an authored autopilot addon as a data-side
+// WorldAddonRow, grant it Drive
 // over a body and watch it move, revoke mid-run and watch the server's edge-latched denial freeze
 // it, then prove Mutate-section enforcement (console loses/regains world.kit.tune) with
 // world.status's dirty counter as the honest witness. Two sessions, mirroring MutateProof's shape:
@@ -4570,14 +4570,14 @@ static class GrantsProof {
             // document (world.status's dirty counter) is genuinely unchanged, then re-grant and prove it applies.
             passed &= RunMutateDenialRoundTrip(ctx: ctx);
 
-            // (e) EXCLUSIVITY (§CR-1): the two grant orders both reject a conflicting second grant, and an exclusively
+            // (e) EXCLUSIVITY: the two grant orders both reject a conflicting second grant, and an exclusively
             // held body has exactly one effective driver — the exclusive holder overrides even the console's Drive/all.
             passed &= RunExclusivityOrders(ctx: ctx);
 
-            // (g) EXCLUSIVE SECTION ACQUISITION (§D8): the seeded per-section Mutate defaults never block a hold.
+            // (g) EXCLUSIVE SECTION ACQUISITION: the seeded per-section Mutate defaults never block a hold.
             passed &= RunExclusiveSectionRound(ctx: ctx);
 
-            // (h) PROFILE SUBJECT (§D8): Edit checks the concrete profile:<id> subject.
+            // (h) PROFILE SUBJECT: Edit checks the concrete profile:<id> subject.
             passed &= RunProfileSubjectRound(ctx: ctx);
         }
         finally {
@@ -4642,7 +4642,7 @@ static class GrantsProof {
     }
 
     // (e): exclusivity must actually exclude, in BOTH grant orders, and the exclusive holder must be the SOLE effective
-    // driver (§CR-1). The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
+    // driver. The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
     // starts clean; the two order tests use fresh bodies so they never interfere with each other.
     static bool RunExclusivityOrders(Ctx ctx) {
         var passed = true;
@@ -4683,10 +4683,9 @@ static class GrantsProof {
 
         Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
 
-        // (f) EXCLUSIVE WILDCARD (§CR-1b): an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
-        // reservation must name a concrete subject. First on a table with only the seeded defaults (a fresh table must
-        // ALSO reject per the new rule), then in the reviewer's exact order with a concrete ordinary hold present (where
-        // it previously slipped past acquisition and then denied every seat at enforcement). Both orders reject now.
+        // (f) EXCLUSIVE WILDCARD: an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
+        // reservation must name a concrete subject, checked on a fresh table AND with a concrete ordinary hold
+        // already present.
         passed &= ExpectGrant(ctx: ctx, name: "exclusive-all-rejected-fresh-table",
             line: $"world.grant addon:{AutopilotName} drive all exclusive",
             needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
@@ -4701,7 +4700,7 @@ static class GrantsProof {
         return passed;
     }
 
-    // (g): an exclusive SECTION hold must be acquirable on a DEFAULT table (§D8) — the seeded per-section Mutate rows
+    // (g): an exclusive SECTION hold must be acquirable on a DEFAULT table — the seeded per-section Mutate rows
     // are the permissive backdrop's concrete spelling and never block a reservation. While seat1 holds section:scene
     // exclusively, the console's scene mutation is denied AT THE GRANT BOUNDARY (before compose; the denial also rides
     // the EchoTap toast channel ui-floor proved). Revoking the hold restores the console: the identical command then
@@ -4746,10 +4745,10 @@ static class GrantsProof {
         return passed;
     }
 
-    // (h): SetPlayerSection is gated on the CONCRETE profile:<id> Edit subject (§D8). The seeded Edit/all wildcard
+    // (h): SetPlayerSection is gated on the CONCRETE profile:<id> Edit subject. The seeded Edit/all wildcard
     // keeps local play unchanged (the baseline edit applies); revoking it denies every profile edit; a narrow
     // profile:amber grant restores exactly amber while cobalt stays denied. The store was cleared before launch, so
-    // the seeded catalog ids (amber, cobalt) are deterministic; RunGrants restores the owner's real store afterward.
+    // the seeded catalog ids (amber, cobalt) are deterministic; RunGrants restores the real store afterward.
     static bool RunProfileSubjectRound(Ctx ctx) {
         var passed = true;
 
@@ -4964,13 +4963,13 @@ static class GrantsProof {
 }
 
 // ============================================================================================
-// BINDINGS — the Phase 3 exit-bar proof for the player document + layered binding resolution
-// (§2.4: engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
+// BINDINGS — the player-document + layered binding-resolution proof
+// (engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
 // (player.bind / player.bindings / profile.save / profile.doc), persistence through
-// puck.world.player.v1, and the one-time migration off the retired puck.world.profiles.v1. Four
+// puck.world.player.v1, and the one-time migration off the legacy puck.world.profiles.v1. Four
 // sessions against the REAL local player-document store — there is no CLI override for its path
 // (WorldProfileStore addresses a fixed %LOCALAPPDATA% location) — so this proof backs up whatever
-// the owner's real player.json/local.json/profiles.json hold (or their absence) before touching
+// the real player.json/local.json/profiles.json hold (or their absence) before touching
 // anything, and restores them in a finally no matter how the sessions finish. Never delete or
 // revert files this proof did not itself create.
 // ============================================================================================
@@ -5006,8 +5005,8 @@ static class BindingsProof {
             return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
         }
 
-        // The current split layout (world/) plus the shared directory the two retired single-file layouts land in
-        // (profiles/ — the Phase 3 whole-document pair AND the pre-Phase-3 puck.world.profiles.v1 catalog).
+        // The current split layout (world/) plus the shared directory the two legacy single-file layouts land in
+        // (profiles/ — the whole-document pair AND the puck.world.profiles.v1 catalog).
         var worldDir = PlayerStorePaths.WorldDir();
         var phaseDir = PlayerStorePaths.PhaseThreeDir();
         var catalogPath = PlayerStorePaths.CatalogPath();
@@ -5015,7 +5014,7 @@ static class BindingsProof {
         var legacyPath = PlayerStorePaths.LegacyPath();
         var phaseThreePlayerPath = PlayerStorePaths.PhaseThreePlayerPath();
 
-        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
         // -byte) before this proof touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
         var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
@@ -5051,12 +5050,12 @@ static class BindingsProof {
             passed &= RunSessionC(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: kartRemapPath);
 
             Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (d): the pre-Phase-3 puck.world.profiles.v1 migration ===");
+            Console.WriteLine(value: "[proof] === bindings (d): the legacy puck.world.profiles.v1 migration ===");
             passed &= RunMigrationLegacy(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
                 worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, legacyPath: legacyPath);
 
             Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (e): the Phase 3 single-file player.json migration ===");
+            Console.WriteLine(value: "[proof] === bindings (e): the single-file player.json migration ===");
             passed &= RunMigrationPhaseThree(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
                 worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, phaseThreePlayerPath: phaseThreePlayerPath);
         }
@@ -5278,7 +5277,7 @@ static class BindingsProof {
         return passed;
     }
 
-    // Session D: synthesize a PRE-PHASE-3 puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
+    // Session D: synthesize a legacy puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
     // the store's migration precondition), boot, and assert the one-time migration: the loud "... retired
     // puck.world.profiles.v1 ..." boot line, the split world/ layout written (world/player.json + world/local.json),
     // profiles/profiles.json deleted, and profile.list showing the migrated names.
@@ -5314,7 +5313,7 @@ static class BindingsProof {
         Console.CancelKeyPress += cancelHandler;
         AppDomain.CurrentDomain.ProcessExit += exitHandler;
 
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized pre-Phase-3 profiles.json at {legacyPath})");
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized legacy profiles.json at {legacyPath})");
 
         try {
             _ = process.Start();
@@ -5363,8 +5362,8 @@ static class BindingsProof {
         return passed;
     }
 
-    // Session E: synthesize a PHASE 3 single-file profiles/player.json (world/ absent — the store's migration
-    // precondition once the catalog blob and the pre-Phase-3 legacy file are both cleared), boot, and assert the
+    // Session E: synthesize a single-file profiles/player.json (world/ absent — the store's migration
+    // precondition once the catalog blob and the legacy multi-file schema are both cleared), boot, and assert the
     // OTHER migration path: the loud "... Phase 3 single-file layout ..." boot line, the split world/ layout written,
     // and profiles/player.json deleted.
     static bool RunMigrationPhaseThree(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
@@ -5400,7 +5399,7 @@ static class BindingsProof {
         Console.CancelKeyPress += cancelHandler;
         AppDomain.CurrentDomain.ProcessExit += exitHandler;
 
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized Phase 3 player.json at {phaseThreePlayerPath})");
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized single-file player.json at {phaseThreePlayerPath})");
 
         try {
             _ = process.Start();
@@ -5449,7 +5448,7 @@ static class BindingsProof {
         return passed;
     }
 
-    // (b2): the identity/motion/preferences SetPlayerSection variants (CR-2). Boots against the persisted store from
+    // (b2): the identity/motion/preferences SetPlayerSection variants. Boots against the persisted store from
     // session A/B (boot profile = amber), and drives every declared section through the raw profile.section reflection:
     // each POSITIVE edit applies + bumps the revision + shows up in profile.doc, an IDENTITY edit LIVE-refreshes the
     // seated participant (profile.show reads the roster's shared handle — not stale), and each MALFORMED payload rejects
@@ -5548,11 +5547,9 @@ static class BindingsProof {
             passed &= ExpectSection(ctx: ctx, name: "preferences-malformed-rejects", line: "profile.section amber preferences [1,2,3]", needle: "did not parse");
             passed &= ExpectRevisionUnchanged(ctx: ctx, name: "preferences-malformed-no-bump", before: revBeforeBadPrefs);
 
-            // --- BINDINGS (positive, §CR-5): a raw profile.section bindings edit on the SEATED profile 'amber' must reach
+            // --- BINDINGS (positive): a raw profile.section bindings edit on the SEATED profile 'amber' must reach
             // seat 1's ACTIVE mapping LIVE — no reseat, no restart. keyboard.q is unbound by default; this remaps it to
-            // player.forward through the durable section, and player.bindings 1 must show it IMMEDIATELY afterwards. This
-            // is the gap the closure commit left: the generic section handler persisted the edit but did not refresh the
-            // per-seat compiled layer, so a seated player kept old controls until reseat.
+            // player.forward through the durable section, and player.bindings 1 must show it IMMEDIATELY afterwards.
             passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-absent-before", seat: 1, needle: "keyboard.q→player.forward", wantPresent: false);
 
             var revBeforeBindings = ReadRevision(ctx: ctx, name: "rev-before-bindings");
@@ -5565,7 +5562,7 @@ static class BindingsProof {
 
             passed &= Check(name: "bindings-bumps-revision", ok: ((revBeforeBindings is { } bb0) && (revAfterBindings is { } bb1) && (bb1 > bb0)),
                 detail: $"{revBeforeBindings?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterBindings?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
-            // THE CR-5 WITNESS: the seated player's composed mapping now carries the durable rebind, with no reseat.
+            // The seated player's composed mapping now carries the durable rebind, with no reseat.
             passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-live-no-reseat", seat: 1, needle: "keyboard.q→player.forward", wantPresent: true);
         }
         finally {
@@ -5810,9 +5807,9 @@ static class BindingsProof {
 }
 
 // ============================================================================================
-// Phase 4 exit-bar proof: cloud-readiness (§2.5), proven against the local backend only. storage.status is the
+// Cloud-readiness proof, proven against the local backend only. storage.status is the
 // control surface; the honest baseline (cloud unwired, identity declined/override, endpoint reflection) and the
-// Revision/version-token ordering + clobber-guard fields (§2.5.1/.2) it reports are the whole surface this arc ships.
+// Revision/version-token ordering + clobber-guard fields it reports are the whole surface today.
 // ============================================================================================
 
 static class StorageProof {
@@ -5853,7 +5850,7 @@ static class StorageProof {
         var worldLocalPath = PlayerStorePaths.LocalPath();
         var profilesDir = PlayerStorePaths.ProfilesDir();
 
-        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
         // -byte) before this proof touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
         var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
@@ -6043,7 +6040,7 @@ static class StorageProof {
     }
 
     // Session (c): boot with --user-id <a valid oid-shaped Guid>. Asserts the explicit-override identity echo
-    // (§2.5.4's ExplicitOverridePlayerStorageIdentityResolver path).
+    // (the ExplicitOverridePlayerStorageIdentityResolver path).
     static bool RunUserIdOverride(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
         const string userId = "11112222-3333-4444-5555-666677778888";
 
@@ -6052,7 +6049,7 @@ static class StorageProof {
     }
 
     // Session (d): boot with --user-id not-a-guid. Asserts the resolver declines loudly rather than inventing a
-    // container (§2.5.4's non-Guid-override branch).
+    // container (the non-Guid-override branch).
     static bool RunUserIdDeclines(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
         const string userId = "not-a-guid";
 
@@ -6111,7 +6108,7 @@ static class StorageProof {
         return passed;
     }
 
-    // storage.status is an Immediate echo of the honest local storage state (§2.5.6) — one line, "[storage.status: ...]".
+    // storage.status is an Immediate echo of the honest local storage state — one line, "[storage.status: ...]".
     static (string Text, bool Ok) ReadStorageStatus(Ctx ctx, string tag) {
         var mark = ctx.Collector.Count;
 
@@ -6239,7 +6236,7 @@ static class StorageProof {
 }
 
 // ============================================================================================
-// record — native-capture proof (the recording arc)
+// record — native-capture proof
 // ============================================================================================
 static class RecordProof {
     public static int RunRecord(ArgMap opts) {
@@ -6331,7 +6328,7 @@ static class RecordProof {
             // (a) idle before start.
             passed &= ExpectStatus(ctx: ctx, needle: "idle", name: "status-idle-before-start");
 
-            // (b) start — arm the session; echo names the landed codec + resolved path (declines are loud).
+            // (b) start — arm the session; echo names the negotiated codec + resolved path (declines are loud).
             var startMark = collector.Count;
 
             Send(ctx: ctx, line: "capture.start");
@@ -6348,7 +6345,7 @@ static class RecordProof {
             var recordingPath = Extract(line: startLine!, after: "recording -> ", until: " |");
             var codec = Extract(line: startLine!, after: "codec ", until: " |");
 
-            Console.WriteLine(value: $"[proof]   landed codec: {codec} | path: {recordingPath}");
+            Console.WriteLine(value: $"[proof]   negotiated codec: {codec} | path: {recordingPath}");
 
             // (c) ~seconds of the autonomous crowd moving.
             Thread.Sleep(millisecondsTimeout: (seconds * 1000));
@@ -6398,7 +6395,7 @@ static class RecordProof {
         return (passed ? 0 : 1);
     }
 
-    // The recording document must carry the capture-only overlay the owner asked for — read the resolved file and assert
+    // The recording document must carry the capture-only overlay — read the resolved file and assert
     // a text overlay row is present. A baked-default fallback (no file) has no overlays; that is a FAIL of this proof's
     // premise (the checked-in asset should have loaded), reported honestly.
     static bool CheckOverlayPresence(string? docLine) {
@@ -6947,7 +6944,7 @@ static class ComposedShotKit {
 }
 
 // ============================================================================================
-// UI-FLOOR — the P1 unified-overlay proof: the ONE screen-space overlay decorator (console
+// UI-FLOOR — the unified-overlay proof: the ONE screen-space overlay decorator (console
 // mirror + per-seat binding bars + mutation toasts) renders on BOTH backends and the
 // world.screenshot verb captures the final COMPOSED frame through the outermost decorator.
 // Three composed captures per backend session: overlay (console on), control (console off),
@@ -6970,7 +6967,7 @@ static class UiFloorProof {
             return 1;
         }
 
-        // D3D12 FIRST (World's default backend — the historically unexercised overlay path), then Vulkan.
+        // D3D12 FIRST (World's default backend), then Vulkan.
         Console.WriteLine(value: "[proof] === ui-floor (a): Direct3D 12 (the default backend) ===");
         var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
 
@@ -7062,7 +7059,7 @@ static class UiFloorProof {
                 detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
             );
 
-            // (4c) THE SPEAKER GIZMO (AP4): a bed speaker dead ahead of the seat camera, SELECTED in editor mode —
+            // (4c) THE SPEAKER GIZMO: a bed speaker dead ahead of the seat camera, SELECTED in editor mode —
             // its accent-tier chip (accent bloom ring + halo) and accent radius ring put an accent-orange population
             // in the central stage that leaving editor mode removes (gizmos are editor-mode-only). Screenshots ride
             // the stdin barrier behind the Simulation-routed acts.
@@ -7173,7 +7170,7 @@ static class UiFloorProof {
 }
 
 // ============================================================================================
-// EDITOR-MODE — the P2/P3.5 proof: a seat enters editor mode mid-session over stdin, its ACTIVE
+// EDITOR-MODE — a seat enters editor mode mid-session over stdin, its ACTIVE
 // binding GROUP flips play→editor (asserted through editor.status, which reads the SAME
 // PageView the bar renders — group= + page=), the reference [lt, rt] chord-command fires
 // editor.enter from pure binding data over synthesized pad signals (player.signal), the chord
@@ -7512,7 +7509,7 @@ static class EditorModeProof {
 }
 
 // ============================================================================================
-// EDITOR-EDIT — the P3 selection/manipulation proof (see the header's subcommand block for the
+// EDITOR-EDIT — the selection/manipulation proof (see the header's subcommand block for the
 // full assertion list). The wire-coalescing headline rides world.status's dirty counter: motion
 // inside a grab must not move it, release must move it by EXACTLY one. The world is pinned
 // static (roster to seat 1, census to 0) so the select/deselect pixel pair reads the amber
@@ -7540,7 +7537,7 @@ static class EditorEditProof {
         Console.WriteLine(value: "[proof] === editor-edit (b): Vulkan ===");
         var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
 
-        // The UIE-4 clip proof runs NARROW on purpose: 640x480 quad-split gives each seat 320px, well under the
+        // The seat-clip proof runs NARROW on purpose: 640x480 quad-split gives each seat 320px, well under the
         // HUD's worst-case line width, so an unclipped panel would visibly cross the seam.
         Console.WriteLine();
         Console.WriteLine(value: "[proof] === editor-edit (c): four-seat HUD viewport clipping, Direct3D 12 (640x480) ===");
@@ -7558,7 +7555,7 @@ static class EditorEditProof {
         return (passed ? 0 : 1);
     }
 
-    // The UIE-4 pixel proof: 4 seats in the 2x2 quad at 640x480 (320px per seat), seats 1 and 3 editing (TWO editors
+    // The seat-clip pixel proof: 4 seats in the 2x2 quad at 640x480 (320px per seat), seats 1 and 3 editing (TWO editors
     // = the standard ladder, no sole-editor workbench). Seat 1's HUD panel would be ~480px wide unclipped; the clip
     // contract must CUT it at the x=320 seam, so the band just right of the seam inside seat 2's region stays at the
     // control image while the band left of the seam repaints decisively.
@@ -7787,7 +7784,7 @@ static class EditorEditProof {
                 detail: $"danger-red pixels in the toast strip: reject {rejectRed} vs control {controlRed}"
             );
 
-            // (g) UIE-2 — every editor-local typed float surface rejects non-finite values loudly, before any local
+            // (g) every editor-local typed float surface rejects non-finite values loudly, before any local
             // state can be poisoned (NaN slides past ordinary range guards; a non-finite center would rebuild the SDF).
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.speed NaN", expect: "as a finite number", name: "finite-cam-speed");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose Infinity 0 0", expect: "as finite numbers", name: "finite-cam-pose");
@@ -7797,7 +7794,7 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.nudge -Infinity 0 0", expect: "as finite numbers", name: "finite-nudge");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder NaN", expect: "bad radius", name: "finite-place");
 
-            // (h) UIE-1 — editor deactivation owns the COMPLETE teardown: an exit mid-drag drops the pending row and
+            // (h) editor deactivation owns the COMPLETE teardown: an exit mid-drag drops the pending row and
             // the selection, so re-entry starts clean and the abandoned drag can never be committed.
             var dirtyBeforeExit = ReadDirty(ctx: ctx, name: "dirty-before-exit-mid-drag");
 
@@ -7847,7 +7844,7 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-cleanup-leave");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "departed-drag-no-wire");
 
-            // (i) UIE-3 — a frozen released preview retires on ITS OWN result, with the honest reason narrated.
+            // (i) a frozen released preview resolves independently on ITS OWN result, with the honest reason narrated.
             // Apply: the release's delivery carries exactly the expected row.
             var applyMark = ctx.Collector.Count;
 
@@ -7863,7 +7860,7 @@ static class EditorEditProof {
 
             // Rejection with a SAME-BATCH unrelated delivery: the seat's release is denied (revoked grant) while a
             // console kit mutation applies in the same drain — the retire reason must be the REJECTION correlation,
-            // never the unrelated delivery (the old global revision watch retired on ANY delivery).
+            // never the unrelated delivery.
             var preRejectStatus = ReadSelectionPosition(ctx: ctx, name: "document-pose-before-rejection");
 
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke seat1 mutate section:scene", expect: "[world.revoke: seat1 mutate section:scene]", name: "retire-reject-revoke");
@@ -7905,7 +7902,7 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "retire-reject-undo-kit");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant seat1 mutate section:scene", expect: "[world.grant: seat1 mutate section:scene]", name: "retire-reject-regrant");
 
-            // (j) UIE-10 — the candidate ring is explicit and bounded: near the flooded scene the ring caps at 16;
+            // (j) the candidate ring is explicit and bounded: near the flooded scene the ring caps at 16;
             // far from everything it is honestly empty; editor.status narrates the policy.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-near");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "of 16 candidates (r 32u, cap 16)", name: "candidates-cap-engages");
@@ -7913,7 +7910,7 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "candidates-radius-bounds");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=0 (r 32u, cap 16)", name: "candidates-status-narrates");
 
-            // (l) P5.5 — the editor/authoring policy row is DATA, split honestly at apply: the candidate radius/cap
+            // (l) the editor/authoring policy row is DATA, split honestly at apply: the candidate radius/cap
             // are LIVE-CONSUMED (the very next chord reads the new value, no restart) while the headroom/repeat-cap
             // fields are BOOT-CONSUMED (the running session's frozen render-envelope probe cannot retroactively
             // grow — the accept echo narrates "next boot" for that half of the SAME whole-row mutation).
@@ -8058,13 +8055,13 @@ static class EditorEditProof {
 }
 
 // ============================================================================================
-// EDITOR-CAMERAS — the P4 camera live-apply proof (§D7 + §CR-6): camera rows edit LIVE. The
+// EDITOR-CAMERAS — the camera live-apply proof: camera rows edit LIVE. The
 // baked default declares two View screens (0 → 'overhead' fixed, 2 → 'first-person' anchored),
 // so the offscreen pool boots with two registered camera views — world.view-refresh's count
 // echo is the pipe-observable witness. A pose/aim edit rewrites the running view's rig in
 // place ('pose updated live'), a dimension change recreates it ('recreated live (WxH)'), a
-// screen re-point (View→View) binds the new camera and releases the orphan, and the CR-6
-// transition (View→None) unbinds the slot AND releases the registration — the count drops and
+// screen re-point (View→View) binds the new camera and releases the orphan, and the
+// View→None transition unbinds the slot AND releases the registration — the count drops and
 // no stale offscreen render survives. Runs on BOTH backends like editor-mode.
 // ============================================================================================
 static class EditorCamerasProof {
@@ -8116,7 +8113,7 @@ static class EditorCamerasProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "boot-two-camera-views");
 
             // (a) LIVE POSE EDIT (fixed): re-aim 'overhead'. The mutation applies, the client reconcile rewrites the
-            // running view's rig in place, and the RETIRED "applies at next boot" narration must never appear.
+            // running view's rig in place, and a stale "applies at next boot" narration must never appear.
             var mark = ctx.Collector.Count;
 
             ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"fixed\",\"position\":[0,18,0],\"lookAt\":[0,0.5,-2.5],\"name\":\"overhead\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.96}");
@@ -8165,7 +8162,7 @@ static class EditorCamerasProof {
                 line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":320,\"renderHeight\":180,\"fieldOfViewRadians\":0.9}",
                 expect: "[world.camera: 'birdseye' recreated live (320x180)]", name: "dimension-change-recreates");
 
-            // (e) THE CR-6 TRANSITION (View→None): the slot unbinds AND the camera registration releases — the pool
+            // (e) THE VIEW→NONE TRANSITION: the slot unbinds AND the camera registration releases — the pool
             // count drops and world.screens reads the slot honestly none/unbound (no stale offscreen render).
             mark = ctx.Collector.Count;
             ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"none\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
@@ -8180,7 +8177,7 @@ static class EditorCamerasProof {
                 predicate: l => (l.Contains(value: "[world.screen: camera view 'birdseye' released") && l.Contains(value: "no remaining screen references it")), deadlineSeconds: 15.0);
 
             passed &= ComposedShotKit.Check(name: "cr6-transition-releases-view", ok: (releaseLine is not null),
-                detail: (releaseLine?.Trim() ?? "(no released line for 'birdseye' — the old view stayed registered)"));
+                detail: (releaseLine?.Trim() ?? "(no released line for 'birdseye' — the view stayed registered)"));
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "1 camera view(s) registered", name: "pool-count-drops");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.screens", expect: "0 none unbound", name: "screen0-reads-none-unbound");
 
@@ -8200,7 +8197,7 @@ static class EditorCamerasProof {
         return passed;
     }
 
-    // The retired camera "applies at next boot" narration must never resurface for a camera mutation.
+    // A stale camera "applies at next boot" narration must never resurface for a camera mutation.
     static bool AssertNoNextBoot(ComposedShotKit.Ctx ctx, int mark, string name) {
         var snapshot = ctx.Collector.Snapshot();
 
@@ -8215,7 +8212,7 @@ static class EditorCamerasProof {
 }
 
 // ============================================================================================
-// PLACEMENTS — the P5 creations/placements proof (§D6): import a PROOF-AUTHORED creation
+// PLACEMENTS — the creations/placements proof: import a PROOF-AUTHORED creation
 // through the strict canonicalizer, stamp it (pixel evidence over empty grass), corrupt the
 // hash pin (loud reject), drag it (one journal entry), undo it, reject the no-cascade
 // creation removal, walk the animated fixture's timeline (pixel motion), flood the reserved
@@ -8264,8 +8261,8 @@ static class PlacementsProof {
         var critterBPath = ShotPath(pid: pid, tag: tag, name: "critter-b");
         var savedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-1.world.json");
         var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-2.world.json");
-        // The proof AUTHORS its own creations (owner ruling: Demo content never ships as World content — no
-        // docs/examples fixture enters a World proof). Both cross the same strict import door a player file would.
+        // The proof AUTHORS its own creations — Demo content never ships as World content, so no
+        // docs/examples fixture enters a World proof. Both cross the same strict import door a player file would.
         var stampFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-stamp.creation.json");
         var critterFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-critter.creation.json");
 
@@ -8490,7 +8487,7 @@ static class PlacementsProof {
         );
     }
 
-    // THE STATIC PROBE — a bulky three-primitive beacon authored HERE (owner ruling: Demo content never ships as
+    // THE STATIC PROBE — a bulky three-primitive beacon authored HERE (Demo content never ships as
     // World content; the proof owns its art). Vector3/Quaternion members use the creation serializer's field shape.
     const string StaticProbeCreationJson = """
         {
@@ -8590,14 +8587,14 @@ static class PlacementsProof {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// sculpt — the P6 creation sub-editor proof, on BOTH backends: sculpt a creation from NOTHING over stdin
+// sculpt — the creation sub-editor proof, on BOTH backends: sculpt a creation from NOTHING over stdin
 // (editor.sculpt.* — primitives, palette, a chain/IK pose), commit it as ONE canonicalized UpsertCreation, stamp it
 // at the exact bench origin, and demand PIXEL IDENTITY between the workbench preview and the committed stamp (the
-// same document at the same transform through the same emission path renders the same pixels — the §P6
+// same document at the same transform through the same emission path renders the same pixels — the
 // stamp-equals-preview contract). Then the two undo domains (local ring vs world journal) assert as distinct, a
 // second sculpt authors a 2-frame timeline whose stamp ANIMATES, re-sculpting it live-refreshes the placement
 // (recreate on a palette change — still animating; release when the frames delete — motion stops), an imported
-// carrier's previously-unauthorable members (cameras/behavior/extensions) survive a model round-trip, the easel
+// carrier's cameras/behavior/extensions members survive a model round-trip, the easel
 // verb wires a bench camera onto a screen row, and the furnished save reloads byte-stably. DISPOSABLE probes only.
 static class SculptProof {
     static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
@@ -8645,8 +8642,8 @@ static class SculptProof {
         var stillBPath = ShotPath(pid: pid, tag: tag, name: "still-b");
         var savedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-1.world.json");
         var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-2.world.json");
-        // The carrier fixture is proof-authored (owner ruling: no external content enters a World proof): it exists
-        // ONLY to prove the previously-unauthorable members (cameras/behavior/extensions) survive a sculpt round-trip.
+        // The carrier fixture is proof-authored (no external content enters a World proof): it exists
+        // ONLY to prove the cameras/behavior/extensions members survive a sculpt round-trip.
         var carrierFixture = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-carrier.creation.json");
 
         File.WriteAllText(path: carrierFixture, contents: CarrierCreationJson);
@@ -8780,10 +8777,10 @@ static class SculptProof {
                 line: """world.placement.set {"id":"place-sculpt","creationId":"probe-sculpt","position":[0,0,16],"yawDegrees":0,"scale":1}""",
                 expect: "[world.mutation: UpsertPlacement 'place-sculpt' applied]", name: "restamp-after-undo");
 
-            // (e) A FRAMED TIMELINE sculpted from nothing (four vertical-bounce holds — four frames is the settled
+            // (e) A FRAMED TIMELINE sculpted from nothing (four vertical-bounce holds — four frames is the
             // robust shot scheme at the FIXED 8-tick replay cadence: a ~700 ms shot gap crosses 5..7 holds, and any
-            // of those counts mod 4 is nonzero, so the second shot ALWAYS lands a different frame index — the
-            // placements-proof lesson; a 2-frame loop can land the same frame on an even crossing count).
+            // of those counts mod 4 is nonzero, so the second shot ALWAYS lands a different frame index; a
+            // 2-frame loop can land the same frame on an even crossing count).
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-motion-grass");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.new probe-motion 12 0 16",
                 expect: "[editor.sculpt.new: seat 1 sculpting 'probe-motion'", name: "motion-bench-opens");
@@ -8872,7 +8869,7 @@ static class SculptProof {
                 detail: $"post-release stillness {stillness.ToString(format: "F2", provider: ProofApp.Inv)} vs prior motion {motion.ToString(format: "F2", provider: ProofApp.Inv)} — the frames-deleted commit released the replay live"
             );
 
-            // (g) THE CARRIER: previously-unauthorable members (cameras/behavior/extensions) survive a full sculpt
+            // (g) THE CARRIER: cameras/behavior/extensions members survive a full sculpt
             // round-trip — import, re-sculpt one nudge, commit; the saved world must still carry them verbatim.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {carrierFixture}",
                 expect: "[world.mutation: UpsertCreation 'probe-carrier' applied]", name: "import-carrier");
@@ -8885,8 +8882,8 @@ static class SculptProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-carrier'", name: "carrier-bench-closes");
 
             // (h) THE EASEL: a bench camera + an existing screen row re-pointed at its view — the first composed
-            // diegetic surface. Asserted over the live reconcile echo (the editor-cameras precedent); a fresh bench
-            // is opened for it and closed after.
+            // diegetic surface. Asserted over the live reconcile echo, the same mechanism editor-cameras proves; a
+            // fresh bench is opened for it and closed after.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-sculpt 0 0 16",
                 expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-sculpt'", name: "easel-bench-opens");
 
@@ -8973,7 +8970,7 @@ static class SculptProof {
         );
     }
 
-    // THE CARRIER — two shapes plus the previously-unauthorable members the sculpt model must carry verbatim: an
+    // THE CARRIER — two shapes plus the members the sculpt model must carry verbatim: an
     // anchored camera eye, a swim/face behavior manifest, and an unknown extension section. Proof-authored.
     const string CarrierCreationJson = """
         {
@@ -8987,7 +8984,7 @@ static class SculptProof {
             { "id": 1, "shapeId": 2, "position": { "x": 0.2, "y": 0.1, "z": 0 }, "yaw": 15, "fov": 70, "feed": "carrier-eye" }
           ],
           "behavior": { "locomotion": "swim", "faces": [ { "name": "face", "shapeId": 1, "defaultSource": "named:emotes" } ] },
-          "proofExtension": { "keeper": "P6 round-trip witness" }
+          "proofExtension": { "keeper": "round-trip witness" }
         }
         """;
 
@@ -9034,7 +9031,7 @@ static class SculptProof {
 }
 
 // ============================================================================================
-// AUDIO — the AP2 document-side proof: the audio sections (speakers/tunes/patches/audio),
+// AUDIO — the audio document-side proof: the audio sections (speakers/tunes/patches/audio),
 // emission facets, creation sounds, the hash pins, the validator rejection table, the
 // no-cascade guards, undo/grants rounds, the audio.emitters derivation listing, and the
 // ouroboros with audio sections. Session/console machinery lives in ComposedShotKit.
@@ -9048,7 +9045,7 @@ static class AudioProof {
     const string JingleDoc = """{"schema":"puck.audio.v1","name":"jingle"}""";
     const string StatueDoc = """{"schema":"puck.creation.v1","name":"statue","shapes":[{"id":1,"type":"Sphere","position":{"x":0,"y":0.6,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1},"scale":{"x":1,"y":1,"z":1}}],"behavior":{"locomotion":"hover","sounds":[{"name":"hum","shapeId":1,"patch":{"schema":"puck.synth.v1","oscillator":"Sine","pitchMillihertz":220000},"level":1,"radius":6}]}}""";
 
-    // THE CUE TABLE (AP4): the full audio-defaults row re-asserted with cue rows — drone everywhere (a looping
+    // THE CUE TABLE: the full audio-defaults row re-asserted with cue rows — drone everywhere (a looping
     // patch takes the 2 s transient cap, a reliable polling window), covering all three placements. Compact JSON
     // (the console tokenizer rule).
     const string CueTableLine =
@@ -9191,7 +9188,7 @@ static class AudioProof {
             passed &= Mutate(ctx: ctx, name: "applies-after-regrant", line: "world.speaker.remove wind", needle: "[world.mutation: RemoveSpeaker 'wind' applied]", dirty: 13);
             passed &= Mutate(ctx: ctx, name: "undo-restores-wind", line: "world.undo", needle: "[world.undo: dropped 1, 12 remaining]", dirty: 12);
 
-            Console.WriteLine(value: "[proof] === audio (f): THE CUE TABLE — world events tie to sound as data (AP4) ===");
+            Console.WriteLine(value: "[proof] === audio (f): THE CUE TABLE — world events tie to sound as data ===");
             passed &= Mutate(ctx: ctx, name: "cue-table-applies", line: CueTableLine, needle: "[world.mutation: SetAudioDefaults applied]", dirty: 13);
 
             var idleState = AwaitEcho(ctx: ctx, line: "speaker.state", needle: "[speaker.state:");
