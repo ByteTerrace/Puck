@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Text.Json;
 using Puck.SdfVm;
 
 namespace Puck.Authoring;
@@ -34,13 +33,7 @@ public sealed class CreationValidationException : Exception {
     /// <param name="errors">The violations found (must be non-empty — an empty list never fails validation).</param>
     /// <param name="source">An optional source label (a file path or save handle) prefixed onto the message.</param>
     public CreationValidationException(IReadOnlyList<CreationValidationError> errors, string? source = null)
-        : base(message: Format(errors: errors, source: source)) => Errors = errors;
-
-    private static string Format(IReadOnlyList<CreationValidationError> errors, string? source) {
-        var joined = string.Join(separator: "; ", values: errors);
-
-        return ((source is { Length: > 0 }) ? $"'{source}' failed validation: {joined}" : joined);
-    }
+        : base(message: DocumentCanonicalizer.FormatErrors(errors: errors, source: source)) => Errors = errors;
 }
 
 /// <summary>
@@ -62,6 +55,9 @@ public sealed class CreationValidationException : Exception {
 /// pipeline did not itself compute.
 /// </para>
 /// </param>
+/// <remarks>Shape-identical to the neutral <see cref="CanonicalDocument{TDocument}"/> (which generalized out of this
+/// type) but deliberately standalone: this record predates the core and its name is load-bearing at existing call
+/// sites, so it stays the creation family's result type rather than a derivation.</remarks>
 public sealed record CanonicalCreation(CreationDocument Document, byte[] Bytes, string Hash);
 
 /// <summary>
@@ -89,10 +85,8 @@ public static class CreationCanonicalizer {
     public static IReadOnlyList<CreationValidationError> Validate(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
-        if (!string.Equals(a: document.Schema, b: CreationDocument.CurrentSchema, comparisonType: StringComparison.Ordinal)) {
-            var schemaLabel = ((document.Schema is { Length: > 0 } schema) ? schema : "(absent)");
-
-            return [new CreationValidationError(Path: "schema", Message: $"declares '{schemaLabel}', not the recognized '{CreationDocument.CurrentSchema}'.")];
+        if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: CreationDocument.CurrentSchema) is { } schemaViolation) {
+            return [new CreationValidationError(Path: "schema", Message: schemaViolation)];
         }
 
         var errors = new List<CreationValidationError>();
@@ -219,11 +213,9 @@ public static class CreationCanonicalizer {
     public static CanonicalCreation Canonicalize(CreationDocument document, string? source = null) {
         ValidateOrThrow(document: document, source: source);
 
-        var normalized = Normalize(document: document);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value: normalized, options: DocumentJsonOptions.Shared);
-        var hash = Puck.Assets.ContentAddressedStore.ComputeHash(content: bytes);
+        var canonical = DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
 
-        return new CanonicalCreation(Bytes: bytes, Document: normalized, Hash: hash);
+        return new CanonicalCreation(Bytes: canonical.Bytes, Document: canonical.Document, Hash: canonical.Hash);
     }
 
     // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
@@ -475,17 +467,12 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateExtensions(CreationDocument document, List<CreationValidationError> errors) {
-        if (document.Extensions is not { Count: > 0 } extensions) {
-            return;
-        }
-
-        foreach (var key in extensions.Keys) {
-            if (KnownMemberNames.Contains(item: key)) {
-                errors.Add(item: new(Path: $"extensions.{key}", Message: $"'{key}' shadows a known document member — not a real extension."));
-            }
-        }
-    }
+    private static void ValidateExtensions(CreationDocument document, List<CreationValidationError> errors) =>
+        DocumentCanonicalizer.ValidateExtensions(
+            addError: (path, message) => errors.Add(item: new(Path: path, Message: message)),
+            extensions: document.Extensions,
+            knownMemberNames: KnownMemberNames
+        );
 
     private static bool IsFinite(Vector3 vector) =>
         (float.IsFinite(f: vector.X) && float.IsFinite(f: vector.Y) && float.IsFinite(f: vector.Z));
