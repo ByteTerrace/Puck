@@ -374,7 +374,19 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             return Error(message: "[screen.unlink: expected one <name>]");
         }
 
-        var (ok, message) = m_binder.TryUnlink(name: args[0].ToString());
+        var name = args[0].ToString();
+
+        // Control over every member is required to sever (the grant table's Screen(index)-for-every-member rule) — the
+        // same gate screen.link applies when the link is formed. A missing link falls through to TryUnlink's honest error.
+        if (m_binder.TryReadLinkMembers(name: name, members: out var members)) {
+            foreach (var member in members) {
+                if (!AllowsControl(index: member)) {
+                    return Denied(verb: "screen.unlink", index: member);
+                }
+            }
+        }
+
+        var (ok, message) = m_binder.TryUnlink(name: name);
 
         return (ok
             ? Success(args: in args, message: $"[screen.unlink: {message}]")

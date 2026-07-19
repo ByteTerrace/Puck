@@ -132,9 +132,11 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "screens");
         }
 
-        // Links drift: the folded live link set differs from the document's rows (a runtime screen.link, an unlink, or a
-        // selector-independent group change).
-        if (!ReferenceEquals(objA: CaptureLinks(definition: definition, binder: binder), objB: definition.Links)) {
+        // Links drift: the folded live link set differs by content from the document's rows (a runtime screen.link, an
+        // unlink, or a member-set change). A reference compare would be a false positive — CaptureLinks returns a FRESH
+        // list whenever the binder holds any link, so a purely-declared link set (which a save reproduces byte-for-byte)
+        // would otherwise report drift forever.
+        if (LinksDrifted(definition: definition, binder: binder)) {
             drifted.Add(item: "links");
         }
 
@@ -215,6 +217,42 @@ internal static class WorldSessionCapture {
         var live = binder.CaptureLinks();
 
         return ((live.Count == 0) ? definition.Links : live);
+    }
+
+    // Content-compare the folded live link set against the document's Links rows (name + ordered members), the same way
+    // ScreensDrifted compares machine sources: true exactly when a world.save would rewrite the Links section. The capture
+    // preserves declared-link order (ReconcileLinks establishes rows in declared order), so a save that reproduces the file
+    // reports no drift.
+    private static bool LinksDrifted(WorldDefinition definition, WorldScreenBinder binder) {
+        var captured = CaptureLinks(definition: definition, binder: binder);
+
+        if (ReferenceEquals(objA: captured, objB: definition.Links)) {
+            return false;
+        }
+
+        var declared = definition.Links;
+        var capturedCount = (captured?.Count ?? 0);
+
+        if (capturedCount != (declared?.Count ?? 0)) {
+            return true;
+        }
+
+        for (var index = 0; (index < capturedCount); index++) {
+            var live = captured![index];
+            var row = declared![index];
+
+            if (!string.Equals(a: live.Name, b: row.Name, comparisonType: StringComparison.Ordinal) || (live.Screens.Count != row.Screens.Count)) {
+                return true;
+            }
+
+            for (var member = 0; (member < live.Screens.Count); member++) {
+                if (live.Screens[member] != row.Screens[member]) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {

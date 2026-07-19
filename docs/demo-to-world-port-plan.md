@@ -3883,14 +3883,19 @@ dispositioned below rather than force-landed broken.
 - **Session capture.** `CaptureScreens` folds the live selector into
   `Magazine.Selected`; `CaptureLinks` folds the live link set into `Links`
   (null-preserving for the ouroboros); `ScreensDrifted`/`DescribeDrift` gained
-  selector + links comparisons (verified `session-drift screens+links`).
+  selector + links content comparisons, surfaced as the `session-drift` token of
+  `world.status` (there is no standalone `session-drift` command). A
+  purely-declared link set reports NO links drift — the compare is by content, so
+  a save that reproduces the file is honest (review-fix: the earlier
+  reference-compare was a false positive).
 
 **Verification (stdin script).** Magazine round-trip `entry=0/3 → next 1/3 (view
 applied) → next 2/3`, `screen.state entry=2/3`; `world.link.set pair 0+2` →
-`dirty 2`, `session-drift screens+links`, `screen.links: pair 0+2 dormant (screen
-0 has no machine)`, `screen.state … link=pair`; the `bad 0+99` link **loudly
-rejected** ("screen 0 is already in another link" + "names undeclared screen
-99"); `world.undo` drops it (`session-drift screens`); `screen.options 4` honest
+`dirty 2`, `world.status` shows `session-drift screens+links`, `screen.links: pair
+0+2 dormant (screen 0 has no machine)`, `screen.state … link=pair`; the `bad 0+99`
+link **loudly rejected** ("screen 0 is already in another link" + "names
+undeclared screen 99"); `world.undo` drops it (`world.status`: `session-drift
+screens`); `screen.options 4` honest
 "no reconfigurable machine"; grant deny/allow; `screen.capture`/`screen.desktop`
 regression intact; `world.save` folded the magazine; default save byte-stable.
 

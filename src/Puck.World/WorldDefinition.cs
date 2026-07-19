@@ -759,13 +759,14 @@ internal abstract record WorldScreenSource {
     internal sealed record Console(int Rows = 24, int Columns = 64, bool Procedural = false) : WorldScreenSource;
 }
 
-/// <summary>An ordered set of sources one screen may show, plus which entry it wakes on — the cycle primitive. A
+/// <summary>An ordered set of sources one screen may show, plus the entry its selector starts on — the cycle primitive. A
 /// selection is a POINTER into this list; changing it never changes how many screen slots exist, so a magazine costs no
 /// render envelope. Entries are the same closed <see cref="WorldScreenSource"/> vocabulary the declared source uses, so a
 /// screen may rotate a cartridge, the webcam, and a jumbotron view through one slot.</summary>
 /// <param name="Entries">The ordered source list (at least one entry).</param>
-/// <param name="Selected">The 0-based entry the screen wakes on. Live selection drifts from this and is folded back by
-/// <c>world.save</c> (see <see cref="WorldSessionCapture"/>).</param>
+/// <param name="Selected">The 0-based entry the selector STARTS on (what <c>screen.select</c> advances from), not what the
+/// screen boots showing — a screen always wakes on its declared <c>Source</c> (the one-live-console ceiling depends on
+/// this). Live selection drifts from this and is folded back by <c>world.save</c> (see <see cref="WorldSessionCapture"/>).</param>
 /// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
 /// when false the selector clamps at both ends.</param>
 internal sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);

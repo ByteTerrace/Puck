@@ -744,6 +744,23 @@ internal sealed class WorldScreenBinder : IDisposable {
         return (Ok: true, Message: $"link '{name}' severed");
     }
 
+    /// <summary>Reads a live link's member screens by name — the grant surface <c>screen.unlink</c> checks <c>Control</c>
+    /// over before severing. Fails when no link of that name is live.</summary>
+    /// <param name="name">The link name.</param>
+    /// <param name="members">The member screen indices in cable order, on success.</param>
+    /// <returns>Whether a link of that name is live.</returns>
+    public bool TryReadLinkMembers(string name, out IReadOnlyList<int> members) {
+        if (m_links.TryGetValue(key: name, value: out var entry)) {
+            members = entry.Members;
+
+            return true;
+        }
+
+        members = [];
+
+        return false;
+    }
+
     /// <summary>The live cable-link set as document rows — the <c>world.save</c> fold of every established/runtime link
     /// back into the <c>Links</c> section (cable order preserved), so re-booting the saved file reproduces the groups.</summary>
     public IReadOnlyList<WorldScreenLink> CaptureLinks() {
