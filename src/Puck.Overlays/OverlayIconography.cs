@@ -87,6 +87,10 @@ public enum OverlayIconId : ushort {
     EditRecord = 31,
     /// <summary>Play/stop (a play triangle).</summary>
     EditPlay = 32,
+    /// <summary>Step the local edit ring back (a leftward hook arrow over its arc).</summary>
+    EditUndo = 33,
+    /// <summary>Step the local edit ring forward (the undo arrow's x-mirror).</summary>
+    EditRedo = 34,
 
     /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
     AtlasBase = 1024,
@@ -160,6 +164,8 @@ public static class OverlayGamepadGlyphs {
             "edit.deselect" => OverlayIconId.EditDeselect,
             "edit.record" => OverlayIconId.EditRecord,
             "edit.play" => OverlayIconId.EditPlay,
+            "edit.undo" => OverlayIconId.EditUndo,
+            "edit.redo" => OverlayIconId.EditRedo,
             _ => (((icon is not null) &&
                 icon.StartsWith(value: "action.", comparisonType: StringComparison.Ordinal) &&
                 int.TryParse(s: icon.AsSpan(start: "action.".Length), result: out var number) &&

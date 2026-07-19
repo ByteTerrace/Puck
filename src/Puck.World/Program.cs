@@ -191,6 +191,20 @@ services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
 // modules for the analyzer ceilings). The orbit pivot retargets at the selection via property injection (targeting
 // composes after the session).
 services.AddSingleton<WorldEditorDrag>();
+// The sculpt workbench (§P6): the per-seat creation sub-editor's client context — its preview creation/placement
+// compose over the delivered rows through the SAME stamp path a committed placement uses. The drag channel's ghost
+// envelope pre-checks fold the workbench preview in (property-injected — the workbench composes after the drag).
+services.AddSingleton(implementationFactory: static sp => {
+    var workbench = new WorldWorkbench(
+        client: sp.GetRequiredService<WorldClient>(),
+        envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+        drag: sp.GetRequiredService<WorldEditorDrag>()
+    );
+
+    sp.GetRequiredService<WorldEditorDrag>().CandidateComposer = workbench.ComposeCandidate;
+
+    return workbench;
+});
 services.AddSingleton<WorldEditorSession>();
 services.AddSingleton<WorldEditorPicker>();
 services.AddSingleton(implementationFactory: static sp => {
@@ -210,6 +224,12 @@ services.AddSingleton(implementationFactory: static sp => {
 });
 services.AddSingleton<ICommandModule, EditorCommandModule>();
 services.AddSingleton<ICommandModule, EditorSelectionCommandModule>();
+// The sculpt verb surface (§P6): lifecycle/commit/easel, shapes, style, and timeline/rig — SEPARATE modules per
+// concern to keep every class under its analyzer ceilings.
+services.AddSingleton<ICommandModule, EditorSculptCommandModule>();
+services.AddSingleton<ICommandModule, EditorSculptShapeCommandModule>();
+services.AddSingleton<ICommandModule, EditorSculptStyleCommandModule>();
+services.AddSingleton<ICommandModule, EditorSculptRigCommandModule>();
 // The creation-asset surface (§D6/P5): editor.import/creations/creation.next|prev/spawn.creation — the place page's
 // place-by-name twins. The animated-placement replay pool sits immediately after the avatar catalog's frozen
 // dynamic-transform capacity (the slot-base contract the frame source's capacity arithmetic mirrors).
@@ -383,7 +403,8 @@ services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     server: sp.GetRequiredService<WorldServer>(),
     settings: sp.GetRequiredService<WorldRenderSettings>(),
     store: sp.GetRequiredService<BindingBarStore>(),
-    targeting: sp.GetRequiredService<WorldEditorTargeting>()
+    targeting: sp.GetRequiredService<WorldEditorTargeting>(),
+    workbench: sp.GetRequiredService<WorldWorkbench>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
 services.AddSingleton<ICommandModule, WorldUiCommandModule>();
@@ -414,7 +435,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         editor: sp.GetRequiredService<WorldEditorSession>(),
         targeting: sp.GetRequiredService<WorldEditorTargeting>(),
         drag: sp.GetRequiredService<WorldEditorDrag>(),
-        animator: sp.GetRequiredService<WorldPlacementAnimator>()
+        animator: sp.GetRequiredService<WorldPlacementAnimator>(),
+        workbench: sp.GetRequiredService<WorldWorkbench>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a

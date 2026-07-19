@@ -390,6 +390,19 @@ float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
         return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
+    if ((iconId == 33u) || (iconId == 34u)) {                          // EditUndo / EditRedo: a hook arrow over its arc
+        // One drawing, mirrored: the ring's TOP half (an arc from the left point over to the right point) with a
+        // downward arrowhead at the left end — the classic "curl back" gesture. EditUndo hooks left; EditRedo is
+        // its x-mirror. Distinct from the EditPrev/EditNext cycle rings (those open a quadrant and point sideways).
+        float2 q = ((iconId == 34u) ? float2(-p.x, p.y) : p);
+        float d = max(abs(length(q) - 0.42), q.y);                     // keep the arc's upper half only (y <= 0 up here)
+
+        d = min(d, distanceToSegment(q, float2(-0.42, 0.10), float2(-0.62, -0.10)));
+        d = min(d, distanceToSegment(q, float2(-0.42, 0.10), float2(-0.22, -0.10)));
+
+        return float4(tokenHue(OVERLAY_ROLE_ACCENT), strokeMask(d, stroke, aa));
+    }
+
     return float4(0.0, 0.0, 0.0, 0.0);
 }
 

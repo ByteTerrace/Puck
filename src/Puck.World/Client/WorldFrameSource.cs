@@ -41,10 +41,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly WorldClient m_client;
     private readonly WorldSimulation m_simulation;
     // The editor's client-side render seams: the drag channel's pending-row overlay (composed over the delivered
-    // definition each rebuild) and the targeting state's selection highlight. Both fold into the rebuild watch.
+    // definition each rebuild), the sculpt workbench's preview creation/placement overlay, and the targeting
+    // state's selection highlight. All fold into the rebuild watch.
     private readonly WorldEditorTargeting m_targeting;
     private readonly WorldChangeShimmer m_shimmer = new();
     private readonly WorldEditorDrag m_drag;
+    private readonly WorldWorkbench m_workbench;
     // The animated-placement replay pool (§D6): reconciled at the delivery boundary, ticked on the render clock,
     // packed after the avatar transforms every frame.
     private readonly WorldPlacementAnimator m_animator;
@@ -90,8 +92,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
     /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
     /// <param name="animator">The animated-placement replay pool (§D6).</param>
+    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch, §P6).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -102,6 +105,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: targeting);
         ArgumentNullException.ThrowIfNull(argument: drag);
         ArgumentNullException.ThrowIfNull(argument: animator);
+        ArgumentNullException.ThrowIfNull(argument: workbench);
 
         m_frameRate = frameRate;
         m_client = client;
@@ -113,6 +117,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_targeting = targeting;
         m_drag = drag;
         m_animator = animator;
+        m_workbench = workbench;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -231,6 +236,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // program itself never rebuilds for a timeline step).
         m_animator.Tick(deltaSeconds: deltaSeconds);
 
+        // Advance the sculpt workbench: playback ticks, drag-coalescer frame boundary, and its model revisions fold
+        // into the monotonic rebuild watch read below.
+        m_workbench.Tick(deltaSeconds: deltaSeconds);
+
         // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count
         // change), a selection change (the highlight tint), or a drag-overlay move rebuilds the program and marks
         // ProgramChanged so the engine re-uploads it, always within the frozen capacities. The first frame also
@@ -267,8 +276,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             m_program = Build(
                 scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
                 screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
-                placements: m_drag.ComposePlacements(live: m_client.Definition.Placements),
-                creations: m_client.Definition.Creations,
+                // The sculpt preview composes OVER the drag-composed rows: the bench's synthetic creation +
+                // placement render through the same stamp path a committed row uses (§P6's stamp-equals-preview).
+                placements: m_workbench.ComposePlacements(live: m_drag.ComposePlacements(live: m_client.Definition.Placements)),
+                creations: m_workbench.ComposeCreations(live: m_client.Definition.Creations),
                 probeWorstCase: false,
                 placementProbe: false,
                 highlight: m_targeting,
@@ -488,8 +499,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     }
 
     // The combined program-rebuild watch: the client's roster/snapshot/definition counters plus the editor's
-    // selection (highlight) and drag-overlay counters — all monotonic, so the sum only stalls when none has changed.
-    private int RebuildRevision() => ((m_client.Revision + m_targeting.Revision) + m_drag.Revision);
+    // selection (highlight), drag-overlay, and sculpt-workbench counters — all monotonic, so the sum only stalls
+    // when none has changed.
+    private int RebuildRevision() => (((m_client.Revision + m_targeting.Revision) + m_drag.Revision) + m_workbench.Revision);
 
     // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
     // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.

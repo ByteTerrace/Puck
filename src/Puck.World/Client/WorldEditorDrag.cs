@@ -80,6 +80,18 @@ internal sealed class WorldEditorDrag {
     /// the frame source's program-rebuild watch.</summary>
     public int Revision => m_revision;
 
+    /// <summary>Folds every OTHER client-local preview overlay (the sculpt workbench's composed rows) into a ghost
+    /// spawn's envelope candidate, so all client-side previews are capacity-checked TOGETHER — a ghost that fits
+    /// alone but not beside an open bench must reject at spawn, never overflow the frozen floors at render.
+    /// Property-injected (the workbench composes after this channel).</summary>
+    public Func<WorldDefinition, WorldDefinition>? CandidateComposer { get; set; }
+
+    // The ghost-spawn envelope gate: the candidate (already carrying the caller's new row) plus every other
+    // client-local overlay, against the probed floors.
+    private bool TryFitComposed(WorldDefinition candidate, out string reason) {
+        return m_envelope.TryFit(candidate: (CandidateComposer?.Invoke(arg: candidate) ?? candidate), reason: out reason);
+    }
+
     /// <summary>Whether the seat holds a live (unreleased) drag.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public bool IsDragging(int slot) => (((uint)slot < (uint)m_channels.Length) && m_channels[slot].Active);
@@ -228,7 +240,7 @@ internal sealed class WorldEditorDrag {
         rows.AddRange(collection: definition.Placements);
         rows.Add(item: placement);
 
-        if (!m_envelope.TryFit(candidate: (definition with { Placements = rows }), reason: out var capacityReason)) {
+        if (!TryFitComposed(candidate: (definition with { Placements = rows }), reason: out var capacityReason)) {
             error = capacityReason;
 
             return false;
@@ -258,7 +270,7 @@ internal sealed class WorldEditorDrag {
 
         var definition = m_client.Definition;
 
-        if (!m_envelope.TryFit(candidate: (definition with { Scene = WithRow(scene: definition.Scene, row: row) }), reason: out var capacityReason)) {
+        if (!TryFitComposed(candidate: (definition with { Scene = WithRow(scene: definition.Scene, row: row) }), reason: out var capacityReason)) {
             error = capacityReason;
 
             return false;

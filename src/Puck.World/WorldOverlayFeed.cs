@@ -41,7 +41,7 @@ internal sealed class WorldOverlayFeed {
 
     // One seat's cached HUD lines + the fact key they were formatted from (re-formatted only on a key change).
     private struct HudCache {
-        public (int Targeting, int Drag, int Definition, int Session, bool SnapEnabled, float SnapPitch) Key;
+        public (int Targeting, int Drag, int Definition, int Session, int Workbench, bool SnapEnabled, float SnapPitch) Key;
         public string SelectionLine;
         public string ContextLine;
         public string SessionLine;
@@ -56,6 +56,7 @@ internal sealed class WorldOverlayFeed {
     private readonly OverlayEditorSeat[] m_editorSeats;
     private readonly HudCache[] m_hudCaches;
     private readonly WorldEditorTargeting m_targeting;
+    private readonly WorldWorkbench m_workbench;
     private readonly GamepadManager? m_gamepads;
     // The session-honesty sources (loopback-local reads, the DescribePopulation precedent): the live render levers
     // (their Revision is the live-act watch), the live census, the screen binder's runtime inserts, and the server's
@@ -105,8 +106,9 @@ internal sealed class WorldOverlayFeed {
     /// <param name="server">The server whose grant table answers exclusive-hold readouts (loopback-local).</param>
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
+    /// <param name="workbench">The sculpt workbench whose bench facts the HUD narrates while a seat sculpts (§P6).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -120,7 +122,9 @@ internal sealed class WorldOverlayFeed {
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: targeting);
+        ArgumentNullException.ThrowIfNull(argument: workbench);
 
+        m_workbench = workbench;
         m_bindings = bindings;
         m_binder = binder;
         m_client = client;
@@ -151,7 +155,7 @@ internal sealed class WorldOverlayFeed {
             var slot = index;
 
             m_hudCaches[index] = new HudCache {
-                Key = (-1, -1, -1, -1, false, 0f),
+                Key = (-1, -1, -1, -1, -1, false, 0f),
                 SelectionLine = string.Empty,
                 ContextLine = string.Empty,
                 SessionLine = string.Empty,
@@ -307,13 +311,31 @@ internal sealed class WorldOverlayFeed {
     // rebuild-scale event anyway, so the transient string cost rides an already-paid frame.
     private void RefreshHudCache(int slot, ref HudCache cache) {
         var snap = m_drag.Snap(slot: slot);
-        var key = (m_targeting.Revision, m_drag.Revision, m_client.DefinitionRevision, m_sessionGeneration, snap.Enabled, snap.Pitch.X);
+        var key = (m_targeting.Revision, m_drag.Revision, m_client.DefinitionRevision, m_sessionGeneration, m_workbench.Revision, snap.Enabled, snap.Pitch.X);
 
         if (cache.Key == key) {
             return;
         }
 
         cache.Key = key;
+
+        // A sculpting seat's HUD narrates the BENCH (its target, budget, timeline, and the two undo domains) —
+        // the world-row selection lines return when the bench closes.
+        if (m_workbench.Model(slot: slot) is { } sculpt) {
+            cache.SelectionLine = ComposeSculptTargetLine(model: sculpt);
+            cache.ContextLine = string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                // ASCII only — the overlay glyph pack is ASCII-95. The shape budget is the §P6 HUD narration.
+                handler: $"'{m_workbench.RowId(slot: slot)}' shapes {sculpt.StampShapeCount}/{sculpt.ShapeCapacity} | frame {sculpt.CurrentFrame}/{sculpt.FrameCount}{(sculpt.Playing ? " play" : string.Empty)} | chains {sculpt.Chains.Count}"
+            );
+            cache.SessionLine = ComposeSessionLine(slot: slot);
+            cache.DragLine = string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"ring {sculpt.HistoryCount}/{Puck.Authoring.SculptModel.HistoryCapacity} local | uncommitted {m_workbench.UncommittedEdits(slot: slot)} | world.undo = journal"
+            );
+
+            return;
+        }
 
         if (m_targeting.Selected(slot: slot) is { } selection) {
             var position = (m_targeting.SelectionPosition(slot: slot) ?? default);
@@ -335,6 +357,27 @@ internal sealed class WorldOverlayFeed {
         );
         cache.SessionLine = ComposeSessionLine(slot: slot);
         cache.DragLine = (m_drag.Describe(slot: slot) ?? string.Empty);
+    }
+
+    // The sculpting seat's target line: the model's live edit target (shape / chain goal / brush).
+    private static string ComposeSculptTargetLine(Puck.Authoring.SculptModel model) {
+        if (model.TargetIsGoal) {
+            var chain = model.TargetGoalChain!;
+
+            return string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"goal chain {chain.Id} ({chain.Goal.X:0.0}, {chain.Goal.Y:0.0}, {chain.Goal.Z:0.0})"
+            );
+        }
+
+        if (model.SelectedShape is { } shape) {
+            return string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"shape {shape.Id} {shape.Type} ({shape.Position.X:0.0}, {shape.Position.Y:0.0}, {shape.Position.Z:0.0})"
+            );
+        }
+
+        return "brush - South adds, D-pad cycles";
     }
 
     // The session-honesty line: the last act's class ("live" applies now and folds at world.save; "doc" applied live

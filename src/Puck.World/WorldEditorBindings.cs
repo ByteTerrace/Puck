@@ -17,6 +17,12 @@ internal static class WorldEditorBindings {
     /// <summary>The editor page group — a seat's active group while it edits.</summary>
     public const string GroupId = "editor";
 
+    /// <summary>The sculpt page group — a seat's active group while its workbench is open (a mode WITHIN editor
+    /// mode: <c>editor.sculpt.new</c>/<c>edit</c> flip onto it, <c>editor.sculpt.exit</c> flips back — modes are
+    /// page groups, the P3.5 doctrine; the editor group's five ordered trigger chords are all spoken for, and the
+    /// sculpt feature set is a page FAMILY of its own).</summary>
+    public const string SculptGroupId = "sculpt";
+
     /// <summary>The editor resting page id (empty chord: free-fly sticks, verticals, exit, status, speed).</summary>
     public const string RestingPageId = "editor";
     /// <summary>The camera page id (chord: LT held).</summary>
@@ -25,6 +31,18 @@ internal static class WorldEditorBindings {
     public const string SelectPageId = "editor-select";
     /// <summary>The placement page id (chord: LT then RT held): the grab/drag verb set, spawn ghosts, snap.</summary>
     public const string PlacePageId = "editor-place";
+
+    /// <summary>The sculpt resting page id (empty chord: build acts — add/primitive/undo/redo, target cycling,
+    /// duplicate/delete, the shape verticals).</summary>
+    public const string SculptRestingPageId = "sculpt";
+    /// <summary>The sculpt bench page id (chord: LT held): commit, easel, deselect, zoom.</summary>
+    public const string SculptBenchPageId = "sculpt-bench";
+    /// <summary>The sculpt style page id (chord: RT held): blend, mirror, material, smooth, scale steps.</summary>
+    public const string SculptStylePageId = "sculpt-style";
+    /// <summary>The sculpt frames page id (chord: LT then RT held): record/play/step/delete the timeline.</summary>
+    public const string SculptFramesPageId = "sculpt-frames";
+    /// <summary>The sculpt rig page id (chord: RT then LT held — the reverse squeeze): chain define/kind/cycle/delete.</summary>
+    public const string SculptRigPageId = "sculpt-rig";
 
     /// <summary>The display label the editor resting page carries — the binding bar's (and <c>editor.status</c>'s)
     /// visible evidence the editor group is live.</summary>
@@ -115,6 +133,112 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.DpadLeft, command: EditorCreationCommandModule.PrevCommand, label: "Creation-", icon: "edit.prev"),
                     ],
                     Label: "Place"
+                )
+            ),
+            // ---- the sculpt group (§P6): the workbench mode's page family. Sticks stay bound on EVERY page (the
+            // session routes move onto the sculpt target and look onto the orbit while a bench is open), and the
+            // shoulder verticals ride along so raise/lower never stalls under a held chord.
+            // The sculpt resting page: build acts.
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [],
+                Page: new BindingPageDefinition(
+                    Id: SculptRestingPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
+                        .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptShapeCommandModule.AddCommand, label: "Add", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptShapeCommandModule.PrimitiveCommand, label: "Shape", icon: "edit.duplicate"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptCommandModule.UndoCommand, label: "Undo", icon: "edit.undo"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptCommandModule.RedoCommand, label: "Redo", icon: "edit.redo"),
+                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptShapeCommandModule.DuplicateCommand, label: "Twin", icon: "edit.duplicate"),
+                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptShapeCommandModule.RemoveCommand, label: "Delete", icon: "edit.delete"),
+                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.NextCommand, label: "Next", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.PrevCommand, label: "Prev", icon: "edit.prev"),
+                        Press(source: InputSources.Gamepad.Back, command: EditorSculptCommandModule.ExitCommand, label: "Done", icon: "edit.exit"),
+                        Press(source: InputSources.Keyboard.Tab, command: EditorSculptCommandModule.ExitCommand, label: "Done", icon: "edit.exit"),
+                    ],
+                    Label: "Sculpt"
+                )
+            ),
+            // The LT bench page: the deliberate acts (commit, easel) plus deselect and the zoom steps.
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [WorldDefaultBindings.LeftTriggerModifierId],
+                Page: new BindingPageDefinition(
+                    Id: SculptBenchPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
+                        .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptCommandModule.CommitCommand, label: "Commit", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptCommandModule.EaselCommand, label: "Easel", icon: "edit.link"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptShapeCommandModule.DeselectCommand, label: "Clear", icon: "edit.deselect"),
+                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptCommandModule.ZoomInCommand, label: "Zoom+", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptCommandModule.ZoomOutCommand, label: "Zoom-", icon: "edit.prev"),
+                    ],
+                    Label: "Bench"
+                )
+            ),
+            // The RT style page: blend/mirror/material plus the smooth and scale steps.
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [WorldDefaultBindings.RightTriggerModifierId],
+                Page: new BindingPageDefinition(
+                    Id: SculptStylePageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
+                        .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptStyleCommandModule.BlendCommand, label: "Blend", icon: "edit.op"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptStyleCommandModule.MirrorCommand, label: "Mirror", icon: "edit.style"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptStyleCommandModule.MaterialNextCommand, label: "Color+", icon: "edit.material"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptStyleCommandModule.MaterialPrevCommand, label: "Color-", icon: "edit.material"),
+                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptStyleCommandModule.SmoothUpCommand, label: "Smooth+", icon: "edit.op"),
+                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptStyleCommandModule.SmoothDownCommand, label: "Smooth-", icon: "edit.op"),
+                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.GrowCommand, label: "Grow", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.ShrinkCommand, label: "Shrink", icon: "edit.prev"),
+                    ],
+                    Label: "Style"
+                )
+            ),
+            // The LT+RT frames page: the timeline (record/play/step/delete).
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [WorldDefaultBindings.LeftTriggerModifierId, WorldDefaultBindings.RightTriggerModifierId],
+                Page: new BindingPageDefinition(
+                    Id: SculptFramesPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
+                        .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptRigCommandModule.FrameRecordCommand, label: "Record", icon: "edit.record"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptRigCommandModule.PlayCommand, label: "Play", icon: "edit.play"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptRigCommandModule.FrameNextCommand, label: "Frame+", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptRigCommandModule.FramePrevCommand, label: "Frame-", icon: "edit.prev"),
+                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptRigCommandModule.FrameRemoveCommand, label: "Del frame", icon: "edit.delete"),
+                    ],
+                    Label: "Frames"
+                )
+            ),
+            // The RT+LT rig page (the reverse squeeze): chains — define from selection, cycle, kind, delete. Goal
+            // posing rides the resting page's target cycle (selection extends into chain goals) + the move stick.
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [WorldDefaultBindings.RightTriggerModifierId, WorldDefaultBindings.LeftTriggerModifierId],
+                Page: new BindingPageDefinition(
+                    Id: SculptRigPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
+                        .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptRigCommandModule.ChainDefineCommand, label: "Chain", icon: "edit.link"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptRigCommandModule.ChainKindCommand, label: "Kind", icon: "edit.style"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptRigCommandModule.ChainRemoveCommand, label: "Del chain", icon: "edit.delete"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptRigCommandModule.ChainNextCommand, label: "Chain+", icon: "edit.next"),
+                    ],
+                    Label: "Rig"
                 )
             ),
         ];

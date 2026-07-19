@@ -47,6 +47,8 @@ internal sealed class WorldEditorSession {
     private const float MinOrbitDistance = 1.5f;
     private const float MaxOrbitDistance = 60f;
     private const float OrbitZoomRatePerSecond = 1.6f;
+    // The sculpt zoom chord's step factor (D-pad Up/Down on the bench page; the numeric twin is editor.sculpt.zoom).
+    private const float OrbitZoomStepFactor = 1.25f;
     // The orbit pivot sits at the avatar's chest height, matching the chase rig's target lift.
     private static readonly Vector3 s_orbitPivotLift = new(x: 0f, y: 1f, z: 0f);
 
@@ -57,6 +59,7 @@ internal sealed class WorldEditorSession {
     private readonly WorldSeatBindings m_bindings;
     private readonly IServerLink m_link;
     private readonly WorldEditorDrag m_drag;
+    private readonly WorldWorkbench m_workbench;
     private readonly Seat[] m_seats;
 
     // One seat's mode state: the camera pose/mode, the two-phase stick latches, the vertical holds, and the intent
@@ -92,17 +95,21 @@ internal sealed class WorldEditorSession {
     /// <param name="link">The server link the intent-source diversion rides (the existing <c>SetControl</c> wire).</param>
     /// <param name="drag">The drag preview channel: while a seat's drag is live, its latched sticks translate the
     /// pending row instead of flying the camera.</param>
+    /// <param name="workbench">The sculpt workbench: while a seat's bench is open, the camera orbits its pivot and
+    /// the latched move stick drives the sculpt target instead of flying.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldEditorSession(PlayerRoster roster, WorldSeatBindings bindings, IServerLink link, WorldEditorDrag drag) {
+    public WorldEditorSession(PlayerRoster roster, WorldSeatBindings bindings, IServerLink link, WorldEditorDrag drag, WorldWorkbench workbench) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: link);
         ArgumentNullException.ThrowIfNull(argument: drag);
+        ArgumentNullException.ThrowIfNull(argument: workbench);
 
         m_roster = roster;
         m_bindings = bindings;
         m_link = link;
         m_drag = drag;
+        m_workbench = workbench;
         m_seats = new Seat[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -378,6 +385,10 @@ internal sealed class WorldEditorSession {
             // under a precision drag fights the hand), the latched move sample translates the pending row in the
             // camera's yaw frame, and the shoulder verticals lift/sink it.
             AdvanceDrag(slot: slot, seat: seat, deltaSeconds: deltaSeconds);
+        } else if (m_workbench.IsActive(slot: slot)) {
+            // An open sculpt bench claims the seat's camera AND sticks: look orbits the workbench pivot, move (in
+            // the camera's planar frame) plus the shoulder verticals drive the sculpt target.
+            AdvanceWorkbench(slot: slot, seat: seat, deltaSeconds: deltaSeconds);
         } else if (seat.Mode == EditorCameraMode.Fly) {
             AdvanceFly(seat: seat, deltaSeconds: deltaSeconds);
         } else {
@@ -459,6 +470,81 @@ internal sealed class WorldEditorSession {
         SetLookToward(seat: seat, target: pivot);
     }
 
+    // The sculpt-bench frame: the look stick orbits the workbench pivot (yaw/pitch; zoom is the deliberate
+    // editor.sculpt.zoom act), the latched move sample + shoulder verticals route into the model in the camera's
+    // planar frame. The fly pose trails the orbit so leaving the bench adopts the vantage.
+    private void AdvanceWorkbench(int slot, Seat seat, float deltaSeconds) {
+        var pivot = (m_workbench.Pivot(slot: slot) ?? seat.Eye);
+        var look = seat.ActiveLook;
+
+        seat.OrbitYaw -= (Response(value: look.X) * LookRateRadiansPerSecond * deltaSeconds);
+        seat.OrbitPitch = Math.Clamp(
+            value: (seat.OrbitPitch + (Response(value: look.Y) * LookRateRadiansPerSecond * deltaSeconds)),
+            min: -MaxPitchRadians,
+            max: MaxPitchRadians
+        );
+        seat.Rig.Eye = (pivot + OrbitRig.Offset(yaw: seat.OrbitYaw, pitch: seat.OrbitPitch, distance: seat.OrbitDistance));
+        seat.Rig.Target = pivot;
+        seat.Eye = seat.Rig.Eye;
+        SetLookToward(seat: seat, target: pivot);
+
+        // The camera's planar frame for the target move (right = cross(look, up)); a degenerate eye-on-pivot frame
+        // falls back to world axes so the sticks never dead-zone.
+        var toPivot = (pivot - seat.Rig.Eye);
+        var forward = new Vector3(x: toPivot.X, y: 0f, z: toPivot.Z);
+
+        forward = ((forward.LengthSquared() > 1e-8f) ? Vector3.Normalize(value: forward) : Vector3.UnitZ);
+
+        var right = Vector3.Normalize(value: Vector3.Cross(vector1: forward, vector2: Vector3.UnitY));
+        var move = seat.ActiveMove;
+        var vertical = ((seat.AscendHeld ? 1f : 0f) - (seat.DescendHeld ? 1f : 0f));
+
+        m_workbench.RouteMove(
+            slot: slot,
+            planarRight: right,
+            planarForward: forward,
+            move: new Vector2(x: Response(value: move.X), y: Response(value: move.Y)),
+            vertical: vertical,
+            deltaSeconds: deltaSeconds
+        );
+    }
+
+    /// <summary>Seeds the seat's orbit framing around the workbench pivot (call when a bench opens): the orbit
+    /// adopts the current fly vantage exactly like <see cref="SetMode"/>'s orbit entry.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public void SeedWorkbenchOrbit(int slot) {
+        var seat = m_seats[SlotOrFirst(slot: slot)];
+
+        seat.OrbitYaw = (seat.Yaw + MathF.PI);
+        seat.OrbitPitch = Math.Clamp(value: -seat.Pitch, min: -MaxPitchRadians, max: MaxPitchRadians);
+        seat.OrbitDistance = Math.Clamp(value: seat.OrbitDistance, min: MinOrbitDistance, max: MaxOrbitDistance);
+    }
+
+    /// <summary>Sets the seat's orbit distance (the sculpt zoom's numeric twin), clamped to the sane envelope.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="distance">The eye distance from the pivot, world units.</param>
+    /// <returns>The clamped applied distance.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="distance"/> is not finite.</exception>
+    public float SetOrbitDistance(int slot, float distance) {
+        FiniteGuard.ThrowIfNonFinite(value: distance);
+
+        var seat = m_seats[SlotOrFirst(slot: slot)];
+
+        seat.OrbitDistance = Math.Clamp(value: distance, min: MinOrbitDistance, max: MaxOrbitDistance);
+
+        return seat.OrbitDistance;
+    }
+
+    /// <summary>Steps the seat's orbit distance in or out by the chord step factor (the sculpt zoom chords).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="zoomIn">Whether to step closer (<see langword="true"/>) or farther.</param>
+    /// <returns>The stepped distance.</returns>
+    public float StepOrbitDistance(int slot, bool zoomIn) {
+        var seat = m_seats[SlotOrFirst(slot: slot)];
+
+        return SetOrbitDistance(slot: slot, distance: (zoomIn ? (seat.OrbitDistance / OrbitZoomStepFactor) : (seat.OrbitDistance * OrbitZoomStepFactor)));
+    }
+
     // Quadratic stick response: sign-preserving v*|v| — fine control near center, full authority at the rim.
     private static float Response(float value) => (value * MathF.Abs(x: value));
 
@@ -515,6 +601,8 @@ internal sealed class WorldEditorSession {
     private void Deactivate(int slot, Seat seat) {
         _ = m_bindings.SetActiveGroup(slot: slot, group: null);
         m_drag.Drop(slot: slot);
+        // An open sculpt bench dies with the session (its local ring is client state; commit is the only keep).
+        _ = m_workbench.Drop(slot: slot);
         SelectionReset?.Invoke(obj: slot);
         seat.Active = false;
         seat.SeedPending = false;

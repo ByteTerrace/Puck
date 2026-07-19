@@ -241,6 +241,11 @@ public sealed class SculptModel {
     public bool TargetMirror => (TargetIsBrush ? m_brushMirror : m_shapes[m_selectionIndex].Mirror);
     /// <summary>The TARGET's smooth-blend radius.</summary>
     public float TargetSmooth => (TargetIsBrush ? m_brushSmooth : m_shapes[m_selectionIndex].Smooth);
+    /// <summary>The TARGET's per-axis scale (the selected shape's, else the brush's — what the next add inherits).</summary>
+    public Vector3 TargetScale => (TargetIsBrush ? m_brushScale : m_shapes[m_selectionIndex].Scale);
+    /// <summary>The TARGET's position: the selected shape's, the targeted chain goal's, or null on the brush (which
+    /// has no place until it becomes a shape).</summary>
+    public Vector3? TargetPosition => (TargetIsGoal ? m_chains[m_goalChainIndex].Goal : (TargetIsBrush ? null : m_shapes[m_selectionIndex].Position));
 
     /// <summary>Adds a shape: the brush's primitive (or an explicit one) with the brush's style, at an explicit
     /// position or the spawn point, then selects it. The brush's palette slot advances so consecutive adds read as
