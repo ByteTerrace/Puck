@@ -20,8 +20,10 @@
 //       untouched default world mixes SILENCE (peak stays 0). Then the machine-audio path end to end IN THE
 //       SELF-HEAL ORDER — the speaker row lands FIRST (emitters derive, sources stay 0), the cartridge boots
 //       SECOND (screen.insert), and the director's per-frame reconcile binds the late machine without any further
-//       verb: sources goes to 1 and the running peak goes nonzero — the first sound World has ever made. Without a
-//       device: audio.state reads silent/rebinding with counted rebinds and the session survives.
+//       verb: sources goes to 1 and the running peak goes nonzero — the first sound World has ever made. A
+//       screen.boot CUE row (AP4) authored before the insert fires on the boot and reads in speaker.state's live
+//       transient tail — the one cue producer that needs a real cartridge. Without a device: audio.state reads
+//       silent/rebinding with counted rebinds and the session survives.
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Puck.Authoring;
@@ -204,8 +206,20 @@ try {
 
         Check("speaker-derives-before-machine", ((derived is { } d) && (d.Emitters >= 1) && (d.Sources == 0) && (d.Peak == 0)), $"emitters={derived?.Emitters} sources={derived?.Sources} peak={derived?.Peak}");
 
+        // The screen.boot CUE row (AP4), authored data-first: a looping patch (the 2 s transient cap keeps the
+        // polling window honest) through the hash-pin boundary — the in-process canonical hash IS the verb's, so
+        // the pin lands in one submission — then the cue row bound to the boot event.
+        var cueDrone = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(
+            Schema: SynthPatchDocument.CurrentSchema, Name: null, Oscillator: SynthOscillator.Noise,
+            DutyThousandths: null, Polynomial: 40, AttackFrames: null, DecayFrames: null, SustainThousandths: null,
+            ReleaseFrames: null, PitchMillihertz: 1_000));
+
+        _ = Check("cue-patch-applies", (SendAwait($$$"""world.patch.set {"id":"cue-drone","document":{"schema":"puck.synth.v1","oscillator":"Noise","polynomial":40,"pitchMillihertz":1000},"hash":"{{{cueDrone.Hash}}}"}""", "[world.mutation: UpsertPatch 'cue-drone' applied]", 20.0) is not null), "the drone patch through the hash pin");
+        _ = Check("boot-cue-applies", (SendAwait("""world.audio.set {"masterGain":1,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"focus","cues":[{"event":"screen.boot","patchId":"cue-drone","placement":"listener"}]}""", "[world.mutation: SetAudioDefaults applied]", 20.0) is not null), "the screen.boot cue row");
+
         // ...the cartridge SECOND: the per-frame reconcile binds the late machine with no further verb.
         _ = Check("cartridge-boots", (SendAwait($"screen.insert 0 {romPath} gaming-brick cgb", "[screen.insert: screen 0 booted", 30.0) is not null), "tune cart on screen 0");
+        _ = Check("boot-cue-fires", (SendAwait("speaker.state", "cue:screen.boot=cue-drone", 5.0) is not null), "cue:screen.boot live in speaker.state");
 
         var audible = AwaitState(state => ((state.Sources >= 1) && (state.Peak > 0)), 20.0);
 
