@@ -254,6 +254,15 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// <param name="index">The engine screen-surface index.</param>
     public bool HasMachine(int index) => (m_slots.TryGetValue(key: index, value: out var slot) && (slot.Machine is not null));
 
+    /// <summary>The live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
+    /// carries no machine (or one without the capability). The audio director's machine-source resolver (audio plan
+    /// A4/AP3): compared by REFERENCE each produced frame, so a boot/eject/live-swap rebinds the mixer source and a
+    /// machine booting late into a referenced slot self-heals. Pump-thread only, like every other read of the slot
+    /// table; the returned machine's <see cref="IAudioMachine.ReadSamples"/> is any-thread-safe by contract.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    public IAudioMachine? AudioMachine(int index) =>
+        ((m_slots.TryGetValue(key: index, value: out var slot) && (slot.Machine is IAudioMachine audio)) ? audio : null);
+
     /// <summary>Reads back the live machine insert on a screen index — its engine id, content path, and options — so
     /// <c>world.save</c> can fold a runtime <c>screen.insert</c> into that screen row's <see cref="WorldScreenSource.Machine"/>
     /// source (§2.1 session write-back). Returns <see langword="false"/> when the slot has no booted machine or the
@@ -367,7 +376,11 @@ internal sealed class WorldScreenBinder : IDisposable {
         IScreenMachine created;
 
         try {
-            created = engine.Create(options: options, contentBytes: content, savePath: null);
+            // ALWAYS-ON machine audio (audio plan A4): every screen machine synthesizes at the mixer rate from boot,
+            // so speakers bind (and mutations add them) at any time without a machine reboot. The accepted cost is
+            // ~192 KB of ring plus low-single-digit % CPU per booted machine; emulator snapshots are unaffected (the
+            // cores' audio carries no state).
+            created = engine.Create(options: options, contentBytes: content, savePath: null, audioSampleRate: Audio.WorldAudioMixer.SampleRate);
         } catch (ArgumentException exception) {
             return (Ok: false, Message: exception.Message);
         }
@@ -1512,7 +1525,8 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         try {
-            slot.Machine = engine.Create(options: machine.Options, contentBytes: content, savePath: null);
+            // Always-on machine audio at the mixer rate — the same A4 posture the runtime-insert path documents.
+            slot.Machine = engine.Create(options: machine.Options, contentBytes: content, savePath: null, audioSampleRate: Audio.WorldAudioMixer.SampleRate);
             slot.MachineEngine = engine.Id;
         } catch (ArgumentException exception) {
             slot.DeclaredFault = exception.Message;
