@@ -37,7 +37,43 @@ internal static class WorldSessionCapture {
             Population = CapturePopulation(population: population, defaults: definition.Population),
             Screens = CaptureScreens(screens: definition.Screens, binder: binder),
             Creations = CaptureCreations(creations: definition.Creations),
+            Tunes = CaptureTunes(tunes: definition.Tunes),
+            Patches = CapturePatches(patches: definition.Patches),
         });
+    }
+
+    // The audio-asset twins of CaptureCreations: every tune/patch row re-crosses its ONE canonicalize pipeline so
+    // the persisted doc + hash come from the SAME canonical result — idempotent at compose time, drift-proof on disk.
+    private static IReadOnlyList<WorldTune> CaptureTunes(IReadOnlyList<WorldTune> tunes) {
+        if (tunes.Count == 0) {
+            return tunes;
+        }
+
+        var captured = new List<WorldTune>(capacity: tunes.Count);
+
+        foreach (var tune in tunes) {
+            var canonical = Puck.Authoring.AudioCanonicalizer.Canonicalize(document: tune.Document, source: tune.Id);
+
+            captured.Add(item: (tune with { Document = canonical.Document, Hash = canonical.Hash }));
+        }
+
+        return captured;
+    }
+
+    private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) {
+        if (patches.Count == 0) {
+            return patches;
+        }
+
+        var captured = new List<WorldPatch>(capacity: patches.Count);
+
+        foreach (var patch in patches) {
+            var canonical = Puck.Authoring.SynthPatchCanonicalizer.Canonicalize(document: patch.Document, source: patch.Id);
+
+            captured.Add(item: (patch with { Document = canonical.Document, Hash = canonical.Hash }));
+        }
+
+        return captured;
     }
 
     // The §D6 world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted

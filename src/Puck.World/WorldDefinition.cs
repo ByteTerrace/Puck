@@ -486,16 +486,24 @@ internal readonly record struct FixedWorldKit(
 /// <param name="Id">The row's stable string id (unique within the scene).</param>
 /// <param name="Center">The shape's world-space center (its translate offset from the origin) — the position every
 /// manipulation edits.</param>
+/// <param name="Emission">The row's emission facet (a synth voice the shape itself makes — see
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null, so
+/// emission-free rows stay byte-identical.</param>
 [JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
 [JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-internal abstract record WorldSceneRow(string Id, Vector3 Center) {
+internal abstract record WorldSceneRow(
+    string Id,
+    Vector3 Center,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission
+) {
     /// <summary>A stone boulder — a sphere carrying the scene's shared <see cref="WorldScene.StoneAlbedo"/>.</summary>
     /// <param name="Id">The row's stable string id.</param>
     /// <param name="Center">The sphere's world-space center.</param>
     /// <param name="Radius">The sphere radius.</param>
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
-    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth) : WorldSceneRow(Id: Id, Center: Center);
+    /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
+    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
 
     /// <summary>A terrain slab — a rounded box patch (a plaza tile, a step, a wall segment) whose material is data on
     /// the row.</summary>
@@ -505,7 +513,8 @@ internal abstract record WorldSceneRow(string Id, Vector3 Center) {
     /// <param name="Round">The corner-rounding radius.</param>
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
     /// <param name="Albedo">The slab's own albedo (per-row material, unlike the shared boulder stone).</param>
-    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo) : WorldSceneRow(Id: Id, Center: Center);
+    /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
+    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
 
     /// <summary>Returns this row with a replaced <see cref="Center"/> — the shape-preserving move every drag commit and
     /// numeric move composes through.</summary>
@@ -587,6 +596,9 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
 /// <see langword="null"/> for none.</param>
 /// <param name="Role">RESERVED for the driven-body rung (null = decoration). Carried, validated as free text, unused
 /// this arc.</param>
+/// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Repeat"/> the emission
+/// binds to the placement ROOT only. Omitted from the wire when null.</param>
 internal sealed record WorldPlacement(
     string Id,
     string CreationId,
@@ -595,7 +607,8 @@ internal sealed record WorldPlacement(
     float Scale,
     WorldPlacementRepeat? Repeat = null,
     string? Mirror = null,
-    string? Role = null
+    string? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null
 );
 
 /// <summary>
@@ -1042,6 +1055,15 @@ internal sealed record WorldAuthoringDefaults(
 /// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
 /// (see <see cref="WorldAuthoringDefaults"/>). <see langword="null"/> in JSON coalesces to
 /// <see cref="WorldAuthoringDefaults.Default"/> (the <see cref="WorldStorageDefaults"/> absence convention).</param>
+/// <param name="Speakers">The placeable speaker rows (default empty) — the camera family's audio sibling (see
+/// <see cref="WorldSpeaker"/>): name-keyed transducers whose feeds tap shared sources.</param>
+/// <param name="Tunes">The tune ASSET rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
+/// inline-canonical with pinned hashes (see <see cref="WorldTune"/>).</param>
+/// <param name="Patches">The synth-patch ASSET rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
+/// inline-canonical with pinned hashes (see <see cref="WorldPatch"/>).</param>
+/// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
+/// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
+/// <see cref="WorldAudioDefaults.Default"/>.</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1059,7 +1081,11 @@ internal sealed record WorldDefinition(
     WorldStorageDefaults Storage,
     IReadOnlyList<WorldCreation> Creations,
     IReadOnlyList<WorldPlacement> Placements,
-    WorldAuthoringDefaults Authoring
+    WorldAuthoringDefaults Authoring,
+    IReadOnlyList<WorldSpeaker> Speakers,
+    IReadOnlyList<WorldTune> Tunes,
+    IReadOnlyList<WorldPatch> Patches,
+    WorldAudioDefaults Audio
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1266,6 +1292,12 @@ internal sealed record WorldDefinition(
         Creations: [],
         Placements: [],
         // The built-in authoring policy — byte-identical to the P4.5-era scattered constants.
-        Authoring: WorldAuthoringDefaults.Default
+        Authoring: WorldAuthoringDefaults.Default,
+        // The built-in world is silent: no speaker rows, no tune/patch assets, the stock audio defaults. A deployment
+        // (or the live editor) authors sound; the audio verbs and world.save persist it.
+        Speakers: [],
+        Tunes: [],
+        Patches: [],
+        Audio: WorldAudioDefaults.Default
     );
 }

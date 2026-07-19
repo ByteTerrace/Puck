@@ -578,8 +578,63 @@ internal sealed class WorldServer {
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => WorldSection.Creations,
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => WorldSection.Placements,
         WorldMutation.SetAuthoringDefaults => WorldSection.Authoring,
+        WorldMutation.UpsertSpeaker or WorldMutation.RemoveSpeaker => WorldSection.Speakers,
+        WorldMutation.UpsertTune or WorldMutation.RemoveTune => WorldSection.Tunes,
+        WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
+        WorldMutation.SetAudioDefaults => WorldSection.Audio,
         _ => WorldSection.Kits,
     };
+
+    // The dependents a placement-removal guard names: every speaker anchored to the placement (null = none).
+    private static string? DescribeSpeakersAnchoredTo(IReadOnlyList<WorldSpeaker> speakers, string placementId) {
+        List<string>? names = null;
+
+        foreach (var speaker in speakers) {
+            if ((speaker is WorldSpeaker.Anchored { Anchor: WorldAnchor.Placement anchor }) &&
+                string.Equals(a: anchor.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                (names ??= new List<string>()).Add(item: $"'{speaker.Name}'");
+            }
+        }
+
+        return ((names is null) ? null : string.Join(separator: ", ", values: names));
+    }
+
+    // The dependents a tune/patch-removal guard names among speaker feeds (null = none).
+    private static string? DescribeSpeakersSourcing(IReadOnlyList<WorldSpeaker> speakers, Func<WorldSpeakerSource, bool> matches) {
+        List<string>? names = null;
+
+        foreach (var speaker in speakers) {
+            if ((speaker.Feed?.Source is { } source) && matches(arg: source)) {
+                (names ??= new List<string>()).Add(item: $"'{speaker.Name}'");
+            }
+        }
+
+        return ((names is null) ? null : string.Join(separator: ", ", values: names));
+    }
+
+    // Every dependent a patch-removal guard names: synth-sourced speakers plus scene-row/placement emission facets
+    // (creation sounds carry their patches INLINE, so they can never dangle). Null = none.
+    private static string? DescribePatchDependents(WorldDefinition current, string patchId) {
+        List<string>? dependents = null;
+
+        if (DescribeSpeakersSourcing(speakers: current.Speakers, matches: source => ((source is WorldSpeakerSource.Synth synth) && string.Equals(a: synth.PatchId, b: patchId, comparisonType: StringComparison.Ordinal))) is { } speakers) {
+            (dependents ??= new List<string>()).Add(item: $"speaker(s) {speakers}");
+        }
+
+        foreach (var row in current.Scene.Rows) {
+            if ((row.Emission is { } emission) && string.Equals(a: emission.PatchId, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                (dependents ??= new List<string>()).Add(item: $"scene row '{row.Id}'");
+            }
+        }
+
+        foreach (var placement in current.Placements) {
+            if ((placement.Emission is { } emission) && string.Equals(a: emission.PatchId, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                (dependents ??= new List<string>()).Add(item: $"placement '{placement.Id}'");
+            }
+        }
+
+        return ((dependents is null) ? null : string.Join(separator: ", ", values: dependents));
+    }
 
     // A short mutation label for the accept/reject console line — the kind plus its stable-id subject.
     private static string Describe(WorldMutation mutation) => mutation switch {
@@ -608,6 +663,13 @@ internal sealed class WorldServer {
         WorldMutation.UpsertPlacement m => $"UpsertPlacement '{m.Placement.Id}'",
         WorldMutation.RemovePlacement m => $"RemovePlacement '{m.Id}'",
         WorldMutation.SetAuthoringDefaults => "SetAuthoringDefaults",
+        WorldMutation.UpsertSpeaker m => $"UpsertSpeaker '{m.Speaker.Name}'",
+        WorldMutation.RemoveSpeaker m => $"RemoveSpeaker '{m.Name}'",
+        WorldMutation.UpsertTune m => $"UpsertTune '{m.Tune.Id}'",
+        WorldMutation.RemoveTune m => $"RemoveTune '{m.Id}'",
+        WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Id}'",
+        WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
+        WorldMutation.SetAudioDefaults => "SetAudioDefaults",
         _ => "unknown",
     };
 
@@ -783,7 +845,17 @@ internal sealed class WorldServer {
                 candidate = (current with { Placements = Upsert(list: current.Placements, item: m.Placement, keyOf: static placement => placement.Id) });
 
                 return true;
-            case WorldMutation.RemovePlacement m:
+            case WorldMutation.RemovePlacement m: {
+                // The no-cascade guard, extended for the audio arc: a placement a speaker anchors to rejects loudly
+                // naming the dependents (the RemoveCreation precedent — full-document revalidation would also catch
+                // the dangling anchor, but the guard names WHO depends rather than echoing a validator path).
+                if (DescribeSpeakersAnchoredTo(speakers: current.Speakers, placementId: m.Id) is { } anchored) {
+                    candidate = current;
+                    reason = $"placement '{m.Id}' anchors speaker(s) {anchored} — remove or re-anchor them first";
+
+                    return false;
+                }
+
                 if (!Remove(list: current.Placements, key: m.Id, keyOf: static placement => placement.Id, result: out var placements)) {
                     candidate = current;
                     reason = $"no placement with id '{m.Id}'";
@@ -792,6 +864,112 @@ internal sealed class WorldServer {
                 }
 
                 candidate = (current with { Placements = placements });
+
+                return true;
+            }
+            case WorldMutation.UpsertSpeaker m:
+                candidate = (current with { Speakers = Upsert(list: current.Speakers, item: m.Speaker, keyOf: static speaker => speaker.Name) });
+
+                return true;
+            case WorldMutation.RemoveSpeaker m:
+                if (!Remove(list: current.Speakers, key: m.Name, keyOf: static speaker => speaker.Name, result: out var speakers)) {
+                    candidate = current;
+                    reason = $"no speaker named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Speakers = speakers });
+
+                return true;
+            case WorldMutation.UpsertTune m: {
+                // The UIE-6 hash contract at the compose boundary (the UpsertCreation pattern verbatim): canonicalize
+                // the carried puck.audio.v1 document, REJECT a hash the pipeline did not itself compute, store the pair.
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.AudioDocument> canonical;
+
+                try {
+                    canonical = Puck.Authoring.AudioCanonicalizer.Canonicalize(document: m.Tune.Document, source: m.Tune.Id);
+                } catch (Puck.Authoring.DocumentValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Tune.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"tune '{m.Tune.Id}' hash '{m.Tune.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Tunes = Upsert(list: current.Tunes, item: (m.Tune with { Document = canonical.Document }), keyOf: static tune => tune.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemoveTune m: {
+                if (DescribeSpeakersSourcing(speakers: current.Speakers, matches: source => ((source is WorldSpeakerSource.Tune tune) && string.Equals(a: tune.TuneId, b: m.Id, comparisonType: StringComparison.Ordinal))) is { } dependents) {
+                    candidate = current;
+                    reason = $"tune '{m.Id}' feeds speaker(s) {dependents} — remove or re-source them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Tunes, key: m.Id, keyOf: static tune => tune.Id, result: out var tunes)) {
+                    candidate = current;
+                    reason = $"no tune with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Tunes = tunes });
+
+                return true;
+            }
+            case WorldMutation.UpsertPatch m: {
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.SynthPatchDocument> canonical;
+
+                try {
+                    canonical = Puck.Authoring.SynthPatchCanonicalizer.Canonicalize(document: m.Patch.Document, source: m.Patch.Id);
+                } catch (Puck.Authoring.DocumentValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Patch.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"patch '{m.Patch.Id}' hash '{m.Patch.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Patches = Upsert(list: current.Patches, item: (m.Patch with { Document = canonical.Document }), keyOf: static patch => patch.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemovePatch m: {
+                if (DescribePatchDependents(current: current, patchId: m.Id) is { } dependents) {
+                    candidate = current;
+                    reason = $"patch '{m.Id}' is referenced by {dependents} — remove or re-source them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Patches, key: m.Id, keyOf: static patch => patch.Id, result: out var patches)) {
+                    candidate = current;
+                    reason = $"no patch with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Patches = patches });
+
+                return true;
+            }
+            case WorldMutation.SetAudioDefaults m:
+                candidate = (current with { Audio = m.Audio });
 
                 return true;
             case WorldMutation.UpsertBindingOverlay m:

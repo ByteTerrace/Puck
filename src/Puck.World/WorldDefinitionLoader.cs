@@ -96,11 +96,15 @@ internal static class WorldDefinitionLoader {
         return (definition with {
             Addons = (definition.Addons ?? []),
             Assignment = assignment,
+            Audio = (definition.Audio ?? WorldAudioDefaults.Default),
             BindingOverlays = (definition.BindingOverlays ?? []),
             Creations = (definition.Creations ?? []),
+            Patches = (definition.Patches ?? []),
             Placements = (definition.Placements ?? []),
+            Speakers = (definition.Speakers ?? []),
             Storage = (definition.Storage ?? WorldStorageDefaults.None),
             Authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default),
+            Tunes = (definition.Tunes ?? []),
         });
     }
 }

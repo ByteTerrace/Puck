@@ -71,7 +71,14 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: $"population.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{WorldPopulation.MaxSimulated}.");
         }
 
-        ValidateScene(scene: definition.Scene, errors: errors);
+        // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
+        // speaker rows below all resolve against the tune/patch id sets. The audio defaults coalesce here (the
+        // WorldAuthoringDefaults absence convention) so every downstream read sees a concrete row.
+        var audio = (definition.Audio ?? WorldAudioDefaults.Default);
+        var tuneIds = ValidateTunes(tunes: definition.Tunes, errors: errors);
+        var patchIds = ValidatePatches(patches: definition.Patches, errors: errors);
+
+        ValidateScene(scene: definition.Scene, patchIds: patchIds, errors: errors);
         ValidateSpawnPoints(spawnPoints: definition.SpawnPoints, errors: errors);
 
         if (definition.Render is null) {
@@ -93,7 +100,7 @@ internal static class WorldDefinitionValidator {
 
         var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
 
-        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, errors: errors);
+        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, patchIds: patchIds, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -124,9 +131,10 @@ internal static class WorldDefinitionValidator {
 
                         // The camera pose path (WorldScreenBinder) cannot yet resolve a placement's stamped transform
                         // — a loud rejection here rather than a silent no-op fault at runtime. Entity/EntityLeaf both
-                        // resolve today (EntityLeaf via WorldAvatarCatalog.RoleOffset's static approximation); full
-                        // placement pose resolution for cameras lands with the audio runtime (AP2/AP3), which needs
-                        // the same placement-transform seam for speakers anyway.
+                        // resolve today (EntityLeaf via WorldAvatarCatalog.RoleOffset's static approximation).
+                        // SPEAKERS resolve every anchor kind (WorldAudioDirector rides the placement transform);
+                        // lifting cameras onto that seam means swapping the binder's anchor-source path, not growing
+                        // this rejection.
                         if (anchoredCamera.Anchor is WorldAnchor.Placement) {
                             errors.Add(item: $"{path}.anchor cameras cannot anchor to a placement yet (the camera pose path does not resolve placement transforms this arc).");
                         }
@@ -228,14 +236,297 @@ internal static class WorldDefinitionValidator {
             }
         }
 
+        // Speakers and the audio defaults validate LAST: their references span every earlier row set (the screen
+        // index set, the placement rows, the tune/patch ids, the camera names).
+        ValidateSpeakers(definition: definition, screenIndices: screenIndices, placementIds: placementIds, tuneIds: tuneIds, patchIds: patchIds, errors: errors);
+        ValidateAudioDefaults(audio: audio, cameras: cameras, errors: errors);
+
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: errors)}");
         }
     }
 
+    // The tune ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants through
+    // AudioCanonicalizer (the ONE pipeline — never a re-implementation), and the UIE-6 hash pin (the carried hash
+    // must equal the canonical hash — a tampered/corrupt row rejects loudly). Returns the id set for the source gate.
+    private static HashSet<string> ValidateTunes(IReadOnlyList<WorldTune> tunes, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (tunes is null) {
+            errors.Add(item: "tunes is required.");
+
+            return ids;
+        }
+
+        for (var index = 0; (index < tunes.Count); index++) {
+            var tune = tunes[index];
+            var path = $"tunes[{index}]";
+
+            if (tune is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: tune.Id)) {
+                errors.Add(item: $"{path}.id is required.");
+            } else if (!ids.Add(item: tune.Id)) {
+                errors.Add(item: $"{path}.id '{tune.Id}' is duplicated.");
+            }
+
+            if (tune.Document is null) {
+                errors.Add(item: $"{path}.document is required.");
+
+                continue;
+            }
+
+            var violations = Puck.Authoring.AudioCanonicalizer.Validate(document: tune.Document);
+
+            if (violations.Count > 0) {
+                foreach (var violation in violations) {
+                    errors.Add(item: $"{path}.document.{violation.Path}: {violation.Message}");
+                }
+
+                continue;
+            }
+
+            var canonical = Puck.Authoring.AudioCanonicalizer.Canonicalize(document: tune.Document, source: tune.Id);
+
+            if (!string.Equals(a: tune.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                errors.Add(item: $"{path}.hash '{tune.Hash}' does not match the canonical sha256 '{canonical.Hash}'.");
+            }
+        }
+
+        return ids;
+    }
+
+    // The synth-patch ASSET rows: the same strict pipeline + hash pin through SynthPatchCanonicalizer. Returns the id
+    // set for the source and emission-facet gates.
+    private static HashSet<string> ValidatePatches(IReadOnlyList<WorldPatch> patches, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (patches is null) {
+            errors.Add(item: "patches is required.");
+
+            return ids;
+        }
+
+        for (var index = 0; (index < patches.Count); index++) {
+            var patch = patches[index];
+            var path = $"patches[{index}]";
+
+            if (patch is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: patch.Id)) {
+                errors.Add(item: $"{path}.id is required.");
+            } else if (!ids.Add(item: patch.Id)) {
+                errors.Add(item: $"{path}.id '{patch.Id}' is duplicated.");
+            }
+
+            if (patch.Document is null) {
+                errors.Add(item: $"{path}.document is required.");
+
+                continue;
+            }
+
+            var violations = Puck.Authoring.SynthPatchCanonicalizer.Validate(document: patch.Document);
+
+            if (violations.Count > 0) {
+                foreach (var violation in violations) {
+                    errors.Add(item: $"{path}.document.{violation.Path}: {violation.Message}");
+                }
+
+                continue;
+            }
+
+            var canonical = Puck.Authoring.SynthPatchCanonicalizer.Canonicalize(document: patch.Document, source: patch.Id);
+
+            if (!string.Equals(a: patch.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                errors.Add(item: $"{path}.hash '{patch.Hash}' does not match the canonical sha256 '{canonical.Hash}'.");
+            }
+        }
+
+        return ids;
+    }
+
+    // The speaker rows (PRESENTATION-ONLY — audio never enters sim state): name presence/uniqueness, the per-kind
+    // pose/extent invariants, the feed (source resolution, channel token, the gain ceiling), and the attenuation
+    // policy. A Machine source checks only that the screen row EXISTS — never its declared source kind (runtime
+    // inserts overlay declared sources; no live machine at drain time is silence, not a reject).
+    private static void ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, List<string> errors) {
+        if (definition.Speakers is not { } speakers) {
+            errors.Add(item: "speakers is required.");
+
+            return;
+        }
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < speakers.Count); index++) {
+            var speaker = speakers[index];
+            var path = $"speakers[{index}]";
+
+            if (speaker is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: speaker.Name)) {
+                errors.Add(item: $"{path}.name is required.");
+            } else if (!names.Add(item: speaker.Name)) {
+                errors.Add(item: $"{path}.name '{speaker.Name}' is duplicated.");
+            }
+
+            switch (speaker) {
+                case WorldSpeaker.Fixed fixedSpeaker:
+                    if (!IsFinite(value: fixedSpeaker.Position)) {
+                        errors.Add(item: $"{path}.position must contain finite coordinates.");
+                    }
+
+                    break;
+                case WorldSpeaker.Anchored anchoredSpeaker:
+                    // Speakers resolve EVERY anchor kind (placements included — unlike the camera pose path), so the
+                    // shared anchor gate runs without the camera's placement rejection.
+                    ValidateAnchor(anchor: anchoredSpeaker.Anchor, placements: definition.Placements, placementIds: placementIds, creations: definition.Creations, path: $"{path}.anchor", errors: errors);
+
+                    if (!IsFinite(value: anchoredSpeaker.Offset)) {
+                        errors.Add(item: $"{path}.offset must contain finite coordinates.");
+                    }
+
+                    break;
+                case WorldSpeaker.Bed bed:
+                    if (!IsFinite(value: bed.Center)) {
+                        errors.Add(item: $"{path}.center must contain finite coordinates.");
+                    }
+
+                    RequirePositive(value: bed.Radius, name: $"{path}.radius", errors: errors);
+
+                    // The inner radius must leave a live envelope band: the mixer's finite-support law needs
+                    // inner < outer (inner == outer would divide the smoothstep by zero support).
+                    if ((bed.InnerRadius is { } innerRadius) &&
+                        (!float.IsFinite(f: innerRadius) || (innerRadius < 0f) || (float.IsFinite(f: bed.Radius) && (innerRadius >= bed.Radius)))) {
+                        errors.Add(item: $"{path}.innerRadius {innerRadius} must be finite, non-negative, and less than radius {bed.Radius}.");
+                    }
+
+                    if (bed.FadeSeconds is { } fadeSeconds) {
+                        RequireNonNegative(value: fadeSeconds, name: $"{path}.fadeSeconds", errors: errors);
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{path} is an unknown speaker kind.");
+
+                    break;
+            }
+
+            ValidateFeed(feed: speaker.Feed, screenIndices: screenIndices, tuneIds: tuneIds, patchIds: patchIds, path: $"{path}.feed", errors: errors);
+
+            if (speaker.Attenuation is { } attenuation) {
+                RequirePositive(value: attenuation.Radius, name: $"{path}.attenuation.radius", errors: errors);
+
+                if ((attenuation.Curve is { } curve) && !string.Equals(a: curve, b: WorldAudioDefaults.CurveSmoothstep, comparisonType: StringComparison.Ordinal)) {
+                    errors.Add(item: $"{path}.attenuation.curve '{curve}' must be '{WorldAudioDefaults.CurveSmoothstep}' or null.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateFeed(WorldSpeakerFeed? feed, HashSet<int> screenIndices, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
+        if (feed is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
+        if (feed.Channel is not (WorldSpeakerFeed.ChannelMix or WorldSpeakerFeed.ChannelLeft or WorldSpeakerFeed.ChannelRight)) {
+            errors.Add(item: $"{path}.channel '{feed.Channel}' must be '{WorldSpeakerFeed.ChannelMix}', '{WorldSpeakerFeed.ChannelLeft}', or '{WorldSpeakerFeed.ChannelRight}'.");
+        }
+
+        RequireGain(value: feed.Gain, name: $"{path}.gain", errors: errors);
+
+        switch (feed.Source) {
+            case null:
+                errors.Add(item: $"{path}.source is required.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when !screenIndices.Contains(item: machine.ScreenIndex):
+                errors.Add(item: $"{path}.source.screenIndex {machine.ScreenIndex} names no declared screen.");
+
+                break;
+            case WorldSpeakerSource.Tune tune when (string.IsNullOrWhiteSpace(value: tune.TuneId) || !tuneIds.Contains(item: tune.TuneId)):
+                errors.Add(item: $"{path}.source.tuneId '{tune.TuneId}' names no tune row.");
+
+                break;
+            case WorldSpeakerSource.Synth synth when (string.IsNullOrWhiteSpace(value: synth.PatchId) || !patchIds.Contains(item: synth.PatchId)):
+                errors.Add(item: $"{path}.source.patchId '{synth.PatchId}' names no patch row.");
+
+                break;
+        }
+    }
+
+    // An emission facet (scene rows + placements): the patch resolves, the level rides the shared gain ceiling, the
+    // optional radius is a positive finite support.
+    private static void ValidateEmission(WorldEmission? emission, HashSet<string> patchIds, string path, List<string> errors) {
+        if (emission is null) {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(value: emission.PatchId) || !patchIds.Contains(item: emission.PatchId)) {
+            errors.Add(item: $"{path}.patchId '{emission.PatchId}' names no patch row.");
+        }
+
+        RequireGain(value: emission.Level, name: $"{path}.level", errors: errors);
+
+        if (emission.Radius is { } radius) {
+            RequirePositive(value: radius, name: $"{path}.radius", errors: errors);
+        }
+    }
+
+    // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
+    // physical, the curve token is v1's one recognized value, and the listener policy resolves (focus | seat:<n> |
+    // a declared camera name).
+    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, List<string> errors) {
+        RequireGain(value: audio.MasterGain, name: "audio.masterGain", errors: errors);
+        RequirePositive(value: audio.DefaultSpeakerRadius, name: "audio.defaultSpeakerRadius", errors: errors);
+        RequireNonNegative(value: audio.DefaultBedFadeSeconds, name: "audio.defaultBedFadeSeconds", errors: errors);
+
+        if (!string.Equals(a: audio.DefaultCurve, b: WorldAudioDefaults.CurveSmoothstep, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"audio.defaultCurve '{audio.DefaultCurve ?? "(absent)"}' must be '{WorldAudioDefaults.CurveSmoothstep}'.");
+        }
+
+        var listener = audio.Listener;
+
+        if (string.IsNullOrWhiteSpace(value: listener)) {
+            errors.Add(item: "audio.listener is required ('focus', 'seat:<n>', or a declared camera name).");
+        } else if (!string.Equals(a: listener, b: WorldAudioDefaults.ListenerFocus, comparisonType: StringComparison.Ordinal) && !cameras.Contains(item: listener)) {
+            if (listener.StartsWith(value: WorldAudioDefaults.ListenerSeatPrefix, comparisonType: StringComparison.Ordinal)) {
+                if (!int.TryParse(s: listener.AsSpan(start: WorldAudioDefaults.ListenerSeatPrefix.Length), result: out var seat) ||
+                    (seat < 1) || (seat > WorldPopulation.LocalSeatCount)) {
+                    errors.Add(item: $"audio.listener '{listener}' names no seat (expected seat:1..seat:{WorldPopulation.LocalSeatCount}).");
+                }
+            } else {
+                errors.Add(item: $"audio.listener '{listener}' is not 'focus', 'seat:<n>', or a declared camera name.");
+            }
+        }
+    }
+
+    // The one audio gain rule: finite, non-negative, and within the shared ceiling
+    // (Puck.Authoring.CreationSoundDocument.MaxLevel — one vocabulary for every audio gain-shaped field).
+    private static void RequireGain(float value, string name, List<string> errors) {
+        if (!float.IsFinite(f: value) || (value < 0f) || (value > Puck.Authoring.CreationSoundDocument.MaxLevel)) {
+            errors.Add(item: $"{name} {value} must be within [0, {Puck.Authoring.CreationSoundDocument.MaxLevel}].");
+        }
+    }
+
     // The static scene (PRESENTATION-ONLY): albedos and row geometry are gated only for structural GPU safety
-    // (finite colors, finite centers, positive extents, non-negative blends) plus row-id presence and uniqueness.
-    private static void ValidateScene(WorldScene scene, List<string> errors) {
+    // (finite colors, finite centers, positive extents, non-negative blends) plus row-id presence and uniqueness,
+    // and each row's optional emission facet (patch resolution + gain/radius bounds).
+    private static void ValidateScene(WorldScene scene, HashSet<string> patchIds, List<string> errors) {
         if (scene is null) {
             errors.Add(item: "scene is required.");
 
@@ -273,6 +564,8 @@ internal static class WorldDefinitionValidator {
             if (!IsFinite(value: row.Center)) {
                 errors.Add(item: $"{path}.center must contain finite coordinates.");
             }
+
+            ValidateEmission(emission: row.Emission, patchIds: patchIds, path: $"{path}.emission", errors: errors);
 
             switch (row) {
                 case WorldSceneRow.Boulder boulder:
@@ -555,7 +848,7 @@ internal static class WorldDefinitionValidator {
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, List<string> errors) {
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, HashSet<string> patchIds, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (placements is null) {
@@ -610,6 +903,10 @@ internal static class WorldDefinitionValidator {
                 !string.Equals(a: mirror, b: "z", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 errors.Add(item: $"{path}.mirror '{mirror}' must be 'x', 'z', or null.");
             }
+
+            // The emission facet binds to the placement ROOT under a repeat (documented on WorldPlacement) — no
+            // per-copy constraint to gate; only patch resolution and the shared gain/radius bounds.
+            ValidateEmission(emission: placement.Emission, patchIds: patchIds, path: $"{path}.emission", errors: errors);
 
             // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
             // pool — single copy only (repeat/mirror are static-stamp facets), and at most the reserved pool count.

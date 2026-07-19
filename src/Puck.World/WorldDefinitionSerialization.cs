@@ -40,8 +40,21 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPlacement))]
 // The P5.5 editor/authoring policy row (world.authoring.set verb accessor).
 [JsonSerializable(typeof(WorldAuthoringDefaults))]
+// The audio sections (AP2): the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
+// world.tune.set / world.patch.set / world.audio.set verb accessors). The embedded puck.audio.v1 / puck.synth.v1
+// documents ride their families' OWN canonical serializer shape (the CreationDocumentJsonConverter precedent).
+[JsonSerializable(typeof(WorldSpeaker))]
+// The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
+// None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
+[JsonSerializable(typeof(WorldSpeaker.Fixed), TypeInfoPropertyName = "WorldSpeakerFixed")]
+[JsonSerializable(typeof(WorldSpeaker.Anchored), TypeInfoPropertyName = "WorldSpeakerAnchored")]
+[JsonSerializable(typeof(WorldSpeakerSource.None), TypeInfoPropertyName = "WorldSpeakerSourceNone")]
+[JsonSerializable(typeof(WorldSpeakerSource.Machine), TypeInfoPropertyName = "WorldSpeakerSourceMachine")]
+[JsonSerializable(typeof(WorldTune))]
+[JsonSerializable(typeof(WorldPatch))]
+[JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSourceGenerationOptions(
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter) },
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = true
@@ -105,6 +118,36 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Authori
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.Authoring.CreationDocument value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
+}
+
+/// <summary>
+/// Bridges an embedded <see cref="Puck.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
+/// audio contract's OWN serializer shape (<see cref="Puck.Authoring.DocumentJsonOptions.Shared"/>) instead of this
+/// context's policies, so the inline-canonical embed carries exactly the member vocabulary
+/// <see cref="Puck.Authoring.AudioCanonicalizer"/> hashes (the <see cref="CreationDocumentJsonConverter"/> precedent).
+/// </summary>
+internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Authoring.AudioDocument> {
+    /// <inheritdoc/>
+    public override Puck.Authoring.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Authoring.AudioDocument>(reader: ref reader, options: Puck.Authoring.DocumentJsonOptions.Shared);
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Puck.Authoring.AudioDocument value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
+}
+
+/// <summary>
+/// Bridges an embedded <see cref="Puck.Authoring.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
+/// the synth contract's OWN serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
+/// </summary>
+internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Authoring.SynthPatchDocument> {
+    /// <inheritdoc/>
+    public override Puck.Authoring.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Authoring.SynthPatchDocument>(reader: ref reader, options: Puck.Authoring.DocumentJsonOptions.Shared);
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Puck.Authoring.SynthPatchDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer: writer, value: value, options: Puck.Authoring.DocumentJsonOptions.Shared);
 }
 

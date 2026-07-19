@@ -24,6 +24,9 @@
         <!-- scripts/ holds standalone .NET 10 file-based programs (dotnet run <script>.cs); they are not part of this
              assembly and their '#:' directives fail the project compile if swept in. -->
         <Compile Remove="scripts/**/*.cs" />
+        <!-- The offline audio proof (scripts/audio-mix.cs) drives the internal document→emitter-derivation pipeline
+             (WorldDefinition, WorldAudioDirector) headlessly; a file-based app's assembly name is its file name. -->
+        <InternalsVisibleTo Include="audio-mix" />
     </ItemGroup>
 
     <ItemGroup>

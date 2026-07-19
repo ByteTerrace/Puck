@@ -70,6 +70,19 @@ internal enum WorldSection : byte {
     /// <summary>The editor/authoring policy row (P5.5) — headroom, placement scale envelope, candidate targeting,
     /// the sole-editor layout split, and the drag-preview deadline (see <see cref="WorldAuthoringDefaults"/>).</summary>
     Authoring,
+
+    /// <summary>The placeable speaker rows (the audio arc) — targeted by <see cref="WorldMutation.UpsertSpeaker"/> /
+    /// <see cref="WorldMutation.RemoveSpeaker"/>.</summary>
+    Speakers,
+
+    /// <summary>The tune ASSET rows — inline-canonical <c>puck.audio.v1</c> documents with pinned hashes.</summary>
+    Tunes,
+
+    /// <summary>The synth-patch ASSET rows — inline-canonical <c>puck.synth.v1</c> documents with pinned hashes.</summary>
+    Patches,
+
+    /// <summary>The audio host-section defaults (master gain, attenuation coalescing, the listener policy).</summary>
+    Audio,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

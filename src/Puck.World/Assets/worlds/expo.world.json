@@ -735,5 +735,15 @@
     "workbenchFraction": 0.7,
     "previewDeadlineFrames": 12
   },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus"
+  },
   "schema": "puck.world.def.v1"
 }
