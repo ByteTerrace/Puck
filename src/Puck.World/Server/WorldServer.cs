@@ -97,6 +97,9 @@ internal sealed class WorldServer {
         // construction) — the server owns it from here without a second build.
         m_solids = population.SolidField;
         m_solidRevision = ((m_solids is null) ? 0 : 1);
+        // Claim the entity-table slots the boot definition's inhabited placements declare (the population constructor
+        // minted only seats + census peers). Every later Install re-runs this after Rebuild.
+        m_population.ReconcileInhabitants(definition: definition);
     }
 
     /// <summary>The live world definition this server runs — swapped in place as buffered edits apply.</summary>
@@ -628,6 +631,9 @@ internal sealed class WorldServer {
 
         if (rebuildPopulation) {
             m_population.Rebuild(definition: definition, solids: m_solids);
+            // Reconcile inhabited placements AFTER the census rebuild (a placement/creation/kit edit can add, retire, or
+            // re-kit a driven body). Idempotent — a no-op when the inhabited set is unchanged.
+            m_population.ReconcileInhabitants(definition: definition);
         }
     }
 
@@ -658,9 +664,11 @@ internal sealed class WorldServer {
         // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
         // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
         WorldMutation.SetPopulationDefaults or
-        // A placement row can now change the census (Arc 6 groundwork for Arc 7's Inhabit facet: a placement contributes
-        // driven bodies), so a placement upsert/remove must trigger Rebuild. (R13: sequence with Arcs 1 and 7.)
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
+        // A placement row can change the census (Arc 7's Inhabit facet: a placement contributes driven bodies), and an
+        // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
+        // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation;
 
     // Build the SDF contact field for a candidate — null when collision is off or the analytic provider is selected (the
     // analytic set is derived inside the population's compile, not here), the built field under the FIELD provider, or a
@@ -1299,7 +1307,8 @@ internal sealed class WorldServer {
                 Active: true,
                 Kit: m_population.KitIndex(index: index),
                 Look: m_population.LookIndex(index: index),
-                Continuity: body.TakeContinuity()
+                Continuity: body.TakeContinuity(),
+                PlacementId: m_population.InhabitantPlacementId(index: index)
             );
         }
 

@@ -337,6 +337,56 @@ internal readonly record struct WanderFlavor(
     float AltitudeRange
 );
 
+/// <summary>What an attending body steers toward. ADMISSION RULE: a genuinely new way of CHOOSING a target is a new
+/// member here; a new way of MOVING toward one is a new <see cref="AttendFlavor"/> value, never a member here.</summary>
+internal enum AttendTarget : byte {
+    /// <summary>The nearest active LOCAL seat (indices 0..3) — the companion's "amble toward the player" target.</summary>
+    NearestSeat,
+
+    /// <summary>The nearest active body of ANY kind (seat, peer, or inhabitant) other than the attending body itself.</summary>
+    NearestBody,
+}
+
+/// <summary>A kit's attend-producer flavor — the authored constants the deterministic attend producer shapes an
+/// entity's gap-filling intent with while a target is in range. A kit without one cannot attend. SIM-AFFECTING:
+/// compiled once, never re-read as float.</summary>
+/// <param name="NoticeRadius">Where an in-band target is acquired (the acquire threshold).</param>
+/// <param name="ReleaseRadius">Where an acquired target is dropped back to the wander flavor (must exceed
+/// <paramref name="NoticeRadius"/> — the hysteresis band that stops edge flicker).</param>
+/// <param name="StandoffRadius">The distance the body holds off its target at (the orbit standoff).</param>
+/// <param name="Approach">The forward closure deflection while outside standoff (0..1).</param>
+/// <param name="Orbit">The strafe deflection held at standoff — the lateral amble (0..1; 0 = face and hold).</param>
+/// <param name="FaceTarget">Whether the body turns to face its target.</param>
+/// <param name="Target">What the body steers toward.</param>
+internal readonly record struct AttendFlavor(float NoticeRadius, float ReleaseRadius, float StandoffRadius,
+    float Approach, float Orbit, bool FaceTarget, AttendTarget Target);
+
+/// <summary>The one-time fixed-point compilation of an <see cref="AttendFlavor"/>. Radii compile to SQUARES so the
+/// producer never takes a square root per body per tick.</summary>
+internal readonly record struct FixedAttendFlavor(FixedQ4816 NoticeRadiusSquared, FixedQ4816 ReleaseRadiusSquared,
+    FixedQ4816 StandoffRadius, FixedQ4816 Approach, FixedQ4816 Orbit, bool FaceTarget, AttendTarget Target) {
+    /// <summary>Compiles an authored attend flavor to fixed point (the once-at-the-boundary rule), or <see langword="null"/>
+    /// for a kit that declares none (it cannot attend).</summary>
+    public static FixedAttendFlavor? Compile(AttendFlavor? flavor) {
+        if (flavor is not { } value) {
+            return null;
+        }
+
+        var notice = FixedQ4816.FromDouble(value: value.NoticeRadius);
+        var release = FixedQ4816.FromDouble(value: value.ReleaseRadius);
+
+        return new FixedAttendFlavor(
+            NoticeRadiusSquared: (notice * notice),
+            ReleaseRadiusSquared: (release * release),
+            StandoffRadius: FixedQ4816.FromDouble(value: value.StandoffRadius),
+            Approach: FixedQ4816.FromDouble(value: value.Approach),
+            Orbit: FixedQ4816.FromDouble(value: value.Orbit),
+            FaceTarget: value.FaceTarget,
+            Target: value.Target
+        );
+    }
+}
+
 /// <summary>One locomotion kit — a world-definition row naming a way of moving: the integrator it runs under
 /// (<see cref="Puck.World.Protocol.MotionModel"/>, an engine fact selected per row), the locomotion/jump tuning its
 /// bodies compile, its wander-producer flavor, and its action-lane bindings. Every game-flavored movement noun is a
@@ -349,6 +399,9 @@ internal readonly record struct WanderFlavor(
 /// <param name="SecondaryAction">The <see cref="Puck.World.Protocol.ActionLanes.Secondary"/> binding, or <see langword="null"/> unbound.</param>
 /// <param name="Collider">The kit's body VOLUME — a vertical capsule solved against the world contact field, or
 /// <see langword="null"/> for a kit with no volume (never solved against the field). Omitted from the wire when null.</param>
+/// <param name="Attend">The attend-producer flavor a body wakes on under <see cref="Puck.World.Protocol.IntentSource.Attend"/>,
+/// or <see langword="null"/> for a kit that cannot attend (validation rejects an <c>Attend</c>-sourced inhabitant on a
+/// kit with no flavor). Omitted from the wire when null.</param>
 internal sealed record WorldKit(
     string Name,
     MotionModel Model,
@@ -356,7 +409,8 @@ internal sealed record WorldKit(
     WanderFlavor Flavor,
     ActionSpec? PrimaryAction,
     ActionSpec? SecondaryAction,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AttendFlavor? Attend = null
 );
 
 /// <summary>The flattened, fixed-point form of one predicate (a conjunction element).</summary>
@@ -523,7 +577,8 @@ internal readonly record struct FixedWorldKit(
     FixedQ4816 AltitudeRange,
     CompiledActionSpec? Primary,
     CompiledActionSpec? Secondary,
-    FixedWorldCollider? Collider
+    FixedWorldCollider? Collider,
+    FixedAttendFlavor? Attend
 ) {
     /// <summary>Compiles a kit row's authored floats to fixed point (the once-at-the-boundary rule).</summary>
     public static FixedWorldKit Compile(WorldKit kit) => new(
@@ -540,7 +595,8 @@ internal readonly record struct FixedWorldKit(
         AltitudeRange: FixedQ4816.FromDouble(value: kit.Flavor.AltitudeRange),
         Primary: CompiledActionSpec.Compile(spec: kit.PrimaryAction),
         Secondary: CompiledActionSpec.Compile(spec: kit.SecondaryAction),
-        Collider: FixedWorldCollider.Compile(collider: kit.Collider)
+        Collider: FixedWorldCollider.Compile(collider: kit.Collider),
+        Attend: FixedAttendFlavor.Compile(flavor: kit.Attend)
     );
 }
 
@@ -654,13 +710,43 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
     public int TotalCount => (Math.Max(val1: CountX, val2: 1) * Math.Max(val1: CountZ, val2: 1));
 }
 
+/// <summary>A placement's INHABIT facet — the row's binding to live population bodies. An inhabited placement is a
+/// normal entry in the entity table: it holds a <see cref="Puck.World.Server.WorldBody"/>, integrates under the named
+/// kit, and is addressable as <see cref="WorldAnchor.Entity"/> like any avatar. Its stamp rides the body's pose instead
+/// of the row's static transform; the row's position/yaw become its SPAWN pose. Absent (null) = decoration, the
+/// unchanged furniture behaviour.</summary>
+/// <param name="Kit">The <see cref="WorldKit.Name"/> the bodies move under. Null resolves the creation's own
+/// <see cref="Puck.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
+/// inhabits the world's kit row named "swim". Neither resolving is a loud rejection naming every kit the world
+/// declares.</param>
+/// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
+/// this placement's own <c>CreationId</c>.</param>
+/// <param name="Source">The gap-filling producer the bodies wake on (Idle/Wander/Attend; Live is legal and means
+/// "nothing drives it until a principal does").</param>
+/// <param name="Count">How many bodies (1..<see cref="Puck.World.Server.WorldPopulation.MaxPopulationSimulated"/>).</param>
+/// <param name="Radius">The phyllotaxis scatter radius about the placement position; 0 stacks them.</param>
+internal sealed record WorldPlacementInhabit(
+    string? Kit,
+    string? Look,
+    Puck.World.Protocol.IntentSource Source,
+    int Count = 1,
+    float Radius = 0f
+);
+
+/// <summary>A per-instance override of one declared creation face's feed — the face twin of the emission facet's
+/// per-instance override channel.</summary>
+/// <param name="Face">The declared <see cref="Puck.Authoring.CreationFaceDocument.Name"/> to override.</param>
+/// <param name="Source">The screen source the face shows, in the existing <see cref="WorldScreenSource"/> vocabulary.</param>
+internal sealed record WorldPlacementFace(string Face, WorldScreenSource Source);
+
 /// <summary>
 /// One placement INSTANCE row — a creation asset stamped into the world by reference: transform + facets as
 /// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is
 /// ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (repeat/mirror
-/// facets are static-stamp-only and reject on an animated row). A wallpaper-pattern facet and cabinet role strings
-/// are deliberately not carried; <paramref name="Role"/> is the reserved nullable seam a future driven-body rung
-/// lands in without schema surgery.
+/// facets are static-stamp-only and reject on an animated row). A placement carrying an <paramref name="Inhabit"/>
+/// facet is a live population body rather than furniture (see <see cref="WorldPlacementInhabit"/>); its declared
+/// creation eyes derive <see cref="WorldCamera"/> feeds and its declared faces derive screens (both at the delivery
+/// boundary, never written to the document).
 /// </summary>
 /// <param name="Id">The row's stable string id (its mutation address).</param>
 /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
@@ -671,13 +757,15 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
 /// <param name="Repeat">The repeat facet, or <see langword="null"/> for a single copy.</param>
 /// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame), or
 /// <see langword="null"/> for none.</param>
-/// <param name="Role">RESERVED for the driven-body rung (null = decoration). Carried, validated as free text, not
-/// yet consumed.</param>
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Repeat"/> the emission
 /// binds to the placement ROOT only. Omitted from the wire when null.</param>
 /// <param name="Solid">The placement's solidity facet (see <see cref="WorldSolid"/>) — needs the FIELD contact provider
 /// (Arc 2); a solid placement under the analytic provider is a loud validator error. Omitted from the wire when null.</param>
+/// <param name="Inhabit">The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from
+/// the wire when null.</param>
+/// <param name="FaceSources">Per-instance overrides of the creation's declared faces (null = every face shows its
+/// declared default). Omitted from the wire when null.</param>
 internal sealed record WorldPlacement(
     string Id,
     string CreationId,
@@ -686,9 +774,10 @@ internal sealed record WorldPlacement(
     float Scale,
     WorldPlacementRepeat? Repeat = null,
     string? Mirror = null,
-    string? Role = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabit? Inhabit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null
 );
 
 /// <summary>
@@ -1275,7 +1364,7 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// <param name="MinPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
 /// <param name="MaxPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's ceiling — also the worst-case
-/// scale <see cref="Client.WorldPlacementAnimator"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
+/// scale <see cref="Client.WorldStampPool"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
 /// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
 /// <param name="CandidateRadius">LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat's editor
 /// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
@@ -1286,6 +1375,13 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// frame by <see cref="Client.WorldFrameSource.LayoutRegion(int, int, int, float)"/>.</param>
 /// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
+/// <param name="InhabitantHeadroom">BOOT-CONSUMED. The population entity-table slots reserved for creation-STAMP bodies
+/// (inhabited placements plus crowd bodies wearing a creation look) — the count of bodies that may render their creation
+/// geometry through the stamp pool rather than a catalog avatar. The construction probe reserves exactly this many
+/// body-rooted stamp registrations, so a document declaring more creation-stamp bodies than this fails the frozen
+/// render-envelope gate LOUDLY at apply time rather than blowing a later GPU allocation.</param>
+/// <param name="DerivedFaceScreens">BOOT-CONSUMED. The derived screen slots the envelope probe reserves for creation
+/// FACES (a face declared by a placement's creation, lit by a feed). Bounded by the engine's screen-surface ceiling.</param>
 internal sealed record WorldAuthoringDefaults(
     int AuthoringHeadroomRows,
     int AuthoringHeadroomScreens,
@@ -1296,7 +1392,9 @@ internal sealed record WorldAuthoringDefaults(
     float CandidateRadius,
     int CandidateCap,
     float WorkbenchFraction,
-    int PreviewDeadlineFrames
+    int PreviewDeadlineFrames,
+    int InhabitantHeadroom,
+    int DerivedFaceScreens
 ) {
     /// <summary>The built-in default authoring policy.</summary>
     public static WorldAuthoringDefaults Default { get; } = new WorldAuthoringDefaults(
@@ -1309,7 +1407,9 @@ internal sealed record WorldAuthoringDefaults(
         CandidateRadius: 32f,
         CandidateCap: 16,
         WorkbenchFraction: 0.70f,
-        PreviewDeadlineFrames: 12
+        PreviewDeadlineFrames: 12,
+        InhabitantHeadroom: 4,
+        DerivedFaceScreens: 4
     );
 }
 
@@ -1566,7 +1666,7 @@ internal sealed record WorldDefinition(
             new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 0f, y: 0f, z: 4f)),
         ],
         Render: WorldRenderDefaults.Default,
-        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxSimulated, DefaultPeerSource: IntentSource.Wander),
+        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxPopulationSimulated, DefaultPeerSource: IntentSource.Wander),
         // THE PLAZA — the built-in broadcast showcase, all faces normal +Z toward a player spawned at the origin looking -Z (the
         // frame source only TRANSLATES a slab, so every screen keeps world-axis Right/Up). Two TIERS keep the sight lines
         // clean from spawn: a LOW front pair (bottoms just above the grass at y = 0.2) and a

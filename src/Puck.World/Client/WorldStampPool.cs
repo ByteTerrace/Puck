@@ -5,65 +5,105 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The ANIMATED-placement replay pool: a placement whose creation carries timeline frames renders as per-shape
-/// dynamic instances riding a reserved dynamic-transform pool, replaying the frames HOLD-STYLE on the render clock at
-/// the fixed 8-tick cadence (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>), presentation-only (never
-/// simulation state). Reconciliation diffs delivered placement rows by stable id against live registrations, the
-/// same pattern camera reconciliation uses — a pose/scale edit is a cheap property write (the
-/// replay clock survives), a creation-content change releases + recreates (the clock resets), and a removed row
-/// releases its pool slot at the delivery boundary (the symmetric-release rule).
+/// The creation-STAMP pool: the reserved dynamic-transform pool a creation renders through as per-shape dynamic
+/// instances, presentation-only (never simulation state). Two root sources share the ONE pool and the ONE reserved
+/// slot budget:
+/// <list type="bullet">
+/// <item><description>an ANIMATED placement (a creation carrying timeline frames) roots on the placement's static
+/// stamped transform and replays its frames HOLD-STYLE at the fixed cadence
+/// (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>);</description></item>
+/// <item><description>a BODY-ROOTED stamp (an inhabited placement's body, or a crowd body wearing a creation look)
+/// roots on the client's interpolated body pose, so an inhabited creation walks its authored walk cycle while its body
+/// moves — that is the entire visual change over a static stamp.</description></item>
+/// </list>
+/// Reconciliation diffs delivered registrations by stable key against live ones (the same pattern camera reconciliation
+/// uses): a pose/scale edit is a cheap property write (the replay clock survives), a creation-content change releases +
+/// recreates (the clock resets), and a departed registration releases its pool slot at the delivery boundary (the
+/// symmetric-release rule).
 /// </summary>
 /// <remarks>The pool is emitted on EVERY rebuild with a CONSTANT slot count
-/// (<see cref="WorldPlacementPolicy.MaxAnimatedPlacements"/> × <see cref="SlotsPerPlacement"/>); an unused slot draws
-/// a parked placeholder hidden below the floor, exactly like the avatar catalog's inactive-slot story. The probe path
-/// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source
-/// measures it once at construction. Single-threaded on the window-pump thread, like every editor/render type here.</remarks>
-internal sealed class WorldPlacementAnimator {
+/// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>); an unused slot draws a
+/// parked placeholder hidden below the floor, exactly like the avatar catalog's inactive-slot story. The probe path
+/// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
+/// it once at construction, so a body-rooted stamp never grows the frozen floor. Single-threaded on the window-pump
+/// thread, like every editor/render type here.</remarks>
+internal sealed class WorldStampPool {
     // Per-shape dynamic-instance bound at unit scale — a cull contract, not a policy: too tight clips a shape at
     // its own tile boundary.
     private const float InstanceRadiusUnitScale = 0.9f;
     private const float GroupBoundMargin = 0.4f;
     private static readonly Vector3 s_hiddenPosition = new(x: 0f, y: -1000f, z: 0f);
 
-    // One live registration: the delivered row + resolved creation and the replay cursor state.
+    /// <summary>One body-rooted creation stamp the frame source requests: a population body index and the creation whose
+    /// geometry rides that body's live pose (an inhabited placement's creature, or a crowd body wearing a creation
+    /// look).</summary>
+    /// <param name="BodyIndex">The population entity index whose interpolated pose roots the stamp.</param>
+    /// <param name="Creation">The creation whose geometry the body wears.</param>
+    /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
+    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale);
+
+    // One live registration: the resolved creation, its root source (a static placement OR a body index), and the
+    // replay cursor state.
     private sealed class Registration {
-        public required WorldPlacement Row;
+        public required string Key;
         public required WorldCreation Creation;
+        // The static-root placement (an ANIMATED placement), or null for a body-rooted stamp.
+        public WorldPlacement? Row;
+        // The body-rooted stamp's population index, or null for a static-root animated placement.
+        public int? BodyIndex;
+        public float Scale = 1f;
         public float Clock;
         public int FrameCursor;
         // Memoized per-frame shape-id → pose index (a pure derivation of the immutable document).
         public Dictionary<int, FrameTransformDocument>?[] FramePoses = [];
     }
 
-    private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxAnimatedPlacements];
+    private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private readonly int m_slotBase;
 
-    /// <summary>Initializes a new instance of the <see cref="WorldPlacementAnimator"/> class at its dynamic-transform
-    /// slot base (the avatar catalog's frozen capacity — the pool sits immediately after it).</summary>
+    /// <summary>Initializes a new instance of the <see cref="WorldStampPool"/> class at its dynamic-transform slot base
+    /// (the avatar catalog's frozen capacity — the pool sits immediately after it).</summary>
     /// <param name="slotBase">The pool's first dynamic-transform slot.</param>
-    public WorldPlacementAnimator(int slotBase) => m_slotBase = slotBase;
+    public WorldStampPool(int slotBase) => m_slotBase = slotBase;
 
-    /// <summary>The dynamic-transform slots ONE animated placement reserves: its root + its full shape-slot pool.</summary>
+    /// <summary>The dynamic-transform slots ONE registration reserves: its root + its full shape-slot pool.</summary>
     public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
-    public static int DynamicSlotCount => (WorldPlacementPolicy.MaxAnimatedPlacements * SlotsPerPlacement);
+    public static int DynamicSlotCount => (WorldPlacementPolicy.MaxStampRegistrations * SlotsPerPlacement);
 
     /// <summary>Reconciles the pool against a delivered definition (call at the delivery boundary, BEFORE the program
-    /// rebuild): diff-by-stable-id, cheap pose edits in place, release+recreate on creation-content change, symmetric
-    /// release on removal.</summary>
+    /// rebuild): the ANIMATED placements root statically; the BODY stamps root on a population body. Diff-by-stable-key,
+    /// cheap pose edits in place, release+recreate on creation-content change, symmetric release on removal. Animated
+    /// placements are admitted first; body stamps fill the remaining free slots.</summary>
     /// <param name="placements">The delivered placement rows.</param>
     /// <param name="creations">The delivered creation rows.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations) {
-        // Pass 1 — retire: a registration whose row vanished, went static (its creation lost its frames), or changed
-        // creation content releases its slot here; a same-content pose edit updates in place (clock preserved).
+    /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
+    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, IReadOnlyList<BodyStamp> bodyStamps) {
+        // Pass 1 — retire: a registration whose backing row/stamp vanished, went static, or changed creation content
+        // releases its slot here; a same-content edit updates in place (clock preserved).
         for (var index = 0; (index < m_pool.Length); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
 
-            var row = FindPlacement(placements: placements, id: live.Row.Id);
+            if (live.BodyIndex is { } bodyIndex) {
+                var stamp = FindBodyStamp(bodyStamps: bodyStamps, bodyIndex: bodyIndex);
+
+                if (stamp is not { } present) {
+                    m_pool[index] = null;
+                } else if (!string.Equals(a: present.Creation.Hash, b: live.Creation.Hash, comparisonType: StringComparison.Ordinal)) {
+                    m_pool[index] = RegisterBody(stamp: present);
+                } else {
+                    live.Creation = present.Creation;
+                    live.Scale = present.Scale;
+                }
+
+                continue;
+            }
+
+            var row = FindPlacement(placements: placements, id: live.Row!.Id);
             var creation = ((row is { } presentRow) ? WorldPlacementStamper.FindCreation(creations: creations, id: presentRow.CreationId) : null);
 
             if ((row is null) || (creation is null) || !WorldPlacementStamper.IsAnimated(creation: creation)) {
@@ -73,8 +113,7 @@ internal sealed class WorldPlacementAnimator {
             }
 
             if (!string.Equals(a: creation.Hash, b: live.Creation.Hash, comparisonType: StringComparison.Ordinal)) {
-                // Structural: the creation's content changed — release and recreate (the replay restarts honestly).
-                m_pool[index] = Register(row: row, creation: creation);
+                m_pool[index] = RegisterRow(row: row, creation: creation);
 
                 continue;
             }
@@ -88,19 +127,36 @@ internal sealed class WorldPlacementAnimator {
         foreach (var placement in placements) {
             if ((WorldPlacementStamper.FindCreation(creations: creations, id: placement.CreationId) is not { } creation) ||
                 !WorldPlacementStamper.IsAnimated(creation: creation) ||
-                (FindRegistration(id: placement.Id) is not null)) {
+                (FindRow(id: placement.Id) is not null)) {
                 continue;
             }
 
             var slot = FreeSlot();
 
             if (slot < 0) {
-                Console.Error.WriteLine(value: $"[world.placement: animated '{placement.Id}' has no free replay slot — the {WorldPlacementPolicy.MaxAnimatedPlacements}-slot pool is full]");
+                Console.Error.WriteLine(value: $"[world.placement: animated '{placement.Id}' has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations}-slot pool is full]");
 
                 continue;
             }
 
-            m_pool[slot] = Register(row: placement, creation: creation);
+            m_pool[slot] = RegisterRow(row: placement, creation: creation);
+        }
+
+        // Pass 3 — admit new body-rooted stamps into the remaining free slots.
+        foreach (var stamp in bodyStamps) {
+            if (FindBody(bodyIndex: stamp.BodyIndex) is not null) {
+                continue;
+            }
+
+            var slot = FreeSlot();
+
+            if (slot < 0) {
+                Console.Error.WriteLine(value: $"[world.placement: creation-stamp body {stamp.BodyIndex} has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations}-slot pool is full; it renders as a catalog avatar]");
+
+                continue;
+            }
+
+            m_pool[slot] = RegisterBody(stamp: stamp);
         }
     }
 
@@ -129,11 +185,12 @@ internal sealed class WorldPlacementAnimator {
         }
     }
 
-    /// <summary>Packs the pool's per-frame transforms: each live registration's root rides its placement pose and each
-    /// shape holds its CURRENT frame's snapshot (composed root ∘ per-shape pose, positions scaled by the placement
-    /// scale); unused slots hide below the floor.</summary>
+    /// <summary>Packs the pool's per-frame transforms: each live registration's root rides its placement pose (animated)
+    /// or the client's interpolated body pose (body-rooted) and each shape holds its CURRENT frame's snapshot (composed
+    /// root ∘ per-shape pose, positions scaled by the registration scale); unused slots hide below the floor.</summary>
     /// <param name="transforms">The unified dynamic-transform buffer (the pool writes its own slot range).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms) {
+    /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
+    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client) {
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (m_slotBase + (index * SlotsPerPlacement));
 
@@ -147,9 +204,9 @@ internal sealed class WorldPlacementAnimator {
                 continue;
             }
 
-            var rootRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (live.Row.YawDegrees * (MathF.PI / 180f)));
+            var (rootPosition, rootRotation, placementScale) = RootPose(live: live, client: client);
 
-            transforms[rootSlot] = new DynamicTransform(Orientation: rootRotation, Position: live.Row.Position);
+            transforms[rootSlot] = new DynamicTransform(Orientation: rootRotation, Position: rootPosition);
 
             var shapes = (live.Creation.Document.Shapes ?? []);
             var poses = FramePoses(live: live, frameCursor: live.FrameCursor);
@@ -170,7 +227,7 @@ internal sealed class WorldPlacementAnimator {
 
                 transforms[slot] = new DynamicTransform(
                     Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
-                    Position: (live.Row.Position + Vector3.Transform(value: (position * live.Row.Scale), rotation: rootRotation))
+                    Position: (rootPosition + Vector3.Transform(value: (position * placementScale), rotation: rootRotation))
                 );
             }
         }
@@ -193,27 +250,36 @@ internal sealed class WorldPlacementAnimator {
         }
     }
 
-    /// <summary>Resolves a live ANIMATED placement's current-frame world position for one of its shapes (or its root
-    /// when <paramref name="shapeId"/> is null) — the placement-anchor seam the audio director rides. Returns
-    /// <see langword="false"/> when the placement holds no replay slot (a static placement resolves through the
+    /// <summary>Resolves a live registration's current-frame world position for one of its shapes (or its root when
+    /// <paramref name="shapeId"/> is null) — the placement-anchor seam the audio director rides. Returns
+    /// <see langword="false"/> when no live registration holds the placement (a static placement resolves through the
     /// stamp math instead).</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
+    /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="position">The resolved world position.</param>
-    public bool TryShapePosition(string placementId, int? shapeId, out Vector3 position) {
-        if (FindRegistration(id: placementId) is not { } live) {
+    public bool TryShapePosition(string placementId, int? shapeId, WorldClient client, out Vector3 position) {
+        var live = FindRow(id: placementId);
+
+        // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
+        if ((live is null) && client.TryInhabitantBody(placementId: placementId, index: out var bodyIndex)) {
+            live = FindBody(bodyIndex: bodyIndex);
+        }
+
+        if (live is null) {
             position = default;
 
             return false;
         }
 
+        var (rootPosition, rootRotation, placementScale) = RootPose(live: live, client: client);
+
         if (shapeId is not { } targetShapeId) {
-            position = live.Row.Position;
+            position = rootPosition;
 
             return true;
         }
 
-        var rootRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (live.Row.YawDegrees * (MathF.PI / 180f)));
         var poses = FramePoses(live: live, frameCursor: live.FrameCursor);
 
         foreach (var shape in (live.Creation.Document.Shapes ?? [])) {
@@ -223,26 +289,69 @@ internal sealed class WorldPlacementAnimator {
 
             var local = (((poses is not null) && poses.TryGetValue(key: targetShapeId, value: out var pose)) ? pose.Position : shape.Position);
 
-            position = (live.Row.Position + Vector3.Transform(value: (local * live.Row.Scale), rotation: rootRotation));
+            position = (rootPosition + Vector3.Transform(value: (local * placementScale), rotation: rootRotation));
 
             return true;
         }
 
-        position = live.Row.Position;
+        position = rootPosition;
 
         return true;
     }
 
-    private static Registration Register(WorldPlacement row, WorldCreation creation) => new() {
+    // The root pose of a live registration: a body-rooted stamp reads the client's interpolated body pose; an animated
+    // placement reads its static stamped transform.
+    private static (Vector3 Position, Quaternion Rotation, float Scale) RootPose(Registration live, WorldClient client) {
+        if (live.BodyIndex is { } bodyIndex) {
+            return (client.Position(index: bodyIndex), client.Orientation(index: bodyIndex), live.Scale);
+        }
+
+        var row = live.Row!;
+        var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (row.YawDegrees * (MathF.PI / 180f)));
+
+        return (row.Position, rotation, row.Scale);
+    }
+
+    private static Registration RegisterRow(WorldPlacement row, WorldCreation creation) => new() {
+        Key = row.Id,
         Row = row,
         Creation = creation,
+        Scale = row.Scale,
         FramePoses = new Dictionary<int, FrameTransformDocument>?[((creation.Document.Frames?.Count ?? 0) + 1)],
     };
 
-    private Registration? FindRegistration(string id) {
+    private static Registration RegisterBody(BodyStamp stamp) => new() {
+        Key = $"body:{stamp.BodyIndex}",
+        BodyIndex = stamp.BodyIndex,
+        Creation = stamp.Creation,
+        Scale = stamp.Scale,
+        FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
+    };
+
+    private Registration? FindRow(string id) {
         foreach (var live in m_pool) {
-            if ((live is not null) && string.Equals(a: live.Row.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+            if ((live is { BodyIndex: null }) && string.Equals(a: live.Row!.Id, b: id, comparisonType: StringComparison.Ordinal)) {
                 return live;
+            }
+        }
+
+        return null;
+    }
+
+    private Registration? FindBody(int bodyIndex) {
+        foreach (var live in m_pool) {
+            if (live is { BodyIndex: { } index } && (index == bodyIndex)) {
+                return live;
+            }
+        }
+
+        return null;
+    }
+
+    private static BodyStamp? FindBodyStamp(IReadOnlyList<BodyStamp> bodyStamps, int bodyIndex) {
+        foreach (var stamp in bodyStamps) {
+            if (stamp.BodyIndex == bodyIndex) {
+                return stamp;
             }
         }
 
@@ -300,7 +409,7 @@ internal sealed class WorldPlacementAnimator {
         var paletteIds = (probeWorstCase
             ? ProbePalette(builder: builder)
             : WorldPlacementStamper.RegisterPalette(builder: builder, document: (document ?? EmptyDocument), tint: null));
-        var placementScale = (probeWorstCase ? maxPlacementScale : (live?.Row.Scale ?? 1f));
+        var placementScale = (probeWorstCase ? maxPlacementScale : (live?.Scale ?? 1f));
         var reach = ((probeWorstCase || (document is null)) ? (2.5f * maxPlacementScale) : (CreationGeometry.Reach(document: document!) * placementScale));
 
         // Pass 1 — ungrouped shapes and unused slots: one tight dynamic instance per shape slot; parked when absent

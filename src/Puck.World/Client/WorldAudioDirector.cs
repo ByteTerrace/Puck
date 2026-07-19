@@ -75,7 +75,7 @@ internal sealed class WorldAudioDirector {
     private const ulong Fnv64Prime = 1099511628211UL;
 
     private readonly WorldClient? m_client;
-    private readonly WorldPlacementAnimator? m_animator;
+    private readonly WorldStampPool? m_animator;
     private readonly WorldAudioSnapshot[] m_slabs;
     private readonly PublishBuffer<WorldAudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
@@ -119,7 +119,7 @@ internal sealed class WorldAudioDirector {
     /// emitters resolve absent (honest silence); without an animator, placements resolve through the static stamp math.</summary>
     /// <param name="client">The snapshot-fed entity view, or <see langword="null"/> headless.</param>
     /// <param name="animator">The animated-placement replay pool, or <see langword="null"/> headless.</param>
-    public WorldAudioDirector(WorldClient? client, WorldPlacementAnimator? animator) {
+    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator) {
         m_client = client;
         m_animator = animator;
         m_slabs = new WorldAudioSnapshot[SnapshotRotation];
@@ -1061,8 +1061,9 @@ internal sealed class WorldAudioDirector {
             }
             case EmitterAnchorKind.Placement:
             default: {
-                // Animated placements ride the animator's current frame; static ones the reconcile-time stamp math.
-                if ((m_animator is { } animator) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, position: out var animated)) {
+                // Animated placements ride the stamp pool's current frame; an INHABITED placement rides its live body
+                // pose (both through TryShapePosition); a static placement uses the reconcile-time stamp math.
+                if ((m_animator is { } animator) && (m_client is { } client) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, client: client, out var animated)) {
                     position = (animated + anchor.Offset);
 
                     return true;

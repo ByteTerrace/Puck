@@ -362,12 +362,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                             break;
                         default:
-                            if (!TryParseInt(text: token, value: out var parsed) || (parsed < 0) || (parsed > WorldPopulation.MaxSimulated)) {
-                                return new CommandResult(Output: $"[world.population: unknown token '{token}' — a count 0..{WorldPopulation.MaxSimulated} and/or idle|wander]");
+                            if (!TryParseInt(text: token, value: out var parsed) || (parsed < 0) || (parsed > WorldPopulation.MaxPopulationSimulated)) {
+                                return new CommandResult(Output: $"[world.population: unknown token '{token}' — a count 0..{WorldPopulation.MaxPopulationSimulated} and/or idle|wander]");
                             }
 
                             if (count is not null) {
-                                return new CommandResult(Output: $"[world.population: count given twice — one integer 0..{WorldPopulation.MaxSimulated}]");
+                                return new CommandResult(Output: $"[world.population: count given twice — one integer 0..{WorldPopulation.MaxPopulationSimulated}]");
                             }
 
                             count = parsed;
@@ -695,7 +695,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         var counts = population.ActiveKitCounts();
         var kits = string.Join(separator: " ", values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}"));
 
-        return $"[world.population: {simulated} network-human stand-ins active (0..{WorldPopulation.MaxSimulated}), behavior {behavior} | {local} local + {simulated} = {(local + simulated)}/{WorldPopulation.MaxPopulation} avatars rendered | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+        return $"[world.population: {simulated} network-human stand-ins active (0..{WorldPopulation.MaxPopulationSimulated}), behavior {behavior} | {local} local + {simulated} = {(local + simulated)}/{WorldPopulation.MaxPopulation} avatars rendered | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
     }
 
     // The world.gpu readout: the previous frame's per-pass GPU ms, read live off the render probe's engine node.

@@ -18,6 +18,11 @@ internal enum PopulationKind {
     /// <summary>Slots 4..127 — a network-human peer that owns its own <see cref="WorldBody"/> state. Until a transport
     /// supplies its intent stream, the built-in scene's deterministic driver stands in for that remote human.</summary>
     NetworkPeer,
+
+    /// <summary>A body bound to a placement's INHABIT facet — a creation living in the world. Allocated downward from
+    /// slot 127, it holds a normal <see cref="WorldBody"/> under the placement's kit and is driven by the placement's
+    /// intent source. Its slot survives unrelated placement edits so an anchor referencing it stays valid.</summary>
+    Inhabitant,
 }
 
 /// <summary>
@@ -54,8 +59,17 @@ internal sealed class WorldPopulation {
     /// <summary>The reserved local-seat count — four seats, always at the front of the entity table.</summary>
     public const int LocalSeatCount = 4;
 
-    /// <summary>The most simulated stand-ins that fit behind the four local seats (<c>128 - 4</c>).</summary>
-    public const int MaxSimulated = (MaxPopulation - LocalSeatCount);
+    /// <summary>The absolute ceiling on simulated bodies behind the four local seats (<c>128 - 4</c>) — the static bound
+    /// the document validator and the <c>world.population</c> input grammar reference. The LIVE ceiling
+    /// (<see cref="MaxSimulated"/>) shrinks below this by the inhabitant count.</summary>
+    public const int MaxPopulationSimulated = (MaxPopulation - LocalSeatCount);
+
+    /// <summary>The most census peers that fit RIGHT NOW behind the four local seats and BELOW the lowest inhabited body
+    /// (R6). Inhabited bodies allocate downward from slot 127, census peers upward from slot 4, so this is exactly "they
+    /// must not meet." A live <c>world.population &lt;n&gt;</c> clamps against it, so adding an inhabited placement lowers
+    /// the peer ceiling rather than silently stealing a peer's body. Reading the FLOOR (not a count) keeps existing
+    /// inhabitant slots stable — a retired inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
+    public int MaxSimulated => (m_inhabitantFloor - LocalSeatCount);
 
     private readonly Entry[] m_entries = new Entry[MaxPopulation];
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
@@ -85,6 +99,10 @@ internal sealed class WorldPopulation {
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedSpawnPolicy m_spawnPolicy = FixedSpawnPolicy.Compile(policy: null, spawnPoints: []);
     private int m_simulatedCount;
+    // The lowest slot index an inhabited body occupies (MaxPopulation = none). Inhabited bodies claim the top of the
+    // entity table (slots 127 downward); the peer ceiling reads this floor so census peers never reach an inhabitant.
+    // Reconciled by ReconcileInhabitants.
+    private int m_inhabitantFloor = MaxPopulation;
     private int m_revision;
     private IntentSource m_defaultPeerSource = IntentSource.Wander;
     private static readonly FixedQ4816 s_negativeOne = -FixedQ4816.One;
@@ -289,6 +307,244 @@ internal sealed class WorldPopulation {
         }
 
         m_revision++;
+    }
+
+    /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
+    /// Install AFTER <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's INHABIT facet claims live
+    /// entity-table slots downward from 127, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
+    /// the placement's intent source. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
+    /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); activate new bodies at the
+    /// highest free slots. The peer ceiling (<see cref="MaxSimulated"/>) follows the resulting inhabitant floor, and the
+    /// census is re-clamped so peers never reach an inhabitant.</summary>
+    /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
+    public void ReconcileInhabitants(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // Pass 1 — retire inhabitant slots whose placement/facet/creation-kit binding no longer holds. A surviving slot
+        // keeps its body (pose preserved); a kit change recompiles in place.
+        for (var index = MaxPopulation - 1; (index >= LocalSeatCount); index--) {
+            var entry = m_entries[index];
+
+            if (entry.Kind != PopulationKind.Inhabitant) {
+                continue;
+            }
+
+            if ((entry.PlacementId is not { } placementId) || (FindInhabited(definition: definition, placementId: placementId) is not { } placement) ||
+                (ResolveInhabitKit(definition: definition, placement: placement) is not { } kitName) || (ResolveKitOrNull(name: kitName) is not { } kitIndex)) {
+                RetireInhabitant(index: index);
+
+                continue;
+            }
+
+            entry.KitIndex = kitIndex;
+            entry.Attend = m_kits[kitIndex].Attend;
+            entry.LookIndex = ResolveInhabitLook(placement: placement);
+            entry.Body?.SetIntentSource(source: placement.Inhabit!.Source);
+            entry.Body?.RecompileKit(tuning: m_kitRows[kitIndex].Tuning, primary: m_kits[kitIndex].Primary, secondary: m_kits[kitIndex].Secondary, model: m_kits[kitIndex].Model, collider: m_kits[kitIndex].Collider);
+        }
+
+        // Pass 2 — grow/shrink each inhabited placement to its declared count, at the highest free slots (document order).
+        foreach (var placement in definition.Placements) {
+            if ((placement.Inhabit is not { } inhabit) || (ResolveInhabitKit(definition: definition, placement: placement) is not { } kitName) || (ResolveKitOrNull(name: kitName) is not { } kitIndex)) {
+                continue;
+            }
+
+            var desired = Math.Clamp(value: inhabit.Count, min: 0, max: MaxPopulationSimulated);
+            var live = CountInhabitants(placementId: placement.Id);
+
+            for (var ordinal = live; (ordinal < desired); ordinal++) {
+                var slot = HighestFreeSlot();
+
+                if (slot < 0) {
+                    Console.Error.WriteLine(value: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {MaxPopulation}-slot table is full]");
+
+                    break;
+                }
+
+                ActivateInhabitant(index: slot, placement: placement, inhabit: inhabit, kitIndex: kitIndex, ordinal: ordinal);
+            }
+
+            for (var extra = desired; (extra < live); extra++) {
+                var slot = LowestInhabitant(placementId: placement.Id);
+
+                if (slot >= 0) {
+                    RetireInhabitant(index: slot);
+                }
+            }
+        }
+
+        // The inhabitant floor is the lowest slot any inhabitant now occupies; re-clamp the census to it so peers never
+        // reach an inhabitant, then bump the revision (the declared set moved).
+        m_inhabitantFloor = MaxPopulation;
+
+        for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
+            if (m_entries[index].Kind == PopulationKind.Inhabitant) {
+                m_inhabitantFloor = index;
+
+                break;
+            }
+        }
+
+        _ = SetSimulatedCount(count: m_simulatedCount);
+        m_revision++;
+    }
+
+    // The placement id an inhabitant slot holds (null unless the slot is an inhabitant) — the frame source / anchor
+    // back-reference.
+    public string? InhabitantPlacementId(int index) => ((m_entries[index].Kind == PopulationKind.Inhabitant) ? m_entries[index].PlacementId : null);
+
+    // Activate one inhabited body at a claimed slot: mint its body from the resolved kit spawned at the placement's
+    // scatter pose, seat its intent source, and tag the slot as an inhabitant of the placement.
+    private void ActivateInhabitant(int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
+        var entry = m_entries[index];
+        var kit = m_kits[kitIndex];
+        var body = new WorldBody(tuning: m_kitRows[kitIndex].Tuning, primary: kit.Primary, secondary: kit.Secondary, collider: kit.Collider);
+
+        body.SetContactField(field: m_contactField);
+
+        var spawn = InhabitantSpawn(placement: placement, radius: inhabit.Radius, ordinal: ordinal);
+        var altitude = ((kit.Model == MotionModel.Free) ? FixedQ4816.FromDouble(value: placement.Position.Y) : m_fixedMotion.GroundY);
+        var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)));
+
+        if (kit.Model == MotionModel.Free) {
+            body.SetModel(model: MotionModel.Free);
+            body.Pose(position: spawn with { Y = altitude }, yawRadians: yaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        } else {
+            body.Warp(x: spawn.X, z: spawn.Z);
+            body.Face(yawRadians: yaw);
+        }
+
+        body.SetIntentSource(source: inhabit.Source);
+        entry.Body = body;
+        entry.Kind = PopulationKind.Inhabitant;
+        entry.PlacementId = placement.Id;
+        entry.KitIndex = kitIndex;
+        entry.Attend = kit.Attend;
+        entry.LookIndex = ResolveInhabitLook(placement: placement);
+        entry.PreferredAltitude = altitude;
+        entry.AcquiredTarget = -1;
+        entry.Active = true;
+    }
+
+    // Retire an inhabitant slot back to an inactive network peer (its body dropped, its placement tag cleared).
+    private void RetireInhabitant(int index) {
+        var entry = m_entries[index];
+
+        entry.Body = null;
+        entry.Kind = PopulationKind.NetworkPeer;
+        entry.PlacementId = null;
+        entry.Active = false;
+        entry.AcquiredTarget = -1;
+    }
+
+    private int CountInhabitants(string placementId) {
+        var count = 0;
+
+        for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
+            if ((m_entries[index].Kind == PopulationKind.Inhabitant) && string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private int LowestInhabitant(string placementId) {
+        for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
+            if ((m_entries[index].Kind == PopulationKind.Inhabitant) && string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    // The highest slot (127 downward) not currently claimed by an active seat/peer or an inhabitant — where a new
+    // inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer.
+    private int HighestFreeSlot() {
+        for (var index = MaxPopulation - 1; (index >= LocalSeatCount); index--) {
+            var entry = m_entries[index];
+
+            if ((entry.Kind != PopulationKind.Inhabitant) && !entry.Active) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    // The scatter spawn for one inhabited body: the placement position, phyllotaxis-scattered inside `radius` by the
+    // ordinal (0 stacks them). Deterministic, index-stable.
+    private static FixedVector3 InhabitantSpawn(WorldPlacement placement, float radius, int ordinal) {
+        if (radius <= 0f) {
+            return new FixedVector3(X: FixedQ4816.FromDouble(value: placement.Position.X), Y: FixedQ4816.FromDouble(value: placement.Position.Y), Z: FixedQ4816.FromDouble(value: placement.Position.Z));
+        }
+
+        var fraction = (((2.0 * ordinal) + 1.0) / (2.0 * Math.Max(val1: ordinal + 1, val2: 1)));
+        var angle = (ordinal * (2.0 * Math.PI * WorldColor.GoldenRatioConjugate));
+        var r = (radius * Math.Sqrt(fraction));
+
+        return new FixedVector3(
+            X: FixedQ4816.FromDouble(value: (placement.Position.X + (r * Math.Cos(angle)))),
+            Y: FixedQ4816.FromDouble(value: placement.Position.Y),
+            Z: FixedQ4816.FromDouble(value: (placement.Position.Z + (r * Math.Sin(angle))))
+        );
+    }
+
+    // The kit name an inhabited placement resolves: its explicit Inhabit.Kit, or the creation's Locomotion token as a
+    // kit name (the creator's rule). Null when neither resolves to a string (the validator already rejected such a row).
+    private static string? ResolveInhabitKit(WorldDefinition definition, WorldPlacement placement) {
+        if (placement.Inhabit?.Kit is { Length: > 0 } explicitKit) {
+            return explicitKit;
+        }
+
+        foreach (var creation in definition.Creations) {
+            if (string.Equals(a: creation.Id, b: placement.CreationId, comparisonType: StringComparison.Ordinal)) {
+                return creation.Document.Behavior?.Locomotion;
+            }
+        }
+
+        return null;
+    }
+
+    // The look row an inhabited placement's bodies wear: its Inhabit.Look when it names an authored look, else the
+    // implicit index-derived look (the client renders the creation stamp from the placement's own CreationId regardless).
+    private byte ResolveInhabitLook(WorldPlacement placement) {
+        if ((placement.Inhabit?.Look is { Length: > 0 } lookName) && (ResolveLookOrNull(name: lookName) is { } lookIndex)) {
+            return lookIndex;
+        }
+
+        return RowFor(index: 0, rowCount: m_lookRows.Count, stream: LookHashStream);
+    }
+
+    private static WorldPlacement? FindInhabited(WorldDefinition definition, string placementId) {
+        foreach (var placement in definition.Placements) {
+            if ((placement.Inhabit is not null) && string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
+        return null;
+    }
+
+    private byte? ResolveKitOrNull(string name) {
+        for (var kit = 0; (kit < m_kitRows.Count); kit++) {
+            if (string.Equals(a: m_kitRows[kit].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return (byte)kit;
+            }
+        }
+
+        return null;
+    }
+
+    private byte? ResolveLookOrNull(string name) {
+        for (var look = 0; (look < m_lookRows.Count); look++) {
+            if (string.Equals(a: m_lookRows[look].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return (byte)look;
+            }
+        }
+
+        return null;
     }
 
     // The kit row index a kebab name resolves to. The validator gates unknown names at startup.
@@ -504,12 +760,25 @@ internal sealed class WorldPopulation {
     public void AdvanceSeats(ulong stepTicks) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot] is { Active: true, Body: { } body } entry) {
-                if (body.Source == IntentSource.Wander) {
-                    StageWander(entry: entry, body: body, stepTicks: stepTicks);
-                }
-
+                StageProducer(entry: entry, body: body, index: slot, stepTicks: stepTicks);
                 body.Advance(stepTicks: stepTicks);
             }
+        }
+    }
+
+    // Stage the gap-filling producer this tick per the entity's intent source: the wander producer, the attend producer
+    // (which itself falls back to wander when no target is in band), or nothing (Live/Idle). Shared by seats, peers, and
+    // inhabitants so a single arm gates the source→producer mapping.
+    private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
+        switch (body.Source) {
+            case IntentSource.Wander:
+                StageWander(entry: entry, body: body, stepTicks: stepTicks);
+
+                break;
+            case IntentSource.Attend:
+                StageAttend(entry: entry, body: body, index: index, stepTicks: stepTicks);
+
+                break;
         }
     }
 
@@ -520,13 +789,23 @@ internal sealed class WorldPopulation {
     /// <param name="count">The requested active simulated count.</param>
     /// <returns>The clamped count actually applied.</returns>
     public int SetSimulatedCount(int count) {
+        // Clamp against the LIVE ceiling (R6): inhabited bodies at the top of the table lower the peer ceiling, so a
+        // request past it is clamped rather than allowed to collide with an inhabitant.
         var clamped = Math.Clamp(value: count, min: 0, max: MaxSimulated);
         var changed = false;
 
-        for (var offset = 0; (offset < MaxSimulated); offset++) {
+        for (var offset = 0; (offset < MaxPopulationSimulated); offset++) {
             var index = (LocalSeatCount + offset);
-            var desired = (offset < clamped);
             var entry = m_entries[index];
+
+            // Inhabitant slots are owned by ReconcileInhabitants; the census never activates or clears them. Because
+            // inhabitants claim the TOP of the peer slice and `clamped <= MaxSimulated`, `offset < clamped` never names
+            // an inhabitant slot, so census peers and inhabitants cannot meet.
+            if (entry.Kind == PopulationKind.Inhabitant) {
+                continue;
+            }
+
+            var desired = (offset < clamped);
 
             if (entry.Active == desired) {
                 continue;
@@ -577,16 +856,13 @@ internal sealed class WorldPopulation {
         for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
             var entry = m_entries[index];
 
-            // Network peers use this deterministic producer only until a real transport, replay, or tape supplies the
-            // same intent currency. An inactive entry has no body.
-            if (!entry.Active || (entry.Kind != PopulationKind.NetworkPeer) || (entry.Body is not { } player)) {
+            // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
+            // transport/possession supplies intents). An inactive entry has no body.
+            if (!entry.Active || (entry.Kind == PopulationKind.LocalSeat) || (entry.Body is not { } player)) {
                 continue;
             }
 
-            if (player.Source == IntentSource.Wander) {
-                StageWander(entry: entry, body: player, stepTicks: stepTicks);
-            }
-
+            StageProducer(entry: entry, body: player, index: index, stepTicks: stepTicks);
             player.Advance(stepTicks: stepTicks);
         }
     }
@@ -650,6 +926,108 @@ internal sealed class WorldPopulation {
         body.StageProducerIntent(intent: in intent);
     }
 
+    // Stage one entity's ATTEND producer image for this tick: a deterministic nearest-target scan over the active
+    // slice (squared fixed-point distances, hysteresis via the notice/release squares), then a steer that closes to the
+    // standoff radius and holds a lateral orbit while facing the target — or, when no target is in band, the kit's
+    // wander flavor exactly. All FixedQ4816; turn-to-face rides Atan2/WrapPi, never a libm call.
+    private void StageAttend(Entry entry, WorldBody body, int index, ulong stepTicks) {
+        if (entry.Attend is not { } flavor) {
+            // A kit with no attend flavor cannot attend (validation rejects the source) — but a live retune could strip
+            // it; fall back to wander so the body never freezes.
+            StageWander(entry: entry, body: body, stepTicks: stepTicks);
+
+            return;
+        }
+
+        var self = body.FixedPosition;
+        var acquired = ResolveAttendTarget(selfIndex: index, flavor: flavor, self: self, current: entry.AcquiredTarget);
+
+        entry.AcquiredTarget = acquired;
+
+        if ((acquired < 0) || (m_entries[acquired].Body is not { } targetBody)) {
+            // Nothing in band: keep phases live and fall back to the wander flavor.
+            StageWander(entry: entry, body: body, stepTicks: stepTicks);
+
+            return;
+        }
+
+        var target = targetBody.FixedPosition;
+        var dx = (target.X - self.X);
+        var dz = (target.Z - self.Z);
+        var distanceSquared = ((dx * dx) + (dz * dz));
+        var standoffSquared = (flavor.StandoffRadius * flavor.StandoffRadius);
+        var yaw = body.FixedYaw;
+        // Face the target: facing = (-sin yaw, -cos yaw), so the yaw pointing AT (dx, dz) is atan2(-dx, -dz).
+        var targetYaw = FixedQ4816.Atan2(y: -dx, x: -dz);
+        var yawRate = (m_wander.InwardGain * WrapPi(angle: (targetYaw - yaw)));
+        var turn = (flavor.FaceTarget
+            ? FixedQ4816.Clamp(value: (yawRate / m_fixedMotion.TurnSpeed), minimum: s_negativeOne, maximum: FixedQ4816.One)
+            : FixedQ4816.Zero);
+        // Close while outside standoff; hold (no forward) once inside it.
+        var forward = ((distanceSquared > standoffSquared) ? flavor.Approach : FixedQ4816.Zero);
+        var kit = m_kits[entry.KitIndex];
+        PlayerIntent intent;
+
+        if (kit.Model == MotionModel.Free) {
+            var altitudeCorrection = FixedQ4816.Clamp(
+                value: ((entry.PreferredAltitude - self.Y) * s_altitudeGain),
+                minimum: s_negativeOne,
+                maximum: FixedQ4816.One
+            );
+
+            intent = new PlayerIntent(MoveForward: forward, MoveStrafe: flavor.Orbit, Turn: turn, MoveUp: altitudeCorrection);
+        } else {
+            intent = new PlayerIntent(MoveForward: forward, MoveStrafe: flavor.Orbit, Turn: turn);
+        }
+
+        body.StageProducerIntent(intent: in intent);
+    }
+
+    // The attend hysteresis: keep the current target while it stays inside the RELEASE band; otherwise acquire the
+    // nearest in-band candidate inside the NOTICE band. Returns the resolved target index (-1 = none).
+    private int ResolveAttendTarget(int selfIndex, in FixedAttendFlavor flavor, in FixedVector3 self, int current) {
+        if ((current >= 0) && (m_entries[current] is { Active: true, Body: { } held }) && IsAttendCandidate(index: current, target: flavor.Target, selfIndex: selfIndex)) {
+            if (PlanarDistanceSquared(a: self, b: held.FixedPosition) <= flavor.ReleaseRadiusSquared) {
+                return current;
+            }
+        }
+
+        var nearest = -1;
+        var nearestSquared = FixedQ4816.MaxValue;
+
+        for (var index = 0; (index < MaxPopulation); index++) {
+            if (!IsAttendCandidate(index: index, target: flavor.Target, selfIndex: selfIndex) || (m_entries[index].Body is not { } candidate)) {
+                continue;
+            }
+
+            var squared = PlanarDistanceSquared(a: self, b: candidate.FixedPosition);
+
+            if (squared < nearestSquared) {
+                nearest = index;
+                nearestSquared = squared;
+            }
+        }
+
+        return (((nearest >= 0) && (nearestSquared <= flavor.NoticeRadiusSquared)) ? nearest : -1);
+    }
+
+    // Whether an entry is a legal attend target for the given target policy (an active body, never the attending body
+    // itself; NearestSeat narrows to the local seats).
+    private bool IsAttendCandidate(int index, AttendTarget target, int selfIndex) {
+        if ((index == selfIndex) || !m_entries[index].Active || (m_entries[index].Body is null)) {
+            return false;
+        }
+
+        return ((target != AttendTarget.NearestSeat) || (m_entries[index].Kind == PopulationKind.LocalSeat));
+    }
+
+    private static FixedQ4816 PlanarDistanceSquared(in FixedVector3 a, in FixedVector3 b) {
+        var dx = (a.X - b.X);
+        var dz = (a.Z - b.Z);
+
+        return ((dx * dx) + (dz * dz));
+    }
+
     private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) {
         if ((EngineTicks.PerSecond % stepTicks) != 0UL) {
             throw new ArgumentException(message: $"The fixed-step period {stepTicks} must divide {EngineTicks.PerSecond} engine ticks exactly.", paramName: nameof(stepTicks));
@@ -695,7 +1073,7 @@ internal sealed class WorldPopulation {
     // phase/activity so the retune does not jerk the crowd.
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
-        var fraction = (FixedQ4816.FromInteger(value: ((2L * offset) + 1L)) / FixedQ4816.FromInteger(value: (2L * MaxSimulated)));
+        var fraction = (FixedQ4816.FromInteger(value: ((2L * offset) + 1L)) / FixedQ4816.FromInteger(value: (2L * MaxPopulationSimulated)));
         // The phyllotaxis radius: the policy's override when authored (> 0), else the wander tuning's spawn radius — so
         // the default policy (radius 0, no points) reproduces the pre-arc golden-angle disc bit-identically.
         var phyllotaxisRadius = ((m_spawnPolicy.PhyllotaxisRadius > FixedQ4816.Zero) ? m_spawnPolicy.PhyllotaxisRadius : m_wander.SpawnRadius);
@@ -713,6 +1091,7 @@ internal sealed class WorldPopulation {
         var (sin, cos) = FixedQ4816.SinCos(angle: angle);
 
         entry.PreferredAltitude = PreferredAltitudeFor(kit: m_kits[entry.KitIndex], altitudeUnit: altitudeUnit);
+        entry.Attend = m_kits[entry.KitIndex].Attend;
         // The spawn footprint: the phyllotaxis disc (X/Z) OR — under a `points` policy — the cycled spawn point with a
         // deterministic R2 jitter scatter (disjoint R2 stream so it never aliases the activity/altitude samples). Y
         // always rides the kit's preferred altitude.
@@ -742,6 +1121,7 @@ internal sealed class WorldPopulation {
         var entry = m_entries[slot];
 
         entry.PreferredAltitude = PreferredAltitudeFor(kit: m_kits[entry.KitIndex], altitudeUnit: altitudeUnit);
+        entry.Attend = m_kits[m_seatKit].Attend;
         entry.WeaveFreq = (m_wander.WeaveFrequencyBase + (m_wander.WeaveFrequencyRange * fixedHue));
 
         if (resetPhase) {
@@ -783,7 +1163,17 @@ internal sealed class WorldPopulation {
         public bool Active { get; set; }
         public WorldBody? Body { get; set; }
         public Vector3 BodyColor { get; set; }
-        public required PopulationKind Kind { get; init; }
+        // Kind is fixed at construction for seats/peers; an inhabitant reconcile flips a peer slot to Inhabitant and
+        // back, so Kind is settable rather than init-only.
+        public required PopulationKind Kind { get; set; }
+        // The placement row this entry inhabits (null unless Kind == Inhabitant) — the back-reference the frame source
+        // and anchor resolver look up by. Set/cleared by ReconcileInhabitants.
+        public string? PlacementId { get; set; }
+        // The compiled attend flavor an Inhabitant/Wander body's Attend producer reads (null = the kit declares none).
+        public FixedAttendFlavor? Attend { get; set; }
+        // The attend producer's acquired target index (-1 = none) — the hysteresis latch that stops edge flicker across
+        // the notice/release band.
+        public int AcquiredTarget { get; set; } = -1;
         // Reassigned in place by Rebuild when the kit-assignment policy (or kit set) mutates; set at construction.
         public required byte KitIndex { get; set; }
         // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices

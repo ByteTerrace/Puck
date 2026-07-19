@@ -30,6 +30,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly int m_authoringHeadroomScreens;
     private readonly int m_authoringHeadroomPlacements;
     private readonly int m_maxRepeatPerSegment;
+    // BOOT-CONSUMED: the reserved derived-face screen count (WorldAuthoringDefaults.DerivedFaceScreens) — the binder's
+    // frozen derived-face slot range, re-pointed live at each delivery.
+    private readonly int m_derivedFaceScreens;
     // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
     // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
     private static readonly Vector3 s_shimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
@@ -50,7 +53,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly WorldWorkbench m_workbench;
     // The animated-placement replay pool: reconciled at the delivery boundary, ticked on the render clock,
     // packed after the avatar transforms every frame.
-    private readonly WorldPlacementAnimator m_animator;
+    private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
     private readonly WorldAudioDirector m_audio;
@@ -77,10 +80,14 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
     // catalog, plus movement-driven gait state per avatar and the joined seats' views. Live programs address only the
     // active avatars' stable slot ranges; stale inactive slots are unreachable.
-    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount)];
+    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount)];
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
+    // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
+    // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
+    private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
+    private readonly bool[] m_rendersAsStamp = new bool[WorldPopulation.MaxPopulation];
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
@@ -119,7 +126,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="composition">The shared live composition-override store (view.layout/view.camera) the composer reads.</param>
     /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldCompositionState composition, WorldViewComposer composer) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldCompositionState composition, WorldViewComposer composer) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -177,10 +184,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
         m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
         m_maxRepeatPerSegment = definition.Authoring.MaxRepeatPerSegment;
+        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
 
-        // A booted world may already stamp animated placements — register them before the first build so the initial
-        // program emits their live pool slots.
-        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
+        // A booted world may already stamp animated placements or inhabited bodies — register them before the first
+        // build so the initial program emits their live pool slots (body stamps are empty until the first snapshot).
+        RefreshBodyStamps();
+        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations, bodyStamps: m_bodyStamps);
         // The boot emitter derivation (a booted world may already author speakers/facets/sounds).
         m_audio.ReconcileSpeakers(definition: definition);
         m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements, maxRepeatPerSegment: m_maxRepeatPerSegment) + m_authoringHeadroomPlacements);
@@ -251,7 +260,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
     /// <summary>The frozen transform-slot count: every leaf in the all-128 avatar catalog plus the reserved
     /// animated-placement replay pool.</summary>
-    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount);
+    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
 
     /// <inheritdoc/>
     public void NotifyDeviceLost() => m_binder.NotifyDeviceLost();
@@ -301,19 +310,27 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             if (definitionRevision != m_builtDefinitionRevision) {
                 // A views-section edit recompiles each seat's chase rig from the delivered seat rig (world.view.rig live).
                 RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
-                m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
-                m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
+                // Derive the creation facets (P5): a creation's eyes become cameras on WorldAnchor.Placement, its faces
+                // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
+                // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
+                var facets = WorldCreationFacets.Derive(definition: m_client.Definition, placements: m_client.Definition.Placements, derivedFaceBase: WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: m_derivedFaceScreens);
+
+                m_binder.ReconcileCameras(cameras: Concat(first: m_client.Definition.Cameras, second: facets.Cameras));
+                m_binder.ReconcileScreens(screens: Concat(first: m_client.Definition.Screens, second: facets.Faces));
                 // Cable links reconcile AFTER screens (a link resolves against the live slot set).
                 m_binder.ReconcileLinks(links: (m_client.Definition.Links ?? []));
-                // The animated-placement pool reconciles at the same delivery boundary: cheap pose
-                // edits write in place, creation-content changes release + recreate, removals release (symmetric).
-                m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
                 // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
-                // after the animator (placement-anchored emitters read its registrations).
+                // after the stamp pool reconcile (placement-anchored emitters read its registrations at Publish).
                 m_audio.ReconcileSpeakers(definition: m_client.Definition);
                 m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, speakers: m_client.Definition.Speakers, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
+
+            // The stamp pool reconciles on EVERY rebuild (a definition delivery OR a population/look change): animated
+            // placements root statically; the creation-stamp bodies (inhabitants + crowd creation-looks) root on live
+            // body poses, so the set follows the active-entity/look census, not just the document.
+            RefreshBodyStamps();
+            m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations, bodyStamps: m_bodyStamps);
 
             // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
             // preview at drag cadence, and release retires the overlay against the identical committed document — no
@@ -399,10 +416,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             m_avatarPreviousPositions[index] = position;
             // Resolve the entity's LOOK: a catalog rig pin, a uniform render scale, and a gait-amplitude phase scale.
             // GaitAmplitude scales m_avatarGaitPhases (1 = the pre-look swing; 0 stills the limbs at their rest pose).
+            // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
+            // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
+            // is gone: the body shows its actual creation geometry instead.
             var look = ResolveLook(index: index);
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,
-                rootPosition: position,
+                rootPosition: (m_rendersAsStamp[index] ? s_hiddenAvatar : position),
                 rootOrientation: m_client.Orientation(index: index),
                 gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
                 castsSoftShadow: castsSoftShadow,
@@ -412,9 +432,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             );
         }
 
-        // The animated-placement pool packs after the avatar catalog (its reserved slots sit past the frozen avatar
-        // capacity); hidden slots park below the floor.
-        m_animator.PackTransforms(transforms: m_transforms);
+        // The stamp pool packs after the avatar catalog (its reserved slots sit past the frozen avatar capacity):
+        // animated placements ride their static pose, body-rooted stamps ride the client's live body pose; hidden slots
+        // park below the floor.
+        m_animator.PackTransforms(transforms: m_transforms, client: m_client);
 
         Array.Clear(array: m_seatCameraPoses);
 
@@ -1032,6 +1053,79 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         );
 
         return builder.Build();
+    }
+
+    // Where a creation-stamp body's catalog avatar parks (below the floor, culled) — the body renders its creation.
+    private static readonly Vector3 s_hiddenAvatar = new(x: 0f, y: -1000f, z: 0f);
+
+    // Refresh the creation-stamp census: which active entities render their creation geometry through the stamp pool
+    // (inhabitants + crowd creation-looks) instead of a catalog avatar. Called at each rebuild.
+    private void RefreshBodyStamps() {
+        m_bodyStamps.Clear();
+        Array.Clear(array: m_rendersAsStamp);
+
+        var definition = m_client.Definition;
+
+        for (var index = 0; (index < WorldPopulation.MaxPopulation); index++) {
+            if (!m_client.IsActive(index: index) || (ResolveStampCreation(index: index, definition: definition) is not { } stamp)) {
+                continue;
+            }
+
+            m_bodyStamps.Add(item: stamp);
+            m_rendersAsStamp[index] = true;
+        }
+    }
+
+    // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
+    // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
+    // look). The uniform scale folds the placement scale and the look scale.
+    private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
+        var look = ResolveLook(index: index);
+
+        if (m_client.PlacementId(index: index) is { } placementId) {
+            if (FindPlacement(placements: definition.Placements, id: placementId) is not { } placement) {
+                return null;
+            }
+
+            var creationId = ((look.Source is WorldLookSource.Creation inhabitLook) ? inhabitLook.CreationId : placement.CreationId);
+
+            return ((WorldPlacementStamper.FindCreation(creations: definition.Creations, id: creationId) is { } creation)
+                ? new WorldStampPool.BodyStamp(BodyIndex: index, Creation: creation, Scale: (placement.Scale * look.Scale))
+                : null);
+        }
+
+        if (look.Source is WorldLookSource.Creation crowdLook) {
+            return ((WorldPlacementStamper.FindCreation(creations: definition.Creations, id: crowdLook.CreationId) is { } creation)
+                ? new WorldStampPool.BodyStamp(BodyIndex: index, Creation: creation, Scale: look.Scale)
+                : null);
+        }
+
+        return null;
+    }
+
+    private static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement> placements, string id) {
+        foreach (var placement in placements) {
+            if (string.Equals(a: placement.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
+        return null;
+    }
+
+    // Concatenate two row lists into one (document rows + derived rows) for the binder reconcile — a small allocation at
+    // the delivery boundary only, never per-frame.
+    private static IReadOnlyList<T> Concat<T>(IReadOnlyList<T> first, IReadOnlyList<T> second) {
+        if (second.Count == 0) {
+            return first;
+        }
+
+        var combined = new List<T>(capacity: (first.Count + second.Count));
+
+        combined.AddRange(collection: first);
+        combined.AddRange(collection: second);
+
+        return combined;
     }
 
     // The LOOK row an entity wears: the delivered look table indexed by the snapshot's per-entity look byte, or the

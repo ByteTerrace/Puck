@@ -53,6 +53,9 @@ internal readonly record struct EntityContinuity(EntityContinuityKind Kind, floa
 /// <param name="Look">The entity's LOOK row index into the server-delivered definition's look table (drives the
 /// client's appearance resolution — catalog rig vs. creation stamp — PRESENTATION-ONLY, never who is driving it).</param>
 /// <param name="Continuity">How the pose changed across this tick — the client's interpolate/snap/ease hint.</param>
+/// <param name="PlacementId">The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer. The
+/// client renders an inhabitant's creation geometry (a body-rooted stamp riding this pose) instead of a catalog avatar —
+/// PRESENTATION-ONLY, never who is driving it. No transport change (the loopback is a pass-through).</param>
 internal readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -61,7 +64,8 @@ internal readonly record struct EntitySnapshot(
     bool Active,
     byte Kit,
     byte Look,
-    EntityContinuity Continuity
+    EntityContinuity Continuity,
+    string? PlacementId = null
 );
 
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the

@@ -279,14 +279,14 @@ services.AddSingleton<ICommandModule, EditorSculptRigCommandModule>();
 // place-by-name twins. The animated-placement replay pool sits immediately after the avatar catalog's frozen
 // dynamic-transform capacity (the slot-base contract the frame source's capacity arithmetic mirrors).
 services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
-services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
+services.AddSingleton(implementationInstance: new WorldStampPool(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
 // The audio director: derives the emitter table from the delivered definition, resolves poses per produced
 // frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for the device pump.
 // Registered as its own singleton so the audio verb surface (audio.emitters) reads the same instance.
 services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
     client: sp.GetRequiredService<WorldClient>(),
-    animator: sp.GetRequiredService<WorldPlacementAnimator>()
+    animator: sp.GetRequiredService<WorldStampPool>()
 ));
 // The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads.
 // One dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a
@@ -376,7 +376,9 @@ services.AddSingleton<IScreenMachineEngine, AdvancedGamingBrickEngine>();
 // window captures); shared by the render factory (its provider maps feed the render spec, and the frame source publishes
 // through it each frame) and the world.screens verb.
 services.AddSingleton(implementationFactory: sp => new WorldScreenBinder(
-    screens: sp.GetRequiredService<WorldDefinition>().Screens,
+    // Reserve the derived-face slot range up front (None-sourced placeholders) so a creation FACE appearing at a later
+    // delivery re-points a slot that already exists — the render provider key set is frozen at boot (Arc 7).
+    screens: [.. sp.GetRequiredService<WorldDefinition>().Screens, .. Puck.World.Client.WorldCreationFacets.ReservedFaceSlots(derivedFaceBase: Puck.World.Client.WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: (sp.GetRequiredService<WorldDefinition>().Authoring ?? WorldAuthoringDefaults.Default).DerivedFaceScreens)],
     engagement: sp.GetRequiredService<WorldEngagement>(),
     engines: sp.GetServices<IScreenMachineEngine>(),
     cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
@@ -397,6 +399,9 @@ services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
 // The LOOK verb surface — world.look.set/.remove/.assign/.tune, world.population.spawn (the spawn-policy RMW), and the
 // world.looks census. A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldLookCommandModule>();
+// The Arc 7 inhabitation + creation-facet verb surface (world.placement.inhabit/.face, world.kit.attend,
+// world.inhabitants, world.faces). A SEPARATE module (WorldMutationCommandModule is at its analyzer ceiling).
+services.AddSingleton<ICommandModule, WorldPlacementCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
@@ -524,7 +529,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         editor: sp.GetRequiredService<WorldEditorSession>(),
         targeting: sp.GetRequiredService<WorldEditorTargeting>(),
         drag: sp.GetRequiredService<WorldEditorDrag>(),
-        animator: sp.GetRequiredService<WorldPlacementAnimator>(),
+        animator: sp.GetRequiredService<WorldStampPool>(),
         workbench: sp.GetRequiredService<WorldWorkbench>(),
         audio: sp.GetRequiredService<WorldAudioDirector>(),
         gizmos: sp.GetRequiredService<EditorGizmoStore>(),

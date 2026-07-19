@@ -264,7 +264,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.placement.set",
-            description: "Upserts a placement INSTANCE row (whole-row, keyed by id) from one inline-JSON WorldPlacement {id, creationId, position, yawDegrees, scale, repeat?, mirror?, role?}: world.placement.set <json>. Must name an existing creation row; capacity-checked against the probed render envelope; a framed creation replays its timeline (repeat/mirror are static-only).",
+            description: "Upserts a placement INSTANCE row (whole-row, keyed by id) from one inline-JSON WorldPlacement {id, creationId, position, yawDegrees, scale, repeat?, mirror?, inhabit?, faceSources?}: world.placement.set <json>. Must name an existing creation row; capacity-checked against the probed render envelope; a framed creation replays its timeline; an inhabited row is a live population body (repeat/mirror reject on animated OR inhabited rows).",
             info: WorldJsonContext.Default.WorldPlacement,
             toMutation: static placement => new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: placement)
         );

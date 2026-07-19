@@ -925,7 +925,9 @@
     "candidateRadius": 32,
     "candidateCap": 16,
     "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12
+    "previewDeadlineFrames": 12,
+    "inhabitantHeadroom": 4,
+    "derivedFaceScreens": 4
   },
   "speakers": [],
   "tunes": [],

@@ -102,4 +102,10 @@ internal enum IntentSource {
     /// <summary>The deterministic index-seeded wander producer fills gaps. Submissions are still admitted above it
     /// (submitted &gt; producer); the device-held lane image is not (wander is not possession by the human).</summary>
     Wander,
+
+    /// <summary>The deterministic attend producer fills gaps: the body steers toward and orbits its kit's
+    /// <see cref="AttendTarget"/> while one is inside the notice band, and falls back to the kit's
+    /// <see cref="WanderFlavor"/> when none is. Submissions are still admitted above it (submitted &gt; producer),
+    /// exactly like <see cref="Wander"/>. A kit with no attend flavor rejects this source at validation.</summary>
+    Attend,
 }

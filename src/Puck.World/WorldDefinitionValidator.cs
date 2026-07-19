@@ -74,8 +74,8 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: $"population.localPlayers {definition.Population.LocalPlayers} is outside 1..{WorldPopulation.LocalSeatCount}.");
         }
 
-        if ((definition.Population.NetworkPlayers < 0) || (definition.Population.NetworkPlayers > WorldPopulation.MaxSimulated)) {
-            errors.Add(item: $"population.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{WorldPopulation.MaxSimulated}.");
+        if ((definition.Population.NetworkPlayers < 0) || (definition.Population.NetworkPlayers > WorldPopulation.MaxPopulationSimulated)) {
+            errors.Add(item: $"population.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{WorldPopulation.MaxPopulationSimulated}.");
         }
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
@@ -96,7 +96,7 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: "render is required.");
         }
 
-        var kitNames = ValidateKits(definition: definition, errors: errors);
+        var (kitNames, attendCapableKits) = ValidateKits(definition: definition, errors: errors);
 
         ValidateAssignment(assignment: definition.Assignment, kitNames: kitNames, errors: errors);
         ValidateAddons(addons: definition.Addons, errors: errors);
@@ -128,7 +128,7 @@ internal static class WorldDefinitionValidator {
 
         ValidateLookAssignment(assignment: definition.LookAssignment, lookNames: lookNames, errors: errors);
 
-        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, patchIds: patchIds, provider: collision.Provider, errors: errors);
+        var placementIds = ValidatePlacements(placements: definition.Placements, definition: definition, creationIds: creationIds, lookNames: lookNames, kitNames: kitNames, attendCapableKits: attendCapableKits, authoring: authoring, patchIds: patchIds, provider: collision.Provider, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -847,13 +847,14 @@ internal static class WorldDefinitionValidator {
 
     // The kit rows (SIM-AFFECTING): name presence/uniqueness, the seat-kit reference, a defined motion model, and the
     // tuning/flavor/action rows that compile to fixed point. Returns the resolved kit-name set for the assignment gate.
-    private static HashSet<string> ValidateKits(WorldDefinition definition, List<string> errors) {
+    private static (HashSet<string> KitNames, HashSet<string> AttendCapable) ValidateKits(WorldDefinition definition, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var attendCapable = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (definition.Kits is not { Count: > 0 } kits) {
             errors.Add(item: "kits requires at least one row.");
 
-            return kitNames;
+            return (kitNames, attendCapable);
         }
 
         for (var index = 0; (index < kits.Count); index++) {
@@ -881,13 +882,47 @@ internal static class WorldDefinitionValidator {
             ValidateActionSpec(spec: kit.PrimaryAction, path: $"{path}.primaryAction", errors: errors);
             ValidateActionSpec(spec: kit.SecondaryAction, path: $"{path}.secondaryAction", errors: errors);
             ValidateCollider(collider: kit.Collider, path: $"{path}.collider", errors: errors);
+
+            if (kit.Attend is { } attend) {
+                ValidateAttendFlavor(attend: attend, path: $"{path}.attend", errors: errors);
+
+                if (!string.IsNullOrWhiteSpace(value: kit.Name)) {
+                    _ = attendCapable.Add(item: kit.Name);
+                }
+            }
         }
 
         if (!kitNames.Contains(item: definition.DefaultSeatKit)) {
             errors.Add(item: $"defaultSeatKit '{definition.DefaultSeatKit}' names no kit row.");
         }
 
-        return kitNames;
+        return (kitNames, attendCapable);
+    }
+
+    // The attend-producer flavor (SIM-AFFECTING): the three radii positive; the two deflections in 0..1; and the
+    // ordering hysteresis rule ReleaseRadius > NoticeRadius >= StandoffRadius as one named error (the band that stops
+    // edge flicker must be non-degenerate).
+    private static void ValidateAttendFlavor(AttendFlavor attend, string path, List<string> errors) {
+        RequirePositive(value: attend.NoticeRadius, name: $"{path}.noticeRadius", errors: errors);
+        RequirePositive(value: attend.ReleaseRadius, name: $"{path}.releaseRadius", errors: errors);
+        RequirePositive(value: attend.StandoffRadius, name: $"{path}.standoffRadius", errors: errors);
+        RequireUnitInterval(value: attend.Approach, name: $"{path}.approach", errors: errors);
+        RequireUnitInterval(value: attend.Orbit, name: $"{path}.orbit", errors: errors);
+
+        if (!Enum.IsDefined(value: attend.Target)) {
+            errors.Add(item: $"{path}.target '{attend.Target}' is not a defined AttendTarget.");
+        }
+
+        if (float.IsFinite(f: attend.NoticeRadius) && float.IsFinite(f: attend.ReleaseRadius) && float.IsFinite(f: attend.StandoffRadius) &&
+            !((attend.ReleaseRadius > attend.NoticeRadius) && (attend.NoticeRadius >= attend.StandoffRadius))) {
+            errors.Add(item: $"{path} radii must satisfy releaseRadius ({attend.ReleaseRadius}) > noticeRadius ({attend.NoticeRadius}) >= standoffRadius ({attend.StandoffRadius}).");
+        }
+    }
+
+    private static void RequireUnitInterval(float value, string name, List<string> errors) {
+        if (!float.IsFinite(f: value) || (value < 0f) || (value > 1f)) {
+            errors.Add(item: $"{name} {value} must be within 0..1.");
+        }
     }
 
     // The kit assignment policy (SIM-AFFECTING): hash needs nothing more; table needs a non-empty cycle whose every
@@ -985,6 +1020,9 @@ internal static class WorldDefinitionValidator {
         }
 
         RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
+        // The Arc 7 boot-consumed headroom fields: the creation-stamp body reserve and the derived-face screen reserve.
+        RequireIntRange(value: authoring.InhabitantHeadroom, min: 0, max: 16, name: "authoring.inhabitantHeadroom", errors: errors);
+        RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: 16, name: "authoring.derivedFaceScreens", errors: errors);
     }
 
     // The creation ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants
@@ -1045,6 +1083,18 @@ internal static class WorldDefinitionValidator {
             if (stampShapes > WorldPlacementPolicy.MaxShapesPerStamp) {
                 errors.Add(item: $"{path} stamps {stampShapes} shapes, exceeding the {WorldPlacementPolicy.MaxShapesPerStamp}-shape per-stamp budget.");
             }
+
+            // Derived-camera names are `creation:{placementId}:{feed}` (Arc 7), so two eyes sharing a feed name would
+            // collide — reject the duplicate at the source. A null Feed derives from the eye's own id (unique already).
+            var feeds = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var camera in (creation.Document.Cameras ?? [])) {
+                var feed = (camera.Feed ?? camera.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+
+                if (!feeds.Add(item: feed)) {
+                    errors.Add(item: $"{path}.doc.cameras feed '{feed}' is declared by more than one eye.");
+                }
+            }
         }
 
         return ids;
@@ -1054,8 +1104,9 @@ internal static class WorldDefinitionValidator {
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, HashSet<string> patchIds, WorldContactProvider provider, List<string> errors) {
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, HashSet<string> creationIds, HashSet<string> lookNames, HashSet<string> kitNames, HashSet<string> attendCapableKits, WorldAuthoringDefaults authoring, HashSet<string> patchIds, WorldContactProvider provider, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var creations = definition.Creations;
 
         if (placements is null) {
             errors.Add(item: "placements is required.");
@@ -1064,6 +1115,7 @@ internal static class WorldDefinitionValidator {
         }
 
         var animatedCount = 0;
+        var inhabitantCount = 0;
 
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
@@ -1134,13 +1186,111 @@ internal static class WorldDefinitionValidator {
                     errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames) — repeat/mirror facets are static-stamp-only.");
                 }
             }
+
+            // The INHABIT facet: a placement's binding to live population bodies (Arc 7). Resolve its kit, gate its
+            // source/look/count, and reject the lattice facets (one body cannot be a repeat grid).
+            if (placement.Inhabit is { } inhabit) {
+                inhabitantCount += Math.Max(val1: inhabit.Count, val2: 0);
+                ValidateInhabit(inhabit: inhabit, placement: placement, path: $"{path}.inhabit", definition: definition, kitNames: kitNames, attendCapableKits: attendCapableKits, lookNames: lookNames, errors: errors);
+
+                if ((placement.Repeat is not null) || (placement.Mirror is not null)) {
+                    errors.Add(item: $"{path} INHABITS — repeat/mirror facets are incompatible (one body is not a lattice).");
+                }
+            }
+
+            // The per-instance FACE overrides: each names a declared creation face, no duplicates. The View source's
+            // camera name is resolved LENIENTLY (a derived creation-camera name is unknown to the document validator; the
+            // binder lights an unresolved feed with its no-signal card, never a hard reject).
+            ValidateFaceSources(faceSources: placement.FaceSources, placement: placement, creations: creations, path: $"{path}.faceSources", errors: errors);
         }
 
-        if (animatedCount > WorldPlacementPolicy.MaxAnimatedPlacements) {
-            errors.Add(item: $"{animatedCount} animated placements exceed the {WorldPlacementPolicy.MaxAnimatedPlacements}-slot replay pool.");
+        if (animatedCount > WorldPlacementPolicy.MaxStampRegistrations) {
+            errors.Add(item: $"{animatedCount} animated placements exceed the {WorldPlacementPolicy.MaxStampRegistrations}-slot replay pool.");
+        }
+
+        // The census fit rule (R6): network peers pack up from slot 4, inhabited bodies down from slot 127, so their
+        // sum must not exceed the simulated ceiling — reported naming both terms.
+        if ((definition.Population.NetworkPlayers + inhabitantCount) > WorldPopulation.MaxPopulationSimulated) {
+            errors.Add(item: $"population.networkPlayers ({definition.Population.NetworkPlayers}) + inhabited bodies ({inhabitantCount}) exceed the {WorldPopulation.MaxPopulationSimulated}-body simulated ceiling.");
         }
 
         return ids;
+    }
+
+    // The INHABIT facet: the kit must resolve (its explicit kit name OR the creation's Locomotion token as a kit name),
+    // an Attend source needs an attend-capable kit, a named look must be declared, and the count/radius are bounded.
+    private static void ValidateInhabit(WorldPlacementInhabit inhabit, WorldPlacement placement, string path, WorldDefinition definition, HashSet<string> kitNames, HashSet<string> attendCapableKits, HashSet<string> lookNames, List<string> errors) {
+        var resolvedKit = (inhabit.Kit ?? ResolveLocomotionKit(definition: definition, creationId: placement.CreationId));
+
+        if ((resolvedKit is null) || !kitNames.Contains(item: resolvedKit)) {
+            errors.Add(item: $"{path} names no kit; the world declares: {string.Join(separator: ", ", values: kitNames)}.");
+        } else if ((inhabit.Source == Puck.World.Protocol.IntentSource.Attend) && !attendCapableKits.Contains(item: resolvedKit)) {
+            errors.Add(item: $"{path}.source is Attend but kit '{resolvedKit}' declares no attend flavor.");
+        }
+
+        if (!Enum.IsDefined(value: inhabit.Source)) {
+            errors.Add(item: $"{path}.source '{inhabit.Source}' is not a defined IntentSource.");
+        }
+
+        if ((inhabit.Look is { Length: > 0 } lookName) && !lookNames.Contains(item: lookName)) {
+            errors.Add(item: $"{path}.look '{lookName}' names no look row.");
+        }
+
+        if ((inhabit.Count < 1) || (inhabit.Count > WorldPopulation.MaxPopulationSimulated)) {
+            errors.Add(item: $"{path}.count {inhabit.Count} is outside 1..{WorldPopulation.MaxPopulationSimulated}.");
+        }
+
+        RequireNonNegative(value: inhabit.Radius, name: $"{path}.radius", errors: errors);
+    }
+
+    // The creation's Locomotion token, resolved as a kit name (the creator's rule; null when the creation/token is absent).
+    private static string? ResolveLocomotionKit(WorldDefinition definition, string creationId) {
+        foreach (var creation in (definition.Creations ?? [])) {
+            if ((creation is not null) && string.Equals(a: creation.Id, b: creationId, comparisonType: StringComparison.Ordinal)) {
+                return creation.Document.Behavior?.Locomotion;
+            }
+        }
+
+        return null;
+    }
+
+    // The per-instance face overrides: each names a declared creation face, no duplicate face names.
+    private static void ValidateFaceSources(IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, string path, List<string> errors) {
+        if (faceSources is not { Count: > 0 } sources) {
+            return;
+        }
+
+        var creation = FindCreation(creations: creations, id: placement.CreationId);
+        var faceNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var face in (creation?.Document.Behavior?.Faces ?? [])) {
+            _ = faceNames.Add(item: face.Name);
+        }
+
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < sources.Count); index++) {
+            var source = sources[index];
+            var facePath = $"{path}[{index}]";
+
+            if ((source is null) || string.IsNullOrWhiteSpace(value: source.Face)) {
+                errors.Add(item: $"{facePath}.face is required.");
+
+                continue;
+            }
+
+            if (!faceNames.Contains(item: source.Face)) {
+                errors.Add(item: $"{facePath}.face '{source.Face}' names no declared face on creation '{placement.CreationId}'.");
+            }
+
+            if (!seen.Add(item: source.Face)) {
+                errors.Add(item: $"{facePath}.face '{source.Face}' is overridden more than once.");
+            }
+
+            if (source.Source is null) {
+                errors.Add(item: $"{facePath}.source is required.");
+            }
+        }
     }
 
     private static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {

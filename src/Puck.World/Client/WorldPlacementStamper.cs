@@ -10,7 +10,7 @@ namespace Puck.World.Client;
 /// creation's shape list with the FULL placement transform baked into EVERY shape's own segment (Translate → yaw
 /// Rotate → the optional mirror fold → the optional repeat → the uniform placement Scale, then the shape's local
 /// T·R·S and the canonical primitive). Animated placements (framed creations)
-/// are NOT emitted here — they ride <see cref="WorldPlacementAnimator"/>'s reserved dynamic pool.
+/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool.
 /// </summary>
 /// <remarks>Text runs count against the per-stamp shape budget (<see cref="CreationDocument.StampShapeCount"/>) but do
 /// not EMIT yet: World deliberately binds no world-space glyph atlas (the combined
@@ -28,6 +28,12 @@ internal static class WorldPlacementStamper {
     /// shares.</summary>
     /// <param name="creation">The creation row.</param>
     public static bool IsAnimated(WorldCreation creation) => (creation.Document.Frames is { Count: > 0 });
+
+    /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
+    /// it) and not when it INHABITS (a live body renders its creation through a body-rooted stamp instead).</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="creation">The placement's resolved creation.</param>
+    public static bool IsStaticStamp(WorldPlacement placement, WorldCreation creation) => (!IsAnimated(creation: creation) && (placement.Inhabit is null));
 
     /// <summary>The emitted SEGMENT count of one placement (its repeat auto-split total; 1 unrepeated) — the unit the
     /// capacity reservation charges in, so a segmented row can never out-instance its charge.</summary>
@@ -52,7 +58,7 @@ internal static class WorldPlacementStamper {
         var segments = 0;
 
         foreach (var placement in placements) {
-            if ((FindCreation(creations: creations, id: placement.CreationId) is { } creation) && !IsAnimated(creation: creation)) {
+            if ((FindCreation(creations: creations, id: placement.CreationId) is { } creation) && IsStaticStamp(placement: placement, creation: creation)) {
                 segments += SegmentCount(placement: placement, maxRepeatPerSegment: maxRepeatPerSegment);
             }
         }
@@ -85,7 +91,7 @@ internal static class WorldPlacementStamper {
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in placements) {
-            if (FindCreation(creations: creations, id: placement.CreationId) is not { } creation || IsAnimated(creation: creation)) {
+            if (FindCreation(creations: creations, id: placement.CreationId) is not { } creation || !IsStaticStamp(placement: placement, creation: creation)) {
                 continue;
             }
 

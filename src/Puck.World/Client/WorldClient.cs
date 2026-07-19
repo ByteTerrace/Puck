@@ -31,6 +31,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
     private readonly byte[] m_look = new byte[EntityCapacity];
+    private readonly string?[] m_placementId = new string?[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
@@ -109,6 +110,29 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="index">The 0-based entity index.</param>
     public byte LookIndex(int index) => m_look[index];
 
+    /// <summary>The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer — the frame source
+    /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public string? PlacementId(int index) => m_placementId[index];
+
+    /// <summary>Resolves the active entity index a placement's FIRST inhabited body occupies (the audio anchor / stamp
+    /// pose lookup), or <see langword="false"/> when no active entity inhabits it.</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="index">The resolved 0-based entity index.</param>
+    public bool TryInhabitantBody(string placementId, out int index) {
+        for (var candidate = 0; (candidate < EntityCapacity); candidate++) {
+            if (m_active[candidate] && string.Equals(a: m_placementId[candidate], b: placementId, comparisonType: StringComparison.Ordinal)) {
+                index = candidate;
+
+                return true;
+            }
+        }
+
+        index = -1;
+
+        return false;
+    }
+
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
@@ -158,6 +182,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
+            m_placementId[index] = entry.PlacementId;
 
             if (!m_active[index]) {
                 // Newly active: both interpolation endpoints start at the spawn pose so the first frame never streaks.
@@ -216,6 +241,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         for (var index = 0; (index < EntityCapacity); index++) {
             if (!m_seen[index]) {
                 m_active[index] = false;
+                m_placementId[index] = null;
 
                 continue;
             }

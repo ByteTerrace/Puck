@@ -335,8 +335,9 @@ internal sealed class WorldBody {
         m_hasSubmittedIntent = true;
     }
     /// <summary>Stages one deterministic producer intent for the next <see cref="Advance"/> — the producer tier below
-    /// the submitted stream, used only while <see cref="Source"/> names its producer (today
-    /// <see cref="IntentSource.Wander"/>). One-tick, consumed like the submitted image; same clamps.</summary>
+    /// the submitted stream, used only while <see cref="Source"/> names its producer
+    /// (<see cref="IntentSource.Wander"/> or <see cref="IntentSource.Attend"/>). One-tick, consumed like the submitted
+    /// image; same clamps.</summary>
     /// <param name="intent">The producer's fixed-point movement and action image.</param>
     public void StageProducerIntent(in PlayerIntent intent) {
         m_producerIntent = Clamped(intent: in intent);
@@ -1041,6 +1042,10 @@ internal sealed class WorldBody {
     // skipped first, so a drained tape falls through the same frame it empties); with the tape dry, the tick's
     // submitted intent (admitted unless Idle), else the producer image (iff the source names it), else zero. The
     // action-track lanes are then overlaid, so a wire player.press jumps a tape-driven runner.
+    // Whether an intent source names a server-side producer whose staged image fills gaps (Wander and Attend both do;
+    // Live/Idle do not). The producer tier sits below the submitted stream, exactly like Wander's.
+    private static bool SourceNamesProducer(IntentSource source) => (source is IntentSource.Wander or IntentSource.Attend);
+
     private PlayerIntent NextIntent(ulong stepTicks) {
         var movement = default(PlayerIntent);
         var resolved = false;
@@ -1067,7 +1072,7 @@ internal sealed class WorldBody {
 
         if (!resolved) {
             movement = ((m_source != IntentSource.Idle) && m_hasSubmittedIntent) ? m_submittedIntent
-                : (((m_source == IntentSource.Wander) && m_hasProducerIntent) ? m_producerIntent : default);
+                : ((SourceNamesProducer(source: m_source) && m_hasProducerIntent) ? m_producerIntent : default);
         }
 
         // Both one-tick images are a one-step publish, even when a tape or the source masked them this time. Their

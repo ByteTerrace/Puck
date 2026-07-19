@@ -5146,6 +5146,148 @@ everywhere.
 
 **Nothing depends on this arc.**
 
+### Arc 7 execution record
+
+Landed on `claude/puck-realtime-world-editing-4fd13f` atop `bc20a9c`. The leading
+Track C fix (largechange-01/-15) is a separate commit; Arc 7 is one squash.
+
+**Leading commit — largechange-01/-15 (audio mixer containment).** `WorldAudioMixer.
+RegisterPatch`/`SetSource` now CONTAIN a full-table overflow (a loud stderr drop +
+`DroppedRegistrationCount`) instead of throwing; `RetirePatches` reclaims patch
+slots whose id left the derived plan (the director calls it at the compose
+boundary before re-registering); the director validates the whole derived plan's
+patch/source counts against the mixer caps and warns loudly; and the per-emitter
+radius squares saturate through `Int128` (`SaturatingSquareQ16`), closing the
+~46 340-unit overflow. **-15's validator-side representable-radius bounds were
+NOT added** — the mixer-side saturation is the substantive overflow containment;
+a radius-ceiling validator pass is a clean follow-up, noted here honestly.
+
+**Arc 7 — LANDED (core thesis, verified).**
+- **The merged inhabit facet (R5).** `WorldPlacementInhabit(Kit?, Look?, Source,
+  Count, Radius)` on `WorldPlacement`; **`WorldPlacement.Role` deleted exactly
+  once** (and its `"role"` lines struck from `docs/examples/puckton.world.json`).
+  `WorldPlacementFace(Face, Source)` + `FaceSources`. `IntentSource.Attend`;
+  `AttendTarget`/`AttendFlavor`/`FixedAttendFlavor` on `WorldKit`.
+  `WorldAuthoringDefaults` gained `InhabitantHeadroom`/`DerivedFaceScreens` (default
+  4/4) — **re-goldened `default.world.json`'s authoring block** (the load-time-0
+  bug: the checked-in file authored the old field set, so the frozen probe read 0
+  derived-face slots until the two fields were added).
+- **Inhabitation (server).** `PopulationKind.Inhabitant`; `Entry.PlacementId`;
+  **`MaxSimulated` is now a computed instance property** reading an inhabitant
+  FLOOR (`m_inhabitantFloor - LocalSeatCount`) — inhabitants claim slots downward
+  from 127, peers pack up from 4, the floor keeps existing inhabitant slots stable
+  (a static `MaxPopulationSimulated` const carries the validator/verb input bound).
+  `ReconcileInhabitants` (called from `WorldServer.Install` after `Rebuild`, and at
+  boot) diffs by placement, keeps pose on an unrelated edit, recompiles in place on
+  a kit change, retires a vanished row, and re-clamps the census. `AffectsPopulation`
+  gained `UpsertCreation`/`RemoveCreation` (R13, the third and last edit).
+- **The attend producer.** `ProduceAttendIntent` (`StageAttend`): an O(active)
+  nearest-target scan over squared fixed-point distances, hysteresis via the
+  notice/release squares, approach/orbit/turn-to-face deflection, and a wander
+  fall-through when no target is in band — all `FixedQ4816`, `SinCos`/`Atan2`, no
+  libm. **Load-bearing correction: `WorldBody.NextIntent` admitted the producer
+  image only under `Wander`; an inhabited Attend body was frozen until the merge
+  was generalized to `SourceNamesProducer` (Wander OR Attend).** Verified: an
+  attend body acquires a target and integrates the approach; a released body
+  reverts to its wander flavor.
+- **Creation-look rendering (Arc 6 deferral CLOSED).** P6 `WorldPlacementAnimator →
+  WorldStampPool` rename + generalization: `Registration` carries a `BodyIndex`
+  root; a body-rooted stamp reads the client's interpolated body pose. The frame
+  source resolves, per active entity, a "creation to stamp" (an inhabitant wears
+  its look's or its placement's creation; a crowd body wears its `Creation`-look's
+  creation), registers it, and packs the entity's catalog avatar HIDDEN — **the
+  Arc 6 "degrades to a catalog avatar" path is gone**; an inhabited/creation-look
+  body renders its actual creation geometry, walking its cycle if framed.
+  `MaxStampRegistrations` (=8: 4 animated + 4 body-rooted headroom) sizes the pool;
+  the construction probe already emits every slot worst-case, so the frozen floor
+  stays honest with no new probe path. `WorldPlacementStamper.IsStaticStamp`
+  excludes inhabited rows from the furniture stamp (no double-render).
+- **P5 facets skeleton CLOSED + extended.** `Client/WorldCreationFacets.Derive` —
+  the one `(placements × creations) → derived rows` entry point — derives CAMERAS
+  (`WorldCamera` on `WorldAnchor.Placement` with a `FirstPerson` rig, R8's shape,
+  concatenated into `ReconcileCameras`) and FACES (screens at the reserved
+  `[DerivedFaceBase=24, +DerivedFaceScreens)` range, `ParseDefaultSource`'s closed
+  four-token grammar, `named:emotes` deliberately not surviving). The binder
+  reserves the derived-face range at construction so a face re-points a slot that
+  already exists (OQ-9's frozen-key-set branch, per the recon).
+- **Protocol/client.** `EntitySnapshot.PlacementId` (no transport change);
+  `WorldClient.PlacementId`/`TryInhabitantBody`; the audio director's
+  `PlacementPoint` resolves an inhabited placement to the live body pose.
+- **Verbs.** `WorldPlacementCommandModule` (`world.placement.inhabit`/`.face`,
+  `world.kit.attend`, `world.inhabitants`, `world.faces`), registered in `Program.cs`;
+  `world.placement.set` description updated (drop `role?`, add `inhabit?`/`faceSources?`).
+  No new mutation kinds, section, or capability. The grant seed comment documents
+  that peers hold `Control/all` but NOT `Drive`, so an inhabitant is possessed only
+  by an explicit `world.grant … drive body:<index>`.
+- **Validator.** `ValidateAttendFlavor` (radii positive, `approach`/`orbit` in
+  0..1, the `release > notice >= standoff` hysteresis as one named error);
+  `ValidateKits` returns `(kitNames, attendCapableKits)`; `ValidatePlacements`
+  gains the inhabit kit-resolution + Attend-capability + look + count/radius gates,
+  the `Repeat`/`Mirror`-vs-`Inhabit` rejection, the face-name/duplicate gate, and
+  the R6 census-fit rule; `ValidateCreations` gains the camera-feed uniqueness
+  check; `ValidateAuthoring` bounds the two headroom fields.
+- **S1 (the one file outside `src/Puck.World/`).** Doc-comment-only on
+  `CreationBehaviorDocument.Locomotion` (resolved as a kit name) and
+  `CreationFaceDocument.DefaultSource` (the closed token map). No signature change.
+
+**DEFERRED with disposition.**
+- **The derived-face SDF slab + live handle.** Derived faces RESOLVE (screen 24,
+  the correct `View` source) and the reserved range is registered/re-pointed live,
+  but the derived-face slab is NOT emitted into the SDF program (to keep the frozen
+  render envelope provably honest, per risk 1's "do not ship an uncapped path"). A
+  derived camera's offscreen render is only pumped when a *rendered* screen names
+  it, so a face wired to a derived camera reads `no-signal` until the slab lands
+  (a face wired to a *document* camera binds a live handle today — verified). The
+  slab + a placement-anchored derived camera's live feed fold in when the derived
+  screen enters the render program with its own probe reservation.
+- **`WorldLookResolver` reroute of the 5 humanoid-role call sites.** NOT landed.
+  The creation-look RENDER path (the substantive Arc 6 deferral) is closed; the
+  resolver's remaining job — resolving a humanoid-LEAF anchor on a creation-look
+  body to the look's root instead of a catalog rig leaf — is a bounded degradation
+  refinement (a lantern-fish has no left shin). A camera/speaker anchored to such a
+  body's leaf still resolves through the catalog rig today (never black, never
+  crash — the binder's settled posture). Carried as a follow-up.
+
+**Demo deletion — (c)-disposition (Arc 1/4/6 precedent; NOT deleted).** The
+`Creator/`, `Tracker/`, `Editing/`, and `EditHistory.cs` targets are consumed by
+the pinned OQ-14 survivors and the HELD `Museum/MuseumRenderer.cs`; excising them
+would break the Demo library build (the ground rules forbid it). The World-side
+capability they represent (a driven creature; a creation's eyes/faces as feeds) is
+fully landed in `Puck.World` this arc. Recorded; the shells die with the survivors
+on the Demo-retirement trajectory.
+
+**Session capture.** No fold needed: inhabit/faceSources are journaled document
+rows (in `server.Definition`); attend flavors ride `UpsertKit`; the derived
+cameras/faces are never written to the document (the derivation stays a
+derivation), so `world.save` round-trips clean — verified: a save reproduces the
+placements/kits and gains no derived rows.
+
+**Verification (Windows, Release; stdin, `--exit-after-seconds`).** Full solution
+builds clean; `Puck.Demo` compiles as a library; the default world boots and runs
+the 2 s smoke with no fault. On a throwaway world (default + two imported creations,
+`networkPlayers` lowered under the census ceiling): two inhabited placements claim
+`body=127`/`126` (top-down); the census echo names them (unlike a Demo companion);
+both bodies integrate (Free swimmer + grounded runner, Wander + Attend); an Attend
+body acquires a target and approaches; `world.placement.inhabit … no-such-kit` is
+**rejected loudly naming every kit the world declares**; `world.placement.inhabit
+<id> -` retires one body and frees its slot; `world.undo 1` reconstructs it at a
+top slot; `world.save` resets `dirty` to 0 and writes no derived rows; `world.faces`
+reports the derived face at `screen=24` wired to `creation:lure:lure`. The census-fit
+rule rejected `networkPlayers 124 + 1 inhabitant` on the default world.
+
+**Plan contradictions found.** (1) The plan's inhabitant slots are "stable, never
+renumber"; a guaranteed-no-collision contiguous-top model would renumber on count
+change, so this arc uses an inhabitant-FLOOR peer ceiling that keeps existing
+inhabitant slots stable AND cannot collide (peers decline the gap below the floor)
+— placement-anchored derived cameras key on placement id, not slot index, so they
+survive regardless. (2) The census-fit rule uses the document `NetworkPlayers`, so
+the default world (`NetworkPlayers = 124`) is un-inhabitable live without lowering
+it first — expected (the plan's verification uses a throwaway `expo` world with a
+low count); `expo.world.json` does not exist in the tree, so a saved default +
+lowered count stood in. (3) `default.world.json`'s authoring block had to be
+re-goldened for the two new fields (they are not a WhenWritingNull section), or the
+frozen probe reads 0 derived-face slots.
+
 ---
 
 ## Arc 8 — RomForge
