@@ -606,6 +606,12 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             };
         }
 
+        // route.autoInsert: engaging an empty engageable screen first boots its selected magazine entry (the "walk over,
+        // press the button, the screen lights" gesture is one act, not an insert then an engage).
+        if (screen.Route.AutoInsert && !m_screens.HasMachine(index: screenIndex) && m_screens.TryMagazine(index: screenIndex, selected: out var selected, magazine: out _)) {
+            _ = m_screens.TrySelect(index: screenIndex, entry: selected);
+        }
+
         if (!m_screens.HasMachine(index: screenIndex)) {
             return new CommandResult(Output: $"[player.engage: screen {screenIndex} has no machine to control — screen.insert a cart first]") {
                 IsError = true,

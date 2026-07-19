@@ -738,6 +738,7 @@ internal sealed class WorldServer {
         WorldMutation.SetHostDefaults => WorldSection.Host,
         WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
+        WorldMutation.UpsertScreenLink or WorldMutation.RemoveScreenLink => WorldSection.Links,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm is a build-time authoring gap, surfaced loudly rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
@@ -836,6 +837,8 @@ internal sealed class WorldServer {
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Policy}'",
+        WorldMutation.UpsertScreenLink m => $"UpsertScreenLink '{m.Link.Name}'",
+        WorldMutation.RemoveScreenLink m => $"RemoveScreenLink '{m.Name}'",
         _ => "unknown",
     };
 
@@ -1207,6 +1210,21 @@ internal sealed class WorldServer {
                 return true;
             case WorldMutation.SetLookAssignment m:
                 candidate = (current with { LookAssignment = m.Assignment });
+
+                return true;
+            case WorldMutation.UpsertScreenLink m:
+                candidate = (current with { Links = Upsert(list: (current.Links ?? []), item: m.Link, keyOf: static link => link.Name) });
+
+                return true;
+            case WorldMutation.RemoveScreenLink m:
+                if (!Remove(list: (current.Links ?? []), key: m.Name, keyOf: static link => link.Name, result: out var links)) {
+                    candidate = current;
+                    reason = $"no cable link named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Links = links });
 
                 return true;
             default:

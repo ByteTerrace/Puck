@@ -3823,6 +3823,148 @@ carries (`ConsoleFeed` 569 + `ProceduralFeed` 248) **move as working code**, not
 as new design, so they land on the moved-lines side rather than the net-new one.
 **L→XL stands, and risks 2 and 3 remain what decides it.**
 
+### Arc 5 execution record
+
+Landed on `claude/puck-realtime-world-editing-4fd13f` atop `cfe7786`, one squash
+commit ("Arc 5: cabinets"). Full Release solution builds clean; `Puck.World`
+boots and the arc's stdin script verifies below. This is a **spine-first**
+landing: the three primitives that carry no cross-thread hazard (magazine, live
+reconfigure, world-event-free links-as-data) plus the grant discipline and
+session-capture fold all landed and verified; the two risk-flagged halves are
+dispositioned below rather than force-landed broken.
+
+**LANDED (verified).**
+- **Engine seams S1–S5.** `IReconfigurableMachine` (S1), `IMachineLink` /
+  `IMachineLinkingEngine` (S2) in `Puck.Abstractions.Machines`; `MachineHost`
+  implements `IReconfigurableMachine` with `m_model` un-`readonly` (S3);
+  `GamingBrickEngine.ParseOptions` hoisted to an internal shared parser + a
+  `FormatOptions` inverse, and the engine implements `IMachineLinkingEngine`
+  (S4); `ConsoleModeRecipes.cs` born engine-side in `Puck.HumbleGamingBrick`,
+  content copied from the Demo table (S5 — see disposition, the Demo copy still
+  stands). The **S3b seam is real and built**: `QueuedMachineWorker` gained a
+  `WorkKind.Reconfigure` + `ReconfigureRequest` marshaled exactly like the
+  proven `MemoryRequest`/`TimeTravelRequest` pattern (rewind ring dropped +
+  frame re-staged on a successful swap), and `IQueuedMachineCore.Reconfigure`
+  (default-reject) implemented by `HumbleGamingBrickCore` calling
+  `Machine.SwitchModel` with the recipe pokes.
+- **Document (`WorldDefinition.cs`).** `WorldScreenMagazine`, `WorldScreenLink`
+  records; `WorldScreenRoute` gained `AutoInsert`/`EngageChannel`/`CycleChannel`
+  (every default byte-preserving); `WorldScreen` gained trailing
+  `Magazine`; `WorldDefinition` gained trailing-nullable `Links` (R12, read as
+  `?? []`); `WorldScreenSource.Console(Rows=24, Columns=64, Procedural=false)`
+  union case. The default-world save gains **no** `magazine`/`links` key
+  (ouroboros verified).
+- **Validator.** `ValidateScreenSource` extracted (called for the declared
+  source AND every magazine entry — closes the undeclared-camera duplication
+  risk); `ValidateRoute` (finite non-negative radius — the real `NaN`→`MathF.Sqrt`
+  gap; kebab channel names; a channel on a non-engageable route rejected);
+  `ValidateMagazine`; the **at-most-one-live-console** ceiling; `ValidateLinks`
+  (name/kebab/unique, ≥2 screens, every index declared, no dup within a link, no
+  screen in two links); console `Rows [1,120]`/`Columns [1,400]`.
+- **Binder.** `ApplySource` extracted; per-slot `Magazine`/`SelectedEntry` with
+  `TryMagazine`/`TrySelect` (the magazine cycle rides the existing dispatch);
+  `TryReconfigure`/`TryReadOptions` (the live device swap); a `LinkEntry` table
+  with `TryLink`/`TryUnlink`/`DescribeLinks`/`ReconcileLinks`/`CaptureLinks`,
+  `StepLiveLinks`, and the **risk-1 guard written into the code** — `TryEject`,
+  `TrySelect`, the reconcile removal pass, and `Dispose` all leave a member's
+  link first.
+- **Mutations/grants.** `UpsertScreenLink`/`RemoveScreenLink` + `WorldSection.Links`
+  (no new capability); `WorldServer` `SectionOf`/`Describe`/`TryCompose`
+  arms; `WorldFrameSource` reconciles links after screens. The **in-arc
+  grant correction**: `screen.insert/.eject/.camera/.capture/.desktop/.view` and
+  the new `screen.select/.options/.link` now all `Control`/`Screen(index)`-check
+  the console principal (verified: `world.revoke console control all` → a live
+  `screen.select` denial, re-grant → allowed).
+- **Verbs.** `screen.select <index> [next|prev|<entry>]`, `screen.options
+  <index> [options…]`, `screen.link`/`screen.unlink`/`screen.links`, and
+  `world.link.set`/`world.link.remove`; `screen.state` gained `entry=N/M` and
+  `link=<name>`. `route.autoInsert` consumed by `player.engage` (boots the
+  selected entry then engages).
+- **Session capture.** `CaptureScreens` folds the live selector into
+  `Magazine.Selected`; `CaptureLinks` folds the live link set into `Links`
+  (null-preserving for the ouroboros); `ScreensDrifted`/`DescribeDrift` gained
+  selector + links comparisons (verified `session-drift screens+links`).
+
+**Verification (stdin script).** Magazine round-trip `entry=0/3 → next 1/3 (view
+applied) → next 2/3`, `screen.state entry=2/3`; `world.link.set pair 0+2` →
+`dirty 2`, `session-drift screens+links`, `screen.links: pair 0+2 dormant (screen
+0 has no machine)`, `screen.state … link=pair`; the `bad 0+99` link **loudly
+rejected** ("screen 0 is already in another link" + "names undeclared screen
+99"); `world.undo` drops it (`session-drift screens`); `screen.options 4` honest
+"no reconfigurable machine"; grant deny/allow; `screen.capture`/`screen.desktop`
+regression intact; `world.save` folded the magazine; default save byte-stable.
+
+**QueuedMachineWorker seam verdict (OQ-9 — RESOLVED).** The recon's read was
+correct: no public drain/quiesce existed, but the established internal
+marshal-a-`WorkKind`-between-steps pattern (`MemoryRequest`/`TimeTravelRequest`,
+proven 3×) is exactly what `TryReconfigure` needed. **S3b is a real, small,
+low-risk `Puck.HumbleGamingBrick`/`Puck.Hosting` seam and it is BUILT** — one new
+`WorkKind.Reconfigure`, one `ReconfigureRequest`, a public `Reconfigure(options)`
+that FIFO-orders behind accepted steps (so no explicit pre-drain is even needed —
+the swap executes only after queued steps complete, satisfying "never mid-step"),
+`m_timeTravel?.Reset()` + re-stage on success. The arc tipped to **XL** as the
+plan warned, but correctness was never in doubt. The full reconfigure path
+(S1/S3/S3b/S4/S5 + binder + `screen.options`) compiles and is wired end-to-end on
+the SM83 `MachineHost`; the peek-same-byte-across-swap assertion could not be
+_run_ because World ships **no bundled SM83 cartridge** (asset-free default) and
+the default AGB screen does not implement `IReconfigurableMachine` — the machinery
+is proven-built, not proven-live, pending a ROM.
+
+**Dispositions / deferrals (disclosed, not force-landed).**
+- **P7 world-event channel seam + `ScreenEngageDirector` + `ActionEffect.EmitWorldEvent`
+  — DEFERRED.** Landing the channel intern table threads a new argument through
+  all of kit compilation (`CompiledActionSpec.Compile`→`FixedWorldKit.Compile`→
+  `WorldPopulation`), and the pipe verification exercises the explicit
+  `player.engage`/`player.warp` path, never the gesture (the gesture is the
+  human-pad pass a pipe cannot prove). The route's `EngageChannel`/`CycleChannel`
+  fields ship as authored data + validated, so no schema surgery when P7 lands.
+  Per risk 3 ("Arc 9 inherits the decision"). `autoInsert` DID land (consumed by
+  `player.engage`).
+- **Console feed live rendering (OQ-13 ConsoleFeed/ProceduralFeed port) —
+  (c)-DISPOSITION.** The `console` union case, validator, and one-live ceiling
+  landed as data; the 817-line frame producer is GDI-atlas + `Puck.Text` +
+  `Puck.Demo.DevConsole`-coupled and its verification is a human-visual "the
+  screen shows the console." A declared `console` source currently renders the
+  procedural no-signal fallback (honest, no crash) — the same precedent Arc 6 set
+  deferring creation-look rendering to Arc 7. `ConsoleFeed.cs`/`ProceduralFeed.cs`
+  **remain in `src/Puck.Demo/Overworld/`**, pinned by that deferred port.
+- **Live cross-worker cable-link co-stepping — DEFERRED (risk 1, the additional
+  `Puck.HumbleGamingBrick` seam the plan predicted).** `SerialLinkSession` drives
+  two `MachineInstance`s from ONE thread, but each World machine's core lives on
+  its own `QueuedMachineWorker` thread; safely lending both cores to the
+  pair-stepper (quiescing both workers) is a further engine seam.
+  `GamingBrickEngine.TryLink` therefore returns a named dormant reason and the
+  binder reports links **dormant** — spec-legal ("a dormant link must name why,
+  never silently no-op"). All link DATA (records, validator, `Links` mutation,
+  `world.link.set`/`screen.link` verbs, session-capture fold, `ReconcileLinks`,
+  the risk-1 teardown-ordering guards) landed and verified.
+- **Demo cabinet deletion + S6 doc scrub — (c)-DISPOSITION.** Because
+  `ConsoleFeed`/`ProceduralFeed` stay in Demo (above) and the god class is not
+  yet excised, `GamingBrickChildNode.cs` / `GamingBrickModeTables.cs` /
+  `GamingBrickPadService.cs` / `World/ScreenSource.cs` / `OverworldPressDriver.cs`
+  / `AgbDebug/` / the two debug command modules **remain**, and the four
+  `GamingBrickChildNode` prose references are left intact (S6 would dangle
+  against a live type). Same precedent as OverworldWorld/OverworldFrameSource:
+  excise when proportionate, else (c)-disposition with the pinning consumer
+  named. The Demo library still compiles (verified). **The time-travel/rewind
+  deck (hole H9)** does not vanish unnamed — it still lives on the standing
+  `GamingBrickChildNode`; the `machine.rewind/snapshot/restore` verb port is
+  deferred with the deletion.
+
+**Plan contradictions found.**
+- The verification script's grant lines (`world.grant console control screen 0
+  exclusive` → revoke `screen 0` → "grant denial line") do **not** produce a
+  denial: `WorldGrants` seeds the console `Control/All` (`SeedDomain`), so a
+  concrete `screen:0` revoke leaves the wildcard and the console still holds
+  Control. The exclusive `screen:0` grant is meaningful against OTHER principals,
+  not the console's own access. A genuine denial requires revoking the wildcard
+  (`world.revoke console control all`), which the executed script used to prove
+  the check works. The grant subject token is `screen:0` (one token), not
+  `screen 0`.
+- The `worlddoc`/ouroboros risk (risk 5) held with no source-gen surprise beyond
+  registering `WorldScreenLink` explicitly (for the `Row<>` verb path); the
+  nested-polymorphic magazine round-trips through the canonical serializer.
+
 ---
 
 ## Arc 6 — Population & Looks

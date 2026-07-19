@@ -116,6 +116,23 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Row(
+            name: "world.link.set",
+            description: "Upserts a cable-link row (whole-row, keyed by name) from one inline-JSON WorldScreenLink: world.link.set <link-json> — {\"name\":\"arcade-pair\",\"screens\":[0,1]}. The durable twin of screen.link; the binder reconciles the declared links live (establishing or reporting the group dormant). Rejected loudly for an undeclared screen, a screen in two links, or fewer than two screens.",
+            info: WorldJsonContext.Default.WorldScreenLink,
+            toMutation: static link => new WorldMutation.UpsertScreenLink(Principal: WorldPrincipal.Console, Link: link)
+        );
+        yield return Simulation(
+            name: "world.link.remove",
+            description: "Removes a cable-link row by name: world.link.remove <name>. Rejected if no row declares that name.",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.link.remove", form: "<name>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemoveScreenLink(Principal: WorldPrincipal.Console, Name: args[0]));
+            }
+        );
+        yield return Row(
             name: "world.camera.set",
             description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera (name, anchor entity|entityLeaf|placement|group|null, offset, rig $type chase|firstPerson|orbit|lookAt|dolly): world.camera.set <camera-json>. Applies LIVE: a pose/aim/FOV/rig edit re-wires the running offscreen view in place, a dimension change recreates it, and every jumbotron filming it updates without a restart.",
             info: WorldJsonContext.Default.WorldCamera,

@@ -303,6 +303,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
                 m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
+                // Cable links reconcile AFTER screens (a link resolves against the live slot set).
+                m_binder.ReconcileLinks(links: (m_client.Definition.Links ?? []));
                 // The animated-placement pool reconciles at the same delivery boundary: cheap pose
                 // edits write in place, creation-content changes release + recreate, removals release (symmetric).
                 m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);

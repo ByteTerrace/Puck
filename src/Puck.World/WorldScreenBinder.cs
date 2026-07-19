@@ -81,6 +81,11 @@ internal sealed class WorldScreenBinder : IDisposable {
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
     private readonly Dictionary<int, Func<nint>> m_sources = new();
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
+    // The live cable links beside m_slots, keyed by name. A link is stepped once per frame INSTEAD of its members
+    // individually (an established link), or reported DORMANT with a reason (its members cannot currently be linked — a
+    // member with no machine, mixed engines, or an engine whose live co-stepping is not yet wired). TryEject and the
+    // removal pass must leave a member's link FIRST — a disposed machine inside a live link is the one crash to prevent.
+    private readonly Dictionary<string, LinkEntry> m_links = new(comparer: StringComparer.Ordinal);
     // Reused scratch for ReconcileScreens' removal pass, so a screen mutation collects the vanished indices without
     // allocating and never mutates m_slots while enumerating it.
     private readonly List<int> m_reconcileRemovals = new();
@@ -157,7 +162,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         foreach (var screen in screens) {
-            var slot = new ScreenSlot { Index = screen.Index, DeclaredSource = screen.Source };
+            var slot = new ScreenSlot { Index = screen.Index, DeclaredSource = screen.Source, Magazine = screen.Magazine, SelectedEntry = (screen.Magazine?.Selected ?? 0) };
 
             switch (screen.Source) {
                 case WorldScreenSource.TestPattern pattern:
@@ -511,10 +516,329 @@ internal sealed class WorldScreenBinder : IDisposable {
             return (Ok: false, Message: $"screen {index} has no source to eject");
         }
 
+        // Leave any cable link this slot belongs to BEFORE disposing its machine — a disposed machine inside a live
+        // link is the one crash this design can produce (risk 1).
+        LeaveLink(index: index);
+
         slot.ClearLive();
         slot.FramesStepped = 0;
 
         return (Ok: true, Message: $"screen {index} ejected");
+    }
+
+    /// <summary>The screen's live magazine and 0-based selector, or <see langword="null"/> when the screen declares no
+    /// magazine — the read the <c>screen.select</c> verb resolves next/prev against.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="selected">The live 0-based selector.</param>
+    /// <param name="magazine">The screen's magazine.</param>
+    /// <returns>Whether the screen exists and carries a magazine.</returns>
+    public bool TryMagazine(int index, out int selected, out WorldScreenMagazine magazine) {
+        if (m_slots.TryGetValue(key: index, value: out var slot) && (slot.Magazine is { } value)) {
+            selected = slot.SelectedEntry;
+            magazine = value;
+
+            return true;
+        }
+
+        selected = 0;
+        magazine = null!;
+
+        return false;
+    }
+
+    /// <summary>Points the screen's magazine selector at <paramref name="entry"/> and applies that entry as the slot's
+    /// live source (the same insert/camera/view dispatch a declared source change uses). The selector moves even when the
+    /// entry has no live setter (an unconfigured machine applies at the next boot), so the pointer always tracks. Fails
+    /// for an undeclared screen, a screen with no magazine, or an out-of-range entry.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="entry">The 0-based magazine entry to select.</param>
+    /// <returns>Whether the selection succeeded, and a message describing the outcome.</returns>
+    public (bool Ok, string Message) TrySelect(int index, int entry) {
+        if (m_disposed) {
+            return (Ok: false, Message: "binder disposed");
+        }
+
+        if (m_slots.TryGetValue(key: index, value: out var slot) is false) {
+            return (Ok: false, Message: $"no screen {index} declared");
+        }
+
+        if (slot.Magazine is not { } magazine) {
+            return (Ok: false, Message: $"screen {index} has no magazine");
+        }
+
+        if ((entry < 0) || (entry >= magazine.Entries.Count)) {
+            return (Ok: false, Message: $"entry {entry} is outside 0..{(magazine.Entries.Count - 1)}");
+        }
+
+        // Leaving a link before a live-swap that re-boots this slot's machine (risk 1).
+        LeaveLink(index: index);
+
+        var outcome = ApplySource(index: index, slot: slot, source: magazine.Entries[entry]);
+
+        slot.SelectedEntry = entry;
+
+        return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} {(outcome.Ok ? outcome.Message : "selected (no live source)")}");
+    }
+
+    /// <summary>Reconfigures a screen's live machine across the engine's options vocabulary (the <c>screen.options</c>
+    /// live device swap — dmg↔cgb↔agb with no reboot and no lost progress). Fails for an undeclared screen, a slot with
+    /// no machine, a machine without the reconfigure capability, or an options string the engine rejects.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="options">The engine-specific options string to retarget to.</param>
+    /// <returns>Whether the reconfigure succeeded, and a message describing the outcome.</returns>
+    public (bool Ok, string Message) TryReconfigure(int index, string? options) {
+        if (m_slots.TryGetValue(key: index, value: out var slot) is false) {
+            return (Ok: false, Message: $"no screen {index} declared");
+        }
+
+        if (slot.Machine is not { } machine) {
+            return (Ok: false, Message: $"screen {index} has no machine to reconfigure");
+        }
+
+        if (machine is not IReconfigurableMachine reconfigurable) {
+            return (Ok: false, Message: $"screen {index}'s machine does not support live reconfiguration");
+        }
+
+        var previous = reconfigurable.Options;
+
+        if (!reconfigurable.TryReconfigure(options: options, out var reason)) {
+            return (Ok: false, Message: $"{index} '{previous}' -> '{options}' rejected: {reason}");
+        }
+
+        // Fold the live options back so world.save reflects the retarget.
+        slot.MachineOptions = reconfigurable.Options;
+
+        return (Ok: true, Message: $"{index} '{previous}' -> '{reconfigurable.Options}' reconfigured{((reason.Length > 0) ? $" — {reason}" : string.Empty)}");
+    }
+
+    /// <summary>Reads a screen's machine's current options string (the <c>screen.options</c> query with no options), or
+    /// <see langword="false"/> when the screen has no reconfigurable machine.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="options">The current options string.</param>
+    public bool TryReadOptions(int index, out string options) {
+        if (m_slots.TryGetValue(key: index, value: out var slot) && (slot.Machine is IReconfigurableMachine reconfigurable)) {
+            options = reconfigurable.Options;
+
+            return true;
+        }
+
+        options = string.Empty;
+
+        return false;
+    }
+
+    /// <summary>The cable link a screen currently belongs to (by name), or <see langword="null"/> — the <c>link=</c>
+    /// token on <c>screen.state</c>.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    public string? LinkOf(int index) => (m_slots.TryGetValue(key: index, value: out var slot) ? slot.LinkName : null);
+
+    /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens — the
+    /// <c>screen.link</c> path and the live twin of a <c>Links</c> row. Every member must be a declared screen carrying a
+    /// machine from the SAME engine, and that engine must implement <c>IMachineLinkingEngine</c>; a set that cannot be
+    /// linked is recorded DORMANT with a reason (never a throw), so a later insert can re-establish it. Fails outright
+    /// only for an undeclared screen, a member already in another link, or fewer than two members.</summary>
+    /// <param name="name">The link's stable name.</param>
+    /// <param name="members">The engine screen indices in cable order.</param>
+    /// <returns>Whether the link row was recorded, and a message describing live/dormant state.</returns>
+    public (bool Ok, string Message) TryLink(string name, IReadOnlyList<int> members) {
+        if (m_disposed) {
+            return (Ok: false, Message: "binder disposed");
+        }
+
+        if ((members is null) || (members.Count < 2)) {
+            return (Ok: false, Message: $"link '{name}' needs two or more screens");
+        }
+
+        var seen = new HashSet<int>();
+
+        foreach (var member in members) {
+            if (m_slots.TryGetValue(key: member, value: out var slot) is false) {
+                return (Ok: false, Message: $"no screen {member} declared");
+            }
+
+            if (!seen.Add(item: member)) {
+                return (Ok: false, Message: $"screen {member} is named twice in link '{name}'");
+            }
+
+            if ((slot.LinkName is { } existing) && !string.Equals(a: existing, b: name, comparisonType: StringComparison.Ordinal)) {
+                return (Ok: false, Message: $"screen {member} is already in link '{existing}'");
+            }
+        }
+
+        // Tear down any prior link of this name before rebuilding (a re-link with a changed member set).
+        TeardownLink(name: name);
+
+        var (link, reason) = TryEstablishLink(members: members);
+        var entry = new LinkEntry { Name = name, Members = [.. members], Link = link, DormantReason = reason };
+
+        m_links[name] = entry;
+
+        foreach (var member in members) {
+            m_slots[member].LinkName = name;
+        }
+
+        return (Ok: true, Message: DescribeLink(entry: entry));
+    }
+
+    /// <summary>Reconciles the DECLARED cable links to a mutated <c>links</c> section — the live-application half of an
+    /// <c>UpsertScreenLink</c>/<c>RemoveScreenLink</c> world mutation (and the boot establishment), called by the frame
+    /// source when the definition revision moves. Establishes declared links whose members are all machine-bearing and
+    /// same-engine (live) or records them dormant with a reason; tears down declared links whose rows vanished. Ad-hoc
+    /// runtime links from <c>screen.link</c> are left untouched.</summary>
+    /// <param name="links">The mutated declared link rows (the live definition's links).</param>
+    public void ReconcileLinks(IReadOnlyList<WorldScreenLink> links) {
+        if (m_disposed) {
+            return;
+        }
+
+        var declaredNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var link in links) {
+            _ = declaredNames.Add(item: link.Name);
+
+            // A declared link whose member set is unchanged and already established stays as-is; otherwise (re)establish.
+            if (m_links.TryGetValue(key: link.Name, value: out var existing) && existing.Declared && MembersMatch(entry: existing, members: link.Screens)) {
+                continue;
+            }
+
+            _ = TryLink(name: link.Name, members: link.Screens);
+
+            if (m_links.TryGetValue(key: link.Name, value: out var reconciled)) {
+                reconciled.Declared = true;
+            }
+        }
+
+        // Tear down declared links whose rows vanished (leaving ad-hoc runtime links alone).
+        var stale = m_links.Values.Where(predicate: entry => entry.Declared && !declaredNames.Contains(item: entry.Name)).Select(selector: entry => entry.Name).ToList();
+
+        foreach (var name in stale) {
+            TeardownLink(name: name);
+        }
+    }
+
+    private static bool MembersMatch(LinkEntry entry, IReadOnlyList<int> members) {
+        if (entry.Members.Length != members.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < members.Count); index++) {
+            if (entry.Members[index] != members[index]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Severs a runtime cable link by name — its members resume individual stepping. Fails when no link of that
+    /// name is live.</summary>
+    /// <param name="name">The link name.</param>
+    /// <returns>Whether the link existed, and a message.</returns>
+    public (bool Ok, string Message) TryUnlink(string name) {
+        if (!m_links.ContainsKey(key: name)) {
+            return (Ok: false, Message: $"no link '{name}'");
+        }
+
+        TeardownLink(name: name);
+
+        return (Ok: true, Message: $"link '{name}' severed");
+    }
+
+    /// <summary>The live cable-link set as document rows — the <c>world.save</c> fold of every established/runtime link
+    /// back into the <c>Links</c> section (cable order preserved), so re-booting the saved file reproduces the groups.</summary>
+    public IReadOnlyList<WorldScreenLink> CaptureLinks() {
+        if (m_links.Count == 0) {
+            return [];
+        }
+
+        var captured = new List<WorldScreenLink>(capacity: m_links.Count);
+
+        foreach (var entry in m_links.Values) {
+            captured.Add(item: new WorldScreenLink(Name: entry.Name, Screens: [.. entry.Members]));
+        }
+
+        return captured;
+    }
+
+    /// <summary>A one-line description of every live cable link (the <c>screen.links</c> query), or <c>none</c>.</summary>
+    public string DescribeLinks() {
+        if (m_links.Count == 0) {
+            return "none";
+        }
+
+        return string.Join(separator: "; ", values: m_links.Values.Select(selector: DescribeLink));
+    }
+
+    // Attempt to establish a live link over the members: resolve each member's machine and engine, require the same
+    // IMachineLinkingEngine across all, and ask it to link. A missing machine, mixed engines, or an engine without the
+    // linking capability is a DORMANT reason (link is null), never a throw.
+    private (IMachineLink? Link, string? Reason) TryEstablishLink(IReadOnlyList<int> members) {
+        var machines = new List<IScreenMachine>(capacity: members.Count);
+        IMachineLinkingEngine? linkingEngine = null;
+        string? engineId = null;
+
+        foreach (var member in members) {
+            var slot = m_slots[member];
+
+            if (slot.Machine is not { } machine) {
+                return (Link: null, Reason: $"screen {member} has no machine");
+            }
+
+            if (slot.MachineEngine is not { } id) {
+                return (Link: null, Reason: $"screen {member}'s machine has no engine identity");
+            }
+
+            if (engineId is null) {
+                engineId = id;
+
+                if (m_engines.TryGetValue(key: id, value: out var engine) && (engine is IMachineLinkingEngine linking)) {
+                    linkingEngine = linking;
+                } else {
+                    return (Link: null, Reason: $"engine '{id}' has no linking capability");
+                }
+            } else if (!string.Equals(a: engineId, b: id, comparisonType: StringComparison.Ordinal)) {
+                return (Link: null, Reason: $"mixed engines ('{engineId}' and '{id}') cannot be cable-linked");
+            }
+
+            machines.Add(item: machine);
+        }
+
+        return (linkingEngine!.TryLink(machines: machines, out var link, out var reason)
+            ? (Link: link, Reason: null)
+            : (Link: null, Reason: reason));
+    }
+
+    // Sever and drop a link by name (disposing any live IMachineLink), clearing every member's LinkName so its slot
+    // resumes individual stepping.
+    private void TeardownLink(string name) {
+        if (!m_links.Remove(key: name, value: out var entry)) {
+            return;
+        }
+
+        entry.Link?.Dispose();
+
+        foreach (var member in entry.Members) {
+            if (m_slots.TryGetValue(key: member, value: out var slot) && string.Equals(a: slot.LinkName, b: name, comparisonType: StringComparison.Ordinal)) {
+                slot.LinkName = null;
+            }
+        }
+    }
+
+    // Leave (sever) whatever link a single screen belongs to — the risk-1 guard run before a machine on the slot is
+    // disposed or live-swapped.
+    private void LeaveLink(int index) {
+        if (m_slots.TryGetValue(key: index, value: out var slot) && (slot.LinkName is { } name)) {
+            TeardownLink(name: name);
+        }
+    }
+
+    // The screen.links line for one link: live (transfers climbing) or dormant (with the reason).
+    private static string DescribeLink(LinkEntry entry) {
+        var members = string.Join(separator: "+", values: entry.Members);
+
+        return ((entry.Link is { } link)
+            ? $"{entry.Name} {members} live transfers={link.CompletedTransfers}"
+            : $"{entry.Name} {members} dormant ({entry.DormantReason ?? "unestablishable"})");
     }
 
     /// <summary>Reconciles the binder's runtime source machinery to a mutated screen list — the live-application half of
@@ -559,6 +883,9 @@ internal sealed class WorldScreenBinder : IDisposable {
             // than being held idle against a machine that no longer exists.
             m_engagement.DisengageScreen(screenIndex: index);
 
+            // Leave any cable link this slot belonged to before its machine is disposed (risk 1).
+            LeaveLink(index: index);
+
             if (m_slots.Remove(key: index, value: out var slot)) {
                 // Note the camera a removed View screen filmed BEFORE DisposeOwned drops the reference, so its offscreen
                 // render can be released once the whole removal pass has updated m_slots (a name shared by another
@@ -584,6 +911,18 @@ internal sealed class WorldScreenBinder : IDisposable {
                 Console.Error.WriteLine(value: $"[world.screen: {screen.Index} added — its source applies at next boot (render provider key set frozen at boot)]");
 
                 continue;
+            }
+
+            // The magazine rides the whole-row UpsertScreen; refresh it (and clamp the live selector) whether or not the
+            // declared source changed, so a live edit to just the magazine takes effect. The selector is retained across
+            // an edit that keeps it in range (the running cycle position survives a magazine grow); an out-of-range
+            // selector clamps.
+            slot.Magazine = screen.Magazine;
+
+            if (screen.Magazine is { } magazine) {
+                slot.SelectedEntry = Math.Clamp(value: slot.SelectedEntry, min: 0, max: Math.Max(val1: 0, val2: (magazine.Entries.Count - 1)));
+            } else {
+                slot.SelectedEntry = 0;
             }
 
             if (Equals(objA: slot.DeclaredSource, objB: screen.Source)) {
@@ -613,16 +952,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     // surviving slot films it (TryEject/ClearLive deliberately keep the DECLARED view for the eject verb, so the
     // declared-source change must drop it here); a View→View re-point releases the superseded camera inside TryView.
     private void ApplySourceChange(int index, ScreenSlot slot, WorldScreenSource source) {
-        var outcome = source switch {
-            WorldScreenSource.None => (slot.HasLive ? TryEject(index: index) : (Ok: true, Message: $"screen {index} unbound")),
-            WorldScreenSource.Machine { ContentPath: { Length: > 0 } path } machine => TryInsert(index: index, contentPath: path, engineId: machine.Engine, options: machine.Options),
-            WorldScreenSource.Machine => (Ok: false, Message: $"screen {index} machine unconfigured — no content path (applies at next boot)"),
-            WorldScreenSource.Camera => TryCamera(index: index),
-            WorldScreenSource.Capture { MonitorIndex: { } monitorIndex } => TryDesktop(index: index, monitorIndex: monitorIndex),
-            WorldScreenSource.Capture capture => TryCapture(index: index, windowTitle: capture.WindowTitle),
-            WorldScreenSource.View view => ApplyViewChange(index: index, slot: slot, view: view),
-            _ => (Ok: false, Message: $"screen {index} test-pattern source applies at next boot"),
-        };
+        var outcome = ApplySource(index: index, slot: slot, source: source);
 
         if (source is not WorldScreenSource.View) {
             ReleaseSlotView(slot: slot);
@@ -630,6 +960,20 @@ internal sealed class WorldScreenBinder : IDisposable {
 
         Console.Error.WriteLine(value: $"[world.screen: {outcome.Message}]");
     }
+
+    // Apply one source through the runtime machinery (the switch that maps a WorldScreenSource to TryInsert/TryCamera/
+    // TryDesktop/TryCapture/TryView/TryEject) — shared by the reconcile-side declared-source change and the magazine
+    // selector (screen.select). The caller decides what to do with DeclaredSource and the view release.
+    private (bool Ok, string Message) ApplySource(int index, ScreenSlot slot, WorldScreenSource source) => source switch {
+        WorldScreenSource.None => (slot.HasLive ? TryEject(index: index) : (Ok: true, Message: $"screen {index} unbound")),
+        WorldScreenSource.Machine { ContentPath: { Length: > 0 } path } machine => TryInsert(index: index, contentPath: path, engineId: machine.Engine, options: machine.Options),
+        WorldScreenSource.Machine => (Ok: false, Message: $"screen {index} machine unconfigured — no content path (applies at next boot)"),
+        WorldScreenSource.Camera => TryCamera(index: index),
+        WorldScreenSource.Capture { MonitorIndex: { } monitorIndex } => TryDesktop(index: index, monitorIndex: monitorIndex),
+        WorldScreenSource.Capture capture => TryCapture(index: index, windowTitle: capture.WindowTitle),
+        WorldScreenSource.View view => ApplyViewChange(index: index, slot: slot, view: view),
+        _ => (Ok: false, Message: $"screen {index} source applies at next boot"),
+    };
 
     // The reconcile-side View bind: a failed bind (unknown camera, unconfigured pool) still releases the PRIOR view —
     // the declared source no longer names it — and records the fault so screen.state reads honestly.
@@ -664,8 +1008,17 @@ internal sealed class WorldScreenBinder : IDisposable {
             return;
         }
 
+        // A live cable link steps as ONE unit with its members' merged pads in cable order (the deterministic interleave
+        // decides who runs when); its member slots are then skipped below. A dormant link steps its members individually.
+        StepLiveLinks(stepTicks: stepTicks);
+
         foreach (var slot in m_slots.Values) {
             if (slot.Machine is not { } machine) {
+                continue;
+            }
+
+            // A slot in a LIVE link was already advanced by StepLiveLinks; stepping it again would double-advance it.
+            if ((slot.LinkName is { } linkName) && m_links.TryGetValue(key: linkName, value: out var entry) && (entry.Link is not null)) {
                 continue;
             }
 
@@ -690,6 +1043,34 @@ internal sealed class WorldScreenBinder : IDisposable {
             // each referenced machine's ring through the mixer's single-pull MachineBlockSource (ReadSamples is
             // any-thread-safe by contract), bound per frame by WorldAudioDirector.SyncMachineSources via
             // AudioMachine(index). This loop supplies the machines' TIME; speakers supply their pose.
+        }
+    }
+
+    // Step every LIVE cable link once by the shared budget, feeding each member the merged pad for its own screen (cable
+    // order). A dormant link (Link is null) is left for the per-slot loop to step its members individually.
+    private void StepLiveLinks(ulong stepTicks) {
+        if (m_links.Count == 0) {
+            return;
+        }
+
+        foreach (var entry in m_links.Values) {
+            if (entry.Link is not { } link) {
+                continue;
+            }
+
+            var inputs = new MachinePadState[entry.Members.Length];
+
+            for (var index = 0; (index < entry.Members.Length); index++) {
+                inputs[index] = m_engagement.MergedPad(screenIndex: entry.Members[index]);
+            }
+
+            link.Step(deltaTicks: stepTicks, inputs: inputs);
+
+            foreach (var member in entry.Members) {
+                if (m_slots.TryGetValue(key: member, value: out var slot) && (slot.Machine is IQueuedScreenMachine queued)) {
+                    slot.FramesStepped = queued.CompletedSteps;
+                }
+            }
         }
     }
 
@@ -917,6 +1298,13 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         m_disposed = true;
+
+        // Sever every cable link before disposing the machines it holds (risk 1).
+        foreach (var entry in m_links.Values) {
+            entry.Link?.Dispose();
+        }
+
+        m_links.Clear();
 
         foreach (var slot in m_slots.Values) {
             slot.Machine?.Dispose();
@@ -1824,6 +2212,18 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
     }
 
+    // One cable link beside m_slots: its name, member screen indices (cable order), the live IMachineLink (null when
+    // dormant), and the dormant reason. A live link is stepped once per frame instead of its members individually.
+    private sealed class LinkEntry {
+        public required string Name { get; init; }
+        public required int[] Members { get; init; }
+        public IMachineLink? Link { get; set; }
+        public string? DormantReason { get; set; }
+        // Whether this link came from a document `links` row (reconciled by ReconcileLinks) rather than an ad-hoc
+        // screen.link verb (which the reconcile leaves untouched).
+        public bool Declared { get; set; }
+    }
+
     // One persistent camera-view registration: the live SdfCameraView plus the WorldCamera row it currently embodies
     // (advanced by pose edits, replaced wholesale on recreate) — the diff baseline ReconcileCameras works against.
     private sealed class CameraRegistration {
@@ -1853,9 +2253,16 @@ internal sealed class WorldScreenBinder : IDisposable {
         // The WorldScreenSource this slot currently reflects — set at construction and updated by ReconcileScreens, so a
         // live UpsertScreen only re-applies its source through the runtime machinery when the source actually changed.
         public WorldScreenSource? DeclaredSource { get; set; }
+        // The screen's source magazine (the cycle primitive), or null for a screen with no magazine, plus the live
+        // 0-based selector (initialized to the magazine's authored Selected, drifted by screen.select, folded back by
+        // world.save). The selector is a POINTER; a selection overlays a live producer exactly like screen.insert.
+        public WorldScreenMagazine? Magazine { get; set; }
+        public int SelectedEntry { get; set; }
         public IScreenMachine? Machine { get; set; }
         public PatternFeed? Pattern { get; set; }
         public ViewFeed? View { get; set; }
+        // The cable link this slot currently belongs to (by name), or null when the slot steps individually.
+        public string? LinkName { get; set; }
         // The engine id hosting the assigned machine (for screen.state), or null when no machine is bound.
         public string? MachineEngine { get; set; }
         // The insert that booted the assigned machine — the content path, the engine id as supplied (verbatim when a

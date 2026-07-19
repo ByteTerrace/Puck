@@ -703,6 +703,7 @@ internal sealed record WorldPlacement(
 [JsonDerivedType(typeof(WorldScreenSource.Camera), typeDiscriminator: "camera")]
 [JsonDerivedType(typeof(WorldScreenSource.View), typeDiscriminator: "view")]
 [JsonDerivedType(typeof(WorldScreenSource.Capture), typeDiscriminator: "capture")]
+[JsonDerivedType(typeof(WorldScreenSource.Console), typeDiscriminator: "console")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldScreenSource {
     private WorldScreenSource() {
@@ -744,7 +745,39 @@ internal abstract record WorldScreenSource {
     /// <param name="Profile">This capture consumer's output extent and maximum refresh cadence.</param>
     /// <param name="MonitorIndex">The 0-based monitor to capture whole (0 = primary), or <see langword="null"/> for window mode.</param>
     internal sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldScreenSource;
+
+    /// <summary>A screen showing the DEVELOPER CONSOLE as an object in the world — the diegetic half of the control plane
+    /// the unification contract names ("the on-screen panel AND process stdin"). The frame is CPU-composed into a
+    /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
+    /// nothing about it is a render-graph node. Complementary to — never a duplicate of — <c>WorldConsoleMirror</c>,
+    /// which publishes the SAME content to the screen-space overlay. At most one <c>console</c> source may be LIVE
+    /// (declared) at a time; an unselected console entry sitting in a magazine is legal.</summary>
+    /// <param name="Rows">Console text rows the framebuffer composes, 1..120. Sizes the CPU buffer.</param>
+    /// <param name="Columns">Console text columns, 1..400.</param>
+    /// <param name="Procedural">When true the slot shows the sibling generated pattern instead of console text — carried
+    /// as a MODE of this variant rather than as a seventh union case.</param>
+    internal sealed record Console(int Rows = 24, int Columns = 64, bool Procedural = false) : WorldScreenSource;
 }
+
+/// <summary>An ordered set of sources one screen may show, plus which entry it wakes on — the cycle primitive. A
+/// selection is a POINTER into this list; changing it never changes how many screen slots exist, so a magazine costs no
+/// render envelope. Entries are the same closed <see cref="WorldScreenSource"/> vocabulary the declared source uses, so a
+/// screen may rotate a cartridge, the webcam, and a jumbotron view through one slot.</summary>
+/// <param name="Entries">The ordered source list (at least one entry).</param>
+/// <param name="Selected">The 0-based entry the screen wakes on. Live selection drifts from this and is folded back by
+/// <c>world.save</c> (see <see cref="WorldSessionCapture"/>).</param>
+/// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
+/// when false the selector clamps at both ends.</param>
+internal sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);
+
+/// <summary>A cable-linked group of screens whose machines advance as ONE interleaved unit. The binder steps the link,
+/// never its members individually, so the engine's deterministic interleave — not the host's frame order — decides who
+/// runs when. Every member must resolve to a machine from the SAME engine, and that engine must implement
+/// <c>IMachineLinkingEngine</c>; a link whose members do not currently satisfy that is reported dormant, never silently
+/// dropped.</summary>
+/// <param name="Name">The link's stable kebab-case name (its mutation address).</param>
+/// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
+internal sealed record WorldScreenLink(string Name, IReadOnlyList<int> Screens);
 
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
@@ -757,12 +790,21 @@ internal readonly record struct WorldFeedProfile(int Width, int Height, uint Ref
     public static WorldFeedProfile Default { get; } = new(Width: 320, Height: 240, RefreshRateHz: 30U);
 }
 
-/// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen and the
-/// activation radius.</summary>
+/// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen, the activation
+/// radius, whether engaging auto-boots the selected magazine entry, and the world-event channels a gesture drives it
+/// through. Every default preserves the pre-arc behavior exactly, so <c>default.world.json</c> deserializes identically.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
-/// <paramref name="Engageable"/>).</param>
-internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius) {
+/// <paramref name="Engageable"/>). Validated finite and non-negative.</param>
+/// <param name="AutoInsert">When set, engaging the screen first boots the selected magazine entry (the "walk over, press
+/// the button, the screen lights" gesture), so the interaction is one act rather than an insert then an engage.</param>
+/// <param name="EngageChannel">The world-event channel whose arrival on a body engages this screen, or
+/// <see langword="null"/> (the default) for a route that does not answer gestures. THE NAME IS THE AUTHOR'S: nothing in
+/// the engine special-cases a spelling. Omitted from the wire when null.</param>
+/// <param name="CycleChannel">Same, for advancing the magazine selector. Omitted from the wire when null.</param>
+internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null) {
     /// <summary>A screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(Engageable: false, EngageRadius: 0f);
 }
@@ -789,6 +831,9 @@ internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRa
 /// <param name="Solid">The screen slab's solidity facet (a box collider derived from the slab's oriented frame +
 /// <c>Margin</c> by <see cref="WorldColliderSet"/>), or <see langword="null"/> for a decorative screen. Omitted from the
 /// wire when null.</param>
+/// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
+/// with no magazine (every existing screen). Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
+/// carries it for free, so no new mutation kind is needed.</param>
 internal sealed record WorldScreen(
     int Index,
     Vector3 Origin,
@@ -800,7 +845,8 @@ internal sealed record WorldScreen(
     float Round,
     WorldScreenSource Source,
     WorldScreenRoute Route,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null
 );
 
 /// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
@@ -1401,6 +1447,8 @@ internal sealed record WorldHostDefaults(
 /// runtime exactly.</param>
 /// <param name="LookAssignment">The look→entity assignment policy (default null ⇒ the hash mapping), the same
 /// <see cref="WorldRowAssignment"/> primitive <see cref="Assignment"/> uses for kits.</param>
+/// <param name="Links">The cable-link rows (default empty/absent) — groups of screens whose machines advance as one
+/// interleaved unit (see <see cref="WorldScreenLink"/>). Absence coalesces to the empty list at every read.</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1436,7 +1484,10 @@ internal sealed record WorldDefinition(
     // pre-arc runtime EXACTLY — every entity resolves to WorldLook.Implicit (the index-derived catalog pick at full
     // gait); NO branch special-cases "the author didn't opt in".
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? Looks = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignment = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignment = null,
+    // OPT-IN and WhenWritingNull (R12 trailing-nullable idiom): a world that authors no cable links carries no `links`
+    // key, so the frozen default world stays byte-identical. Absence coalesces to the empty list (`?? []`) at every read.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenLink>? Links = null
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>

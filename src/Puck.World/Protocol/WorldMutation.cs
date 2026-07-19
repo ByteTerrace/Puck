@@ -255,4 +255,17 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Assignment">The look assignment policy.</param>
     internal sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
+
+    /// <summary>Upserts a cable-link row (whole-row, keyed by name) into the <see cref="WorldSection.Links"/> section —
+    /// the durable twin of the <c>screen.link</c> verb. Applies LIVE: the binder reconciles the declared links to the
+    /// new definition, establishing (or reporting dormant) the group. Rejected by full-document revalidation when a
+    /// named screen is undeclared, a screen is in two links, or fewer than two screens are named.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Link">The whole cable-link row.</param>
+    internal sealed record UpsertScreenLink(WorldPrincipal Principal, WorldScreenLink Link) : WorldMutation(Principal);
+
+    /// <summary>Removes a cable-link row by name. Rejected loudly when no row declares that name.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The link name to remove.</param>
+    internal sealed record RemoveScreenLink(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

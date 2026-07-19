@@ -7,11 +7,13 @@ namespace Puck.HumbleGamingBrick;
 /// screen-machine contract. Its <see cref="Id"/> is <c>gaming-brick</c>, and its options vocabulary is a hardware model
 /// (<c>dmg</c>/<c>cgb</c>/<c>agb</c>, default <c>dmg</c>) plus an optional <c>dmgspeed</c> fairness pin, in any order.
 /// A host resolves this engine by id and hands it cartridge bytes; the machine it builds is a <see cref="MachineHost"/>.
+/// It also carries <see cref="IMachineLinkingEngine"/>: two of its machines can be cable-linked over the deterministic
+/// <see cref="SerialLinkSession"/> interleave.
 /// </summary>
-public sealed class GamingBrickEngine : IScreenMachineEngine {
+public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEngine {
     /// <summary>The <c>dmgspeed</c> option token — the fairness speed pin (a fixed per-tick cycle budget regardless of the
     /// KEY1 double-speed latch).</summary>
-    private const string DmgSpeedToken = "dmgspeed";
+    internal const string DmgSpeedToken = "dmgspeed";
 
     /// <inheritdoc/>
     public string Id => "gaming-brick";
@@ -23,9 +25,42 @@ public sealed class GamingBrickEngine : IScreenMachineEngine {
         return new MachineHost(model: model, cartridgeRom: contentBytes, savePath: savePath, dmgSpeed: dmgSpeed, audioSampleRate: audioSampleRate);
     }
 
-    // Parse the space-separated options string (order-independent): a model keyword sets the console costume; the
-    // 'dmgspeed' token applies the fairness pin. An unknown token throws so a typo is loud, not silently defaulted.
-    private static (ConsoleModel Model, bool DmgSpeed) ParseOptions(string? options) {
+    /// <inheritdoc/>
+    public bool TryLink(IReadOnlyList<IScreenMachine> machines, out IMachineLink? link, out string reason) {
+        link = null;
+
+        if (machines is null || (machines.Count < 2)) {
+            reason = "a cable link needs two or more machines";
+
+            return false;
+        }
+
+        for (var index = 0; (index < machines.Count); index++) {
+            if (machines[index] is not MachineHost) {
+                reason = $"member {index} is not a gaming-brick machine";
+
+                return false;
+            }
+        }
+
+        // The neutral queued host owns each machine's core on its OWN worker thread, and SerialLinkSession requires the
+        // two MachineInstances driven from ONE thread through its instruction-atomic interleave. Wiring that safely means
+        // quiescing both workers and lending their cores to the pair-stepper — a further Puck.HumbleGamingBrick seam
+        // (risk 1 in the arc plan). Until it lands, a link is reported DORMANT with this reason rather than moving bytes
+        // through an unsafe cross-thread step.
+        reason = "live cable linking of running gaming-brick machines is not yet wired for the queued host";
+
+        return false;
+    }
+
+    /// <summary>Parses the space-separated options string (order-independent) into a hardware model and the fairness
+    /// pin — the ONE options grammar, shared by <see cref="Create"/> and a host's live reconfigure. A model keyword sets
+    /// the console costume; the <c>dmgspeed</c> token applies the fairness pin. An unknown token throws so a typo is
+    /// loud, not silently defaulted.</summary>
+    /// <param name="options">The engine-specific options string, or <see langword="null"/> for defaults.</param>
+    /// <returns>The parsed model and fairness pin.</returns>
+    /// <exception cref="ArgumentException">A token is not a recognized option.</exception>
+    internal static (ConsoleModel Model, bool DmgSpeed) ParseOptions(string? options) {
         var model = ConsoleModel.Dmg;
         var dmgSpeed = false;
 
@@ -48,5 +83,21 @@ public sealed class GamingBrickEngine : IScreenMachineEngine {
         }
 
         return (Model: model, DmgSpeed: dmgSpeed);
+    }
+
+    /// <summary>Formats a model + fairness pin back into the canonical options string — the inverse of
+    /// <see cref="ParseOptions"/>, so a host's <c>screen.options</c> echo and <c>world.save</c> readback speak the same
+    /// vocabulary an author wrote.</summary>
+    /// <param name="model">The current model.</param>
+    /// <param name="dmgSpeed">Whether the fairness pin is set.</param>
+    /// <returns>The options string (e.g. <c>cgb</c> or <c>dmg dmgspeed</c>).</returns>
+    internal static string FormatOptions(ConsoleModel model, bool dmgSpeed) {
+        var modelToken = model switch {
+            ConsoleModel.Cgb => "cgb",
+            ConsoleModel.Agb => "agb",
+            _ => "dmg",
+        };
+
+        return (dmgSpeed ? $"{modelToken} {DmgSpeedToken}" : modelToken);
     }
 }

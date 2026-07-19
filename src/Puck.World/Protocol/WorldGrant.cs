@@ -102,6 +102,10 @@ internal enum WorldSection : byte {
     /// targeted by <see cref="WorldMutation.UpsertLook"/> / <see cref="WorldMutation.RemoveLook"/> /
     /// <see cref="WorldMutation.SetLookAssignment"/>. PRESENTATION-ONLY authority (restyle the crowd, never reshape it).</summary>
     Looks,
+
+    /// <summary>The cable-link rows — groups of screens whose machines advance as one interleaved unit, targeted by
+    /// <see cref="WorldMutation.UpsertScreenLink"/> / <see cref="WorldMutation.RemoveScreenLink"/>.</summary>
+    Links,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

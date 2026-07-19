@@ -44,6 +44,8 @@ internal static class WorldSessionCapture {
             Render = CaptureRender(render: render, defaults: definition.Render),
             Population = CapturePopulation(population: population, defaults: definition.Population),
             Screens = CaptureScreens(screens: definition.Screens, binder: binder),
+            // The live cable-link set folds into the Links section (declared + runtime), so a save reproduces the groups.
+            Links = CaptureLinks(definition: definition, binder: binder),
             Creations = CaptureCreations(creations: definition.Creations),
             Tunes = CaptureTunes(tunes: definition.Tunes),
             Patches = CapturePatches(patches: definition.Patches),
@@ -130,6 +132,12 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "screens");
         }
 
+        // Links drift: the folded live link set differs from the document's rows (a runtime screen.link, an unlink, or a
+        // selector-independent group change).
+        if (!ReferenceEquals(objA: CaptureLinks(definition: definition, binder: binder), objB: definition.Links)) {
+            drifted.Add(item: "links");
+        }
+
         if (audio.MasterVolumeLeverEngaged && (audio.EffectiveMasterVolume != definition.Audio.MasterGain)) {
             drifted.Add(item: "audio");
         }
@@ -178,18 +186,35 @@ internal static class WorldSessionCapture {
         DefaultPeerSource = population.DefaultPeerSource,
     });
 
-    // Fold a live machine insert on each declared screen back into that row's Machine source; a screen with no live
-    // insert keeps its declared source untouched.
+    // Fold a live machine insert on each declared screen back into that row's Machine source, and the live magazine
+    // selector back into that row's Magazine.Selected; a screen with no live insert / no magazine keeps its declared
+    // source / magazine untouched.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
 
         foreach (var screen in screens) {
-            captured.Add(item: (binder.TryReadMachineInsert(index: screen.Index, engine: out var engine, contentPath: out var contentPath, options: out var options)
+            var row = (binder.TryReadMachineInsert(index: screen.Index, engine: out var engine, contentPath: out var contentPath, options: out var options)
                 ? (screen with { Source = new WorldScreenSource.Machine(Engine: engine, ContentPath: contentPath, Options: options) })
-                : screen));
+                : screen);
+
+            if ((row.Magazine is { } magazine) && binder.TryMagazine(index: screen.Index, selected: out var selected, magazine: out _) && (selected != magazine.Selected)) {
+                row = (row with { Magazine = (magazine with { Selected = selected }) });
+            }
+
+            captured.Add(item: row);
         }
 
         return captured;
+    }
+
+    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.link.set).
+    // When the binder holds no runtime links, the document's own Links carries forward unchanged — so a world with no
+    // links (null) keeps its `links` key absent (the ouroboros), and declared links not yet established at boot are
+    // preserved rather than dropped.
+    private static IReadOnlyList<WorldScreenLink>? CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
+        var live = binder.CaptureLinks();
+
+        return ((live.Count == 0) ? definition.Links : live);
     }
 
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
@@ -199,6 +224,11 @@ internal static class WorldSessionCapture {
                  !string.Equals(a: machine.Engine, b: engine, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.ContentPath, b: contentPath, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.Options, b: options, comparisonType: StringComparison.Ordinal))) {
+                return true;
+            }
+
+            // Selector drift: the live magazine pointer moved off the row's authored Selected.
+            if ((screen.Magazine is { } magazine) && binder.TryMagazine(index: screen.Index, selected: out var selected, magazine: out _) && (selected != magazine.Selected)) {
                 return true;
             }
         }

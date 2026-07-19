@@ -21,6 +21,7 @@ namespace Puck.World;
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
+[JsonSerializable(typeof(WorldScreenLink))]
 [JsonSerializable(typeof(WorldCamera))]
 // The camera's rig union (world.camera.set / world.view.rig accessors) and the views section rows (world.view.rig /
 // world.view.layout.set accessors). WorldRig is polymorphic ($type chase|firstPerson|orbit|lookAt|dolly); registering

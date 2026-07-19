@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
+using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -14,14 +16,24 @@ namespace Puck.World;
 /// own options string. Every verb is wire-native — each failure marks <see cref="CommandResult.IsError"/> so
 /// <c>wire.ack quiet</c> drops only successes, and the two queries always echo their data.
 /// </summary>
-internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagement engagement) : ICommandModule {
+internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagement engagement, WorldServer server) : ICommandModule {
     private readonly WorldScreenBinder m_binder = binder;
     private readonly WorldEngagement m_engagement = engagement;
+    private readonly WorldServer m_server = server;
+
+    // The stdin console's Control check over a screen subject — World's grant discipline applied where the Demo had
+    // none. The console holds Control over every screen by the permissive local defaults, so this is transparent until
+    // someone narrows the trust (world.grant/world.revoke). A denial is loud and drops the verb.
+    private bool AllowsControl(int index) =>
+        m_server.Grants.Allows(principal: WorldPrincipal.Console, capability: WorldCapability.Control, subject: GrantSubject.Screen(index: index));
+
+    private static CommandResult Denied(string verb, int index) =>
+        new(Output: $"[{verb}: console lacks Control over screen {index} — grant it (world.grant console control screen {index})]") { IsError = true };
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in Commands()) {
-            yield return ((command.Name is "screen.state" or "screen.peek")
+            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links")
                 ? command
                 : command with { Routing = CommandRouting.Simulation });
         }
@@ -59,6 +71,32 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            name: "screen.select",
+            description: "Advances a screen's source magazine, live: screen.select <index> [next|prev|<entry>]. No third token echoes the current selection. Applies the selected entry as the slot's live source (a cartridge, the webcam, a jumbotron view) where it has a live setter; the selector always moves. Errors on an undeclared screen, a screen with no magazine, or an out-of-range entry.",
+            handler: SelectHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "screen.options",
+            description: "Reconfigures a screen's live machine across the engine's options vocabulary, live: screen.options <index> [options…]. No options echoes the machine's current string. With options, retargets the running machine (the dmg|cgb|agb device swap — no reboot, no lost progress). Errors on an undeclared screen, a slot with no machine, a machine without the reconfigure capability, or rejected options.",
+            handler: OptionsHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "screen.link",
+            description: "Cable-links two or more declared screens' machines into one deterministically stepped group: screen.link <name> <index> <index> [index…] — the runtime twin of a Links row. A group whose members cannot currently be linked (a member with no machine, mixed engines, an engine with no linking capability) is recorded DORMANT with a reason. Errors on an undeclared screen, a duplicate member, or a member already in another link.",
+            handler: LinkHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "screen.unlink",
+            description: "Severs a runtime cable link by name: screen.unlink <name>. Its members resume individual stepping. Errors when no link of that name is live.",
+            handler: UnlinkHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "screen.links",
+            description: "Echoes every live cable link: screen.links — each link's name, member screens, and live (transfers=…) or dormant (with the reason) state. A query (always echoes, even under wire.ack quiet).",
+            handler: LinksHandler,
+            echoesData: true
+        );
+        yield return CommandDefinition.WithWireArgs(
             name: "screen.state",
             description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, and the engaged players. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
             handler: StateHandler,
@@ -78,6 +116,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
 
         if (!args.TryInt(index: 0, value: out var index)) {
             return Error(message: $"[screen.insert: index '{args[0].ToString()}' must be an integer]");
+        }
+
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.insert", index: index);
         }
 
         var contentPath = args[1].ToString();
@@ -123,6 +165,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             return Error(message: $"[screen.camera: index '{args[0].ToString()}' must be an integer]");
         }
 
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.camera", index: index);
+        }
+
         var (ok, message) = m_binder.TryCamera(index: index);
 
         return (ok
@@ -136,6 +182,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
 
         if (!args.TryInt(index: 0, value: out var index)) {
             return Error(message: $"[screen.capture: index '{args[0].ToString()}' must be an integer]");
+        }
+
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.capture", index: index);
         }
 
         // The window title is every token after the index joined with spaces — a title may contain spaces.
@@ -164,6 +214,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             return Error(message: $"[screen.desktop: index '{args[0].ToString()}' must be an integer]");
         }
 
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.desktop", index: index);
+        }
+
         var monitorIndex = 0;
 
         if ((args.Count == 2) && !args.TryInt(index: 1, value: out monitorIndex)) {
@@ -185,6 +239,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             return Error(message: $"[screen.view: index '{args[0].ToString()}' must be an integer]");
         }
 
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.view", index: index);
+        }
+
         var (ok, message) = m_binder.TryView(index: index, cameraName: args[1].ToString());
 
         return (ok
@@ -200,11 +258,147 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             return Error(message: $"[screen.eject: index '{args[0].ToString()}' must be an integer]");
         }
 
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.eject", index: index);
+        }
+
         var (ok, message) = m_binder.TryEject(index: index);
 
         return (ok
             ? Success(args: in args, message: $"[screen.eject: {message}]")
             : Error(message: $"[screen.eject: {message}]"));
+    }
+    private CommandResult SelectHandler(CommandContext context, WireArgs args) {
+        if (args.Count is < 1 or > 2) {
+            return Error(message: "[screen.select: expected <index> [next|prev|<entry>]]");
+        }
+
+        if (!args.TryInt(index: 0, value: out var index)) {
+            return Error(message: $"[screen.select: index '{args[0].ToString()}' must be an integer]");
+        }
+
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.select", index: index);
+        }
+
+        if (!m_binder.TryMagazine(index: index, selected: out var selected, magazine: out var magazine)) {
+            return Error(message: $"[screen.select: screen {index} has no magazine]");
+        }
+
+        // No third token: echo the current selection without moving.
+        if (args.Count == 1) {
+            return new CommandResult(Output: $"[screen.select: {index} entry {selected}/{magazine.Entries.Count} (unchanged)]");
+        }
+
+        var token = args[1].ToString();
+        int target;
+
+        if (string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            target = Advance(selected: selected, delta: 1, count: magazine.Entries.Count, wrap: magazine.Wrap);
+        } else if (string.Equals(a: token, b: "prev", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            target = Advance(selected: selected, delta: -1, count: magazine.Entries.Count, wrap: magazine.Wrap);
+        } else if (!int.TryParse(s: token, style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out target)) {
+            return Error(message: $"[screen.select: '{token}' must be next, prev, or an entry index]");
+        }
+
+        var (ok, message) = m_binder.TrySelect(index: index, entry: target);
+
+        return (ok
+            ? Success(args: in args, message: $"[screen.select: {message}]")
+            : Error(message: $"[screen.select: {message}]"));
+    }
+    private CommandResult OptionsHandler(CommandContext context, WireArgs args) {
+        if (args.Count < 1) {
+            return Error(message: "[screen.options: expected <index> [options…]]");
+        }
+
+        if (!args.TryInt(index: 0, value: out var index)) {
+            return Error(message: $"[screen.options: index '{args[0].ToString()}' must be an integer]");
+        }
+
+        if (!AllowsControl(index: index)) {
+            return Denied(verb: "screen.options", index: index);
+        }
+
+        // No options: echo the machine's current string.
+        if (args.Count == 1) {
+            return (m_binder.TryReadOptions(index: index, out var current)
+                ? new CommandResult(Output: $"[screen.options: {index} '{current}']")
+                : Error(message: $"[screen.options: screen {index} has no reconfigurable machine]"));
+        }
+
+        var optionsBuilder = new StringBuilder();
+
+        for (var token = 1; (token < args.Count); token++) {
+            if (optionsBuilder.Length > 0) {
+                _ = optionsBuilder.Append(value: ' ');
+            }
+
+            _ = optionsBuilder.Append(value: args[token].ToString());
+        }
+
+        var (ok, message) = m_binder.TryReconfigure(index: index, options: optionsBuilder.ToString());
+
+        return (ok
+            ? Success(args: in args, message: $"[screen.options: {message}]")
+            : Error(message: $"[screen.options: {message}]"));
+    }
+    private CommandResult LinkHandler(CommandContext context, WireArgs args) {
+        if (args.Count < 3) {
+            return Error(message: "[screen.link: expected <name> <index> <index> [index…]]");
+        }
+
+        var name = args[0].ToString();
+        var members = new List<int>(capacity: (args.Count - 1));
+
+        for (var token = 1; (token < args.Count); token++) {
+            if (!args.TryInt(index: token, value: out var member)) {
+                return Error(message: $"[screen.link: '{args[token].ToString()}' must be an integer]");
+            }
+
+            if (!AllowsControl(index: member)) {
+                return Denied(verb: "screen.link", index: member);
+            }
+
+            members.Add(item: member);
+        }
+
+        var (ok, message) = m_binder.TryLink(name: name, members: members);
+
+        return (ok
+            ? Success(args: in args, message: $"[screen.link: {message}]")
+            : Error(message: $"[screen.link: {message}]"));
+    }
+    private CommandResult UnlinkHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 1) {
+            return Error(message: "[screen.unlink: expected one <name>]");
+        }
+
+        var (ok, message) = m_binder.TryUnlink(name: args[0].ToString());
+
+        return (ok
+            ? Success(args: in args, message: $"[screen.unlink: {message}]")
+            : Error(message: $"[screen.unlink: {message}]"));
+    }
+    private CommandResult LinksHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return Error(message: "[screen.links: expected no arguments]");
+        }
+
+        return new CommandResult(Output: $"[screen.links: {m_binder.DescribeLinks()}]");
+    }
+
+    // Advance a magazine selector by delta, wrapping or clamping per the magazine policy.
+    private static int Advance(int selected, int delta, int count, bool wrap) {
+        if (count <= 0) {
+            return 0;
+        }
+
+        var next = (selected + delta);
+
+        return (wrap
+            ? (((next % count) + count) % count)
+            : Math.Clamp(value: next, min: 0, max: (count - 1)));
     }
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
@@ -229,6 +423,15 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"assigned {(state.Engine ?? "?")} {((state.Handle != 0) ? "bound" : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText}");
         } else {
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"empty {((state.Handle != 0) ? "bound" : "unbound")} engaged={engagedText}");
+        }
+
+        // The magazine selector and cable link, when present — one query answers the whole arc.
+        if (m_binder.TryMagazine(index: index, selected: out var selected, magazine: out var magazine)) {
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" entry={selected}/{magazine.Entries.Count}");
+        }
+
+        if (m_binder.LinkOf(index: index) is { } link) {
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" link={link}");
         }
 
         if (state.Fault is { } fault) {

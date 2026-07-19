@@ -180,6 +180,9 @@ internal static class WorldDefinitionValidator {
         ValidateViews(views: (definition.Views ?? WorldViewDefaults.Default), cameras: cameras, errors: errors);
 
         var screenIndices = new HashSet<int>();
+        // The declared-live console sources (screens[*].source, NOT magazine entries): the feed owns ONE upload surface,
+        // so at most one may be live at a time. A console entry sitting unselected in a magazine is legal.
+        var consoleLiveIndices = new List<int>();
 
         if (definition.Screens is not { } screens) {
             errors.Add(item: "screens is required.");
@@ -212,49 +215,15 @@ internal static class WorldDefinitionValidator {
                     errors.Add(item: $"{path} half extents must be finite and positive.");
                 }
 
-                switch (screen.Source) {
-                    case null:
-                        errors.Add(item: $"{path}.source is required.");
-                        break;
-                    case WorldScreenSource.Machine machine:
-                        if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
-                            errors.Add(item: $"{path}.source.machine.engine is required.");
-                        }
-
-                        // An empty contentPath is a valid "unconfigured" screen (the built-in default for the native AGB
-                        // screen — asset-free, no owner-local path baked in): the binder faults the slot gracefully at
-                        // boot rather than crashing here. A present-but-missing file is likewise a runtime fact, not a
-                        // structural authoring error, so only WorldScreenBinder checks existence.
-                        break;
-                    case WorldScreenSource.TestPattern pattern:
-                        if ((pattern.Width <= 0) || (pattern.Height <= 0) ||
-                            (pattern.Width > MaxSurfaceDimension) || (pattern.Height > MaxSurfaceDimension)) {
-                            errors.Add(item: $"{path}.source test-pattern dimensions must be within 1..{MaxSurfaceDimension}.");
-                        }
-
-                        break;
-                    case WorldScreenSource.Camera camera:
-                        ValidateProfile(profile: camera.Profile, path: $"{path}.source.camera", errors: errors);
-
-                        break;
-                    case WorldScreenSource.Capture capture:
-                        // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
-                        if (capture.MonitorIndex is { } monitorIndex) {
-                            if (monitorIndex < 0) {
-                                errors.Add(item: $"{path}.source.capture.monitorIndex must be non-negative.");
-                            }
-                        } else if (string.IsNullOrWhiteSpace(value: capture.WindowTitle)) {
-                            errors.Add(item: $"{path}.source.capture.windowTitle is required.");
-                        }
-
-                        ValidateProfile(profile: capture.Profile, path: $"{path}.source.capture", errors: errors);
-
-                        break;
-                    case WorldScreenSource.View view when !cameras.Contains(item: view.CameraName):
-                        errors.Add(item: $"{path}.source.view references undeclared camera '{view.CameraName}'.");
-
-                        break;
+                // The declared source and each magazine entry cross the SAME source gate (a magazine entry could
+                // otherwise name an undeclared camera). A declared console source counts against the one-live ceiling;
+                // a console entry sitting in the magazine does not.
+                if (ValidateScreenSource(source: screen.Source, path: $"{path}.source", cameras: cameras, errors: errors)) {
+                    consoleLiveIndices.Add(item: screen.Index);
                 }
+
+                ValidateRoute(route: screen.Route, path: $"{path}.route", errors: errors);
+                ValidateMagazine(magazine: screen.Magazine, path: $"{path}.magazine", cameras: cameras, errors: errors);
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin (R3). The effective
                 // per-axis extent must stay positive (a margin that inverts the box is rejected by name).
@@ -264,6 +233,15 @@ internal static class WorldDefinitionValidator {
                 }
             }
         }
+
+        // The one-live-console ceiling: the console feed owns a single upload surface, so a second declared console
+        // screen is an error naming both indices.
+        if (consoleLiveIndices.Count > 1) {
+            errors.Add(item: $"at most one screen may declare a console source, but screens {string.Join(separator: " and ", values: consoleLiveIndices)} both do.");
+        }
+
+        // The cable links resolve against the declared screen index set built above.
+        ValidateLinks(links: definition.Links, screenIndices: screenIndices, errors: errors);
 
         // Speakers and the audio defaults validate LAST: their references span every earlier row set (the screen
         // index set, the placement rows, the tune/patch ids, the camera names — and the cue table's emitter
@@ -1685,6 +1663,189 @@ internal static class WorldDefinitionValidator {
                 errors.Add(item: $"{path} is an unknown effect kind.");
                 break;
         }
+    }
+
+    // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
+    // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
+    // live CONSOLE (the caller counts these against the one-live ceiling).
+    private static bool ValidateScreenSource(WorldScreenSource source, string path, HashSet<string> cameras, List<string> errors) {
+        switch (source) {
+            case null:
+                errors.Add(item: $"{path} is required.");
+
+                return false;
+            case WorldScreenSource.Machine machine:
+                if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
+                    errors.Add(item: $"{path}.machine.engine is required.");
+                }
+
+                // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
+                // A present-but-missing file is a runtime fact, not a structural authoring error.
+                return false;
+            case WorldScreenSource.TestPattern pattern:
+                if ((pattern.Width <= 0) || (pattern.Height <= 0) ||
+                    (pattern.Width > MaxSurfaceDimension) || (pattern.Height > MaxSurfaceDimension)) {
+                    errors.Add(item: $"{path} test-pattern dimensions must be within 1..{MaxSurfaceDimension}.");
+                }
+
+                return false;
+            case WorldScreenSource.Camera camera:
+                ValidateProfile(profile: camera.Profile, path: $"{path}.camera", errors: errors);
+
+                return false;
+            case WorldScreenSource.Capture capture:
+                // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
+                if (capture.MonitorIndex is { } monitorIndex) {
+                    if (monitorIndex < 0) {
+                        errors.Add(item: $"{path}.capture.monitorIndex must be non-negative.");
+                    }
+                } else if (string.IsNullOrWhiteSpace(value: capture.WindowTitle)) {
+                    errors.Add(item: $"{path}.capture.windowTitle is required.");
+                }
+
+                ValidateProfile(profile: capture.Profile, path: $"{path}.capture", errors: errors);
+
+                return false;
+            case WorldScreenSource.View view:
+                if (!cameras.Contains(item: view.CameraName)) {
+                    errors.Add(item: $"{path}.view references undeclared camera '{view.CameraName}'.");
+                }
+
+                return false;
+            case WorldScreenSource.Console console:
+                if ((console.Rows < 1) || (console.Rows > 120)) {
+                    errors.Add(item: $"{path}.console.rows {console.Rows} is outside 1..120.");
+                }
+
+                if ((console.Columns < 1) || (console.Columns > 400)) {
+                    errors.Add(item: $"{path}.console.columns {console.Columns} is outside 1..400.");
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // The engage-route policy: a finite non-negative radius (today unvalidated, and a real gap — a NaN reaches
+    // MathF.Sqrt in the engage handler), plus the authored world-event channel names (kebab-case, non-empty; a channel
+    // on a non-engageable route is an authoring mistake, not a configuration).
+    private static void ValidateRoute(WorldScreenRoute route, string path, List<string> errors) {
+        if (!float.IsFinite(f: route.EngageRadius) || (route.EngageRadius < 0f)) {
+            errors.Add(item: $"{path}.engageRadius {route.EngageRadius} must be finite and non-negative.");
+        }
+
+        ValidateChannel(channel: route.EngageChannel, name: $"{path}.engageChannel", errors: errors);
+        ValidateChannel(channel: route.CycleChannel, name: $"{path}.cycleChannel", errors: errors);
+
+        if (!route.Engageable && ((route.EngageChannel is not null) || (route.CycleChannel is not null))) {
+            errors.Add(item: $"{path} names an engageChannel/cycleChannel but engageable is false — a screen cannot answer a gesture it can never be engaged from.");
+        }
+    }
+
+    // A world-event channel name, when present: non-empty kebab-case (lowercase, digits, single hyphens).
+    private static void ValidateChannel(string? channel, string name, List<string> errors) {
+        if ((channel is not null) && !IsKebabCase(value: channel)) {
+            errors.Add(item: $"{name} '{channel}' must be non-empty kebab-case.");
+        }
+    }
+
+    // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
+    // gate as a declared source.
+    private static void ValidateMagazine(WorldScreenMagazine? magazine, string path, HashSet<string> cameras, List<string> errors) {
+        if (magazine is not { } value) {
+            return;
+        }
+
+        if ((value.Entries is null) || (value.Entries.Count == 0)) {
+            errors.Add(item: $"{path}.entries requires at least one entry.");
+
+            return;
+        }
+
+        if ((value.Selected < 0) || (value.Selected >= value.Entries.Count)) {
+            errors.Add(item: $"{path}.selected {value.Selected} is outside 0..{(value.Entries.Count - 1)}.");
+        }
+
+        for (var index = 0; (index < value.Entries.Count); index++) {
+            _ = ValidateScreenSource(source: value.Entries[index], path: $"{path}.entries[{index}]", cameras: cameras, errors: errors);
+        }
+    }
+
+    // The cable links: name required/kebab/unique; two or more screens; every index declared; no duplicate within a link;
+    // no screen in two links. NOT validated: engine identity of the members — that is a RUNTIME fact (a screen.insert
+    // changes it), so the binder reports a dormant link with a reason rather than the validator rejecting the row.
+    private static void ValidateLinks(IReadOnlyList<WorldScreenLink>? links, HashSet<int> screenIndices, List<string> errors) {
+        if (links is null) {
+            return;
+        }
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var claimed = new HashSet<int>();
+
+        for (var index = 0; (index < links.Count); index++) {
+            var link = links[index];
+            var path = $"links[{index}]";
+
+            if (link is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: link.Name) || !IsKebabCase(value: link.Name)) {
+                errors.Add(item: $"{path}.name '{link.Name}' must be non-empty kebab-case.");
+            } else if (!names.Add(item: link.Name)) {
+                errors.Add(item: $"{path}.name '{link.Name}' is duplicated.");
+            }
+
+            if ((link.Screens is null) || (link.Screens.Count < 2)) {
+                errors.Add(item: $"{path}.screens requires two or more screen indices.");
+
+                continue;
+            }
+
+            var withinLink = new HashSet<int>();
+
+            foreach (var screen in link.Screens) {
+                if (!screenIndices.Contains(item: screen)) {
+                    errors.Add(item: $"{path}.screens names undeclared screen {screen}.");
+                } else if (!withinLink.Add(item: screen)) {
+                    errors.Add(item: $"{path}.screens names screen {screen} twice.");
+                } else if (!claimed.Add(item: screen)) {
+                    errors.Add(item: $"{path}.screens: screen {screen} is already in another link.");
+                }
+            }
+        }
+    }
+
+    // A non-empty kebab-case token: lowercase ASCII letters/digits, single hyphens between them, no leading/trailing
+    // hyphen. The channel/link-name grammar.
+    private static bool IsKebabCase(string value) {
+        if (string.IsNullOrEmpty(value: value) || (value[index: 0] == '-') || (value[index: (value.Length - 1)] == '-')) {
+            return false;
+        }
+
+        var previousHyphen = false;
+
+        foreach (var character in value) {
+            var isLower = ((character >= 'a') && (character <= 'z'));
+            var isDigit = ((character >= '0') && (character <= '9'));
+
+            if (character == '-') {
+                if (previousHyphen) {
+                    return false;
+                }
+
+                previousHyphen = true;
+            } else if (isLower || isDigit) {
+                previousHyphen = false;
+            } else {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void ValidateProfile(WorldFeedProfile profile, string path, List<string> errors) {
