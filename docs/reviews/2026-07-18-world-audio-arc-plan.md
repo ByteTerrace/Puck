@@ -263,6 +263,25 @@ trajectory directly; the demo-port ledger gains the entry.
   incl. faults), the HUD selection line, `audio.emitters` (the derived
   emitter-table dump — the document→emitter derivation made assertable).
 
+### A11b — World events tie to audio as CUE DATA (owner-raised, post-AP1)
+
+The trigger mechanism was built for events from the start (sequence-stamped
+one-shot trigger records on the snapshot); the wiring gets its vocabulary:
+a `cues` list in the Audio section — rows of `(event token, patchId, gain,
+placement)` where placement is `at-site` (spatial, at the event's world
+position — a mutation chime where the row changed, the shimmer's audio
+twin), `listener` (UI feedback), or `emitter:<name>`. Event tokens are a
+CLOSED, published vocabulary of engine mechanisms (the leaf-role
+precedent): `mutation.applied`, `mutation.rejected`, `grant.denied`,
+`player.jump`, `player.land`, `player.footstep` (derived from the
+presentation gait phase), `screen.boot`, `screen.fault`, `seat.join`. The
+§2.6 audit holds: a genre ships different cue rows; new tokens appear only
+when the engine grows new mechanisms. Trigger production is one pluggable
+"submit a trigger request" seam with multiple producers (arrival policy,
+the edit-echo lane, gait derivation, screen lifecycle). Behavioral
+creature-condition triggers (on-move, on-face-change) remain a later tier
+on `CreationSoundDocument`. Lands in AP4.
+
 ### A12 — Verification: the pure core with two drivers
 
 `WorldAudioMixer.MixBlock(in WorldAudioSnapshot, Span<short>)` is a
