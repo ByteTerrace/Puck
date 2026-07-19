@@ -195,18 +195,50 @@ public sealed record CreationFaceDocument(
     string? DefaultSource
 );
 
+/// <summary>One SOUND a creation carries — a creature/phenomenon voice as data, following <see cref="CreationFaceDocument"/>'s
+/// named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the
+/// creation's root), and the <c>puck.synth.v1</c> patch INLINE — creations stay portable, and the existing creation
+/// hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an
+/// audio emitter anchored to the placement (root or the named shape); the placement row's own emission facet remains
+/// the per-instance override channel.</summary>
+/// <param name="Name">The sound's name (a wiring handle — <c>sound</c> by default; unique within the creation).</param>
+/// <param name="ShapeId">The shape the voice emits from (a <see cref="ShapeDocument.Id"/>; null = the creation's
+/// root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).</param>
+/// <param name="Patch">The voice's <c>puck.synth.v1</c> patch, INLINE (validated through the synth family's own
+/// canonicalizer as part of creation validation).</param>
+/// <param name="Level">The emitter level (null = 1 — unity).</param>
+/// <param name="Radius">The audible support radius in world units (null = the consuming world's default speaker
+/// radius).</param>
+public sealed record CreationSoundDocument(
+    string Name,
+    int? ShapeId,
+    SynthPatchDocument Patch,
+    float? Level,
+    float? Radius
+) {
+    /// <summary>The largest level/gain any audio-shaped document field admits — headroom above unity while every
+    /// Q16 composite gain the mix path multiplies stays far inside int range. World-side gain bounds reference this
+    /// same ceiling so the vocabulary cannot fork.</summary>
+    public const float MaxLevel = 8f;
+}
+
 /// <summary>
 /// A creation's BEHAVIOR manifest — the behavioral facts a creation carries so consumers stop re-supplying them by
 /// hand. A loaded fish without one walks because nothing records that it SWIMS; this makes those facts DATA. Minimal
-/// and normalized: a locomotion mode and the creation's declared faces (screen surfaces that show named feeds).
+/// and normalized: a locomotion mode, the creation's declared faces (screen surfaces that show named feeds), and its
+/// declared sounds (synth voices that emit from its body).
 /// </summary>
 /// <param name="Locomotion">How the creation moves — <c>walk</c> (default), <c>swim</c> (hover-bob, a swimmer), or
 /// <c>hover</c> (float in place). Null = walk.</param>
 /// <param name="Faces">The declared screen faces (null = none). A creation with a face shows a feed on its body; the
 /// face's default source is pure data, wirable to any camera feed.</param>
+/// <param name="Sounds">The declared sounds (null = none). Omitted from the wire when null, so a sound-free creation
+/// stays byte-identical to one authored before the member existed.</param>
 public sealed record CreationBehaviorDocument(
     string? Locomotion,
-    IReadOnlyList<CreationFaceDocument>? Faces
+    IReadOnlyList<CreationFaceDocument>? Faces,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CreationSoundDocument>? Sounds = null
 );
 
 /// <summary>
@@ -307,9 +339,9 @@ public static class CreationStore {
     /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <param name="casRoot">The content-addressed store root (Demo's convention: <see cref="DefaultCasRoot"/>).</param>
     /// <returns>The written path.</returns>
-    /// <exception cref="CreationValidationException"><paramref name="document"/> fails
-    /// <see cref="CreationCanonicalizer.Validate"/> (only its schema can fail here, since this stamps the current one
-    /// before validating — a structural invariant violation still rejects the save).</exception>
+    /// <exception cref="DocumentValidationException"><paramref name="document"/> fails
+    /// <see cref="CreationCanonicalizer.Validate"/> (only a structural invariant can fail here, since this stamps the
+    /// current schema before validating).</exception>
     public static string Save(CreationDocument document, string name, string creationsRoot, string casRoot) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
@@ -342,11 +374,10 @@ public static class CreationStore {
     /// <param name="creationsRoot">The creations folder a bare handle resolves against (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <returns>The normalized document, or null when nothing readable exists at the location.</returns>
     /// <exception cref="InvalidDataException">The file deserialized to a null document, OR the document declares an
-    /// absent/foreign schema, or fails a structural invariant — in the latter two cases this is
-    /// <see cref="CreationValidationException"/>'s message with the offending <see cref="CreationValidationException"/>
-    /// itself as <see cref="Exception.InnerException"/> (rethrown as plain <see cref="InvalidDataException"/> here so
-    /// the repo's existing malformed-input catch convention, <c>Puck.Commands.CommandArgs.IsMalformedInput</c>, needs
-    /// no changes to catch it).</exception>
+    /// absent/foreign schema, or fails a structural invariant — in the latter two cases the offending
+    /// <see cref="DocumentValidationException"/> rides as <see cref="Exception.InnerException"/>, so the repo's
+    /// existing malformed-input catch convention (<c>Puck.Commands.CommandArgs.IsMalformedInput</c>) needs no changes
+    /// to catch it.</exception>
     public static CreationDocument? Load(string nameOrPath, string creationsRoot) {
         ArgumentException.ThrowIfNullOrEmpty(nameOrPath);
         ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
@@ -363,7 +394,7 @@ public static class CreationStore {
 
         try {
             CreationCanonicalizer.ValidateOrThrow(document: document, source: path);
-        } catch (CreationValidationException exception) {
+        } catch (DocumentValidationException exception) {
             throw new InvalidDataException(message: exception.Message, innerException: exception);
         }
 

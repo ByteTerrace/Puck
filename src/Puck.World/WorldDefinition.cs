@@ -545,7 +545,7 @@ internal sealed record WorldScene(
 /// <summary>
 /// One creation ASSET row (§D6) — a whole <c>puck.creation.v1</c> document embedded INLINE-CANONICAL in the world
 /// file with its identity hash pinned beside it. The document and hash MUST come from the SAME
-/// <see cref="Puck.Authoring.CanonicalCreation"/> (the UIE-6 contract): the compose boundary canonicalizes on upsert
+/// <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/> (the UIE-6 contract): the compose boundary canonicalizes on upsert
 /// and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a
 /// tampered world file rejects loudly. World files stay self-contained — the CAS is an authoring-time import/export
 /// cache, never a load-time dependency.
@@ -553,7 +553,7 @@ internal sealed record WorldScene(
 /// <param name="Id">The row's stable string id — its mutation address and the handle placements reference.</param>
 /// <param name="Document">The canonical (validated + normalized) creation document.</param>
 /// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Authoring.CanonicalDocument{TDocument}.Hash"/>
-/// on the <see cref="Puck.Authoring.CanonicalCreation"/> the compose boundary produces).</param>
+/// on the canonical result the compose boundary produces).</param>
 internal sealed record WorldCreation(string Id, CreationDocument Document, string Hash);
 
 /// <summary>A placement's repeat facet — a row of copies IS a repeat (the Demo placement vocabulary, adopted): the

@@ -727,12 +727,12 @@ internal sealed class WorldServer {
             case WorldMutation.UpsertCreation m: {
                 // The UIE-6 hash contract at the compose boundary: canonicalize (validate + normalize + hash) the
                 // carried document, REJECT a hash the pipeline did not itself compute, and store the canonical pair —
-                // so a stored row's doc and hash always come from the SAME CanonicalCreation.
-                Puck.Authoring.CanonicalCreation canonical;
+                // so a stored row's doc and hash always come from the SAME canonical result.
+                Puck.Authoring.CanonicalDocument<Puck.Authoring.CreationDocument> canonical;
 
                 try {
                     canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: m.Creation.Document, source: m.Creation.Id);
-                } catch (Puck.Authoring.CreationValidationException exception) {
+                } catch (Puck.Authoring.DocumentValidationException exception) {
                     candidate = current;
                     reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 

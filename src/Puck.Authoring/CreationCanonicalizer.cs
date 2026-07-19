@@ -3,63 +3,6 @@ using Puck.SdfVm;
 
 namespace Puck.Authoring;
 
-/// <summary>One structural rule a <see cref="CreationDocument"/> violates, collected by
-/// <see cref="CreationCanonicalizer.Validate"/> rather than thrown per-violation, so a caller sees every problem in
-/// one pass instead of fixing a document one exception at a time.</summary>
-/// <param name="Path">A dotted/indexed pointer to the offending member (e.g. <c>"shapes[2].id"</c>,
-/// <c>"cameras[0].feed"</c>).</param>
-/// <param name="Message">A human-readable description of the violation.</param>
-public readonly record struct CreationValidationError(string Path, string Message) {
-    /// <inheritdoc/>
-    public override string ToString() => $"{Path}: {Message}";
-}
-
-/// <summary>
-/// Thrown by <see cref="CreationCanonicalizer.ValidateOrThrow"/>/<see cref="CreationCanonicalizer.Canonicalize"/> when
-/// a <see cref="CreationDocument"/> fails validation — an absent or foreign <see cref="CreationDocument.Schema"/>, or
-/// a structural invariant the document must hold before it is safe to normalize, hash, and (per the World UI/editor
-/// plan's §D6) embed verbatim into a world row. <see cref="CreationStore.Load"/> wraps this in an
-/// <see cref="InvalidDataException"/> (as its <see cref="Exception.InnerException"/>) before it leaves the store, so
-/// it flows through the repo's existing malformed-input catch convention (<c>Puck.Commands.CommandArgs.IsMalformedInput</c>)
-/// at every file-load-verb call site with zero changes there, while a caller that talks to
-/// <see cref="CreationCanonicalizer"/> directly (an in-memory/byte pipeline consumer, e.g. a future World import) sees
-/// this type — and its structured <see cref="Errors"/> — undecorated.
-/// </summary>
-public sealed class CreationValidationException : Exception {
-    /// <summary>Gets every violation found in the validation pass that raised this exception (never empty).</summary>
-    public IReadOnlyList<CreationValidationError> Errors { get; }
-
-    /// <summary>Initializes the exception from one or more validation errors.</summary>
-    /// <param name="errors">The violations found (must be non-empty — an empty list never fails validation).</param>
-    /// <param name="source">An optional source label (a file path or save handle) prefixed onto the message.</param>
-    public CreationValidationException(IReadOnlyList<CreationValidationError> errors, string? source = null)
-        : base(message: DocumentCanonicalizer.FormatErrors(errors: errors, source: source)) => Errors = errors;
-}
-
-/// <summary>
-/// The canonical bytes of a validated, normalized <see cref="CreationDocument"/> and their identity hash — the exact
-/// payload a caller should persist, embed, or pin.
-/// </summary>
-/// <param name="Document">The validated, normalized document <see cref="Bytes"/> was serialized from.</param>
-/// <param name="Bytes">The canonical UTF-8 JSON bytes: deterministic member order (declared record order, via the
-/// shared <see cref="DocumentJsonOptions.Shared"/> instance) and deterministic formatting — for a given normalized
-/// document these bytes never vary across calls, processes, or machines.</param>
-/// <param name="Hash">The SHA-256 hex64 digest of <see cref="Bytes"/>, in
-/// <see cref="Puck.Assets.ContentAddressedStore.ComputeHash"/>'s format (lowercase hex, no <c>sha256/</c> prefix) —
-/// prefix it with <c>"sha256/"</c> to use directly as a <see cref="Puck.Assets.ContentAddressedStore"/> ref target.
-/// <para>
-/// THIS is the identity contract the World UI/editor plan's §D6 <c>creations: [{id, doc, hash}]</c> row pins: two
-/// creations hash equal if and only if their canonical bytes are equal. A world row importing a creation MUST
-/// obtain both <c>doc</c> and <c>hash</c> from the SAME <see cref="CanonicalCreation"/> — never hash a document by
-/// any other route (raw <see cref="CreationStore.ToJson"/>, a hand-rolled serialize) and never accept a hash the
-/// pipeline did not itself compute.
-/// </para>
-/// </param>
-/// <remarks>Shape-identical to the neutral <see cref="CanonicalDocument{TDocument}"/> (which generalized out of this
-/// type) but deliberately standalone: this record predates the core and its name is load-bearing at existing call
-/// sites, so it stays the creation family's result type rather than a derivation.</remarks>
-public sealed record CanonicalCreation(CreationDocument Document, byte[] Bytes, string Hash);
-
 /// <summary>
 /// THE strict validate → normalize → canonicalize boundary every <see cref="CreationDocument"/> crosses before it is
 /// trusted, persisted, or embedded — the one public pipeline the World UI/editor implementation review's UIE-6
@@ -82,14 +25,14 @@ public static class CreationCanonicalizer {
     /// palette overflowing its 16 slots, an orphaned frame transform, a feed-name collision) are.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
     /// <returns>Every violation found; empty when the document is a valid <c>puck.creation.v1</c> value.</returns>
-    public static IReadOnlyList<CreationValidationError> Validate(CreationDocument document) {
+    public static IReadOnlyList<DocumentValidationError> Validate(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
         if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: CreationDocument.CurrentSchema) is { } schemaViolation) {
-            return [new CreationValidationError(Path: "schema", Message: schemaViolation)];
+            return [new DocumentValidationError(Path: "schema", Message: schemaViolation)];
         }
 
-        var errors = new List<CreationValidationError>();
+        var errors = new List<DocumentValidationError>();
         var shapeIds = new HashSet<int>();
 
         for (var i = 0; i < (document.Shapes?.Count ?? 0); i++) {
@@ -123,13 +66,13 @@ public static class CreationCanonicalizer {
     /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
     /// <param name="document">The document to validate.</param>
     /// <param name="source">An optional source label (a file path or save handle) for the exception message.</param>
-    /// <exception cref="CreationValidationException">The document declares an absent/foreign schema, or fails a
+    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
     public static void ValidateOrThrow(CreationDocument document, string? source = null) {
         var errors = Validate(document: document);
 
         if (errors.Count > 0) {
-            throw new CreationValidationException(errors: errors, source: source);
+            throw new DocumentValidationException(errors: errors, source: source);
         }
     }
 
@@ -201,21 +144,19 @@ public static class CreationCanonicalizer {
     }
 
     /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
-    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them. Two calls against value-equal input
-    /// documents always produce byte-identical <see cref="CanonicalCreation.Bytes"/> and therefore the same
-    /// <see cref="CanonicalCreation.Hash"/> — cite THIS guarantee wherever a creation's identity is pinned (the World
-    /// UI/editor plan's §D6 world-row hash).</summary>
+    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
+    /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always produce
+    /// byte-identical bytes and therefore the same hash — cite THIS guarantee wherever a creation's identity is pinned
+    /// (the §D6 world-row hash).</summary>
     /// <param name="document">The document to canonicalize.</param>
     /// <param name="source">An optional source label (a file path or save handle) for a validation-failure message.</param>
     /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
-    /// <exception cref="CreationValidationException">The document declares an absent/foreign schema, or fails a
+    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
-    public static CanonicalCreation Canonicalize(CreationDocument document, string? source = null) {
+    public static CanonicalDocument<CreationDocument> Canonicalize(CreationDocument document, string? source = null) {
         ValidateOrThrow(document: document, source: source);
 
-        var canonical = DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
-
-        return new CanonicalCreation(Bytes: canonical.Bytes, Document: canonical.Document, Hash: canonical.Hash);
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
 
     // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
@@ -280,9 +221,9 @@ public static class CreationCanonicalizer {
         return ((normalized.Count > 0) ? normalized : null);
     }
 
-    // The behavior manifest normalizes to a canonical locomotion member name and drops a face naming a missing shape.
-    // A manifest that is entirely default (walk, no faces) collapses to null so a creation without behavioral facts
-    // round-trips byte-identically to one that never carried the manifest at all.
+    // The behavior manifest normalizes to a canonical locomotion member name and drops a face/sound naming a missing
+    // shape. A manifest that is entirely default (walk, no faces, no sounds) collapses to null so a creation without
+    // behavioral facts round-trips byte-identically to one that never carried the manifest at all.
     private static CreationBehaviorDocument? NormalizeBehavior(CreationBehaviorDocument? behavior, HashSet<int> shapeIds) {
         if (behavior is null) {
             return null;
@@ -314,15 +255,44 @@ public static class CreationCanonicalizer {
             }
         }
 
+        var sounds = NormalizeSounds(sounds: behavior.Sounds, shapeIds: shapeIds);
+
         // Fully default → null (byte-stable round-trip with a manifest-less creation).
-        if (string.Equals(a: locomotion, b: "walk", comparisonType: StringComparison.Ordinal) && (faces is not { Count: > 0 })) {
+        if (string.Equals(a: locomotion, b: "walk", comparisonType: StringComparison.Ordinal) && (faces is not { Count: > 0 }) && (sounds is not { Count: > 0 })) {
             return null;
         }
 
-        return new CreationBehaviorDocument(Faces: faces, Locomotion: locomotion);
+        return new CreationBehaviorDocument(Faces: faces, Locomotion: locomotion, Sounds: sounds);
     }
 
-    private static void ValidatePalette(CreationDocument document, List<CreationValidationError> errors) {
+    // A sound naming a missing shape drops (the faces rule — its emission point is not there); the survivors carry a
+    // defaulted name, a clamped level, and the inline patch normalized through the synth family's own pipeline (so
+    // the creation hash always covers the patch's canonical form). An empty result collapses to null (byte-stable
+    // round-trip with a sound-free creation).
+    private static List<CreationSoundDocument>? NormalizeSounds(IReadOnlyList<CreationSoundDocument>? sounds, HashSet<int> shapeIds) {
+        if (sounds is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<CreationSoundDocument>(capacity: source.Count);
+
+        foreach (var sound in source) {
+            if ((sound.ShapeId is { } shapeId) && (shapeId >= 0) && !shapeIds.Contains(item: shapeId)) {
+                continue;
+            }
+
+            normalized.Add(item: sound with {
+                Level = Math.Clamp(value: (sound.Level ?? 1f), max: CreationSoundDocument.MaxLevel, min: 0f),
+                Name = ((sound.Name is { Length: > 0 } name) ? name : "sound"),
+                Patch = SynthPatchCanonicalizer.Normalize(document: sound.Patch),
+                ShapeId = (((sound.ShapeId is { } id) && (id >= 0)) ? (int?)id : null),
+            });
+        }
+
+        return ((normalized.Count > 0) ? normalized : null);
+    }
+
+    private static void ValidatePalette(CreationDocument document, List<DocumentValidationError> errors) {
         if (document.Palette is not { Count: > 0 } palette) {
             return;
         }
@@ -349,7 +319,7 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateFrames(CreationDocument document, List<CreationValidationError> errors, HashSet<int> shapeIds) {
+    private static void ValidateFrames(CreationDocument document, List<DocumentValidationError> errors, HashSet<int> shapeIds) {
         if (document.Frames is not { Count: > 0 } frames) {
             return;
         }
@@ -388,7 +358,7 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateChains(CreationDocument document, List<CreationValidationError> errors) {
+    private static void ValidateChains(CreationDocument document, List<DocumentValidationError> errors) {
         if (document.Chains is not { Count: > 0 } chains) {
             return;
         }
@@ -402,7 +372,7 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateCameras(CreationDocument document, List<CreationValidationError> errors) {
+    private static void ValidateCameras(CreationDocument document, List<DocumentValidationError> errors) {
         if (document.Cameras is not { Count: > 0 } cameras) {
             return;
         }
@@ -428,23 +398,61 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateBehavior(CreationDocument document, List<CreationValidationError> errors) {
-        if (document.Behavior?.Faces is not { Count: > 0 } faces) {
+    private static void ValidateBehavior(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Behavior?.Faces is { Count: > 0 } faces) {
+            var faceNames = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < faces.Count; i++) {
+                var name = ((faces[i].Name is { Length: > 0 } faceName) ? faceName : "face");
+
+                if (!faceNames.Add(item: name)) {
+                    errors.Add(item: new(Path: $"behavior.faces[{i}].name", Message: $"face name '{name}' collides with another face."));
+                }
+            }
+        }
+
+        ValidateSounds(document: document, errors: errors);
+    }
+
+    // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synth.v1 patch validated through
+    // the synth family's OWN canonicalizer (the one pipeline — never a re-implementation), its violations re-pathed
+    // under this creation. A sound naming a missing shape is NOT a failure — Normalize drops it (the faces rule).
+    private static void ValidateSounds(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Behavior?.Sounds is not { Count: > 0 } sounds) {
             return;
         }
 
-        var faceNames = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var soundNames = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        for (var i = 0; i < faces.Count; i++) {
-            var name = ((faces[i].Name is { Length: > 0 } faceName) ? faceName : "face");
+        for (var i = 0; i < sounds.Count; i++) {
+            var sound = sounds[i];
+            var name = ((sound.Name is { Length: > 0 } soundName) ? soundName : "sound");
 
-            if (!faceNames.Add(item: name)) {
-                errors.Add(item: new(Path: $"behavior.faces[{i}].name", Message: $"face name '{name}' collides with another face."));
+            if (!soundNames.Add(item: name)) {
+                errors.Add(item: new(Path: $"behavior.sounds[{i}].name", Message: $"sound name '{name}' collides with another sound."));
+            }
+
+            if ((sound.Level is { } level) && (!float.IsFinite(f: level) || (level < 0f) || (level > CreationSoundDocument.MaxLevel))) {
+                errors.Add(item: new(Path: $"behavior.sounds[{i}].level", Message: $"level {level} is outside [0, {CreationSoundDocument.MaxLevel}]."));
+            }
+
+            if ((sound.Radius is { } radius) && (!float.IsFinite(f: radius) || (radius <= 0f))) {
+                errors.Add(item: new(Path: $"behavior.sounds[{i}].radius", Message: "radius must be finite and positive."));
+            }
+
+            if (sound.Patch is null) {
+                errors.Add(item: new(Path: $"behavior.sounds[{i}].patch", Message: "a sound requires an inline puck.synth.v1 patch."));
+
+                continue;
+            }
+
+            foreach (var violation in SynthPatchCanonicalizer.Validate(document: sound.Patch)) {
+                errors.Add(item: new(Path: $"behavior.sounds[{i}].patch.{violation.Path}", Message: violation.Message));
             }
         }
     }
 
-    private static void ValidateTextRuns(CreationDocument document, List<CreationValidationError> errors) {
+    private static void ValidateTextRuns(CreationDocument document, List<DocumentValidationError> errors) {
         if (document.TextRuns is not { Count: > 0 } runs) {
             return;
         }
@@ -467,7 +475,7 @@ public static class CreationCanonicalizer {
         }
     }
 
-    private static void ValidateExtensions(CreationDocument document, List<CreationValidationError> errors) =>
+    private static void ValidateExtensions(CreationDocument document, List<DocumentValidationError> errors) =>
         DocumentCanonicalizer.ValidateExtensions(
             addError: (path, message) => errors.Add(item: new(Path: path, Message: message)),
             extensions: document.Extensions,

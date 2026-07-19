@@ -4,8 +4,7 @@ namespace Puck.Authoring;
 
 /// <summary>One structural rule a document violates, collected by a family canonicalizer's <c>Validate</c> rather than
 /// thrown per-violation, so a caller sees every problem in one pass instead of fixing a document one exception at a
-/// time. The document-neutral twin of <see cref="CreationValidationError"/> (which predates this core and is kept
-/// verbatim for its existing consumers); new document families report through this type.</summary>
+/// time. Every document family reports through this one type.</summary>
 /// <param name="Path">A dotted/indexed pointer to the offending member (e.g. <c>"patterns[2][0].note"</c>,
 /// <c>"order[3]"</c>).</param>
 /// <param name="Message">A human-readable description of the violation.</param>
@@ -21,8 +20,7 @@ public readonly record struct DocumentValidationError(string Path, string Messag
 /// <see cref="Exception.InnerException"/>) before it leaves the store, so it flows through the repo's existing
 /// malformed-input catch convention (<c>Puck.Commands.CommandArgs.IsMalformedInput</c>) at every file-load-verb call
 /// site with zero changes there, while a caller that talks to the canonicalizer directly sees this type — and its
-/// structured <see cref="Errors"/> — undecorated. The document-neutral twin of
-/// <see cref="CreationValidationException"/> (kept verbatim for its existing consumers).
+/// structured <see cref="Errors"/> — undecorated.
 /// </summary>
 public sealed class DocumentValidationException : Exception {
     /// <summary>Gets every violation found in the validation pass that raised this exception (never empty).</summary>

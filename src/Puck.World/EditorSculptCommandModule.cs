@@ -12,7 +12,7 @@ namespace Puck.World;
 /// chords. <c>editor.sculpt.new</c>/<c>edit</c> open a seat's bench (a blank model, or an existing creation row
 /// loaded through the canonical pipeline) and flip its active binding group onto the sculpt pages;
 /// <c>editor.sculpt.commit</c> canonicalizes the model and submits ONE <c>UpsertCreation</c> (doc + hash from the
-/// SAME <see cref="CanonicalCreation"/> — the UIE-6 contract; live placements of the row refresh on delivery,
+/// SAME <see cref="CanonicalDocument{TDocument}"/> — the UIE-6 contract; live placements of the row refresh on delivery,
 /// animated ones through the animator's hash-diff release+recreate); <c>editor.sculpt.easel</c> authors the diegetic
 /// preview easel (a fixed workbench camera + an existing screen row re-pointed at its feed — two ordinary mutations,
 /// zero engine change); <c>editor.sculpt.undo</c>/<c>redo</c> walk the LOCAL ring (the world journal is untouched —
@@ -246,15 +246,15 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         }
 
         var rowId = m_workbench.RowId(slot: slot);
-        CanonicalCreation canonical;
+        CanonicalDocument<CreationDocument> canonical;
 
         try {
             canonical = CreationCanonicalizer.Canonicalize(document: model!.ToDocument(), source: rowId);
-        } catch (CreationValidationException exception) {
+        } catch (DocumentValidationException exception) {
             return Error(text: $"[{CommitCommand}: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
 
-        // Doc + hash from the SAME CanonicalCreation — the UIE-6 sentence, satisfied structurally.
+        // Doc + hash from the SAME canonical result — the UIE-6 sentence, satisfied structurally.
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCreation(
             Principal: WorldPrincipal.Seat(slot: slot),
             Creation: new WorldCreation(Id: rowId, Document: canonical.Document, Hash: canonical.Hash)

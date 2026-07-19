@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>
 /// The creation-asset console surface (§D6/P5) — the assist-layer twins of the place page's place-by-name chords.
 /// <c>editor.import</c> reads a creation FILE through the ONE <see cref="CreationCanonicalizer"/> pipeline and inlines
-/// an <c>UpsertCreation</c> (doc + hash from the SAME <see cref="CanonicalCreation"/> — the UIE-6 contract);
+/// an <c>UpsertCreation</c> (doc + hash from the SAME <see cref="CanonicalDocument{TDocument}"/> — the UIE-6 contract);
 /// <c>editor.creations</c> lists the world's creation rows; <c>editor.creation.next</c>/<c>prev</c> cycle a per-seat
 /// ARMED creation (the place page's D-pad chords); <c>editor.spawn.creation</c> begins a ghost drag of the armed (or
 /// named) creation at the editor focus — the P3 ghost/spawn pattern, committed by <c>editor.grab</c> as one
@@ -75,21 +75,21 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
             return Error(text: $"[editor.import: no file at {path}]");
         }
 
-        CanonicalCreation canonical;
+        CanonicalDocument<CreationDocument> canonical;
 
         try {
             var document = (System.Text.Json.JsonSerializer.Deserialize<CreationDocument>(json: File.ReadAllText(path: path), options: DocumentJsonOptions.Shared)
-                ?? throw new CreationValidationException(errors: [new CreationValidationError(Path: "(root)", Message: "the file deserialized to null")], source: path));
+                ?? throw new DocumentValidationException(errors: [new DocumentValidationError(Path: "(root)", Message: "the file deserialized to null")], source: path));
 
             canonical = CreationCanonicalizer.Canonicalize(document: document, source: path);
-        } catch (Exception exception) when (exception is CreationValidationException or System.Text.Json.JsonException or IOException) {
+        } catch (Exception exception) when (exception is DocumentValidationException or System.Text.Json.JsonException or IOException) {
             return Error(text: $"[editor.import: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
 
         var id = ((args.Length >= 2) ? args[1] : (canonical.Document.Name ?? "creation"));
         var slot = ((context.Parse is null) ? context.Slot : 0);
 
-        // Doc + hash from the SAME CanonicalCreation — the UIE-6 sentence, satisfied structurally.
+        // Doc + hash from the SAME canonical result — the UIE-6 sentence, satisfied structurally.
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCreation(
             Principal: WorldPrincipal.Seat(slot: slot),
             Creation: new WorldCreation(Id: id, Document: canonical.Document, Hash: canonical.Hash)

@@ -123,7 +123,7 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     internal sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
     /// <summary>Upserts a creation ASSET row addressed by <see cref="WorldCreation.Id"/> (§D6). The compose boundary
-    /// canonicalizes the row's document (UIE-6: doc + hash from the SAME <see cref="Puck.Authoring.CanonicalCreation"/>)
+    /// canonicalizes the row's document (UIE-6: doc + hash from the SAME <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
     /// compute is never accepted.</summary>
     /// <param name="Principal">The acting identity.</param>
