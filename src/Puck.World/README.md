@@ -1376,8 +1376,10 @@ synchronous Humble core) acquires while referenced and releases when
 orphaned, active while a mixer is attached (the device pump live; the offline
 proof headlessly). Verbs: `world.speaker.set/remove`, `world.tune.set/remove`,
 `world.patch.set/remove`, `world.audio.set`, `world.speakers`,
-`audio.emitters` (the deterministic derived-table dump), and `audio.state`
-(the live device echo, below). The document-side battery is
+`audio.emitters` (the deterministic derived-table dump), `audio.state`
+(the live device echo, below), `speaker.state` (the per-row live status +
+transient-cue tail), and `world.volume` (the session lever). The
+document-side battery is
 `dotnet run src/Puck.World/scripts/proof.cs -- audio`.
 
 **The device (AP3).** `Audio/WorldAudioRenderService` is the world speaker —
@@ -1427,7 +1429,49 @@ paths against mock factories (unsupported / declining-with-rebinds /
 mid-stream fault + reattach), the real endpoint delivering frames, and the
 full session: speaker row first, cartridge second, `audio.state`'s sources
 and peak going live — structural liveness only (sample content stays the
-offline hash proof's job).
+offline hash proof's job) — plus the `screen.boot` cue firing on the real
+cartridge boot.
+
+**THE CUE TABLE (AP4, plan A11b).** World events tie to sound as DATA: the
+`Audio` row's `cues` list — `(event, patchId, gainThousandths?, placement)`
+where placement is `at-site` (spatial, at the event's world position — the
+shimmer's audio twin; falls back to the listener when no site is derivable),
+`listener` (rides the listener pose: distance 0 = full gain, the mixer's
+on-top-of-listener pan hold centers it), or `emitter:<speaker>` (the named
+speaker's pose and support). Event tokens are a CLOSED published vocabulary
+(`WorldAudioCue.EventTokens`, the leaf-role precedent): `mutation.applied`,
+`mutation.rejected`, `grant.denied`, `player.footstep` (gait-phase derived,
+local seats, one footfall per half-cycle), `screen.boot`, `screen.fault`,
+`seat.join`, plus `player.jump`/`player.land` (RESERVED — no producer wired;
+the client view carries no grounded signal). Mechanics: each fired cue takes
+one slot of a **4-deep reserved transient-emitter pool** (charged off the
+32-row snapshot cap so a full plan can never starve a cue; nearest-expiry
+eviction at capacity), lives its patch's own envelope (looping patches take
+the 2 s invariant cap), and lands with its trigger in the SAME snapshot so
+voice release can never race. Producers feed
+`WorldAudioDirector.SubmitCue` — the edit-echo lane, the binder's machine
+lifecycle tap, the frame source's gait/roster edges. `speaker.state` echoes
+each speaker row's live status (bound/silent/faulted, resolved pos,
+`inMix`) plus the live transient tail (`cue:<token>=<patch>`).
+
+**Speakers in the editor (AP4).** `(speakers, name)` joins the selection
+vocabulary (Fixed/Bed pick by proxy spheres, drag through the P3 channel
+with whole-row `UpsertSpeaker` on release; anchored rows edit their OFFSET
+via `editor.move`/numeric verbs — they never drag), `editor.speaker.place/
+move/gain/channel/radius/delete` are the name-addressed numeric twins
+(console-only — every place-page chord slot is honestly spoken for), and
+editor mode renders overlay GIZMO chips at each speaker's resolved pose
+(the director's own anchor resolution; selection lights the accent tier, a
+change shimmer the held tier, beds carry a translucent radius ring) through
+`Puck.Overlays.EditorGizmoStore/Writer` — a new writer plus two grammar
+icons and one RING element kind, never a world-geometry marker (the frozen
+render envelope stays untouched).
+
+**The master-volume lever (AP4).** `world.volume <0..8>` is session state on
+the render-levers asymmetry: the document's `audio.masterGain` owns boot
+(and flows live until the lever first engages), the lever owns "now"
+thereafter, `world.save` folds it back into `audio.masterGain`
+(`WorldSessionCapture` — `world.status` names the `audio` drift dimension).
 
 ## Engine boundaries worth knowing
 

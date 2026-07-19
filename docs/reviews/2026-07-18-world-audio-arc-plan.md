@@ -372,3 +372,77 @@ before this plan was written. The one standing acceptance to reaffirm at
 AP3: always-on machine audio's cost (~192 KB + low-single-digit % CPU per
 booted machine) as the price of speakers binding at any time without
 machine reboots.
+
+## 5. LANDED — the arc shipped (2026-07-19)
+
+All five phases are on `claude/puck-world-next-steps-c46511`, each as
+scoped milestone commits; the batteries are self-referentially green.
+
+- **AP0** (`ce9de2a`, `e905742`, `6131aa6`, `1a03b64`, `73bf3e6`): the
+  document-neutral canonicalizer core + adapters, `puck.audio.v1` matured
+  into `Puck.Authoring`, `puck.synth.v1`, the tune compile chain lifted to
+  `Puck.Forge` (byte-matching the Demo oracle; Demo fully untouched per the
+  mid-AP0 ruling), the `WorldAnchor` union with the camera migration.
+- **AP1** (`e794b22`, `b61a580`, `e48aa36`): `WorldAudioSnapshot`, the
+  32-voice fixed-point `WorldVoiceSynth`, `WorldAudioMixer.MixBlock`
+  (integer end to end, the cubic soft-clip, finite-support cull, equal-power
+  pan, block coefficient ramps), and the offline PCM hash proof
+  (`audio-mix.cs`) landing BEFORE any device code.
+- **AP2** (`7c4dee1`, `4c9db00`, `d6dd80f`, `e259e31`): the world data
+  model (Speakers/Tunes/Patches/Audio + emission facets + creation sounds,
+  hash-pinned inline-canonical assets), mutations/validator/grants,
+  `WorldAudioDirector` (stable-id derivation, arrival triggers, tune
+  acquire/release, the snapshot publisher), `audio.emitters`, the
+  document battery, and the fixture-world golden PCM hash.
+- **AP3** (`79b6a2d`, `3d6c0b3`, `66aaec4`, `cac8930`): always-on machine
+  audio through the flagged `audioSampleRate` engine seam, the WASAPI
+  render device + hosted governor (silent-degrade + ~1 s rebind), the
+  per-frame machine-source self-heal, `audio.state`, and the live smoke
+  (`audio-device.cs`) — the first sound World ever made.
+- **AP4** (`83f14b2`, `b0610c0`, `49a9d87`, `2b9adb7`, `b8f6768`,
+  `f70941a`, `739b3c7`, `d33c988`): **THE CUE TABLE** (§A11b) — the closed
+  published token vocabulary, the validator table, the 4-deep reserved
+  transient-emitter pool (patch-derived TTL, 2 s looping cap,
+  nearest-expiry eviction, trigger+emitter in one snapshot), producers for
+  mutation.applied (at-site where the payload carries a pose) /
+  mutation.rejected / grant.denied / player.footstep (gait-phase wrap,
+  local seats) / screen.boot / screen.fault / seat.join; speakers in the
+  editor (selection/pick/drag/undo + the console-only `editor.speaker.*`
+  numeric twins — every place-page chord slot was honestly spoken for);
+  the overlay GIZMO layer (projected chips per the icon grammar: two new
+  procedural icons + the RING element kind; accent = selection, held =
+  shimmer; beds get radius rings); `speaker.state`; the `world.volume`
+  session lever with the render-levers fold
+  (`WorldSessionCapture` + the `audio` drift dimension).
+
+**Proof evidence (all green, 2026-07-19):** `audio-mix.cs` — every battery
+incl. the new (i) cue rounds; both golden PCM hashes reproduce unchanged
+(no mix-law change; the run's world-document hash
+`8EC7ED9E8D2D369754FC94C87C87E46FFA5170204336F941EE4FBF5DB79AE427`
+self-verified across two fresh runs). `proof.cs audio` — the full AP2
+battery + the AP4 cue/editor/volume rounds, the ouroboros now carrying the
+cue table and the folded volume lever, the REBOOTED cue table still firing.
+`ui-floor` — both backends, including the new gizmo round (accent
+population ~660 in editor mode vs ~35–61 exited). `audio-device.cs` — the
+device ladder, the audible cabinet, and the screen.boot cue on a real
+cartridge boot.
+
+**Honest opens:**
+- `player.jump` / `player.land` are RESERVED tokens with no producer: the
+  client view carries no grounded/airborne signal, and Y-heuristics would
+  misfire on flying/swimming kits. Wiring them wants a small presentation
+  flag on the snapshot (a sim-side fact surfacing, one honest seam).
+- Anchored speakers edit their `Offset` numerically only (documented v1);
+  a drag-in-anchor-space channel is a possible later editor tier.
+- Constructor-time declared machine boots precede the binder lifecycle
+  tap's wiring, so a DECLARED cartridge's boot fires no `screen.boot` cue
+  (runtime inserts and reconcile-driven source changes all do).
+- The bed gizmo's radius ring is a screen-space circle at the center's
+  depth — a radius indicator, not a perspective-correct 3D circle
+  (deliberate; documented at the projection helper).
+- Cue TTL ages on the presentation clock (the frame source's delta); the
+  offline drivers age at the sim cadence — equivalent in law, not in wall
+  time, which is fine for a presentation-only transient.
+- Deferred ledger §3 unchanged (adaptive-music tiers 2–3, HRTF/occlusion,
+  clip sources, cones, box beds, non-Windows device, the mix-tap
+  recording, Doppler).
