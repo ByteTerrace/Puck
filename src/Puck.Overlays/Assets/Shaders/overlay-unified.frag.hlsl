@@ -88,42 +88,52 @@ bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
     return ((fragXy.x < clipXy.x) || (fragXy.y < clipXy.y) || (fragXy.x >= (clipXy.x + clipWh.x)) || (fragXy.y >= (clipXy.y + clipWh.y)));
 }
 
-// ---- letters (unions of capsule strokes in [-1, 1] glyph space, y down) -------------------------------------------
+// ---- THE WORLD ICON GRAMMAR ---------------------------------------------------------------------------------------
+// One geometric grammar for every procedural glyph, numeral, and icon — the artwork half of the token identity
+// (docs/ui-design-tokens.md, "precision-tool minimalism"). Symbols draw in [-1, 1] glyph space, y down:
+//   GRID   — symbol content lives in the +/-0.6 box; round forms may overshoot to +/-0.66 for optical balance.
+//   STROKE — every line is the ONE hairline weight (the GlyphStroke token) with round caps: unions of capsule
+//            segments and circular arcs, never a second weight.
+//   ANGLES — verticals, horizontals, 45-degree diagonals, and circular arcs; only a numeral's skeleton may take
+//            the diagonal its letterform demands.
+//   FILL   — at most one small filled focal form per symbol (a dot, a lens, a half-disc); the strokes carry the
+//            silhouette, the fill marks the point of action.
+//   HUE    — tints come from the token block's semantic roles, never per-icon literals: navigation reads TextDim,
+//            structure TextPrimary, commit/go Positive, appearance Warning, destructive/live Danger, and the
+//            interact verb Accent (the one accent-hued icon, mirroring the accent budget).
 
-float letterA(float2 p) {
-    float d = distanceToSegment(p, float2(-0.5, 0.6), float2(0.0, -0.6));
-
-    d = min(d, distanceToSegment(p, float2(0.0, -0.6), float2(0.5, 0.6)));
-    d = min(d, distanceToSegment(p, float2(-0.27, 0.15), float2(0.27, 0.15)));
-
-    return d;
+// The token palette's rgb for an icon tint.
+float3 tokenHue(uint role) {
+    return OverlayTokenColor(overlayData, role).rgb;
 }
 
-float letterL(float2 p) {
-    float d = distanceToSegment(p, float2(-0.25, -0.6), float2(-0.25, 0.6));
-
-    return min(d, distanceToSegment(p, float2(-0.25, 0.6), float2(0.35, 0.6)));
-}
-
-float letterR(float2 p) {
-    float d = distanceToSegment(p, float2(-0.35, -0.6), float2(-0.35, 0.6));
-
-    d = min(d, abs(length(p - float2(-0.02, -0.28)) - 0.32));
-    d = min(d, distanceToSegment(p, float2(-0.05, 0.02), float2(0.4, 0.6)));
-
-    return d;
-}
-
-// A chevron pointing up; the arrows rotate it by quarter turns.
+// A directional chevron pointing up: two 45-degree capsule arms; the arrows rotate it by quarter turns.
 float chevron(float2 p) {
-    float d = distanceToSegment(p, float2(-0.55, 0.28), float2(0.0, -0.28));
+    float d = distanceToSegment(p, float2(-0.45, 0.22), float2(0.0, -0.23));
 
-    return min(d, distanceToSegment(p, float2(0.0, -0.28), float2(0.55, 0.28)));
+    return min(d, distanceToSegment(p, float2(0.0, -0.23), float2(0.45, 0.22)));
 }
 
 // ---- gamepad glyph badges (ids: KEEP IN SYNC with OverlayGlyphId) -------------------------------------------------
-// Letter-shaped badges (A/B/X/Y, LB/RB/LT/RT/LS/RS) render from the shared atlas via the packed label bits; only the
-// iconographic glyphs below stay procedural.
+// Text-labeled badges (LB/RB/LT/RT/LS/RS) render from the shared atlas via the packed label bits; the d-pad arrows
+// and the neutral face-position glyphs stay procedural.
+
+// The face-position glyph — the NEUTRAL, family-invariant face-button treatment: the four-position diamond drawn
+// as abstract positions (a filled dot at the named position, hairline pips at the other three), no vendor's
+// branding. Position index: 0 north, 1 east, 2 south, 3 west (compass order, matching the physical diamond).
+float facePosition(uint position, float2 p) {
+    float d = 1e3;
+
+    [unroll]
+    for (uint i = 0u; (i < 4u); i++) {
+        // Compass point i on the badge diamond (N/E/S/W), radius 0.55.
+        float2 c = ((i == 0u) ? float2(0.0, -0.55) : ((i == 1u) ? float2(0.55, 0.0) : ((i == 2u) ? float2(0.0, 0.55) : float2(-0.55, 0.0))));
+
+        d = min(d, (length(p - c) - ((i == position) ? 0.30 : 0.06)));
+    }
+
+    return d;
+}
 
 float glyphDistance(uint glyphId, float2 p) {
     // Atlas ids (>= 1024) are the reserved texture path; until it exists they draw nothing.
@@ -136,69 +146,98 @@ float glyphDistance(uint glyphId, float2 p) {
         case 2u: return chevron(float2(p.y, -p.x));                    // ArrowRight
         case 3u: return chevron(-p);                                   // ArrowDown
         case 4u: return chevron(float2(-p.y, p.x));                    // ArrowLeft
-        case 5u: {                                                     // ShapeTriangle (PlayStation 5)
-            float d = distanceToSegment(p, float2(0.0, -0.62), float2(0.6, 0.5));
-
-            d = min(d, distanceToSegment(p, float2(0.6, 0.5), float2(-0.6, 0.5)));
-
-            return min(d, distanceToSegment(p, float2(-0.6, 0.5), float2(0.0, -0.62)));
-        }
-        case 6u: return abs(length(p) - 0.58);                         // ShapeCircle
-        case 7u: {                                                     // ShapeCross
-            float d = distanceToSegment(p, float2(-0.5, -0.5), float2(0.5, 0.5));
-
-            return min(d, distanceToSegment(p, float2(-0.5, 0.5), float2(0.5, -0.5)));
-        }
-        case 8u: return abs(sdRoundedBox(p, float2(0.5, 0.5), 0.12));  // ShapeSquare
+        case 5u: return facePosition(0u, p);                           // FaceNorth
+        case 6u: return facePosition(1u, p);                           // FaceEast
+        case 7u: return facePosition(2u, p);                           // FaceSouth
+        case 8u: return facePosition(3u, p);                           // FaceWest
         default: return 1e3;
     }
 }
 
-// ---- seven-segment numerals (the generic action-slot icons) -------------------------------------------------------
-
-// Segment coverage bit masks for digits 0-9 (a=1 top, b=2 top-right, c=4 bottom-right, d=8 bottom, e=16
-// bottom-left, f=32 top-left, g=64 middle).
-static const uint SegmentMasks[10] = { 63u, 6u, 91u, 79u, 102u, 109u, 125u, 7u, 127u, 111u };
+// ---- numerals (the generic action-slot icons) ---------------------------------------------------------------------
+// Hairline drafting digits from the grammar's own vocabulary — capsule strokes and circular arcs on a shared
+// 0.40 x 0.60 half-extent box — so a numeral and an icon read as one hand. Arcs compose as a ring cut by
+// half-plane / quadrant terms (max), the same construction the icons use.
 
 float digitDistance(uint digit, float2 p) {
-    uint mask = SegmentMasks[min(digit, 9u)];
-    float d = 1e3;
+    switch (min(digit, 9u)) {
+        case 0u: return abs(sdRoundedBox(p, float2(0.38, 0.58), 0.38));
+        case 1u: {
+            float d = distanceToSegment(p, float2(-0.16, -0.34), float2(0.08, -0.58));
 
-    if (mask & 1u) { d = min(d, distanceToSegment(p, float2(-0.4, -0.8), float2(0.4, -0.8))); }
-    if (mask & 2u) { d = min(d, distanceToSegment(p, float2(0.5, -0.7), float2(0.5, -0.1))); }
-    if (mask & 4u) { d = min(d, distanceToSegment(p, float2(0.5, 0.1), float2(0.5, 0.7))); }
-    if (mask & 8u) { d = min(d, distanceToSegment(p, float2(-0.4, 0.8), float2(0.4, 0.8))); }
-    if (mask & 16u) { d = min(d, distanceToSegment(p, float2(-0.5, 0.1), float2(-0.5, 0.7))); }
-    if (mask & 32u) { d = min(d, distanceToSegment(p, float2(-0.5, -0.7), float2(-0.5, -0.1))); }
-    if (mask & 64u) { d = min(d, distanceToSegment(p, float2(-0.4, 0.0), float2(0.4, 0.0))); }
+            return min(d, distanceToSegment(p, float2(0.08, -0.58), float2(0.08, 0.58)));
+        }
+        case 2u: {
+            // The upper half-arc, the descending diagonal, the base.
+            float d = max(abs(length(p - float2(0.0, -0.26)) - 0.32), (p.y - -0.26));
 
-    return d;
+            d = min(d, distanceToSegment(p, float2(0.32, -0.26), float2(-0.32, 0.58)));
+
+            return min(d, distanceToSegment(p, float2(-0.32, 0.58), float2(0.36, 0.58)));
+        }
+        case 3u: {
+            // Flat-topped: the top bar, the diagonal into the waist, the lower bowl (open at its upper-left).
+            float d = distanceToSegment(p, float2(-0.30, -0.58), float2(0.30, -0.58));
+
+            d = min(d, distanceToSegment(p, float2(0.30, -0.58), float2(-0.02, -0.12)));
+
+            return min(d, max(abs(length(p - float2(0.0, 0.22)) - 0.34), min((0.0 - p.x), (0.22 - p.y))));
+        }
+        case 4u: {
+            float d = distanceToSegment(p, float2(0.12, -0.58), float2(-0.38, 0.22));
+
+            d = min(d, distanceToSegment(p, float2(-0.38, 0.22), float2(0.38, 0.22)));
+
+            return min(d, distanceToSegment(p, float2(0.12, -0.58), float2(0.12, 0.58)));
+        }
+        case 5u: {
+            float d = distanceToSegment(p, float2(-0.28, -0.58), float2(0.32, -0.58));
+
+            d = min(d, distanceToSegment(p, float2(-0.28, -0.58), float2(-0.28, -0.10)));
+            d = min(d, distanceToSegment(p, float2(-0.28, -0.10), float2(-0.02, -0.16)));
+
+            // The lower bowl: a ring open at its upper-left quadrant.
+            return min(d, max(abs(length(p - float2(-0.02, 0.20)) - 0.36), min((-0.02 - p.x), (0.20 - p.y))));
+        }
+        case 6u: {
+            float d = distanceToSegment(p, float2(0.24, -0.58), float2(-0.20, -0.02));
+
+            return min(d, abs(length(p - float2(0.0, 0.24)) - 0.33));
+        }
+        case 7u: {
+            float d = distanceToSegment(p, float2(-0.34, -0.58), float2(0.36, -0.58));
+
+            return min(d, distanceToSegment(p, float2(0.36, -0.58), float2(-0.06, 0.58)));
+        }
+        case 8u: {
+            float d = abs(length(p - float2(0.0, -0.28)) - 0.27);
+
+            return min(d, abs(length(p - float2(0.0, 0.27)) - 0.31));
+        }
+        default: {
+            // 9 — the point-mirror of 6.
+            float d = distanceToSegment(p, float2(-0.24, 0.58), float2(0.20, 0.02));
+
+            return min(d, abs(length(p - float2(0.0, -0.24)) - 0.33));
+        }
+    }
 }
 
 float numberDistance(uint number, float2 p) {
-    // The digits evaluate in a scaled space; the distances scale back (x the divisor) so the stroke width the
-    // caller applies stays uniform.
+    // Single digits draw at native grammar size; two digits (the actions run 1-12) evaluate in a scaled space and
+    // the distances scale back (x the divisor) so the stroke width the caller applies stays uniform.
     if (number < 10u) {
-        return (digitDistance(number, (p / 0.8)) * 0.8);
+        return digitDistance(number, p);
     }
 
-    // Two digits, side by side (the placeholder actions run 1-12).
-    float d = digitDistance((number / 10u), ((p - float2(-0.42, 0.0)) / 0.62));
+    float d = digitDistance((number / 10u), ((p - float2(-0.32, 0.0)) / 0.72));
 
-    return (min(d, digitDistance((number % 10u), ((p - float2(0.42, 0.0)) / 0.62))) * 0.62);
-}
-
-float3 hueColor(float hue) {
-    float3 k = (frac(hue + float3(0.0, (2.0 / 3.0), (1.0 / 3.0))) * 6.0);
-    float3 rgb = saturate(min((k - 3.0), (5.0 - k)));
-
-    // A gentle palette: desaturated toward white so the numerals stay readable on every hue.
-    return lerp(float3(0.85, 0.85, 0.85), (1.0 - rgb), 0.62);
+    return (min(d, digitDistance((number % 10u), ((p - float2(0.32, 0.0)) / 0.72))) * 0.72);
 }
 
 // ---- action icons (ids: KEEP IN SYNC with OverlayIconId) ----------------------------------------------------------
-// The rgb tints below are per-icon ARTWORK constants, not palette roles — the semantic palette lives in the token
-// block; an icon's identifying hue is part of its drawing.
+// Every symbol follows the icon grammar above; an icon's identifying hue is part of its drawing, but it is fetched
+// from the token block by SEMANTIC ROLE — the artwork draws from the one token palette, never its own literals.
 
 // Returns rgb = the icon tint, a = the symbol coverage, for a point in [-1, 1] icon space.
 float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
@@ -206,146 +245,149 @@ float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    if (iconId == 1u) {                                                // Generic: a plain dot
-        return float4(0.78, 0.78, 0.82, strokeMask(length(p), 0.24, aa));
+    if (iconId == 1u) {                                                // Generic: the focal dot alone
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask((length(p) - 0.16), 0.0, aa));
     }
 
     if (iconId == 2u) {                                                // Jump: a double up-chevron
-        float d = min(chevron(p - float2(0.0, -0.22)), chevron(p + float2(0.0, -0.26)));
+        float d = min(chevron(p - float2(0.0, -0.20)), chevron(p - float2(0.0, 0.24)));
 
-        return float4(0.36, 0.86, 0.46, strokeMask(d, stroke, aa));
+        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
-    if (iconId == 3u) {                                                // Interact: a diamond
-        float d = distanceToSegment(p, float2(0.0, -0.6), float2(0.6, 0.0));
+    if (iconId == 3u) {                                                // Interact: the diamond, focal dot at center
+        float2 q = (float2((p.x + p.y), (p.y - p.x)) * 0.7071);        // rotate 45 degrees: the box becomes a diamond
 
-        d = min(d, distanceToSegment(p, float2(0.6, 0.0), float2(0.0, 0.6)));
-        d = min(d, distanceToSegment(p, float2(0.0, 0.6), float2(-0.6, 0.0)));
-        d = min(d, distanceToSegment(p, float2(-0.6, 0.0), float2(0.0, -0.6)));
+        float d = abs(sdRoundedBox(q, float2(0.42, 0.42), 0.08));
 
-        return float4(0.95, 0.76, 0.28, strokeMask(d, stroke, aa));
+        d = min(d, (length(p) - 0.10));
+
+        return float4(tokenHue(OVERLAY_ROLE_ACCENT), strokeMask(d, stroke, aa));
     }
 
-    if (iconId == 4u) {                                                // Target: a reticle
-        float d = abs(length(p) - 0.5);
+    if (iconId == 4u) {                                                // Target: a reticle, focal dot at center
+        float d = abs(length(p) - 0.42);
 
-        d = min(d, distanceToSegment(p, float2(0.0, -0.85), float2(0.0, -0.55)));
-        d = min(d, distanceToSegment(p, float2(0.0, 0.55), float2(0.0, 0.85)));
-        d = min(d, distanceToSegment(p, float2(-0.85, 0.0), float2(-0.55, 0.0)));
-        d = min(d, distanceToSegment(p, float2(0.55, 0.0), float2(0.85, 0.0)));
-        d = min(d, (length(p) - 0.1));
+        d = min(d, distanceToSegment(p, float2(0.0, -0.72), float2(0.0, -0.52)));
+        d = min(d, distanceToSegment(p, float2(0.0, 0.52), float2(0.0, 0.72)));
+        d = min(d, distanceToSegment(p, float2(-0.72, 0.0), float2(-0.52, 0.0)));
+        d = min(d, distanceToSegment(p, float2(0.52, 0.0), float2(0.72, 0.0)));
+        d = min(d, (length(p) - 0.10));
 
-        return float4(0.92, 0.34, 0.32, strokeMask(d, (stroke * 0.8), aa));
+        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask(d, stroke, aa));
     }
 
-    if ((iconId >= 8u) && (iconId <= 19u)) {                           // Number1..Number12
+    if ((iconId >= 8u) && (iconId <= 19u)) {                           // Number1..Number12: drafting digits
         uint number = ((iconId - 8u) + 1u);
-        float mask = strokeMask(numberDistance(number, p), (stroke * 0.75), aa);
 
-        return float4(hueColor(float(number - 1u) / 12.0), mask);
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), strokeMask(numberDistance(number, p), stroke, aa));
     }
 
     // ---- editing verb icons (KEEP IN SYNC with OverlayIconId.Edit*) ----
 
-    if (iconId == 20u) {                                               // EditPrev: a left-pointing cycle arrow
-        float d = abs(length(p) - 0.45);                               // most of a ring...
-        d = max(d, -(p.x + 0.15));                                     // ...cut to the left half (an open loop)
-        d = min(d, distanceToSegment(p, float2(-0.45, 0.0), float2(-0.14, -0.28)));   // arrowhead
-        d = min(d, distanceToSegment(p, float2(-0.45, 0.0), float2(-0.14, 0.28)));
+    if ((iconId == 20u) || (iconId == 21u)) {                          // EditPrev / EditNext: a cycle arrow
+        // One drawing, mirrored: a ring open at its upper quadrant on the pointing side, with a 45-degree
+        // arrowhead at the side point. EditPrev points left; EditNext is its x-mirror.
+        float2 q = ((iconId == 21u) ? float2(-p.x, p.y) : p);
+        float d = max(abs(length(q) - 0.44), min(-q.x, -q.y));         // remove the upper-left quadrant
 
-        return float4(0.72, 0.82, 0.95, strokeMask(d, stroke, aa));
-    }
+        d = min(d, distanceToSegment(q, float2(-0.44, 0.0), float2(-0.61, 0.17)));
+        d = min(d, distanceToSegment(q, float2(-0.44, 0.0), float2(-0.27, 0.17)));
 
-    if (iconId == 21u) {                                               // EditNext: a right-pointing cycle arrow
-        float d = abs(length(p) - 0.45);
-        d = max(d, (p.x - 0.15));                                      // cut to the right half
-        d = min(d, distanceToSegment(p, float2(0.45, 0.0), float2(0.14, -0.28)));
-        d = min(d, distanceToSegment(p, float2(0.45, 0.0), float2(0.14, 0.28)));
-
-        return float4(0.72, 0.82, 0.95, strokeMask(d, stroke, aa));
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 22u) {                                               // EditPlace: a down-arrow onto a baseline
-        float d = distanceToSegment(p, float2(0.0, -0.6), float2(0.0, 0.32));
-        d = min(d, distanceToSegment(p, float2(-0.28, 0.05), float2(0.0, 0.34)));
-        d = min(d, distanceToSegment(p, float2(0.28, 0.05), float2(0.0, 0.34)));
-        d = min(d, distanceToSegment(p, float2(-0.5, 0.62), float2(0.5, 0.62)));      // the ground line
+        float d = distanceToSegment(p, float2(0.0, -0.52), float2(0.0, 0.22));
 
-        return float4(0.40, 0.90, 0.52, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.24, -0.02), float2(0.0, 0.22)));
+        d = min(d, distanceToSegment(p, float2(0.24, -0.02), float2(0.0, 0.22)));
+        d = min(d, distanceToSegment(p, float2(-0.44, 0.52), float2(0.44, 0.52)));
+
+        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 23u) {                                               // EditDelete: an X
-        float d = distanceToSegment(p, float2(-0.45, -0.45), float2(0.45, 0.45));
-        d = min(d, distanceToSegment(p, float2(-0.45, 0.45), float2(0.45, -0.45)));
+        float d = distanceToSegment(p, float2(-0.38, -0.38), float2(0.38, 0.38));
 
-        return float4(0.94, 0.42, 0.40, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.38, 0.38), float2(0.38, -0.38)));
+
+        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 24u) {                                               // EditExit: a leftward return arrow
-        float d = distanceToSegment(p, float2(0.5, 0.0), float2(-0.4, 0.0));
-        d = min(d, distanceToSegment(p, float2(-0.4, 0.0), float2(-0.05, -0.32)));
-        d = min(d, distanceToSegment(p, float2(-0.4, 0.0), float2(-0.05, 0.32)));
+        float d = distanceToSegment(p, float2(0.44, 0.0), float2(-0.36, 0.0));
 
-        return float4(0.95, 0.82, 0.45, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.36, 0.0), float2(-0.12, -0.24)));
+        d = min(d, distanceToSegment(p, float2(-0.36, 0.0), float2(-0.12, 0.24)));
+        d = min(d, distanceToSegment(p, float2(0.44, 0.0), float2(0.44, -0.30)));  // the return riser
+
+        return float4(tokenHue(OVERLAY_ROLE_WARNING), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 25u) {                                               // EditDuplicate: two offset squares
-        float d = abs(sdRoundedBox((p - float2(0.16, 0.16)), float2(0.34, 0.34), 0.06));
-        d = min(d, abs(sdRoundedBox((p + float2(0.16, 0.16)), float2(0.34, 0.34), 0.06)));
+        float d = abs(sdRoundedBox((p - float2(0.14, 0.14)), float2(0.30, 0.30), 0.06));
 
-        return float4(0.55, 0.85, 0.95, strokeMask(d, stroke, aa));
+        d = min(d, abs(sdRoundedBox((p + float2(0.14, 0.14)), float2(0.30, 0.30), 0.06)));
+
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 26u) {                                               // EditLink: two interlocked rings
-        float d = abs(length(p - float2(0.24, 0.0)) - 0.34);
-        d = min(d, abs(length(p + float2(0.24, 0.0)) - 0.34));
+        float d = abs(length(p - float2(0.20, 0.0)) - 0.28);
 
-        return float4(0.62, 0.92, 0.62, strokeMask(d, stroke, aa));
+        d = min(d, abs(length(p + float2(0.20, 0.0)) - 0.28));
+
+        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
-    if (iconId == 27u) {                                               // EditMaterial: a paint drop
-        float d = abs(length(p - float2(0.0, 0.18)) - 0.4);            // the round body...
-        d = min(d, distanceToSegment(p, float2(-0.26, -0.10), float2(0.0, -0.62)));   // ...tapering to a tip
-        d = min(d, distanceToSegment(p, float2(0.26, -0.10), float2(0.0, -0.62)));
-        d = min(d, (length(p - float2(0.12, 0.26)) - 0.08));           // the highlight dot
+    if (iconId == 27u) {                                               // EditMaterial: a drop, focal dot inside
+        // The round body (open at its top wedge), two strokes tapering to the tip, the focal dot.
+        float d = max(abs(length(p - float2(0.0, 0.16)) - 0.34), (-0.05 - p.y));
 
-        return float4(0.92, 0.62, 0.88, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.27, -0.05), float2(0.0, -0.52)));
+        d = min(d, distanceToSegment(p, float2(0.27, -0.05), float2(0.0, -0.52)));
+        d = min(d, (length(p - float2(0.10, 0.22)) - 0.06));
+
+        return float4(tokenHue(OVERLAY_ROLE_WARNING), strokeMask(d, stroke, aa));
     }
 
     if (iconId == 28u) {                                               // EditOpCycle: a two-circle boolean venn
-        float left = (length(p - float2(-0.2, 0.0)) - 0.42);
-        float right = (length(p - float2(0.2, 0.0)) - 0.42);
+        float left = (length(p - float2(-0.16, 0.0)) - 0.32);
+        float right = (length(p - float2(0.16, 0.0)) - 0.32);
         float d = min(abs(left), abs(right));
-        // Fill the overlap lens so the icon reads as an OPERATION, not just two rings.
+        // The overlap lens is the focal fill — the icon reads as an OPERATION, not just two rings.
         float lens = max(left, right);
 
-        return float4(0.95, 0.78, 0.42, max(strokeMask(d, stroke, aa), (0.55 * strokeMask(lens, 0.02, aa))));
+        return float4(tokenHue(OVERLAY_ROLE_WARNING), max(strokeMask(d, stroke, aa), (0.55 * strokeMask(lens, 0.0, aa))));
     }
 
     if (iconId == 29u) {                                               // EditStyle: a half-filled circle
-        float ring = abs(length(p) - 0.5);
-        float fill = max((length(p) - 0.5), -p.x);                     // solid left half
+        float ring = abs(length(p) - 0.44);
+        float fill = max((length(p) - 0.44), p.x);                     // the filled left half is the focal form
 
-        return float4(0.85, 0.85, 0.55, max(strokeMask(ring, stroke, aa), (0.7 * strokeMask(fill, 0.02, aa))));
+        return float4(tokenHue(OVERLAY_ROLE_WARNING), max(strokeMask(ring, stroke, aa), (0.7 * strokeMask(fill, 0.0, aa))));
     }
 
     if (iconId == 30u) {                                               // EditDeselect: a slashed circle
-        float d = abs(length(p) - 0.5);
-        d = min(d, distanceToSegment(p, float2(-0.36, 0.36), float2(0.36, -0.36)));
+        float d = abs(length(p) - 0.44);
 
-        return float4(0.78, 0.78, 0.82, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.31, 0.31), float2(0.31, -0.31)));
+
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask(d, stroke, aa));
     }
 
-    if (iconId == 31u) {                                               // EditRecord: a filled dot
-        return float4(0.94, 0.38, 0.38, strokeMask((length(p) - 0.34), 0.02, aa));
+    if (iconId == 31u) {                                               // EditRecord: the focal dot alone, live-red
+        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask((length(p) - 0.26), 0.0, aa));
     }
 
     if (iconId == 32u) {                                               // EditPlay: a play triangle
-        float d = distanceToSegment(p, float2(-0.34, -0.5), float2(-0.34, 0.5));
-        d = min(d, distanceToSegment(p, float2(-0.34, 0.5), float2(0.52, 0.0)));
-        d = min(d, distanceToSegment(p, float2(0.52, 0.0), float2(-0.34, -0.5)));
+        float d = distanceToSegment(p, float2(-0.30, -0.42), float2(-0.30, 0.42));
 
-        return float4(0.45, 0.92, 0.55, strokeMask(d, stroke, aa));
+        d = min(d, distanceToSegment(p, float2(-0.30, 0.42), float2(0.48, 0.0)));
+        d = min(d, distanceToSegment(p, float2(0.48, 0.0), float2(-0.30, -0.42)));
+
+        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
     return float4(0.0, 0.0, 0.0, 0.0);

@@ -60,7 +60,11 @@ float OverlayTokenScalar(StructuredBuffer<uint4> data, uint index) {
 
 // Color-role indices — KEEP IN SYNC with OverlayColorRole.
 #define OVERLAY_ROLE_TEXT_PRIMARY 0u
+#define OVERLAY_ROLE_TEXT_DIM 1u
 #define OVERLAY_ROLE_ACCENT 3u
+#define OVERLAY_ROLE_POSITIVE 4u
+#define OVERLAY_ROLE_WARNING 5u
+#define OVERLAY_ROLE_DANGER 6u
 #define OVERLAY_ROLE_ACCENT_INK 8u
 #define OVERLAY_ROLE_SURFACE_RAISED 9u
 #define OVERLAY_ROLE_ACCENT_QUIET 11u

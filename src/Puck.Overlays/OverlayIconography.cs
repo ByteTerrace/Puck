@@ -14,20 +14,21 @@ public enum OverlayGlyphId : ushort {
     ArrowRight = 2,
     ArrowDown = 3,
     ArrowLeft = 4,
-    ShapeTriangle = 5,
-    ShapeCircle = 6,
-    ShapeCross = 7,
-    ShapeSquare = 8,
-    LetterA = 9,
-    LetterB = 10,
-    LetterX = 11,
-    LetterY = 12,
-    BumperLeft = 13,
-    BumperRight = 14,
-    TriggerLeft = 15,
-    TriggerRight = 16,
-    StickLeft = 17,
-    StickRight = 18,
+    /// <summary>The four-position face diamond with the NORTH position marked — the neutral, family-invariant
+    /// face-button treatment (abstract positions, no vendor's branding).</summary>
+    FaceNorth = 5,
+    /// <summary>The face diamond with the EAST position marked.</summary>
+    FaceEast = 6,
+    /// <summary>The face diamond with the SOUTH position marked.</summary>
+    FaceSouth = 7,
+    /// <summary>The face diamond with the WEST position marked.</summary>
+    FaceWest = 8,
+    BumperLeft = 9,
+    BumperRight = 10,
+    TriggerLeft = 11,
+    TriggerRight = 12,
+    StickLeft = 13,
+    StickRight = 14,
 
     /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
     AtlasBase = 1024,
@@ -36,8 +37,8 @@ public enum OverlayGlyphId : ushort {
 /// <summary>
 /// Procedural action-icon ids for the symbol drawn on an icon element's plate. The same procedural/atlas split as
 /// <see cref="OverlayGlyphId"/> (KEEP IN SYNC with the shader); <see cref="Number1"/> through <see cref="Number12"/>
-/// render as seven-segment numerals for generic placeholder actions. The editor verbs (<see cref="EditPrev"/>
-/// onward) are the sculpt/select/place repertoire the P2 editor pages bind.
+/// render as the icon grammar's hairline drafting digits for generic placeholder actions. The editor verbs
+/// (<see cref="EditPrev"/> onward) are the sculpt/select/place repertoire the P2 editor pages bind.
 /// </summary>
 public enum OverlayIconId : ushort {
     None = 0,
@@ -93,15 +94,19 @@ public enum OverlayIconId : ushort {
 
 /// <summary>
 /// Resolves physical buttons and opaque binding icon strings to shader ids, on the CPU — the shader never knows
-/// about controller families or icon names. Face-button glyphs follow the connected family: PlayStation 5 shapes,
-/// Xbox letters (South = A), Switch Pro letters (South = B — Nintendo's positions differ from Xbox's).
+/// about controller families or icon names. Face buttons resolve to the NEUTRAL four-position diamond glyphs
+/// (the physical positions <c>Puck.Input</c> names — South/East/West/North — drawn as abstract positions), so the
+/// badge artwork is family-invariant; the family parameter remains the seam a future themed atlas tier keys on.
 /// </summary>
 public static class OverlayGamepadGlyphs {
-    /// <summary>Resolves a physical button to its family-specific badge glyph.</summary>
+    /// <summary>Resolves a physical button to its badge glyph.</summary>
     /// <param name="button">The physical button (one flag).</param>
-    /// <param name="family">The connected controller family; <see cref="GamepadType.Unknown"/> uses Xbox letters.</param>
+    /// <param name="family">The connected controller family — reserved for a future themed (atlas) glyph tier; the
+    /// procedural glyph set is family-invariant by design.</param>
     /// <returns>The glyph id.</returns>
     public static OverlayGlyphId Resolve(GamepadButtons button, GamepadType family) {
+        _ = family;
+
         return button switch {
             GamepadButtons.DpadUp => OverlayGlyphId.ArrowUp,
             GamepadButtons.DpadRight => OverlayGlyphId.ArrowRight,
@@ -111,7 +116,10 @@ public static class OverlayGamepadGlyphs {
             GamepadButtons.RightShoulder => OverlayGlyphId.BumperRight,
             GamepadButtons.LeftStickPress => OverlayGlyphId.StickLeft,
             GamepadButtons.RightStickPress => OverlayGlyphId.StickRight,
-            GamepadButtons.ButtonSouth or GamepadButtons.ButtonEast or GamepadButtons.ButtonWest or GamepadButtons.ButtonNorth => ResolveFace(button: button, family: family),
+            GamepadButtons.ButtonNorth => OverlayGlyphId.FaceNorth,
+            GamepadButtons.ButtonEast => OverlayGlyphId.FaceEast,
+            GamepadButtons.ButtonSouth => OverlayGlyphId.FaceSouth,
+            GamepadButtons.ButtonWest => OverlayGlyphId.FaceWest,
             _ => OverlayGlyphId.None,
         };
     }
@@ -162,16 +170,12 @@ public static class OverlayGamepadGlyphs {
     }
 
     /// <summary>The short ASCII label for a physical-button badge, or <see langword="null"/> for the iconographic
-    /// glyphs (d-pad arrows, the PlayStation face shapes) that read better as procedural symbols. A present label
+    /// glyphs (d-pad arrows, the face-position diamonds) that read better as procedural symbols. A present label
     /// routes the badge to shared-atlas text; its absence leaves the procedural glyph path.</summary>
     /// <param name="glyph">The badge glyph.</param>
     /// <returns>The label, at most two characters, or <see langword="null"/>.</returns>
     public static string? BadgeLabel(OverlayGlyphId glyph) =>
         glyph switch {
-            OverlayGlyphId.LetterA => "A",
-            OverlayGlyphId.LetterB => "B",
-            OverlayGlyphId.LetterX => "X",
-            OverlayGlyphId.LetterY => "Y",
             OverlayGlyphId.BumperLeft => "LB",
             OverlayGlyphId.BumperRight => "RB",
             OverlayGlyphId.TriggerLeft => "LT",
@@ -180,33 +184,4 @@ public static class OverlayGamepadGlyphs {
             OverlayGlyphId.StickRight => "RS",
             _ => null,
         };
-
-    private static OverlayGlyphId ResolveFace(GamepadButtons button, GamepadType family) {
-        if (family == GamepadType.PlayStation5) {
-            return button switch {
-                GamepadButtons.ButtonSouth => OverlayGlyphId.ShapeCross,
-                GamepadButtons.ButtonEast => OverlayGlyphId.ShapeCircle,
-                GamepadButtons.ButtonWest => OverlayGlyphId.ShapeSquare,
-                _ => OverlayGlyphId.ShapeTriangle,
-            };
-        }
-
-        if (family == GamepadType.SwitchPro) {
-            // Nintendo letters sit in different positions: B is South and A is East (X North, Y West).
-            return button switch {
-                GamepadButtons.ButtonSouth => OverlayGlyphId.LetterB,
-                GamepadButtons.ButtonEast => OverlayGlyphId.LetterA,
-                GamepadButtons.ButtonWest => OverlayGlyphId.LetterY,
-                _ => OverlayGlyphId.LetterX,
-            };
-        }
-
-        // Xbox (and unknown devices): A South, B East, X West, Y North.
-        return button switch {
-            GamepadButtons.ButtonSouth => OverlayGlyphId.LetterA,
-            GamepadButtons.ButtonEast => OverlayGlyphId.LetterB,
-            GamepadButtons.ButtonWest => OverlayGlyphId.LetterX,
-            _ => OverlayGlyphId.LetterY,
-        };
-    }
 }
