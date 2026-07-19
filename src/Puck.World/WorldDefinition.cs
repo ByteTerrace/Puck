@@ -556,7 +556,7 @@ internal sealed record WorldScene(
 internal sealed record WorldCreation(string Id, CreationDocument Document, string Hash);
 
 /// <summary>A placement's repeat facet — a row of copies IS a repeat (the Demo placement vocabulary, adopted): the
-/// stamp replays on a placement-local X/Z lattice. A row longer than <see cref="WorldPlacementPolicy.MaxRepeatPerSegment"/>
+/// stamp replays on a placement-local X/Z lattice. A row longer than <see cref="WorldAuthoringDefaults.MaxRepeatPerSegment"/>
 /// on an axis auto-splits into several emitted segments so each instance bound stays tight.</summary>
 /// <param name="SpacingX">The per-copy spacing along the placement's local X.</param>
 /// <param name="SpacingZ">The per-copy spacing along the placement's local Z.</param>
@@ -933,6 +933,78 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 }
 
 /// <summary>
+/// The world's editor/authoring policy (the P5.5 sweep's "a constant must justify not being data" section) —
+/// world-varying values the P4.5-era code scattered as literals across the editor client. Two consumption classes
+/// share this one row (whole-row mutable like every other section — never split into two sections for a consumption
+/// nuance that consumers already handle honestly):
+/// <list type="bullet">
+/// <item><description><b>BOOT-CONSUMED</b> (<see cref="AuthoringHeadroomRows"/>, <see cref="AuthoringHeadroomScreens"/>,
+/// <see cref="AuthoringHeadroomPlacements"/>, <see cref="MaxRepeatPerSegment"/>): read exactly ONCE, at
+/// <see cref="Client.WorldFrameSource"/> construction, into the frozen render-envelope capacity floor (the probe's
+/// worst-case word/instance reservation). A live mutation of one of these is captured and journaled like any other
+/// edit, but the running session's capacity floor cannot retroactively grow — the honest exception documented at
+/// D7's "applies at next boot" precedent (the validator still gates the new value against engine caps immediately,
+/// so a bad authored value never reaches a boot).</description></item>
+/// <item><description><b>LIVE-CONSUMED</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
+/// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>, <see cref="WorkbenchFraction"/>,
+/// <see cref="PreviewDeadlineFrames"/>): read fresh from the delivered definition at each use site (a candidate
+/// gather, a layout resolve, a drag-freeze tick) — a mutation takes effect at the very next tick/frame, no restart.
+/// </description></item>
+/// </list>
+/// </summary>
+/// <param name="AuthoringHeadroomRows">BOOT-CONSUMED. The scene rows of authoring headroom the construction probe
+/// reserves beyond the boot scene, captured once into <see cref="Client.WorldFrameSource"/>'s frozen field at
+/// construction.</param>
+/// <param name="AuthoringHeadroomScreens">BOOT-CONSUMED. The extra screen slots the probe reserves, bounded by the
+/// engine's <see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
+/// <param name="AuthoringHeadroomPlacements">BOOT-CONSUMED. The placement rows of headroom the probe reserves beyond
+/// the boot placements (see <see cref="Client.WorldPlacementStamper.StaticStampSegments"/>).</param>
+/// <param name="MaxRepeatPerSegment">BOOT-CONSUMED. The largest per-axis repeat count one emitted placement segment
+/// carries before auto-splitting (the Demo auto-split precedent) — frozen at construction because it feeds the same
+/// probe segment math as the headroom fields (the probe-vs-measure word-count constancy is load-bearing; see
+/// <see cref="Client.WorldFrameSource"/>'s placement-reservation remarks).</param>
+/// <param name="MinPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's floor (the Demo authoring
+/// envelope, adopted) — a pure validator bound, revalidated on every placement mutation.</param>
+/// <param name="MaxPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's ceiling — also the worst-case
+/// scale <see cref="Client.WorldPlacementAnimator"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
+/// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
+/// <param name="CandidateRadius">LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat's editor
+/// focus point — cycling never walks the whole world (UIE-10's explicit candidate policy).</param>
+/// <param name="CandidateCap">LIVE-CONSUMED. The candidate-count cap: at most this many nearest in-radius rows enter
+/// the cycle ring.</param>
+/// <param name="WorkbenchFraction">LIVE-CONSUMED. The full-height fraction a SOLE editing seat's viewport takes when
+/// 2+ seats are joined (the remaining width splits as a live rail among the playing seats) — read fresh each captured
+/// frame by <see cref="Client.WorldFrameSource.LayoutRegion(int, int, int, float)"/>.</param>
+/// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
+/// released overlay with no definition delivery after this many produced frames drops honestly.</param>
+internal sealed record WorldAuthoringDefaults(
+    int AuthoringHeadroomRows,
+    int AuthoringHeadroomScreens,
+    int AuthoringHeadroomPlacements,
+    int MaxRepeatPerSegment,
+    float MinPlacementScale,
+    float MaxPlacementScale,
+    float CandidateRadius,
+    int CandidateCap,
+    float WorkbenchFraction,
+    int PreviewDeadlineFrames
+) {
+    /// <summary>The built-in default — byte-identical to the former scattered constants (P4.5-era literals).</summary>
+    public static WorldAuthoringDefaults Default { get; } = new WorldAuthoringDefaults(
+        AuthoringHeadroomRows: 32,
+        AuthoringHeadroomScreens: 4,
+        AuthoringHeadroomPlacements: 8,
+        MaxRepeatPerSegment: 8,
+        MinPlacementScale: 0.2f,
+        MaxPlacementScale: 5.0f,
+        CandidateRadius: 32f,
+        CandidateCap: 16,
+        WorkbenchFraction: 0.70f,
+        PreviewDeadlineFrames: 12
+    );
+}
+
+/// <summary>
 /// The definition of this world — the aggregate describing what the world is, distinct from the live session state that
 /// plays in it. It gathers the static scene (<see cref="Scene"/>), the seat spawn points (<see cref="SpawnPoints"/>),
 /// the population's wander tuning (<see cref="Wander"/>), the locomotion/jump feel (<see cref="Motion"/>), and the
@@ -964,6 +1036,10 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// embedded inline-canonical with their identity hashes pinned (see <see cref="WorldCreation"/>).</param>
 /// <param name="Placements">The placement INSTANCE rows (§D6, default empty) — creations stamped by reference (see
 /// <see cref="WorldPlacement"/>).</param>
+/// <param name="Authoring">The editor/authoring policy row (the P5.5 data-fication sweep) — headroom, placement
+/// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
+/// (see <see cref="WorldAuthoringDefaults"/>). <see langword="null"/> in JSON coalesces to
+/// <see cref="WorldAuthoringDefaults.Default"/> (the <see cref="WorldStorageDefaults"/> absence convention).</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -980,7 +1056,8 @@ internal sealed record WorldDefinition(
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
     WorldStorageDefaults Storage,
     IReadOnlyList<WorldCreation> Creations,
-    IReadOnlyList<WorldPlacement> Placements
+    IReadOnlyList<WorldPlacement> Placements,
+    WorldAuthoringDefaults Authoring
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1185,6 +1262,8 @@ internal sealed record WorldDefinition(
         // No creation assets or placements in the built-in world — the editor stamps them live (editor.import /
         // editor.place) and world.save persists them.
         Creations: [],
-        Placements: []
+        Placements: [],
+        // The built-in authoring policy — byte-identical to the P4.5-era scattered constants.
+        Authoring: WorldAuthoringDefaults.Default
     );
 }

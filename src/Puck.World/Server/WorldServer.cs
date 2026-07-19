@@ -434,8 +434,15 @@ internal sealed class WorldServer {
 
         // The D7 asymmetry, presented: a defaults-class mutation edits what the NEXT boot wakes on while the live
         // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
+        // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
+        // classes at once (WorldAuthoringDefaults' own remarks name which field is which) — the headroom/repeat-cap
+        // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
+        // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
+        // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
         var documentOnly = IsDocumentDefaults(mutation: mutation);
-        var message = $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}";
+        var message = (mutation is WorldMutation.SetAuthoringDefaults
+            ? $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot"
+            : $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}");
 
         Console.Error.WriteLine(value: $"[world.mutation: {message}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation)));
@@ -570,6 +577,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => WorldSection.Creations,
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => WorldSection.Placements,
+        WorldMutation.SetAuthoringDefaults => WorldSection.Authoring,
         _ => WorldSection.Kits,
     };
 
@@ -599,6 +607,7 @@ internal sealed class WorldServer {
         WorldMutation.RemoveCreation m => $"RemoveCreation '{m.Id}'",
         WorldMutation.UpsertPlacement m => $"UpsertPlacement '{m.Placement.Id}'",
         WorldMutation.RemovePlacement m => $"RemovePlacement '{m.Id}'",
+        WorldMutation.SetAuthoringDefaults => "SetAuthoringDefaults",
         _ => "unknown",
     };
 
@@ -787,6 +796,10 @@ internal sealed class WorldServer {
                 return true;
             case WorldMutation.UpsertBindingOverlay m:
                 candidate = (current with { BindingOverlays = Upsert(list: current.BindingOverlays, item: m.Overlay, keyOf: static overlay => overlay.Id) });
+
+                return true;
+            case WorldMutation.SetAuthoringDefaults m:
+                candidate = (current with { Authoring = m.Authoring });
 
                 return true;
             case WorldMutation.RemoveBindingOverlay m:

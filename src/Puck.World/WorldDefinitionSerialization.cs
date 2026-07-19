@@ -38,6 +38,8 @@ namespace Puck.World;
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldCreation))]
 [JsonSerializable(typeof(WorldPlacement))]
+// The P5.5 editor/authoring policy row (world.authoring.set verb accessor).
+[JsonSerializable(typeof(WorldAuthoringDefaults))]
 [JsonSourceGenerationOptions(
     Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

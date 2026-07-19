@@ -32,24 +32,28 @@ internal static class WorldPlacementStamper {
     /// <summary>The emitted SEGMENT count of one placement (its repeat auto-split total; 1 unrepeated) — the unit the
     /// capacity reservation charges in, so a segmented row can never out-instance its charge.</summary>
     /// <param name="placement">The placement row.</param>
-    public static int SegmentCount(WorldPlacement placement) {
+    /// <param name="maxRepeatPerSegment">The largest per-axis repeat count one emitted segment carries (BOOT-CONSUMED
+    /// — the frame source's captured <see cref="WorldAuthoringDefaults.MaxRepeatPerSegment"/>, identical across the
+    /// construction probe, every live rebuild, and the apply-time measure).</param>
+    public static int SegmentCount(WorldPlacement placement, int maxRepeatPerSegment) {
         if ((placement.Repeat is not { } repeat) || (repeat.TotalCount <= 1)) {
             return 1;
         }
 
-        return (SegmentTotal(count: repeat.CountX) * SegmentTotal(count: repeat.CountZ));
+        return (SegmentTotal(count: repeat.CountX, maxRepeatPerSegment: maxRepeatPerSegment) * SegmentTotal(count: repeat.CountZ, maxRepeatPerSegment: maxRepeatPerSegment));
     }
 
     /// <summary>The total STATIC stamp segments of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The placement rows.</param>
-    public static int StaticStampSegments(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements) {
+    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
+    public static int StaticStampSegments(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, int maxRepeatPerSegment) {
         var segments = 0;
 
         foreach (var placement in placements) {
             if ((FindCreation(creations: creations, id: placement.CreationId) is { } creation) && !IsAnimated(creation: creation)) {
-                segments += SegmentCount(placement: placement);
+                segments += SegmentCount(placement: placement, maxRepeatPerSegment: maxRepeatPerSegment);
             }
         }
 
@@ -76,7 +80,8 @@ internal static class WorldPlacementStamper {
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The (possibly drag-composed) placement rows.</param>
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
+    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, int maxRepeatPerSegment, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in placements) {
@@ -89,7 +94,7 @@ internal static class WorldPlacementStamper {
                 ? ResolvePalette(builder: builder, creation: creation, paletteById: paletteById)
                 : RegisterPalette(builder: builder, document: creation.Document, tint: tint));
 
-            EmitPlacement(builder: builder, creation: creation.Document, paletteIds: paletteIds, placement: placement);
+            EmitPlacement(builder: builder, creation: creation.Document, paletteIds: paletteIds, placement: placement, maxRepeatPerSegment: maxRepeatPerSegment);
         }
     }
 
@@ -99,7 +104,8 @@ internal static class WorldPlacementStamper {
     /// static emission within the placement policy fits the once-sized buffers by construction. Never rendered.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="reservedCount">The reserved stamp count (boot placements + the authoring headroom).</param>
-    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount) {
+    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
+    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int maxRepeatPerSegment) {
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
             // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).
@@ -119,7 +125,7 @@ internal static class WorldPlacementStamper {
                         .Translate(offset: center)
                         .Rotate(rotation: Quaternion.Identity)
                         .SymmetryX()
-                        .RepeatLimited(spacing: new Vector3(x: 1f, y: 0f, z: 1f), limit: new Vector3(x: WorldPlacementPolicy.MaxRepeatPerSegment, y: 0f, z: WorldPlacementPolicy.MaxRepeatPerSegment))
+                        .RepeatLimited(spacing: new Vector3(x: 1f, y: 0f, z: 1f), limit: new Vector3(x: maxRepeatPerSegment, y: 0f, z: maxRepeatPerSegment))
                         .Scale(scale: Vector3.One)
                         .Translate(offset: Vector3.Zero)
                         .Rotate(rotation: Quaternion.Identity)
@@ -175,8 +181,8 @@ internal static class WorldPlacementStamper {
     }
 
     // One placement's static instances: the single-copy fast path, or the repeat auto-split (no segment bound covers
-    // more than MaxRepeatPerSegment copies per axis — the tile-cull contract the Demo path settled).
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement) {
+    // more than maxRepeatPerSegment copies per axis — the tile-cull contract the Demo path settled).
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, int maxRepeatPerSegment) {
         var reach = CreationGeometry.Reach(document: creation);
         var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
 
@@ -188,21 +194,21 @@ internal static class WorldPlacementStamper {
             return;
         }
 
-        var segmentsX = SegmentTotal(count: repeat.CountX);
-        var segmentsZ = SegmentTotal(count: repeat.CountZ);
+        var segmentsX = SegmentTotal(count: repeat.CountX, maxRepeatPerSegment: maxRepeatPerSegment);
+        var segmentsZ = SegmentTotal(count: repeat.CountZ, maxRepeatPerSegment: maxRepeatPerSegment);
 
         for (var segmentX = 0; (segmentX < segmentsX); segmentX++) {
-            var countX = SegmentCount(total: repeat.CountX, segment: segmentX);
+            var countX = SegmentCount(total: repeat.CountX, segment: segmentX, maxRepeatPerSegment: maxRepeatPerSegment);
 
             for (var segmentZ = 0; (segmentZ < segmentsZ); segmentZ++) {
-                var countZ = SegmentCount(total: repeat.CountZ, segment: segmentZ);
+                var countZ = SegmentCount(total: repeat.CountZ, segment: segmentZ, maxRepeatPerSegment: maxRepeatPerSegment);
 
                 if ((countX <= 0) || (countZ <= 0)) {
                     continue;
                 }
 
-                var offsetX = (SegmentStart(segment: segmentX) * repeat.SpacingX);
-                var offsetZ = (SegmentStart(segment: segmentZ) * repeat.SpacingZ);
+                var offsetX = (SegmentStart(segment: segmentX, maxRepeatPerSegment: maxRepeatPerSegment) * repeat.SpacingX);
+                var offsetZ = (SegmentStart(segment: segmentZ, maxRepeatPerSegment: maxRepeatPerSegment) * repeat.SpacingZ);
                 var segmentOrigin = (placement.Position + Vector3.Transform(value: new Vector3(x: offsetX, y: 0f, z: offsetZ), rotation: rotation));
                 var span = new Vector3(x: (((countX - 1) * repeat.SpacingX) * 0.5f), y: 0f, z: (((countZ - 1) * repeat.SpacingZ) * 0.5f));
                 var segmentCenter = (segmentOrigin + Vector3.Transform(value: span, rotation: rotation));
@@ -251,7 +257,8 @@ internal static class WorldPlacementStamper {
         }
     }
 
-    private static int SegmentTotal(int count) => Math.Max(val1: 1, val2: (((count + WorldPlacementPolicy.MaxRepeatPerSegment) - 1) / WorldPlacementPolicy.MaxRepeatPerSegment));
-    private static int SegmentStart(int segment) => (segment * WorldPlacementPolicy.MaxRepeatPerSegment);
-    private static int SegmentCount(int total, int segment) => (Math.Min(val1: total, val2: SegmentStart(segment: (segment + 1))) - Math.Min(val1: total, val2: SegmentStart(segment: segment)));
+    private static int SegmentTotal(int count, int maxRepeatPerSegment) => Math.Max(val1: 1, val2: (((count + maxRepeatPerSegment) - 1) / maxRepeatPerSegment));
+    private static int SegmentStart(int segment, int maxRepeatPerSegment) => (segment * maxRepeatPerSegment);
+    private static int SegmentCount(int total, int segment, int maxRepeatPerSegment) =>
+        (Math.Min(val1: total, val2: SegmentStart(segment: (segment + 1), maxRepeatPerSegment: maxRepeatPerSegment)) - Math.Min(val1: total, val2: SegmentStart(segment: segment, maxRepeatPerSegment: maxRepeatPerSegment)));
 }

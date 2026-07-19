@@ -85,9 +85,15 @@ internal static class WorldDefinitionValidator {
         ValidateBindingOverlays(overlays: definition.BindingOverlays, errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
 
+        // The editor/authoring policy row (P5.5): absent-in-JSON coalesces to the built-in default HERE (the
+        // WorldStorageDefaults absence convention) so every downstream read below sees a concrete row, never null.
+        var authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default);
+
+        ValidateAuthoring(authoring: authoring, errors: errors);
+
         var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
 
-        ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, errors: errors);
+        ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -446,6 +452,35 @@ internal static class WorldDefinitionValidator {
         }
     }
 
+    // The editor/authoring policy row (P5.5): every field finite/positive with a sane ceiling. The BOOT-CONSUMED
+    // fields (headroom, max-repeat-per-segment) are additionally capped against the engine's own limits — see
+    // WorldAuthoringDefaults' remarks for which fields are boot-consumed vs. live-consumed — so a bad authored value
+    // can never reach a boot's frozen render-envelope probe (a live-consumed field's bad value is caught the same
+    // way, on every mutation, since the validator re-runs on every composed candidate).
+    private static void ValidateAuthoring(WorldAuthoringDefaults authoring, List<string> errors) {
+        RequireIntRange(value: authoring.AuthoringHeadroomRows, min: 0, max: 256, name: "authoring.authoringHeadroomRows", errors: errors);
+        RequireIntRange(value: authoring.AuthoringHeadroomScreens, min: 0, max: SdfProgramBuilder.MaxScreenSurfaces, name: "authoring.authoringHeadroomScreens", errors: errors);
+        RequireIntRange(value: authoring.AuthoringHeadroomPlacements, min: 0, max: 256, name: "authoring.authoringHeadroomPlacements", errors: errors);
+        RequireIntRange(value: authoring.MaxRepeatPerSegment, min: 1, max: 64, name: "authoring.maxRepeatPerSegment", errors: errors);
+
+        RequirePositive(value: authoring.MinPlacementScale, name: "authoring.minPlacementScale", errors: errors);
+        RequirePositive(value: authoring.MaxPlacementScale, name: "authoring.maxPlacementScale", errors: errors);
+
+        if (float.IsFinite(f: authoring.MinPlacementScale) && float.IsFinite(f: authoring.MaxPlacementScale) &&
+            (authoring.MinPlacementScale > authoring.MaxPlacementScale)) {
+            errors.Add(item: $"authoring.minPlacementScale {authoring.MinPlacementScale} exceeds authoring.maxPlacementScale {authoring.MaxPlacementScale}.");
+        }
+
+        RequirePositive(value: authoring.CandidateRadius, name: "authoring.candidateRadius", errors: errors);
+        RequireIntRange(value: authoring.CandidateCap, min: 1, max: 256, name: "authoring.candidateCap", errors: errors);
+
+        if (!float.IsFinite(f: authoring.WorkbenchFraction) || (authoring.WorkbenchFraction <= 0f) || (authoring.WorkbenchFraction >= 1f)) {
+            errors.Add(item: $"authoring.workbenchFraction {authoring.WorkbenchFraction} must be finite and strictly between 0 and 1.");
+        }
+
+        RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
+    }
+
     // The creation ASSET rows (§D6): id presence/uniqueness, the document's own strict schema + structural invariants
     // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the UIE-6 hash pin (the carried
     // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
@@ -512,7 +547,7 @@ internal static class WorldDefinitionValidator {
     // The placement INSTANCE rows (§D6): id presence/uniqueness, the creation reference, finite transform, the policy
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact).
-    private static void ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, List<string> errors) {
+    private static void ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, List<string> errors) {
         if (placements is null) {
             errors.Add(item: "placements is required.");
 
@@ -548,8 +583,8 @@ internal static class WorldDefinitionValidator {
 
             RequireFinite(value: placement.YawDegrees, name: $"{path}.yawDegrees", errors: errors);
 
-            if (!float.IsFinite(f: placement.Scale) || (placement.Scale < WorldPlacementPolicy.MinScale) || (placement.Scale > WorldPlacementPolicy.MaxScale)) {
-                errors.Add(item: $"{path}.scale {placement.Scale} is outside {WorldPlacementPolicy.MinScale}..{WorldPlacementPolicy.MaxScale}.");
+            if (!float.IsFinite(f: placement.Scale) || (placement.Scale < authoring.MinPlacementScale) || (placement.Scale > authoring.MaxPlacementScale)) {
+                errors.Add(item: $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}.");
             }
 
             if (placement.Repeat is { } repeat) {
@@ -784,6 +819,12 @@ internal static class WorldDefinitionValidator {
     private static void RequireNonNegative(float value, string name, List<string> errors) {
         if (!float.IsFinite(f: value) || (value < 0f)) {
             errors.Add(item: $"{name} must be finite and non-negative.");
+        }
+    }
+
+    private static void RequireIntRange(int value, int min, int max, string name, List<string> errors) {
+        if ((value < min) || (value > max)) {
+            errors.Add(item: $"{name} {value} is outside {min}..{max}.");
         }
     }
 

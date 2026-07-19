@@ -26,15 +26,6 @@ internal readonly record struct EditorSelection(WorldSection Section, string Id,
 /// window and the render-path reads (<see cref="IsSceneRowSelected"/>, the HUD feed) run during frame produce, all on
 /// the launcher's window-pump thread.</remarks>
 internal sealed class WorldEditorTargeting {
-    /// <summary>The proximity-candidate radius around the seat's editor focus point, world units — the EXPLICIT
-    /// candidate policy (UIE-10): cycling never walks the whole world. Rows beyond this reach are selected by pick
-    /// or by the <c>editor.select</c> console twin.</summary>
-    internal const float CandidateRadius = 32f;
-    /// <summary>The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring, so the
-    /// chord stays usable against large placement catalogs.</summary>
-    internal const int CandidateCap = 16;
-    private const float CandidateRadiusSquared = (CandidateRadius * CandidateRadius);
-
     private readonly WorldClient m_client;
     private readonly WorldEditorPicker m_picker;
     private readonly WorldEditorSession m_session;
@@ -61,6 +52,18 @@ internal sealed class WorldEditorTargeting {
     /// <summary>The monotonic selection revision — bumped on every selection change, folded into the frame source's
     /// program-rebuild watch so a highlight lands at human cadence.</summary>
     public int Revision => m_revision;
+
+    /// <summary>LIVE-CONSUMED: the proximity-candidate radius around a seat's editor focus point, world units — the
+    /// EXPLICIT candidate policy (UIE-10): cycling never walks the whole world. Rows beyond this reach are selected
+    /// by pick or by the <c>editor.select</c> console twin. Read fresh from the delivered definition's
+    /// <see cref="WorldAuthoringDefaults.CandidateRadius"/> at every gather — a <c>world.authoring.set</c> mutation
+    /// takes effect at the very next cycle, no restart.</summary>
+    public float CandidateRadius => m_client.Definition.Authoring.CandidateRadius;
+
+    /// <summary>LIVE-CONSUMED: the candidate-count cap (<see cref="WorldAuthoringDefaults.CandidateCap"/>) — at most
+    /// this many nearest in-radius rows enter the cycle ring, so the chord stays usable against large placement
+    /// catalogs.</summary>
+    public int CandidateCap => m_client.Definition.Authoring.CandidateCap;
 
     /// <summary>The seat's current selection, or <see langword="null"/>. A selection whose row no longer resolves in
     /// the delivered definition is cleared here (the self-heal read).</summary>
@@ -201,12 +204,14 @@ internal sealed class WorldEditorTargeting {
         }
 
         var focus = m_session.Focus(slot: slot);
+        var radius = CandidateRadius;
+        var radiusSquared = (radius * radius);
         var count = 0;
 
         for (var index = 0; (index < targets.Length); index++) {
             var distanceSquared = Vector3.DistanceSquared(value1: targets[index].Focus, value2: focus);
 
-            if (distanceSquared <= CandidateRadiusSquared) {
+            if (distanceSquared <= radiusSquared) {
                 m_sortScratch[count++] = (distanceSquared, index);
             }
         }

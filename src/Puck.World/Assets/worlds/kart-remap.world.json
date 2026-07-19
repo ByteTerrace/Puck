@@ -805,5 +805,17 @@
   },
   "creations": [],
   "placements": [],
+  "authoring": {
+    "authoringHeadroomRows": 32,
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "maxRepeatPerSegment": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12
+  },
   "schema": "puck.world.def.v1"
 }

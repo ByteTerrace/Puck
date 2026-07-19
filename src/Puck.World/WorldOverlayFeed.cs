@@ -24,7 +24,7 @@ internal enum EditorActClass {
 /// <see cref="Puck.Commands.BindingPageView"/> through <see cref="WorldSeatBindings"/>, joins it against the twelve
 /// physical layout slots for the connected controller family — chips lit from the router's carried held state
 /// (<see cref="InputRouter.IsCommandHeld"/>) — scopes it into that seat's split-screen viewport rect
-/// (<see cref="WorldFrameSource.LayoutRegion(int, int, int)"/>, editor layout policy included), and publishes one
+/// (<see cref="WorldFrameSource.LayoutRegion(int, int, int, float)"/>, editor layout policy included), and publishes one
 /// <see cref="OverlayBindingBarFrame"/> — plus, for every EDITING seat, one <see cref="OverlayEditorSeat"/> HUD entry
 /// (selection readout, candidate/snap context, live drag line). Zero steady-state allocation: the per-seat arrays and
 /// pressed probes are preallocated and reused, and the HUD lines are re-formatted only when their source facts move
@@ -209,7 +209,7 @@ internal sealed class WorldOverlayFeed {
             BindingBarSeatComposer.ComposeSlots(barAlpha: barAlpha, destination: m_slots[viewIndex], family: family, isPressed: m_pressedBySlot[slot], view: view);
 
             var modifierCount = BindingBarSeatComposer.ComposeModifiers(destination: m_modifiers[viewIndex], view: view);
-            var viewport = WorldFrameSource.LayoutRegion(count: joined, index: viewIndex, soleEditorIndex: soleEditorViewIndex);
+            var viewport = WorldFrameSource.LayoutRegion(count: joined, index: viewIndex, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
 
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,

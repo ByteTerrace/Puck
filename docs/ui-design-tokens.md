@@ -1,8 +1,12 @@
 # Puck UI design tokens
 
 This document is the design contract implemented by
-`src/Puck.Demo/Ui/DesignTokens.cs`. Values are specified in hexadecimal,
-RGBA, pixels, or milliseconds and map directly to named C# constants.
+`src/Puck.Overlays/DesignTokens.cs` — the library home every 2D overlay
+surface (World's `UnifiedOverlayNode` first) reads instead of hand-picked
+literals. (Demo's `src/Puck.Demo/Ui/DesignTokens.cs` carries its own frozen
+copy until Demo retires — see the retirement trajectory — and is not this
+contract's implementation.) Values are specified in hexadecimal, RGBA,
+pixels, or milliseconds and map directly to named C# constants.
 
 Identity: precision-tool minimalism. Near-neutral graphite surfaces, ONE
 electric accent used sparingly and semantically, hairline outlines as the
@@ -323,3 +327,46 @@ text.
   1px repeating stroke (shader `mod`); decorative, never load-bearing.
 - **No backdrop blur, no bitmap textures, no multi-stop load-bearing
   gradients anywhere.**
+
+---
+
+## 10 · Icon repertoire (the procedural glyph grammar's feel scalars)
+
+Added directly in C# (`DesignTokens.Icon`) ahead of this document — the
+reverse of every section above, so the values here are a convenience mirror,
+**not** the spec: `src/Puck.Overlays/DesignTokens.cs`'s XML doc comments on
+`DesignTokens.Icon` are authoritative.
+
+| Token | C# constant | Value | Use |
+|---|---|---|---|
+| `icon.stroke.halfWidth` | `StrokeHalfWidth` | `0.08` (glyph-local units, box `[-1,1]`) | the hairline capsule stroke every procedural glyph/icon draws with — the icon language's one stroke weight |
+| `icon.aaRamp` | `AaRamp` | `0.10` (glyph-local units) | the procedural glyph/icon anti-alias ramp |
+| `icon.edgeAaRamp` | `EdgeAaRamp` | `1.25px` | the anti-alias ramp for hairline/rounded-rect edges |
+
+The icon grammar itself (hairline capsule strokes on a shared glyph grid)
+lives in `overlay-unified.frag.hlsl`; these three scalars are its only
+authored feel knobs, uploaded through the `OverlayTokenBlock` storage slab
+beside the rest of the palette.
+
+---
+
+## 11 · World feedback tints (presentation-only render pulls)
+
+Also added directly in C# (`DesignTokens.Feedback`) — same convention as
+§10: `src/Puck.Overlays/DesignTokens.cs`'s XML doc comments are
+authoritative, this table mirrors them. These tints are NOT UI chrome — they
+are the World editor's presentation-only SDF material pulls (a lerp toward
+the tint, never a new material system), fed to the SDF program CPU-side from
+this one token source, deliberately outside the chrome palette's accent
+budget.
+
+| Token | C# constant | Value | Use |
+|---|---|---|---|
+| `feedback.changeShimmer.tint` | `ChangeShimmerTint` | cool cyan | a delivery-changed row's albedo pulses toward this hue (mutation feedback; the undo spectacle) |
+| `feedback.changeShimmer.blendMax` | `ChangeShimmerBlendMax` | `0.6` | the shimmer's peak albedo blend (eases from this toward zero) |
+| `feedback.changeShimmer.pulseSeconds` | `ChangeShimmerPulseSeconds` | `0.9s` | one shimmer pulse's duration (render clock, never simulation state) |
+| `feedback.selection.tint` | `SelectionTint` | amber | the selected row's albedo pulls toward this hue |
+| `feedback.selection.tintBlend` | `SelectionTintBlend` | `0.65` | the selection tint's albedo blend |
+
+Distinct from the change-shimmer cyan and the chrome `danger` red by design —
+three readable hues for three readable meanings.

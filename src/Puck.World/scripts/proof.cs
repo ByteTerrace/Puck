@@ -7831,6 +7831,50 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "candidates-radius-bounds");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=0 (r 32u, cap 16)", name: "candidates-status-narrates");
 
+            // (l) P5.5 — the editor/authoring policy row is DATA, split honestly at apply: the candidate radius/cap
+            // are LIVE-CONSUMED (the very next chord reads the new value, no restart) while the headroom/repeat-cap
+            // fields are BOOT-CONSUMED (the running session's frozen render-envelope probe cannot retroactively
+            // grow — the accept echo narrates "next boot" for that half of the SAME whole-row mutation).
+            const string authoringDefault = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+            const string authoringHugeRadius = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":2000,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+            const string authoringTinyCap = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":3,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            // STILL at the far pose (500, 5, 500) from (j): the 32u-radius ring there is PROVEN empty
+            // ("candidates-radius-bounds" above). Growing the live radius past the ~700u distance to the flooded
+            // cluster must cross that distance boundary on the very next chord — no relaunch, no rebuild wait.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringHugeRadius}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-huge-radius");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "candidates (r 2000u, cap 16)", name: "authoring-live-radius-crosses-boundary");
+
+            // Restore the default radius — the far pose reads honestly empty again, proving the live read cuts both
+            // ways (no stale widened cache).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-restore-radius");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "authoring-live-radius-restores-empty");
+
+            // The candidate CAP is the second live lever: back at the near pose (the proven 16-candidate ring),
+            // shrinking the cap to 3 must shrink the ACTUAL ring (not just its echoed number) on the next chord —
+            // GatherCandidates' Math.Min(count, CandidateCap) reads the live cap every call.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "authoring-live-pose-near-for-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringTinyCap}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-tiny-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=3 (r 32u, cap 3)", name: "authoring-live-cap-shrinks-ring");
+
+            // Restore the default cap — the ring widens back to 16 on the next read.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-restore-cap");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=16 (r 32u, cap 16)", name: "authoring-live-cap-restores-ring");
+
+            // The boot-consumed half of the SAME mutation kind: a headroom change narrates "next boot" in the SAME
+            // accept line as the live narration above — the honest split, never two separate mutations.
+            const string authoringGrownHeadroom = "{\"authoringHeadroomRows\":40,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":0.2,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringGrownHeadroom}", expect: "headroom + max-repeat-per-segment apply at next boot", name: "authoring-boot-consumed-narrates-next-boot");
+
+            // A malformed row (min scale above max) rejects loudly before it ever reaches the frozen probe.
+            const string authoringInvertedScale = "{\"authoringHeadroomRows\":32,\"authoringHeadroomScreens\":4,\"authoringHeadroomPlacements\":8,\"maxRepeatPerSegment\":8,\"minPlacementScale\":6,\"maxPlacementScale\":5,\"candidateRadius\":32,\"candidateCap\":16,\"workbenchFraction\":0.7,\"previewDeadlineFrames\":12}";
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringInvertedScale}", expect: "exceeds authoring.maxPlacementScale", name: "authoring-validator-rejects-inverted-scale");
+
+            // Restore the byte-identical default row so the session's authoring policy ends where it started.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-final-restore");
+
             // (k) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }

@@ -181,12 +181,15 @@ internal sealed class WorldPlacementAnimator {
     /// shape); parked placeholders elsewhere. The probe path takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
-    public void Emit(SdfProgramBuilder builder, bool probeWorstCase) {
+    /// <param name="maxPlacementScale">LIVE-CONSUMED: the placement scale envelope's ceiling
+    /// (<see cref="WorldAuthoringDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
+    /// bound radii here, never a word-capacity term, so re-reading it live cannot desync the frozen probe.</param>
+    public void Emit(SdfProgramBuilder builder, bool probeWorstCase, float maxPlacementScale) {
         for (var index = 0; (index < m_pool.Length); index++) {
             var live = (probeWorstCase ? null : m_pool[index]);
             var rootSlot = (m_slotBase + (index * SlotsPerPlacement));
 
-            EmitOne(builder: builder, live: live, probeWorstCase: probeWorstCase, rootSlot: rootSlot);
+            EmitOne(builder: builder, live: live, probeWorstCase: probeWorstCase, rootSlot: rootSlot, maxPlacementScale: maxPlacementScale);
         }
     }
 
@@ -249,7 +252,7 @@ internal sealed class WorldPlacementAnimator {
     }
 
     // One pool slot's emission: palette, Pass 1 ungrouped shapes / parked placeholders, Pass 2 blend groups.
-    private static void EmitOne(SdfProgramBuilder builder, Registration? live, bool probeWorstCase, int rootSlot) {
+    private static void EmitOne(SdfProgramBuilder builder, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale) {
         var document = live?.Creation.Document;
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
@@ -257,8 +260,8 @@ internal sealed class WorldPlacementAnimator {
         var paletteIds = (probeWorstCase
             ? ProbePalette(builder: builder)
             : WorldPlacementStamper.RegisterPalette(builder: builder, document: (document ?? EmptyDocument), tint: null));
-        var placementScale = (probeWorstCase ? WorldPlacementPolicy.MaxScale : (live?.Row.Scale ?? 1f));
-        var reach = ((probeWorstCase || (document is null)) ? (2.5f * WorldPlacementPolicy.MaxScale) : (CreationGeometry.Reach(document: document!) * placementScale));
+        var placementScale = (probeWorstCase ? maxPlacementScale : (live?.Row.Scale ?? 1f));
+        var reach = ((probeWorstCase || (document is null)) ? (2.5f * maxPlacementScale) : (CreationGeometry.Reach(document: document!) * placementScale));
 
         // Pass 1 — ungrouped shapes and unused slots: one tight dynamic instance per shape slot; parked when absent
         // (the beam cull skips it with one branch). The probe stays fully active with the full modifier envelope.

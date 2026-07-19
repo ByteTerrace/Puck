@@ -100,6 +100,7 @@ internal static class WorldDefinitionLoader {
             Creations = (definition.Creations ?? []),
             Placements = (definition.Placements ?? []),
             Storage = (definition.Storage ?? WorldStorageDefaults.None),
+            Authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default),
         });
     }
 }

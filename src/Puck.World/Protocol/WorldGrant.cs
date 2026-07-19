@@ -66,6 +66,10 @@ internal enum WorldSection : byte {
 
     /// <summary>The placement INSTANCE rows (§D6) — creations stamped into the world by reference.</summary>
     Placements,
+
+    /// <summary>The editor/authoring policy row (P5.5) — headroom, placement scale envelope, candidate targeting,
+    /// the sole-editor layout split, and the drag-preview deadline (see <see cref="WorldAuthoringDefaults"/>).</summary>
+    Authoring,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

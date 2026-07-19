@@ -207,13 +207,13 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         if (m_targeting.Cycle(slot: slot, direction: direction) is not { } cycled) {
             return Echo(slot: slot, verb: verb, detail: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"no candidates within {WorldEditorTargeting.CandidateRadius:0}u — fly closer, or editor.select by id"
+                handler: $"no candidates within {m_targeting.CandidateRadius:0}u — fly closer, or editor.select by id"
             ));
         }
 
         return Echo(slot: slot, verb: verb, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{cycled.Selection.Describe()} {cycled.Distance:0.0}u of {cycled.Count} candidates (r {WorldEditorTargeting.CandidateRadius:0}u, cap {WorldEditorTargeting.CandidateCap})"
+            handler: $"{cycled.Selection.Describe()} {cycled.Distance:0.0}u of {cycled.Count} candidates (r {m_targeting.CandidateRadius:0}u, cap {m_targeting.CandidateCap})"
         ));
     }
 

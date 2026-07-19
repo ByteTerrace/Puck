@@ -220,7 +220,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection} cand={m_targeting.CandidateCount(slot: slot)} (r {WorldEditorTargeting.CandidateRadius:0}u, cap {WorldEditorTargeting.CandidateCap}){dragState}]"
+            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection} cand={m_targeting.CandidateCount(slot: slot)} (r {m_targeting.CandidateRadius:0}u, cap {m_targeting.CandidateCap}){dragState}]"
         ));
     }
 

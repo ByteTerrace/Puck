@@ -21,15 +21,14 @@ namespace Puck.World.Client;
 /// simulated count changes). A construction probe emits the complete 128-rig catalog and freezes the word, instance,
 /// and dynamic-transform envelopes; live programs contain active avatars only.</remarks>
 internal sealed class WorldFrameSource : ISdfFrameSource {
-    /// <summary>The scene rows of AUTHORING HEADROOM the construction probe reserves beyond the boot scene, so a live
-    /// editor can place rows into a booted world; a mutation past boot + headroom rejects loudly at apply time (the
-    /// envelope's honest ceiling). Sized as worst-case slabs (per-row material + box), which also covers a boulder.</summary>
-    internal const int AuthoringHeadroomRows = 32;
-    /// <summary>The extra screen slots the probe reserves (same rationale: <c>UpsertScreen</c> of a NEW index must fit
-    /// at runtime), bounded by the engine's screen-surface ceiling.</summary>
-    internal const int AuthoringHeadroomScreens = 4;
-    // Placement headroom rides WorldPlacementPolicy.AuthoringHeadroomPlacements (the centralized placement policy);
-    // the probe reserves (boot placements + headroom) worst-case stamps plus the whole animated replay pool.
+    // BOOT-CONSUMED authoring policy (WorldAuthoringDefaults, P5.5): captured ONCE at construction into the fields
+    // below, from the boot definition's Authoring row — never re-read live. These feed the frozen render-envelope
+    // probe (scene-row/screen-slot/placement-segment reservation), so a later SetAuthoringDefaults mutation is
+    // journaled but cannot retroactively grow a running session's capacity floor; it narrates "next boot" honestly.
+    private readonly int m_authoringHeadroomRows;
+    private readonly int m_authoringHeadroomScreens;
+    private readonly int m_authoringHeadroomPlacements;
+    private readonly int m_maxRepeatPerSegment;
     // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
     // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
     private static readonly Vector3 s_shimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
@@ -126,15 +125,23 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         var definition = m_client.Definition;
 
+        // Capture the BOOT-CONSUMED authoring policy once — every probe/measure/live build below reads these
+        // instance fields, never definition.Authoring again, so the frozen capacity floor and the placement-segment
+        // math stay mutually consistent for the life of this frame source (see the fields' remarks).
+        m_authoringHeadroomRows = definition.Authoring.AuthoringHeadroomRows;
+        m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
+        m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
+        m_maxRepeatPerSegment = definition.Authoring.MaxRepeatPerSegment;
+
         // A booted world may already stamp animated placements — register them before the first build so the initial
         // program emits their live pool slots.
         m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
-        m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements) + WorldPlacementPolicy.AuthoringHeadroomPlacements);
+        m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements, maxRepeatPerSegment: m_maxRepeatPerSegment) + m_authoringHeadroomPlacements);
 
         // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
-        // documented authoring headroom (scene rows, screens, AND placement stamps — WorldPlacementPolicy), so a live
-        // editor can add rows up to the reserved ceilings. Its word/instance counts become the spec's capacity floors;
-        // every active-only live rebuild fits by construction.
+        // documented authoring headroom (scene rows, screens, AND placement stamps), so a live editor can add rows up
+        // to the reserved ceilings. Its word/instance counts become the spec's capacity floors; every active-only
+        // live rebuild fits by construction.
         var probe = Build(
             scene: WithAuthoringHeadroom(scene: definition.Scene),
             screens: WithAuthoringHeadroom(screens: definition.Screens),
@@ -142,7 +149,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             creations: definition.Creations,
             probeWorstCase: true,
             placementProbe: true,
-            highlight: null
+            highlight: null,
+            maxPlacementScale: definition.Authoring.MaxPlacementScale
         );
 
         ProgramWordCapacity = probe.Words.Length;
@@ -151,7 +159,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // Publish the probed envelope + a candidate measurer so a scene/screen/placement mutation is capacity-checked
         // at apply time against the SAME worst-case build (avatars and the animated pool are always at worst case;
         // scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room before the
-        // loud rejection).
+        // loud rejection). The candidate's OWN Authoring.MaxPlacementScale feeds the animated-pool bound radius (a
+        // live-consumed value; the segment/headroom math stays on the frozen m_maxRepeatPerSegment/m_authoringHeadroom* fields).
         envelope.Configure(
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
@@ -163,7 +172,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                     creations: candidate.Creations,
                     probeWorstCase: true,
                     placementProbe: false,
-                    highlight: null
+                    highlight: null,
+                    maxPlacementScale: candidate.Authoring.MaxPlacementScale
                 );
 
                 return (Words: measured.Words.Length, Instances: measured.Instances.Count);
@@ -179,7 +189,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             creations: definition.Creations,
             probeWorstCase: false,
             placementProbe: false,
-            highlight: m_targeting
+            highlight: m_targeting,
+            maxPlacementScale: definition.Authoring.MaxPlacementScale
         );
         // The boot scene + placements are the shimmer baseline — the first delivery pulses only what it changed.
         m_shimmer.Observe(scene: definition.Scene, placements: definition.Placements, now: 0d);
@@ -261,6 +272,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 probeWorstCase: false,
                 placementProbe: false,
                 highlight: m_targeting,
+                maxPlacementScale: m_client.Definition.Authoring.MaxPlacementScale,
                 shimmerNow: m_elapsedSeconds
             );
             m_builtRevision = revision;
@@ -338,7 +350,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex);
+            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples.
@@ -437,19 +449,22 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     }
 
     // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+
-    // joined), the editing view takes the full-height left 70% — the workbench wants width and an honest aspect —
-    // and the playing seats stack in a live right rail (each keeps a visible, playable view). All-playing,
-    // single-seat, and multi-editor sessions fall through to the standard ladder.
-    internal static NormalizedRect LayoutRegion(int count, int index, int soleEditorIndex) {
+    // joined), the editing view takes the full-height left `workbenchFraction` (LIVE-CONSUMED —
+    // WorldAuthoringDefaults.WorkbenchFraction, read fresh by the one caller each captured frame; the workbench wants
+    // width and an honest aspect) and the playing seats stack in a live right rail spanning the remaining width (each
+    // keeps a visible, playable view). All-playing, single-seat, and multi-editor sessions fall through to the
+    // standard ladder.
+    internal static NormalizedRect LayoutRegion(int count, int index, int soleEditorIndex, float workbenchFraction) {
         if ((soleEditorIndex >= 0) && (count >= 2)) {
             if (index == soleEditorIndex) {
-                return new NormalizedRect(X: 0f, Y: 0f, Width: 0.70f, Height: 1f);
+                return new NormalizedRect(X: 0f, Y: 0f, Width: workbenchFraction, Height: 1f);
             }
 
             var railCount = (count - 1);
             var railIndex = ((index < soleEditorIndex) ? index : (index - 1));
+            var railWidth = (1f - workbenchFraction);
 
-            return new NormalizedRect(X: 0.70f, Y: ((float)railIndex / railCount), Width: 0.30f, Height: (1f / railCount));
+            return new NormalizedRect(X: workbenchFraction, Y: ((float)railIndex / railCount), Width: railWidth, Height: (1f / railCount));
         }
 
         return LayoutRegion(count: count, index: index);
@@ -478,12 +493,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
     // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
     // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.
-    private static WorldScene WithAuthoringHeadroom(WorldScene scene) {
-        var rows = new List<WorldSceneRow>(capacity: (scene.Rows.Count + AuthoringHeadroomRows));
+    // BOOT-CONSUMED: reads the frozen m_authoringHeadroomRows field (never definition.Authoring live).
+    private WorldScene WithAuthoringHeadroom(WorldScene scene) {
+        var rows = new List<WorldSceneRow>(capacity: (scene.Rows.Count + m_authoringHeadroomRows));
 
         rows.AddRange(collection: scene.Rows);
 
-        for (var index = 0; (index < AuthoringHeadroomRows); index++) {
+        for (var index = 0; (index < m_authoringHeadroomRows); index++) {
             rows.Add(item: new WorldSceneRow.Slab(
                 Id: $"authoring-headroom-{index}",
                 Center: Vector3.Zero,
@@ -498,9 +514,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     }
 
     // The boot screens padded with headroom slabs at free engine indices (bounded by the engine surface ceiling), so a
-    // runtime UpsertScreen of a NEW index fits the probed envelope.
-    private static IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
-        var padded = new List<WorldScreen>(capacity: (screens.Count + AuthoringHeadroomScreens));
+    // runtime UpsertScreen of a NEW index fits the probed envelope. BOOT-CONSUMED: reads the frozen
+    // m_authoringHeadroomScreens field.
+    private IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
+        var padded = new List<WorldScreen>(capacity: (screens.Count + m_authoringHeadroomScreens));
         var used = new HashSet<int>();
 
         foreach (var screen in screens) {
@@ -510,7 +527,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         var added = 0;
 
-        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (added < AuthoringHeadroomScreens)); index++) {
+        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (added < m_authoringHeadroomScreens)); index++) {
             if (!used.Add(item: index)) {
                 continue;
             }
@@ -543,7 +560,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces the static stamps
     // with the reserved worst case (construction only); the animated pool and the avatars follow `probeWorstCase`
     // (worst case for both the construction probe AND the apply-time measure).
-    private SdfProgram Build(WorldScene scene, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, double shimmerNow = 0d) {
+    private SdfProgram Build(WorldScene scene, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, float maxPlacementScale, double shimmerNow = 0d) {
         var client = m_client;
         var builder = new SdfProgramBuilder();
         var grass = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.GroundAlbedo));
@@ -623,14 +640,15 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // rows through the replay pool (worst-case under any probe). Selection amber and the change shimmer tint a
         // stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
         if (placementProbe || probeWorstCase) {
-            var candidateSegments = WorldPlacementStamper.StaticStampSegments(creations: creations, placements: placements);
+            var candidateSegments = WorldPlacementStamper.StaticStampSegments(creations: creations, placements: placements, maxRepeatPerSegment: m_maxRepeatPerSegment);
 
-            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: Math.Max(val1: candidateSegments, val2: m_placementReservation));
+            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: Math.Max(val1: candidateSegments, val2: m_placementReservation), maxRepeatPerSegment: m_maxRepeatPerSegment);
         } else {
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 creations: creations,
                 placements: placements,
+                maxRepeatPerSegment: m_maxRepeatPerSegment,
                 tintFor: ((highlight is null) ? null : id => {
                     if (highlight.IsPlacementSelected(id: id)) {
                         return (s_selectionTint, SelectionTintBlend);
@@ -645,7 +663,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             );
         }
 
-        m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase);
+        m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase, maxPlacementScale: maxPlacementScale);
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
         // each. The probe emits every catalog range; a live build emits only active ranges without renumbering slots.

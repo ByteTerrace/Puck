@@ -261,6 +261,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return Submit(mutation: new WorldMutation.RemovePlacement(Principal: WorldPrincipal.Console, Id: args[0]));
             }
         );
+        yield return Row(
+            name: "world.authoring.set",
+            description: "Replaces the whole editor/authoring policy row from one inline-JSON WorldAuthoringDefaults: world.authoring.set <json>. The candidate radius/cap, sole-editor layout split, and drag-preview deadline apply LIVE (next tick, no restart); the authoring headroom and max-repeat-per-segment feed the frozen render-envelope probe and apply at the NEXT boot (the accept echo narrates the split).",
+            info: WorldJsonContext.Default.WorldAuthoringDefaults,
+            toMutation: static authoring => new WorldMutation.SetAuthoringDefaults(Principal: WorldPrincipal.Console, Authoring: authoring)
+        );
         yield return Simulation(
             name: "world.load",
             description: "Loads a world file through the Phase 1 loader and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",

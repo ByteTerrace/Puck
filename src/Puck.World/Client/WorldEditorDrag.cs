@@ -22,8 +22,6 @@ namespace Puck.World.Client;
 /// act resolved). The frame deadline stays as the honest fallback for a missing response. Single-threaded on the
 /// window-pump thread, like every editor type here.</remarks>
 internal sealed class WorldEditorDrag {
-    // The rejection deadline: a released overlay with no definition delivery after this many produced frames drops.
-    private const int FreezeFrameDeadline = 12;
     private const float DefaultSnapPitch = 0.5f;
 
     // One seat's pending-row channel. A mutable class per seat so the per-frame paths never copy.
@@ -422,7 +420,9 @@ internal sealed class WorldEditorDrag {
                 }
             }
 
-            if (++channel.FreezeFrames > FreezeFrameDeadline) {
+            // LIVE-CONSUMED: WorldAuthoringDefaults.PreviewDeadlineFrames, read fresh every tick — a
+            // world.authoring.set mutation of the deadline takes effect on the very next frame, mid-freeze included.
+            if (++channel.FreezeFrames > m_client.Definition.Authoring.PreviewDeadlineFrames) {
                 Retire(slot: slot, channel: channel, reason: "deadline (no response)");
             }
         }

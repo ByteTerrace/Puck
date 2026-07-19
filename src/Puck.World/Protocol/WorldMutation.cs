@@ -147,4 +147,13 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The placement id to remove.</param>
     internal sealed record RemovePlacement(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole editor/authoring policy row (P5.5). A single whole-row mutation carries both
+    /// consumption classes the row holds (see <see cref="WorldAuthoringDefaults"/>'s remarks): the boot-consumed
+    /// headroom/repeat-cap fields apply at the NEXT boot (the frozen render-envelope probe cannot retroactively grow),
+    /// while the live-consumed candidate/layout/preview fields apply at the very next tick — the server's accept echo
+    /// narrates the split honestly rather than picking one class for the whole row.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Authoring">The whole authoring policy row.</param>
+    internal sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
 }
