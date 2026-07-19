@@ -484,9 +484,12 @@ internal sealed class WorldEditorSession {
             max: MaxPitchRadians
         );
         seat.Rig.Eye = (pivot + OrbitRig.Offset(yaw: seat.OrbitYaw, pitch: seat.OrbitPitch, distance: seat.OrbitDistance));
-        seat.Rig.Target = pivot;
         seat.Eye = seat.Rig.Eye;
         SetLookToward(seat: seat, target: pivot);
+        // Aim through the QUANTIZED fly angles rather than at the pivot point directly, so closing the bench hands
+        // fly mode a bit-identical view (the same eye and the same yaw/pitch-derived direction — no sub-pixel pop,
+        // and the sculpt proof's preview/stamp shots share one exact camera).
+        seat.Rig.Target = (seat.Eye + LookDirection(yaw: seat.Yaw, pitch: seat.Pitch));
 
         // The camera's planar frame for the target move (right = cross(look, up)); a degenerate eye-on-pivot frame
         // falls back to world axes so the sticks never dead-zone.

@@ -239,8 +239,9 @@ static class ProofApp {
                 "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
                 "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
                 "placements" => PlacementsProof.RunPlacements(opts: opts),
+                "sculpt" => SculptProof.RunSculpt(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt)"),
             };
         }
         catch (ArgException ex) {
@@ -271,6 +272,7 @@ static class ProofApp {
         Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -8467,6 +8469,450 @@ static class PlacementsProof {
 
     static string ShotPath(int pid, string tag, string name) {
         return Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-{name}.png");
+    }
+
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Sends world.status and parses the journal dirty counter (the stdin barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// sculpt — the P6 creation sub-editor proof, on BOTH backends: sculpt a creation from NOTHING over stdin
+// (editor.sculpt.* — primitives, palette, a chain/IK pose), commit it as ONE canonicalized UpsertCreation, stamp it
+// at the exact bench origin, and demand PIXEL IDENTITY between the workbench preview and the committed stamp (the
+// same document at the same transform through the same emission path renders the same pixels — the §P6
+// stamp-equals-preview contract). Then the two undo domains (local ring vs world journal) assert as distinct, a
+// second sculpt authors a 2-frame timeline whose stamp ANIMATES, re-sculpting it live-refreshes the placement
+// (recreate on a palette change — still animating; release when the frames delete — motion stops), an imported
+// carrier's previously-unauthorable members (cameras/behavior/extensions) survive a model round-trip, the easel
+// verb wires a bench camera onto a screen row, and the furnished save reloads byte-stably. DISPOSABLE probes only.
+static class SculptProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+    static readonly Regex HashEcho = new(pattern: @"sha256 ([0-9a-f]{12})", options: RegexOptions.Compiled);
+
+    public static int RunSculpt(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 300, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === sculpt (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === sculpt (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] sculpt proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-sculpt");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var previewPath = ShotPath(pid: pid, tag: tag, name: "preview");
+        var stampPath = ShotPath(pid: pid, tag: tag, name: "stamp");
+        var motionAPath = ShotPath(pid: pid, tag: tag, name: "motion-a");
+        var motionBPath = ShotPath(pid: pid, tag: tag, name: "motion-b");
+        var recolorAPath = ShotPath(pid: pid, tag: tag, name: "recolor-a");
+        var recolorBPath = ShotPath(pid: pid, tag: tag, name: "recolor-b");
+        var stillAPath = ShotPath(pid: pid, tag: tag, name: "still-a");
+        var stillBPath = ShotPath(pid: pid, tag: tag, name: "still-b");
+        var savedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-1.world.json");
+        var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-2.world.json");
+        // The carrier fixture is proof-authored (owner ruling: no external content enters a World proof): it exists
+        // ONLY to prove the previously-unauthorable members (cameras/behavior/extensions) survive a sculpt round-trip.
+        var carrierFixture = Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-carrier.creation.json");
+
+        File.WriteAllText(path: carrierFixture, contents: CarrierCreationJson);
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, roster to seat 1, zero census, and the editor camera at a fixed
+            // vantage over empty grass BEFORE the bench opens (the workbench orbit seeds from this pose, so the
+            // preview/stamp shots share one deterministic camera).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-grass");
+
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            // (a) SCULPT FROM NOTHING: open the bench on empty grass, control-pair the empty bench (an empty model
+            // stamps no geometry), then build a small beacon — primitives, blend, palette, and a posed 2-bone limb.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.new probe-sculpt 0 0 16",
+                expect: "[editor.sculpt.new: seat 1 sculpting 'probe-sculpt'", name: "bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=sculpt page=sculpt 'Sculpt'", name: "bar-flips-to-sculpt-group");
+            Thread.Sleep(millisecondsTimeout: 2200); // let the entry toast decay before the control pair
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-b", path: controlBPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add box", expect: "shape 1 (Box)", name: "add-box");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 1.8 0.7 1.8", expect: "scale=(1.80, 0.70, 1.80)", name: "scale-box");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add sphere 0 1.7 0", expect: "shape 2 (Sphere)", name: "add-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 2.2", expect: "scale=(2.20, 2.20, 2.20)", name: "scale-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.blend smoothunion", expect: "SmoothUnion", name: "blend-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.smooth 0.3", expect: "0.30", name: "smooth-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 0 0.92 0.30 0.18", expect: "slot 0 rgb=(0.92, 0.30, 0.18)", name: "palette-0");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 1 0.20 0.55 0.95 0.4", expect: "slot 1 rgb=(0.20, 0.55, 0.95)", name: "palette-1");
+            // The limb: three capsules off to the side, chained root-to-tip and POSED through the analytic solver
+            // (the solved transforms land in ordinary shapes, so the commit carries the pose).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 0.4 0", expect: "shape 3 (Capsule)", name: "add-limb-root");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 1.4 0", expect: "shape 4 (Capsule)", name: "add-limb-mid");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add capsule 2.2 2.4 0", expect: "shape 5 (Capsule)", name: "add-limb-tip");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.chain arm 3 4 5 limb", expect: "chain 1 'arm' (limb, 3 shapes)", name: "define-limb");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.goal arm 3.4 1.2 0.6", expect: "goal=(3.40, 1.20, 0.60) — pose re-solved", name: "pose-goal");
+
+            // (b) THE TWO UNDO DOMAINS, mid-sculpt: a nudge + local undo restores the exact position while the world
+            // journal never moves; world.undo remains the journal's verb (asserted after commit below).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 2", expect: "shape 2 (Sphere) at (0.00, 1.70, 0.00)", name: "reselect-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.nudge 0.9 0 0", expect: "at (0.90, 1.70, 0.00)", name: "nudge-sphere");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.undo", expect: "local ring — restored", name: "local-undo-restores");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 2", expect: "shape 2 (Sphere) at (0.00, 1.70, 0.00)", name: "local-undo-exact-position");
+            passed &= ComposedShotKit.Check(name: "local-ring-never-touches-journal", ok: (ReadDirty(ctx: ctx, name: "dirty-mid-sculpt") == dirty0), detail: "dirty unchanged across sculpt edits + local undo");
+
+            // (c) THE PREVIEW in pixels, then COMMIT: one canonicalized UpsertCreation with the hash echo.
+            Thread.Sleep(millisecondsTimeout: 3400); // let toasts decay: the preview shot reads geometry only
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "preview-shot", path: previewPath);
+
+            var commitMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-sculpt' applied]", name: "commit-applies");
+
+            var commitEcho = ComposedShotKit.Await(collector: ctx.Collector, mark: commitMark,
+                predicate: l => (l.Contains(value: "[editor.sculpt.commit: seat 1 'probe-sculpt'") && HashEcho.IsMatch(input: l)), deadlineSeconds: 15.0);
+            var commitHash = ((commitEcho is not null) ? HashEcho.Match(input: commitEcho).Groups[1].Value : null);
+
+            passed &= ComposedShotKit.Check(name: "commit-echoes-canonical-hash", ok: (commitHash is not null), detail: (commitHash ?? "(no hash echo)"));
+            passed &= ComposedShotKit.Check(name: "commit-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-commit") == (dirty0 + 1)), detail: "commit = one journal entry");
+
+            // The world's creation catalog pins the SAME canonical hash and stamp cost the commit echoed.
+            if (commitHash is not null) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.creations", expect: $"probe-sculpt: 5 stamp shapes sha256 {commitHash}", name: "catalog-pins-commit-hash");
+            }
+
+            // (d) STAMP = PREVIEW, byte-for-byte in pixels: close the bench (the preview vanishes; the camera holds
+            // its trailing pose), stamp the committed row at the EXACT bench transform, and demand the stamp shot
+            // repaint the preview shot's pixels to the noise floor — same document, same transform, same emission.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-sculpt'", name: "bench-closes");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-sculpt","creationId":"probe-sculpt","position":[0,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-sculpt' applied]", name: "stamp-at-bench-origin");
+            Thread.Sleep(millisecondsTimeout: 3400); // change shimmer + toast decay
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "stamp-shot", path: stampPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var preview = ComposedShotKit.DecodePng(path: previewPath);
+            var stamp = ComposedShotKit.DecodePng(path: stampPath);
+            // The identity band: center-right, clear of the editor HUD (top-left), the binding bar (bottom), the
+            // toast strip (top edge), AND the default world's capture-fed screen slab (a LIVE desktop feed at the
+            // frame's right-middle under this vantage — measured at x 0.68..0.76, y 0.50..0.72 — which would leak
+            // real-time desktop change into a determinism band). The sculpt fills the frame center under the
+            // pivot-locked orbit camera.
+            var bandX = (int)(width * 0.46);
+            var bandY = (int)(height * 0.15);
+            var bandW = (int)(width * 0.28);
+            var bandH = (int)(height * 0.27);
+            var noise = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var previewDiff = MeanAbsDiff(a: preview, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var identityDiff = MeanAbsDiff(a: stamp, b: preview, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "preview-visible",
+                ok: ((previewDiff > 0.8) && (previewDiff > (noise * 4.0))),
+                detail: $"preview band diff {previewDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x noise)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "stamp-equals-preview-pixels",
+                // The stamp must repaint the preview's band at the static noise floor: a generous absolute ceiling
+                // plus a relative guard against the preview's own repaint magnitude.
+                ok: ((identityDiff < Math.Max(val1: (noise * 4.0), val2: 0.45)) && (identityDiff < (previewDiff * 0.10))),
+                detail: $"stamp-vs-preview band diff {identityDiff.ToString(format: "F2", provider: ProofApp.Inv)} (noise {noise.ToString(format: "F2", provider: ProofApp.Inv)}, preview repaint {previewDiff.ToString(format: "F2", provider: ProofApp.Inv)})"
+            );
+
+            // Post-commit undo is the JOURNAL's domain: world.undo drops the stamp placement (the last entry).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1", name: "world-undo-is-journal-domain");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-sculpt","creationId":"probe-sculpt","position":[0,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-sculpt' applied]", name: "restamp-after-undo");
+
+            // (e) A FRAMED TIMELINE sculpted from nothing (four vertical-bounce holds — four frames is the settled
+            // robust shot scheme at the FIXED 8-tick replay cadence: a ~700 ms shot gap crosses 5..7 holds, and any
+            // of those counts mod 4 is nonzero, so the second shot ALWAYS lands a different frame index — the
+            // placements-proof lesson; a 2-frame loop can land the same frame on an even crossing count).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-motion-grass");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.new probe-motion 12 0 16",
+                expect: "[editor.sculpt.new: seat 1 sculpting 'probe-motion'", name: "motion-bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.add sphere 0 1.6 0", expect: "shape 1 (Sphere)", name: "motion-add-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.scale 2.4", expect: "scale=(2.40, 2.40, 2.40)", name: "motion-scale-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 1/1 recorded", name: "record-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/1 (rest)", name: "back-to-rest-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 2.5 0", expect: "at (0.00, 2.50, 0.00)", name: "pose-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 2/2 recorded", name: "record-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/2 (rest)", name: "back-to-rest-f3");
+            // Every frame pose is DISTINCT (a repeated pose would let a frame-delta that maps it onto its twin
+            // render two identical shots and fake a stall).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 3.2 0", expect: "at (0.00, 3.20, 0.00)", name: "pose-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 3/3 recorded", name: "record-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 0", expect: "frame 0/3 (rest)", name: "back-to-rest-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.move 0 0.9 0", expect: "at (0.00, 0.90, 0.00)", name: "pose-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.record", expect: "frame 4/4 recorded", name: "record-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "motion-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "motion-bench-closes");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: """world.placement.set {"id":"place-motion","creationId":"probe-motion","position":[12,0,16],"yawDegrees":0,"scale":1}""",
+                expect: "[world.mutation: UpsertPlacement 'place-motion' applied]", name: "stamp-motion");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "motion-shot-a", path: motionAPath);
+            Thread.Sleep(millisecondsTimeout: 700); // crosses the 8-tick hold cadence: a different frame lands
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "motion-shot-b", path: motionBPath);
+
+            var motionA = ComposedShotKit.DecodePng(path: motionAPath);
+            var motionB = ComposedShotKit.DecodePng(path: motionBPath);
+            var motion = MeanAbsDiff(a: motionB, b: motionA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var cornerStill = MeanAbsDiff(a: motionB, b: motionA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
+
+            passed &= ComposedShotKit.Check(
+                name: "sculpted-timeline-animates",
+                ok: ((motion > 0.8) && (motion > (cornerStill * 4.0))),
+                detail: $"motion band {motion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x)"
+            );
+
+            // (f) LIVE REFRESH of the animated placement, twice over: a re-sculpted PALETTE (a content/hash change —
+            // the animator recreates the replay; the stamp keeps animating in its new skin), then FRAME DELETION
+            // (the row goes static — the replay releases and the motion STOPS). Both land through ordinary commits.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-motion 12 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-motion'", name: "reopen-motion");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.palette 0 0.95 0.90 0.10", expect: "slot 0 rgb=(0.95, 0.90, 0.10)", name: "recolor-body");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "recolor-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "recolor-bench-closes");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "recolor-shot-a", path: recolorAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "recolor-shot-b", path: recolorBPath);
+
+            var recolorA = ComposedShotKit.DecodePng(path: recolorAPath);
+            var recolorB = ComposedShotKit.DecodePng(path: recolorBPath);
+            var recolorMotion = MeanAbsDiff(a: recolorB, b: recolorA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "recreated-replay-still-animates",
+                ok: ((recolorMotion > 0.8) && (recolorMotion > (cornerStill * 4.0))),
+                detail: $"post-recolor motion band {recolorMotion.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 — the hash-diff recreate kept the timeline live)"
+            );
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-motion 12 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-motion'", name: "reopen-motion-again");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame 1", expect: "frame 1/4", name: "cursor-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 3 left", name: "delete-f1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 2 left", name: "delete-f2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 1 left", name: "delete-f3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.frame.remove", expect: "frame removed — 0 left", name: "delete-f4");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-motion' applied]", name: "static-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-motion'", name: "static-bench-closes");
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "still-shot-a", path: stillAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "still-shot-b", path: stillBPath);
+
+            var stillA = ComposedShotKit.DecodePng(path: stillAPath);
+            var stillB = ComposedShotKit.DecodePng(path: stillBPath);
+            var stillness = MeanAbsDiff(a: stillB, b: stillA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "released-replay-stops-moving",
+                ok: ((stillness < Math.Max(val1: (noise * 4.0), val2: 0.45)) && ((motion <= 0) || (stillness < (motion * 0.10)))),
+                detail: $"post-release stillness {stillness.ToString(format: "F2", provider: ProofApp.Inv)} vs prior motion {motion.ToString(format: "F2", provider: ProofApp.Inv)} — the frames-deleted commit released the replay live"
+            );
+
+            // (g) THE CARRIER: previously-unauthorable members (cameras/behavior/extensions) survive a full sculpt
+            // round-trip — import, re-sculpt one nudge, commit; the saved world must still carry them verbatim.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {carrierFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-carrier' applied]", name: "import-carrier");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-carrier 20 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-carrier'", name: "carrier-bench-opens");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.select 1", expect: "shape 1", name: "carrier-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.nudge 0.3 0 0", expect: "at (0.60, 0.90, 0.00)", name: "carrier-nudge");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.commit",
+                expect: "[world.mutation: UpsertCreation 'probe-carrier' applied]", name: "carrier-commit-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-carrier'", name: "carrier-bench-closes");
+
+            // (h) THE EASEL: a bench camera + an existing screen row re-pointed at its view — the first composed
+            // diegetic surface. Asserted over the live reconcile echo (the editor-cameras precedent); a fresh bench
+            // is opened for it and closed after.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.edit probe-sculpt 0 0 16",
+                expect: "[editor.sculpt.edit: seat 1 sculpting 'probe-sculpt'", name: "easel-bench-opens");
+
+            var easelMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.easel",
+                expect: "camera 'easel-1' + screen 0 re-pointed", name: "easel-authors");
+
+            var easelBound = ComposedShotKit.Await(collector: ctx.Collector, mark: easelMark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 showing camera 'easel-1']"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "easel-screen-binds-live", ok: (easelBound is not null), detail: (easelBound?.Trim() ?? "(no live screen bind echo)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.screens", expect: "0 view bound", name: "easel-screen-listed");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.sculpt.exit", expect: "closed 'probe-sculpt'", name: "easel-bench-closes");
+
+            // (i) SAVE the furnished world for the ouroboros; the carrier's opaque members must persist verbatim.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {savedPath}", expect: "[world.save:", name: "save-sculpted-world");
+
+            var savedJson = File.ReadAllText(path: savedPath);
+
+            passed &= ComposedShotKit.Check(name: "carried-cameras-persist", ok: savedJson.Contains(value: "\"cameras\""), detail: "saved world carries the creation's cameras member");
+            passed &= ComposedShotKit.Check(name: "carried-behavior-persists", ok: savedJson.Contains(value: "\"swim\""), detail: "saved world carries the swim locomotion");
+            passed &= ComposedShotKit.Check(name: "carried-extension-persists", ok: savedJson.Contains(value: "proofExtension"), detail: "saved world carries the unknown extension member");
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "sculpt-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: previewPath);
+            ComposedShotKit.TryDelete(path: stampPath);
+            ComposedShotKit.TryDelete(path: motionAPath);
+            ComposedShotKit.TryDelete(path: motionBPath);
+            ComposedShotKit.TryDelete(path: recolorAPath);
+            ComposedShotKit.TryDelete(path: recolorBPath);
+            ComposedShotKit.TryDelete(path: stillAPath);
+            ComposedShotKit.TryDelete(path: stillBPath);
+            ComposedShotKit.TryDelete(path: carrierFixture);
+        }
+
+        // (j) THE OUROBOROS: reload the sculpted save and save again — byte identity proves the sculpted embeds
+        // (posed chains, carried members, the recomputed hash pins) are stable end to end.
+        passed &= RunReloadOuroboros(exe: exe, repoRoot: repoRoot, backend: backend, savedPath: savedPath, resavedPath: resavedPath, exitAfterSeconds: exitAfterSeconds);
+        ComposedShotKit.TryDelete(path: savedPath);
+        ComposedShotKit.TryDelete(path: resavedPath);
+
+        return passed;
+    }
+
+    static bool RunReloadOuroboros(string exe, string repoRoot, string? backend, string savedPath, string resavedPath, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: 640, height: 480, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savedPath]);
+        var process = ctx.Process;
+        var passed = true;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 3 placements 2", name: "reload-carries-sculpted-rows");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-sculpted-world");
+        }
+        finally {
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        if (!passed) {
+            return false;
+        }
+
+        var savedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: savedPath)));
+        var resavedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: resavedPath)));
+
+        return ComposedShotKit.Check(
+            name: "sculpt-ouroboros-byte-stable",
+            ok: string.Equals(a: savedHash, b: resavedHash, comparisonType: StringComparison.Ordinal),
+            detail: $"sha256 {savedHash[..12]} vs {resavedHash[..12]}"
+        );
+    }
+
+    // THE CARRIER — two shapes plus the previously-unauthorable members the sculpt model must carry verbatim: an
+    // anchored camera eye, a swim/face behavior manifest, and an unknown extension section. Proof-authored.
+    const string CarrierCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-carrier",
+          "shapes": [
+            { "id": 1, "type": "Ellipsoid", "position": { "x": 0.3, "y": 0.9, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.6, "y": 1.0, "z": 1.0 }, "material": 0 },
+            { "id": 2, "type": "Sphere", "position": { "x": 1.1, "y": 0.9, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 0.6, "y": 0.6, "z": 0.6 }, "material": 1 }
+          ],
+          "cameras": [
+            { "id": 1, "shapeId": 2, "position": { "x": 0.2, "y": 0.1, "z": 0 }, "yaw": 15, "fov": 70, "feed": "carrier-eye" }
+          ],
+          "behavior": { "locomotion": "swim", "faces": [ { "name": "face", "shapeId": 1, "defaultSource": "named:emotes" } ] },
+          "proofExtension": { "keeper": "P6 round-trip witness" }
+        }
+        """;
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-sculpt-{tag}-{pid}-{name}.png");
     }
 
     static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {

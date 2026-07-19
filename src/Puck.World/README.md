@@ -654,6 +654,45 @@ through the canonical pipeline; Demo content never ships as World content). Text
 shape budget but do not render this arc (World binds no world-space glyph
 atlas — the UIE-7 memory posture; binding one later is emission-only).
 
+**The sculpt workbench (P6, §D6)** is the creation SUB-EDITOR: a per-seat
+`Puck.Authoring.SculptModel` (primitives, blends, the 16-slot palette,
+hold-style timeline frames, IK chains — the analytic two-bone/spine
+`ChainSolver`, deliberately float host-side math) edited inside a client-local
+bench (`WorldWorkbench`). The live preview composes a synthetic creation +
+placement over the delivered rows and renders through the SAME
+`WorldPlacementStamper`/`CreationGeometry` path a committed stamp uses — what
+you sculpt IS what stamps, byte-for-byte (the proof pins it in pixels). The
+bench is a page GROUP (`sculpt` — a mode within editor mode): the resting
+build page (South adds, North re-primitives, West/East walk the LOCAL undo
+ring, D-pad cycles the target through shapes AND chain goals), LT bench
+(Commit/Easel/zoom), RT style (blend/mirror/color/smooth/scale), LT+RT frames
+(record/play/step/delete), RT+LT rig (chain define/kind/cycle/delete); the
+move stick drives the sculpt target while the look stick orbits the bench.
+`editor.sculpt.new <rowId> [x y z]` opens blank, `editor.sculpt.edit <rowId>`
+loads an existing row (carried cameras/behavior/text-runs/extensions ride
+verbatim); `editor.sculpt.commit` canonicalizes and submits ONE
+`UpsertCreation` (doc + hash from the same `CanonicalCreation`) — live
+placements of the row refresh on delivery, animated ones through the
+animator's hash-diff release+recreate. UNDO HAS TWO HONEST DOMAINS, narrated
+distinctly: `editor.sculpt.undo`/`redo` walk the bounded local ring
+(mid-sculpt, gesture-coalesced, never touches the journal);
+`world.undo` reverts committed acts (the journal). `editor.sculpt.easel`
+authors the diegetic preview easel — a fixed bench camera plus an existing
+screen row re-pointed at its view, two ordinary mutations through the live
+camera/screen reconcile (the offscreen view renders the composed program,
+preview included — the first composed diegetic surface). Every chord act has
+an `editor.sculpt.*` typed twin (~40 verbs across four modules); the editor
+HUD narrates the bench target, the `shapes n/48` stamp budget, the timeline
+cursor, and the ring/uncommitted counts. Capacity: bench entry pre-verifies
+the composed candidate against the probed envelope (ghost spawns fold the
+bench in, so all client-local previews fit TOGETHER), and the model itself
+enforces the 48-shape stamp cap. Proven on both backends by `proof.cs sculpt`
+(sculpt-from-nothing over stdin, the stamp=preview pixel identity, the
+two-domain undo split, a sculpted 2-frame timeline animating its stamp,
+live refresh on re-commit — recreate on recolor, release when the frames
+delete — the carrier round-trip of previously-unauthorable members, the
+easel's live screen bind, and the save→reload→save byte ouroboros).
+
 ## Storage (cloud-ready, local-proven)
 
 Phase 4 lands the **readiness** blueprint the eventual cloud arc executes
