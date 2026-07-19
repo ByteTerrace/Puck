@@ -319,6 +319,45 @@ public static class DesignTokens {
     }
 
     /// <summary>
+    /// The procedural icon grammar's feel scalars (the World icon language in <c>overlay-unified.frag.hlsl</c> —
+    /// hairline capsule strokes on a shared glyph grid, uploaded through the <see cref="OverlayTokenBlock"/> slab).
+    /// </summary>
+    public static class Icon {
+        /// <summary>The hairline stroke half-width every procedural glyph/icon draws with, in glyph-local units
+        /// (the glyph box is [-1, 1]) — the icon language's one stroke weight.</summary>
+        public const float StrokeHalfWidth = 0.08f;
+        /// <summary>The procedural glyph/icon anti-alias ramp, in glyph-local units.</summary>
+        public const float AaRamp = 0.10f;
+        /// <summary>The anti-alias ramp for hairline/rounded-rect edges, px.</summary>
+        public const float EdgeAaRamp = 1.25f;
+    }
+
+    /// <summary>
+    /// The world-render feedback tints — the editor's presentation-only albedo pulls (a material lerp, never a new
+    /// material system), fed to the SDF program CPU-side from this one token source. Hues sit deliberately OUTSIDE
+    /// the chrome palette's accent budget: they paint world geometry, not UI chrome.
+    /// </summary>
+    public static class Feedback {
+        /// <summary>The change shimmer's pulse tint — rows a delivery changed pulse toward this cool cyan
+        /// (mutation feedback, and the undo spectacle of history flowing backward through the world). Distinct
+        /// from the selection amber and the danger red.</summary>
+        public static readonly RgbaColor ChangeShimmerTint = new(A: 1f, B: 1f, G: 0.85f, R: 0.35f);
+
+        /// <summary>The shimmer's peak albedo blend (the pulse eases from this toward zero).</summary>
+        public const float ChangeShimmerBlendMax = 0.6f;
+
+        /// <summary>One shimmer pulse's duration, seconds (rides the render clock, never simulation state).</summary>
+        public const float ChangeShimmerPulseSeconds = 0.9f;
+
+        /// <summary>The selection tint — the selected row's albedo pulls toward this amber so a selection reads at
+        /// a glance (and a proof can count its hue).</summary>
+        public static readonly RgbaColor SelectionTint = new(A: 1f, B: 0.15f, G: 0.72f, R: 1f);
+
+        /// <summary>The selection tint's albedo blend.</summary>
+        public const float SelectionTintBlend = 0.65f;
+    }
+
+    /// <summary>
     /// Section 8 — motion. Delight is color/depth/typography, never motion: text never translates, only
     /// opacity/color/glow tween. Caps: interactions ≤ 180ms, panel transitions ≤ 320ms.
     /// </summary>

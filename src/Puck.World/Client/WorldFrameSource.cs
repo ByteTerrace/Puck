@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Cameras;
 using Puck.Compositing;
+using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.World.Server;
@@ -29,14 +30,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     internal const int AuthoringHeadroomScreens = 4;
     // Placement headroom rides WorldPlacementPolicy.AuthoringHeadroomPlacements (the centralized placement policy);
     // the probe reserves (boot placements + headroom) worst-case stamps plus the whole animated replay pool.
-    // The change shimmer: rows a delivery changed pulse toward this cool cyan — mutation feedback, and the undo
-    // spectacle (history flowing backward through the world). Distinct from the amber selection and the danger red.
-    private static readonly Vector3 s_shimmerTint = new(x: 0.35f, y: 0.85f, z: 1.0f);
-    private const float ShimmerBlendMax = 0.6f;
-    // The selection tint: the selected scene row's albedo pulls toward this amber so a selection reads at a glance
-    // (and a proof can count its hue). A material swap, not a new material system.
-    private static readonly Vector3 s_selectionTint = new(x: 1.0f, y: 0.72f, z: 0.15f);
-    private const float SelectionTintBlend = 0.65f;
+    // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
+    // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
+    private static readonly Vector3 s_shimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
+    private const float ShimmerBlendMax = DesignTokens.Feedback.ChangeShimmerBlendMax;
+    private static readonly Vector3 s_selectionTint = DesignTokens.Feedback.SelectionTint.Rgb;
+    private const float SelectionTintBlend = DesignTokens.Feedback.SelectionTintBlend;
 
     private readonly FrameRateMonitor m_frameRate;
     private readonly PlayerRoster m_roster;

@@ -1,3 +1,5 @@
+using Puck.Overlays;
+
 namespace Puck.World.Client;
 
 /// <summary>Watches delivered scene AND placement rows and pulses the ones a delivery changed — the visible answer to
@@ -11,7 +13,8 @@ namespace Puck.World.Client;
 /// so a scene row and a placement sharing an id never cross-pulse. The first <see cref="Observe"/> is the baseline
 /// and never pulses; a whole-document swap pulses everything it changed, which is honest.</remarks>
 internal sealed class WorldChangeShimmer {
-    private const double PulseSeconds = 0.9;
+    // The pulse duration token (DesignTokens.Feedback — the shimmer's feel is design data, not a local literal).
+    private const double PulseSeconds = DesignTokens.Feedback.ChangeShimmerPulseSeconds;
     // The internal pulse-key prefixes (scene / placement) — never surfaced.
     private const string SceneKeyPrefix = "s:";
     private const string PlacementKeyPrefix = "p:";

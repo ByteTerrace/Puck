@@ -55,12 +55,12 @@ public static class OverlayTokenBlock {
         BloomHaloAlpha = 7,
         BloomNeutralRingAlpha = 8,
         BloomNeutralHaloAlpha = 9,
-        /// <summary>The anti-alias ramp width for hairline/rounded-rect edges, px (not a spec token).</summary>
+        /// <summary>The anti-alias ramp width for hairline/rounded-rect edges, px (<see cref="DesignTokens.Icon.EdgeAaRamp"/>).</summary>
         EdgeAa = 10,
         ChipRestOpacity = 11,
-        /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units.</summary>
+        /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units (<see cref="DesignTokens.Icon.StrokeHalfWidth"/>).</summary>
         GlyphStroke = 12,
-        /// <summary>The procedural icon/glyph anti-alias ramp, in glyph-local units.</summary>
+        /// <summary>The procedural icon/glyph anti-alias ramp, in glyph-local units (<see cref="DesignTokens.Icon.AaRamp"/>).</summary>
         GlyphAa = 13,
         /// <summary>Half the reference chip height — the denominator that converts an absolute px token into a
         /// per-chip ratio (the chip recipes scale with each slot's own plate half-size).</summary>
@@ -114,10 +114,10 @@ public static class OverlayTokenBlock {
         WriteScalar(destination: destination, scalar: Scalar.BloomHaloAlpha, value: DesignTokens.Elevation.BloomHaloAlpha);
         WriteScalar(destination: destination, scalar: Scalar.BloomNeutralRingAlpha, value: DesignTokens.Elevation.BloomNeutralRingAlpha);
         WriteScalar(destination: destination, scalar: Scalar.BloomNeutralHaloAlpha, value: DesignTokens.Elevation.BloomNeutralHaloAlpha);
-        WriteScalar(destination: destination, scalar: Scalar.EdgeAa, value: 1.25f);
+        WriteScalar(destination: destination, scalar: Scalar.EdgeAa, value: DesignTokens.Icon.EdgeAaRamp);
         WriteScalar(destination: destination, scalar: Scalar.ChipRestOpacity, value: DesignTokens.Elevation.ChipRestOpacity);
-        WriteScalar(destination: destination, scalar: Scalar.GlyphStroke, value: 0.16f);
-        WriteScalar(destination: destination, scalar: Scalar.GlyphAa, value: 0.14f);
+        WriteScalar(destination: destination, scalar: Scalar.GlyphStroke, value: DesignTokens.Icon.StrokeHalfWidth);
+        WriteScalar(destination: destination, scalar: Scalar.GlyphAa, value: DesignTokens.Icon.AaRamp);
         WriteScalar(destination: destination, scalar: Scalar.ReferenceChipHalf, value: (DesignTokens.Space.HeightChip * 0.5f));
     }
 
