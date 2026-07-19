@@ -15,7 +15,7 @@ namespace Puck.Demo.Tracker;
 /// </summary>
 /// <remarks>
 /// WHY THIS MODULE KEEPS <c>Tracker.TrackerScene</c> OFF THE RENDER NODE'S SURFACE.
-/// <see cref="Overworld.OverworldRenderNode"/> is AT its analyzer coupling ceiling already (its own remarks say
+/// <c>OverworldRenderNode</c> is AT its analyzer coupling ceiling already (its own remarks say
 /// so — see <c>ICreatorModeHost</c>'s doc comment there), so <c>Tracker.TrackerModeState</c>/<c>TrackerScene</c>
 /// must never appear in its signature; they live behind a lazily-built static singleton
 /// (<see cref="ForgeCommands.TrackerModeInstance"/>) reached through <see cref="IServiceProvider"/>, and every edit

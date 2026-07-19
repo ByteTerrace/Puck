@@ -11,7 +11,7 @@ namespace Puck.Demo;
 /// <item>every PUSHED command activation (bound-key / gamepad chords), via <see cref="ICommandObserver.OnCommand"/>,
 /// the same contract <see cref="DemoCommandObserver"/> already taps;</item>
 /// <item>every TYPED console line (stdin-driven verbs), via <see cref="RecordTextCommand"/>, called from
-/// <see cref="DemoHost"/>'s stdin result callback — the Submit path bypasses <see cref="ICommandObserver"/>
+/// <c>DemoHost</c>'s stdin result callback — the Submit path bypasses <see cref="ICommandObserver"/>
 /// entirely, so a piped script's verbs need this second tap to show up in the narration.</item>
 /// </list>
 /// The tick boundary (and its state-hash bracket) comes from <see cref="OverworldWorld.OnTickAdvanced"/>, wired
@@ -70,7 +70,7 @@ internal sealed class TickTranscriptRecorder : ICommandObserver {
     }
 
     /// <summary>Records one TYPED console line — the Submit path <see cref="ICommandObserver"/> never sees. Called
-    /// from <see cref="DemoHost"/>'s stdin result callback for every submitted line, including this module's own
+    /// from <c>DemoHost</c>'s stdin result callback for every submitted line, including this module's own
     /// verbs (full transparency over the pipe).</summary>
     /// <param name="line">The raw submitted line.</param>
     public void RecordTextCommand(string line) {

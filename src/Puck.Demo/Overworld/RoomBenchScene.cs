@@ -15,7 +15,7 @@ namespace Puck.Demo.Overworld;
 /// loop does, but keeps its own tiny median/min/p95 report (one line, not a table) since there is only ever one
 /// "configuration" — the pinned room — per run.
 /// <para>
-/// Driven by the <c>room.bench</c> console verb (<see cref="OverworldControlCommandModule"/> /
+/// Driven by the <c>room.bench</c> console verb (<c>OverworldControlCommandModule</c> /
 /// <c>IOverworldControlHost.RoomBench</c>): <c>room.bench [n]</c> starts a run sampling n produced frames (default
 /// <see cref="DefaultSampleFrames"/>), <c>room.bench abort</c> cancels one in flight. While <see cref="Running"/> the
 /// frame source asserts <see cref="CameraFrame"/> onto <see cref="ScreenLayoutDirector.ScenarioCameraPose"/> — the

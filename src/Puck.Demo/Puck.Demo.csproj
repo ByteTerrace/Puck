@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>Exe</OutputType>
+        <!-- Arc 3 Beat B (docs/demo-to-world-port-plan.md) retired the demo's composition root, so the project is no
+             longer a runnable program (deleting Program.cs from an Exe is CS5001). It stays a compiling Library until
+             Arc 12 does `git rm -r src/Puck.Demo`. The plan anticipated a teardown-window <NoWarn> for orphaned-island
+             analyzer diagnostics; none fire against the surviving islands under this repo's analyzer set, so none is
+             added. -->
+        <OutputType>Library</OutputType>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the demo's
              cursor-overlay HLSL to both SPIR-V (Vulkan) and DXIL (DirectX). Override with /p:DxcCommand="path\to\dxc". -->
         <DxcCommand>dxc</DxcCommand>

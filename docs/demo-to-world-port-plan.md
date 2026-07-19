@@ -2009,10 +2009,19 @@ names this mechanism rather than asserting "yes."
 *The god files* — the R0 act. After this, every remaining Demo file is an
 unreferenced island:
 
+> **CORRECTED BY EXECUTION (see "Beat B execution record" below).** This table is
+> wrong on three of its six rows. `OverworldRenderNode.cs` was deleted (its shared
+> `ICreatorModeHost` interface extracted first). `OverworldDeterminism.cs` and
+> `OverworldReplayCapture.cs` are HELD (OQ-14). `OverworldFrameSource.*`,
+> `OverworldWorld.cs`, and `OverworldRoom.cs` **could not be deleted** — the held
+> OQ-14 set constructs `OverworldWorld`/`OverworldRoom`, and `OverworldFrameSource`
+> is consumed by Arc 8/9/10 files Beat B leaves standing. They are not
+> unreferenced islands; the sweep frees far less than "everything below."
+
 | File | Lines |
 |---|---|
 | `Overworld/OverworldRenderNode.cs` | 3 396 |
-| `Overworld/OverworldFrameSource.cs` + all partials (`.Control` 973, `.Emitters` 186, `.SdfDebug` 81, `.RoomBench` 255, `.Gravity` — Arc 2's) | ≈4 500 |
+| `Overworld/OverworldFrameSource.cs` + all partials (`.Control` 973, `.Emitters` 186, `.SdfDebug` 81, `.RoomBench` 255, `.AgbDebug`, `.Gravity` — Arc 2's) | ≈4 500 |
 | `Overworld/OverworldWorld.cs` | 1 391 |
 | `Overworld/OverworldRoom.cs` | 181 |
 | `Overworld/OverworldDeterminism.cs` | 194 |
@@ -2103,6 +2112,93 @@ rationale.
 2026-07-19) **moved** it to a `tools/` generator rather than deleting it. Beat A
 carries the move; Beat B's sweep must not take the file with the composition
 root.
+
+### Beat B execution record — the R17 survey deliverable (EXECUTED)
+
+**Beat B was executed; this subsection is the R17 find-all-references survey it
+owed, and it supersedes the aspirational god-files/residue/held tables above
+wherever they conflict.** The teardown was NOT the clean "delete the composition
+root + god files → every remaining file is an island" the tables above assume.
+Verified against the actual reference graph (Roslyn/compiler, not grep), three
+structural facts the plan under-modelled forced a much smaller sweep, each
+recorded below as a `(c)` disposition — *stop deleting, a real consumer exists* —
+rather than executed blindly:
+
+1. **The OQ-14 hold transitively pins the overworld sim.** The held
+   `OverworldDeterminism.cs`/`OverworldReplayCapture.cs`/`OverworldSnapshotProjection.cs`/
+   `TickTranscriptRecorder.cs` **construct and subscribe to** `OverworldWorld`
+   (`new OverworldWorld(...)`, `OverworldWorld.MaxPlayers`, `.OnTickAdvanced`) and
+   `OverworldRoom` (`OverworldRoom.WithConsolesAndShelf`). Holding the nine
+   therefore pins `OverworldWorld.cs` + `OverworldRoom.cs`, and `OverworldRoom`
+   pins `World/WorldDocument.cs` → `WorldDocumentStore.cs` (+ Arc-4's `CameraEye`,
+   Arc-5's `ScreenSource`). **None of these god/`World/` files can be deleted
+   while OQ-14 is held.** OQ-14 is *not closed here*: closing it requires the
+   explicit recorded owner decision the ruling demands, which a subagent teardown
+   cannot supply — a `git rm` is exactly what the ruling forbids. The nine (plus
+   `TickNarration.cs`, held transitively — `TickTranscriptRecorder`/
+   `IntrospectionCommandModule` reference it) stand, and OQ-14 + OQ-17 remain
+   **OPEN, still owed an owner sitting.**
+2. **`OverworldFrameSource` is a mid-graph hub, not a top-of-tree island.** It is
+   consumed as a concrete type (fields, ctor params, dictionary generics) by
+   `Bench/BenchInstaller.cs` (Arc 10), `Forge/ForgeSubject.cs` +
+   `CreatorForgeCommand.cs` (Arc 8), and `Overworld/MetaVictoryWatch.cs` (Arc 9) —
+   files Beat B leaves standing — and it in turn depends on `OverworldWorld`,
+   `WorldScene`, `MuseumRenderer`, `CompanionState`, `GamingBrickChildNode`,
+   `CreatorController`, `ConsoleFeed`, `DiegeticUiDirector`, … . Because Beat B
+   executes FIRST (OQ-15), those later-arc consumers still exist, so the whole
+   `OverworldFrameSource.*` family (7 partials, incl. an undocumented `.AgbDebug`
+   and Arc-2's `.Gravity`), `OverworldWorld`, `OverworldRoom`, and essentially the
+   entire `World/` subtree survive as a closure pinned by the surviving hub. **The
+   R0 "god-file act frees everything below" premise is false for this file** — it
+   is simultaneously a dependency of the top render node and a hub the Bench/Forge/
+   Victory capabilities hang off. It falls to the arcs that delete its consumers.
+3. **Two "deletable" god files co-locate widely-consumed shared declarations.**
+   `--emit-schema` is not a standalone file — it is `DemoRunRegistrar.EmitSchema`,
+   commingled with the composition root; extracted verbatim to **`SchemaEmitter.cs`**
+   (a standing island for Beat A's `tools/` relocation). `ICreatorModeHost` (the
+   `creator`/`tracker`/`sdf`/`agb`/`mode` host seam consumed by ~17 command modules
+   across Arcs 5–10 and the held introspection modules) lived at the tail of
+   `OverworldRenderNode.cs`; extracted to **`Overworld/ICreatorModeHost.cs`** so the
+   3,396-line node body could be deleted. (`BrickCoupling`, co-located there, had
+   no surviving consumer and died with the node.) The plan's predicted
+   teardown-window `<NoWarn>` was **not added**: no orphaned-island analyzer
+   diagnostic fires against the surviving islands under this repo's analyzer set.
+
+**Actually deleted: 18 files, 6,599 lines.** Composition root — `Program.cs`,
+`DemoHost.cs`, `DemoRunDocuments.cs`, `DemoRunRegistrar.cs`, `GraphBuilder.cs`,
+`PresentRateCommandModule.cs`. God file — `Overworld/OverworldRenderNode.cs`.
+Satellite islands (all consumers were in the deleted set) — `DemoCommandModule.cs`,
+`OverworldControlCommandModule.cs`, `AddonCommandModule.cs`, `LightingInstaller.cs`,
+`LightingCelebration.cs`, `GamepadDemoRegistration.cs`, `TextCommandModule.cs`,
+`OverworldControlGateInstaller.cs`. Residue islands —
+`Overworld/OverworldPageInput.cs`, `OverworldBrickTimeline.cs`, `LocalIntentSource.cs`.
+Plus two extraction files added and eleven surviving files doc-scrubbed of
+now-dangling `<see cref>`s (S6 precedent).
+
+**`(c)` — listed for Beat B but NOT deleted, a real consumer or the OQ-14 hold
+pins each (survives to a later arc):**
+
+| Held-back | Pinned by |
+|---|---|
+| `OverworldFrameSource.*` (7 partials), `OverworldWorld.cs`, `OverworldRoom.cs` | fact 1 (OQ-14 held set) + fact 2 (Arc 8/9/10 hub consumers) |
+| `World/` subtree (`WorldDocument`/`WorldDocumentStore` + the rest via the surviving `OverworldFrameSource`/`OverworldRoom`), `Town/` | facts 1–2 |
+| Composition-root **helpers** `HostSettings.cs`, `GpuHostComposition.cs`, `DemoPresentation.cs`, `Configuration/` (4) | shared infra: `Bench`/`DiegeticUiInstaller` resolve `HostSettings` from DI; `Forge/ForgeHost` calls `GpuHostComposition`; `OverworldFrameSource`/`CaptureSequencer` use `Configuration.*` |
+| Satellites `DebugConsoleFormat.cs`, `BindingProfileDocuments.cs`+`.DocumentStore.cs`, `DemoActionCommandModule.cs`+`DemoCommandObserver.cs`, `SdfParityProducers.cs`, `DemoShaders.cs`, `SdfProducerServices.cs`, `DemoConsole.cs` | `AgbDebug`/`GamingBrick` (Arc 5), `BindingBar`/`Ui` (OQ-3), held `TickTranscriptRecorder` — all still standing |
+| Residue `IAddonControlHost.cs`, `OverlayPanelsFeed.cs`, `ConsoleAccentPalette.cs` | extracted `ICreatorModeHost` needs the first; `Ui/` needs the second; surviving `OverworldFrameSource` needs the third |
+| `Ui/` (6), `BindingBar/` (5), `DevConsole/` (4), `Text/` (3) | **NOT-YET-ISLAND / transitive:** `DiegeticUiInstaller`/`Director` (Arc 4) hold `BindingBar`/`DevConsole` open; `MuseumRenderer` (Arc 11, held) pins `Text/SharedGlyphAtlas`. Design successors confirmed in `Puck.Overlays` — delete when their Arc-4/11 blockers clear |
+
+**HELD per ground rules / OQ-14 (untouched save doc-comment repair):** the nine
+replay/introspection files + `TickNarration.cs`; `ConsoleFeed.cs`/`ProceduralFeed.cs`
+(Arc 5, OQ-13); `Museum/MuseumRenderer.cs` (Arc 11). Transitive pins of the held
+set also stand: `ParityResult.cs` (ctor arg of `OverworldDeterminismNode`),
+`IRosterEventSource.cs`, `RosterEvent.cs`, `ControllerPlayerRegistry.cs`,
+`OverworldInput.cs`.
+
+**`(b)` — capabilities World lacks, each with an owning arc (unchanged by this
+survey):** `Audio/` (4 — cabinet chiptune output; the landed World spatial mixer
+is a different capability) → **Arc 5** (cabinet boot). `Camera/` (1 — the Game Boy
+Camera cart's webcam adapter; `Puck.Cameras` is a view-rig library, a pure name
+collision) → **Arc 5**.
 
 ### Verification
 

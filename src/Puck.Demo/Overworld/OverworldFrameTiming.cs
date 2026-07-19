@@ -4,7 +4,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// [frame-timing] sub-bucket plumbing for <see cref="OverworldRenderNode.ProduceFrame"/> — hoisted out of the node so
+/// [frame-timing] sub-bucket plumbing for <c>OverworldRenderNode.ProduceFrame</c> — hoisted out of the node so
 /// the Stopwatch machinery adds exactly ONE coupled type there (the node is at its analyzer class-coupling ceiling;
 /// see its own remarks). Presentation-side only (Stopwatch ticks, never simulation state), armed off the same
 /// <see cref="GpuTimingControl.Shared"/> state <see cref="Puck.SdfVm.SdfEngineNode"/> reads for its GPU

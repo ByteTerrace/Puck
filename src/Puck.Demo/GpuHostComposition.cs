@@ -9,8 +9,8 @@ namespace Puck.Demo;
 
 /// <summary>
 /// The one trimmed-GPU-host recipe every demo composition root shares: launcher terminal, platform windowing, camera
-/// capture, the unmanaged allocator, both presenters, and the named backend switch. <see cref="DemoHost"/> (the live
-/// demo) and <c>ForgeHost</c> (the one-shot forge harness) both build on this instead of re-declaring the block.
+/// capture, the unmanaged allocator, both presenters, and the named backend switch. The live demo host and
+/// <c>ForgeHost</c> (the one-shot forge harness) both build on this instead of re-declaring the block.
 /// <c>Puck.Post</c> keeps its own deliberately VALUE-COPIED equivalent (the POST and the demo cross-check each other;
 /// never fold the two together).
 /// </summary>
