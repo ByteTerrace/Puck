@@ -458,6 +458,13 @@
           "Puck.Hosting": "[1.0.0, )"
         }
       },
+      "puck.forge": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Authoring": "[1.0.0, )",
+          "Puck.HumbleGamingBrick": "[1.0.0, )"
+        }
+      },
       "puck.hosting": {
         "type": "Project",
         "dependencies": {

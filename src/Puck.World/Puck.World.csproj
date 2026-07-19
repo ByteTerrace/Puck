@@ -50,6 +50,9 @@
              neutral seam, so World takes the backend directly (already transitive via Puck.DirectX.Presentation). -->
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
+        <!-- The tune compile chain (AudioDocumentCompiler/TuneRom): a WorldTune asset compiles to a headless cart the
+             audio director's acquire/release hosting boots (TuneMachineSource) — the AP0 library lift, consumed. -->
+        <ProjectReference Include="..\Puck.Forge\Puck.Forge.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />

@@ -236,6 +236,14 @@ services.AddSingleton<ICommandModule, EditorSculptRigCommandModule>();
 services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
 services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
+// The audio director (AP2): derives the emitter table from the delivered definition, resolves poses per produced
+// frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for AP3's device pump.
+// Registered as its own singleton so the audio verb surface (audio.emitters) reads the same instance.
+services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
+    client: sp.GetRequiredService<WorldClient>(),
+    animator: sp.GetRequiredService<WorldPlacementAnimator>()
+));
+
 // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
 // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
 services.AddSingleton<WorldPopulation>();
@@ -324,6 +332,9 @@ services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the §2.7 principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
+// The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the AP2
+// mutation twins and the derived-emitter listing). A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
 // The diegetic screens' verb surface — screen.insert/eject boot cabinets over the wire, screen.state/peek make the
 // emulated brick state pipe-assertable.
 services.AddSingleton<ICommandModule, ScreenCommandModule>();
@@ -436,7 +447,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         targeting: sp.GetRequiredService<WorldEditorTargeting>(),
         drag: sp.GetRequiredService<WorldEditorDrag>(),
         animator: sp.GetRequiredService<WorldPlacementAnimator>(),
-        workbench: sp.GetRequiredService<WorldWorkbench>()
+        workbench: sp.GetRequiredService<WorldWorkbench>(),
+        audio: sp.GetRequiredService<WorldAudioDirector>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a

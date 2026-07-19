@@ -193,6 +193,46 @@ internal sealed class WorldPlacementAnimator {
         }
     }
 
+    /// <summary>Resolves a live ANIMATED placement's current-frame world position for one of its shapes (or its root
+    /// when <paramref name="shapeId"/> is null) — the placement-anchor seam the audio director rides. Returns
+    /// <see langword="false"/> when the placement holds no replay slot (a static placement resolves through the
+    /// stamp math instead).</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
+    /// <param name="position">The resolved world position.</param>
+    public bool TryShapePosition(string placementId, int? shapeId, out Vector3 position) {
+        if (FindRegistration(id: placementId) is not { } live) {
+            position = default;
+
+            return false;
+        }
+
+        if (shapeId is not { } targetShapeId) {
+            position = live.Row.Position;
+
+            return true;
+        }
+
+        var rootRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (live.Row.YawDegrees * (MathF.PI / 180f)));
+        var poses = FramePoses(live: live, frameCursor: live.FrameCursor);
+
+        foreach (var shape in (live.Creation.Document.Shapes ?? [])) {
+            if (shape.Id != targetShapeId) {
+                continue;
+            }
+
+            var local = (((poses is not null) && poses.TryGetValue(key: targetShapeId, value: out var pose)) ? pose.Position : shape.Position);
+
+            position = (live.Row.Position + Vector3.Transform(value: (local * live.Row.Scale), rotation: rootRotation));
+
+            return true;
+        }
+
+        position = live.Row.Position;
+
+        return true;
+    }
+
     private static Registration Register(WorldPlacement row, WorldCreation creation) => new() {
         Row = row,
         Creation = creation,

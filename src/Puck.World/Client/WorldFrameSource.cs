@@ -50,6 +50,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // The animated-placement replay pool (§D6): reconciled at the delivery boundary, ticked on the render clock,
     // packed after the avatar transforms every frame.
     private readonly WorldPlacementAnimator m_animator;
+    // The audio director (AP2): its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
+    // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
+    private readonly WorldAudioDirector m_audio;
+    // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
+    private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
@@ -93,8 +98,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
     /// <param name="animator">The animated-placement replay pool (§D6).</param>
     /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch, §P6).</param>
+    /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
+    /// per-frame snapshot publisher (AP2).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -106,7 +113,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: drag);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: workbench);
+        ArgumentNullException.ThrowIfNull(argument: audio);
 
+        m_audio = audio;
         m_frameRate = frameRate;
         m_client = client;
         m_roster = client.Roster;
@@ -141,6 +150,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // A booted world may already stamp animated placements — register them before the first build so the initial
         // program emits their live pool slots.
         m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
+        // The boot emitter derivation (a booted world may already author speakers/facets/sounds).
+        m_audio.ReconcileSpeakers(definition: definition);
         m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements, maxRepeatPerSegment: m_maxRepeatPerSegment) + m_authoringHeadroomPlacements);
 
         // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
@@ -262,6 +273,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 // The animated-placement pool reconciles at the same delivery boundary (the P4 template): cheap pose
                 // edits write in place, creation-content changes release + recreate, removals release (symmetric).
                 m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
+                // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
+                // after the animator (placement-anchored emitters read its registrations).
+                m_audio.ReconcileSpeakers(definition: m_client.Definition);
                 m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
@@ -356,6 +370,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // capacity); hidden slots park below the floor.
         m_animator.PackTransforms(transforms: m_transforms);
 
+        Array.Clear(array: m_seatCameraPoses);
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
                 continue;
@@ -365,11 +381,19 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples.
-            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds), Region: region) {
+            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target), Region: region) {
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
+            // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
+            // so "focus" listens where the active view looks (audio plan A5).
+            m_seatCameraPoses[slot] = new WorldSeatCameraPose(Joined: true, Eye: eye, Forward: (target - eye));
         }
+
+        // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
+        // poses read the packed leaf transforms; the listener reads the seat cameras (plan A3 — once per produced
+        // frame, from the produce path where render poses are already resolved).
+        _ = m_audio.Publish(transforms: m_transforms, seats: m_seatCameraPoses);
 
         return new SdfFrame(
             Program: m_program,
@@ -445,10 +469,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // frame's presentation delta) frames it instead. The anchor is the seat's render pose (interpolated and
     // error-eased, resolved by the client view this frame), so the chase camera tracks the pose the avatar is drawn
     // at and the orbit pivot rides it live.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds) {
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, out Vector3 eye, out Vector3 target) {
         var anchor = new SdfAnchor(Position: m_client.Position(index: slot), Orientation: m_client.Orientation(index: slot));
         var rig = m_editor.ResolveRig(slot: slot, chase: m_cameraRigs[slot], anchor: in anchor, time: m_elapsedSeconds, deltaSeconds: deltaSeconds);
-        var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
+        var fieldOfView = 0f;
+
+        (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
 
         return CameraSnapshot.LookAt(
             position: eye,
