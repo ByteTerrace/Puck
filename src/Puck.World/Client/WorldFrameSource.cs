@@ -557,18 +557,32 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_binder.RenderViews(context: in context, program: m_program, revision: m_builtRevision, transforms: m_transforms, time: m_elapsedSeconds);
     }
 
+    // The per-editing-seat gizmo budget (largechange-09): the projected speaker chips one seat contributes to the
+    // shared 192-record overlay table are capped here, nearest-to-camera first, so an author who declares a large
+    // speaker field cannot flood the table and starve the binding bar / editor HUD / toast — each of which reserves
+    // its own tail capacity, but only against a bounded gizmo writer. A dropped chip is off-screen priority (the
+    // farthest speakers), never a nearer one. Worst case: PlayerRoster.MaxSlots seats × this budget × 2 records
+    // (ring + icon) stays a documented fraction of MaxElements.
+    private const int MaxGizmoChipsPerSeat = 16;
+
     // One editing seat's gizmo set: every composed speaker row resolved to a world pose (the director's own anchor
-    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport.
-    // Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
-    // support-radius ring. Reuses the per-slot chip array (grown only when the speaker count does).
+    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport, then
+    // culled to MaxGizmoChipsPerSeat nearest the camera (largechange-09 — bounded admission into the shared overlay
+    // table). Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
+    // support-radius ring. Reuses the per-slot chip array (grown only when the budget-bounded count does).
     private OverlayGizmoSeat ComposeGizmoSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, IReadOnlyList<WorldSpeaker> speakers) {
-        if (m_gizmoChips[slot].Length < speakers.Count) {
-            m_gizmoChips[slot] = new OverlayGizmoChip[speakers.Count];
+        var budget = Math.Min(val1: speakers.Count, val2: MaxGizmoChipsPerSeat);
+
+        if (m_gizmoChips[slot].Length < budget) {
+            m_gizmoChips[slot] = new OverlayGizmoChip[budget];
         }
 
         var chips = m_gizmoChips[slot];
         var count = 0;
         var selection = m_targeting.Selected(slot: slot);
+        // The nearest-kept cull: the resolved camera-space depth of the FARTHEST kept chip and its slot, so once the
+        // budget fills a nearer speaker evicts the farthest instead of dropping. depths[i] tracks chips[i]'s depth.
+        Span<float> depths = stackalloc float[MaxGizmoChipsPerSeat];
 
         foreach (var speaker in speakers) {
             if (!m_audio.TryResolveSpeakerPose(speaker: speaker, transforms: m_transforms, position: out var world) ||
@@ -576,7 +590,31 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            chips[count++] = new OverlayGizmoChip(
+            var depth = Vector3.Dot(vector1: (world - camera.Position), vector2: camera.Forward);
+            int writeSlot;
+
+            if (count < budget) {
+                writeSlot = count++;
+            } else {
+                // Budget full: evict the farthest kept chip only when this one is nearer; otherwise drop this speaker.
+                // count stays at budget — we overwrite one slot in place.
+                var farthest = 0;
+
+                for (var i = 1; (i < budget); i++) {
+                    if (depths[i] > depths[farthest]) {
+                        farthest = i;
+                    }
+                }
+
+                if (depth >= depths[farthest]) {
+                    continue;
+                }
+
+                writeSlot = farthest;
+            }
+
+            depths[writeSlot] = depth;
+            chips[writeSlot] = new OverlayGizmoChip(
                 CenterX: px,
                 CenterY: py,
                 RingRadiusPx: ((speaker is WorldSpeaker.Bed bed) ? (bed.Radius * pixelsPerUnit) : 0f),
