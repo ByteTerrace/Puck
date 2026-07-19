@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Authoring\Puck.Authoring.csproj" />
+        <!-- The self-verify batteries boot forged carts on a REAL headless Humble machine (pure CPU) — the forge's
+             "verify by running" discipline lives in the library with the chain it verifies. -->
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+    </ItemGroup>
+</Project>

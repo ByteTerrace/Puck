@@ -13,6 +13,7 @@
         <Project Path="src/Puck.Demo/Puck.Demo.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
+        <Project Path="src/Puck.Forge/Puck.Forge.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
