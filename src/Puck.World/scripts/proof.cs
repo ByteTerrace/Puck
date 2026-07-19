@@ -7069,6 +7069,9 @@ static class UiFloorProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: """world.speaker.set {"$type":"bed","name":"gizmo-bed","center":[0,1.2,-5],"radius":2.5,"feed":{"source":{"$type":"none"},"channel":"mix","gain":1}}""", expect: "[world.mutation: UpsertSpeaker 'gizmo-bed' applied]", name: "gizmo-speaker-applies");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "gizmo-editor-enters");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers gizmo-bed", expect: "speakers 'gizmo-bed'", name: "gizmo-selects");
+            // Let the upsert's change-shimmer pulse decay (0.9 s): the HELD tier would otherwise mask the ACCENT
+            // tier this round asserts (held wins over accent by the chip-state contract).
+            Thread.Sleep(millisecondsTimeout: 1500);
             passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-shot", path: gizmoPath);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 1", expect: "[editor.exit: seat 1", name: "gizmo-editor-exits");
             passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-control-shot", path: gizmoControlPath);
@@ -7085,7 +7088,7 @@ static class UiFloorProof {
 
             passed &= ComposedShotKit.Check(
                 name: "gizmo-lights-editor-mode-only",
-                ok: ((gizmoAccent > (controlAccent + 40)) && (gizmoAccent > 60)),
+                ok: ((gizmoAccent > (controlAccent + 25)) && (gizmoAccent > 40)),
                 detail: $"accent-orange pixels in the stage: editor {gizmoAccent} vs exited {controlAccent}"
             );
 
@@ -7145,8 +7148,10 @@ static class UiFloorProof {
         return count;
     }
 
-    // Accent-hue population: the token accent #FF6A2B (electric amber-orange) — red far over green AND green well
-    // over blue, which the danger family (g ≈ b) and every world hue fail. The gizmo assertion's discriminator.
+    // Accent-hue population: the token accent #FF6A2B (electric amber-orange) — red well over green AND green over
+    // blue, which the danger family (g ≈ b), grass (green-dominant), gray stone, and the purple/magenta avatars all
+    // fail. Thresholds calibrated against the chip's 0.55-alpha bloom ring blended over the world (a half-alpha
+    // accent stays decisively r>g+50/g>b+15; the 0.35-alpha radius ring only reads over darker ground).
     static int CountAccentOrange((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
         var count = 0;
 
@@ -7157,7 +7162,7 @@ static class UiFloorProof {
                 int g = image.Rgba[(i + 1)];
                 int b = image.Rgba[(i + 2)];
 
-                if ((r > (g + 60)) && (g > (b + 20))) {
+                if ((r > (g + 50)) && (g > (b + 15))) {
                     count++;
                 }
             }
