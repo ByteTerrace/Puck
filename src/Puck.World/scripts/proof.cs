@@ -8089,7 +8089,7 @@ static class EditorCamerasProof {
 }
 
 // ============================================================================================
-// PLACEMENTS — the P5 creations/placements proof (§D6): import a committed creation fixture
+// PLACEMENTS — the P5 creations/placements proof (§D6): import a PROOF-AUTHORED creation
 // through the strict canonicalizer, stamp it (pixel evidence over empty grass), corrupt the
 // hash pin (loud reject), drag it (one journal entry), undo it, reject the no-cascade
 // creation removal, walk the animated fixture's timeline (pixel motion), flood the reserved
