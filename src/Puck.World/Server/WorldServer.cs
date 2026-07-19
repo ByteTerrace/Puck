@@ -504,9 +504,13 @@ internal sealed class WorldServer {
         // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
         // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
         var documentOnly = IsDocumentDefaults(mutation: mutation);
-        var message = (mutation is WorldMutation.SetAuthoringDefaults
-            ? $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot"
-            : $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}");
+        var message = mutation switch {
+            WorldMutation.SetAuthoringDefaults => $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot",
+            // SetPopulationDefaults is a THIRD timing class: the census figures are document defaults (next boot), but
+            // the SpawnPolicy is LIVE for future activations while INERT for bodies already standing — spell out the split.
+            WorldMutation.SetPopulationDefaults => $"{Describe(mutation: mutation)} applied — census figures next boot; spawn policy live for future activations, standing bodies unmoved",
+            _ => $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}",
+        };
 
         Console.Error.WriteLine(value: $"[world.mutation: {message}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation), Mutation: mutation));
@@ -634,7 +638,17 @@ internal sealed class WorldServer {
     private static bool AffectsPopulation(WorldMutation mutation) => mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns or
-        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision;
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision or
+        // The LOOK mutations re-resolve the population's look table (PRESENTATION-ONLY, but Rebuild is the one path that
+        // re-runs ResolveLookIndices and bumps the client's program-rebuild revision).
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment or
+        // SetPopulationDefaults now carries the SpawnPolicy row: Rebuild is the one path that recompiles the fixed spawn
+        // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
+        // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
+        WorldMutation.SetPopulationDefaults or
+        // A placement row can now change the census (Arc 6 groundwork for Arc 7's Inhabit facet: a placement contributes
+        // driven bodies), so a placement upsert/remove must trigger Rebuild. (R13: sequence with Arcs 1 and 7.)
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
 
     // Build the SDF contact field for a candidate — null when collision is off or the analytic provider is selected (the
     // analytic set is derived inside the population's compile, not here), the built field under the FIELD provider, or a
@@ -680,7 +694,10 @@ internal sealed class WorldServer {
         WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        // A creation look changes the emitted program word count (a body worn as a stamp), so all three look mutations
+        // ride the envelope gate — the loud capacity rejection fires at apply time, not at a later GPU allocation.
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
@@ -706,6 +723,7 @@ internal sealed class WorldServer {
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
         WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm is a build-time authoring gap, surfaced loudly rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
@@ -801,6 +819,9 @@ internal sealed class WorldServer {
         WorldMutation.SetViewDefaults => "SetViewDefaults",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
+        WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
+        WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
+        WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Policy}'",
         _ => "unknown",
     };
 
@@ -1155,6 +1176,25 @@ internal sealed class WorldServer {
                 candidate = (current with { BindingOverlays = overlays });
 
                 return true;
+            case WorldMutation.UpsertLook m:
+                candidate = (current with { Looks = Upsert(list: (current.Looks ?? []), item: m.Look, keyOf: static look => look.Name) });
+
+                return true;
+            case WorldMutation.RemoveLook m:
+                if (!Remove(list: (current.Looks ?? []), key: m.Name, keyOf: static look => look.Name, result: out var looks)) {
+                    candidate = current;
+                    reason = $"no look row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Looks = looks });
+
+                return true;
+            case WorldMutation.SetLookAssignment m:
+                candidate = (current with { LookAssignment = m.Assignment });
+
+                return true;
             default:
                 candidate = current;
                 reason = "unknown mutation kind";
@@ -1226,6 +1266,7 @@ internal sealed class WorldServer {
                 BodyColor: m_population.BodyColor(index: index),
                 Active: true,
                 Kit: m_population.KitIndex(index: index),
+                Look: m_population.LookIndex(index: index),
                 Continuity: body.TakeContinuity()
             );
         }

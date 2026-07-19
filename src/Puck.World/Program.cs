@@ -394,6 +394,9 @@ services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
 // The contact/solidity verb surface — world.collision(.on/.off/.skin/.slope/.gradient/.provider), world.kit.collider/
 // .model/.response, world.scene.solid, and the world.contacts read. A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
+// The LOOK verb surface — world.look.set/.remove/.assign/.tune, world.population.spawn (the spawn-policy RMW), and the
+// world.looks census. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldLookCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();

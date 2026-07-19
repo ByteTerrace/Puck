@@ -97,6 +97,11 @@ internal enum WorldSection : byte {
     /// <see cref="WorldMutation.SetViewDefaults"/> / <see cref="WorldMutation.UpsertViewLayout"/> /
     /// <see cref="WorldMutation.RemoveViewLayout"/> mutations).</summary>
     Views,
+
+    /// <summary>The LOOK rows and the look→entity assignment policy — the appearance peer of <see cref="Kits"/>,
+    /// targeted by <see cref="WorldMutation.UpsertLook"/> / <see cref="WorldMutation.RemoveLook"/> /
+    /// <see cref="WorldMutation.SetLookAssignment"/>. PRESENTATION-ONLY authority (restyle the crowd, never reshape it).</summary>
+    Looks,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

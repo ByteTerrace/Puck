@@ -395,13 +395,18 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             }
 
             m_avatarPreviousPositions[index] = position;
+            // Resolve the entity's LOOK: a catalog rig pin, a uniform render scale, and a gait-amplitude phase scale.
+            // GaitAmplitude scales m_avatarGaitPhases (1 = the pre-look swing; 0 stills the limbs at their rest pose).
+            var look = ResolveLook(index: index);
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,
                 rootPosition: position,
                 rootOrientation: m_client.Orientation(index: index),
-                gaitPhase: m_avatarGaitPhases[index],
+                gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
                 castsSoftShadow: castsSoftShadow,
-                transforms: m_transforms
+                transforms: m_transforms,
+                rig: LookRig(look: look),
+                scale: look.Scale
             );
         }
 
@@ -1011,15 +1016,38 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase, maxPlacementScale: maxPlacementScale);
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
-        // each. The probe emits every catalog range; a live build emits only active ranges without renumbering slots.
+        // each. The probe emits every catalog range at unit scale (the frozen worst case); a live build emits only
+        // active ranges, each sourcing its LOOK's pinned rig and uniform scale (both clamped so the frozen per-entity
+        // slot capacity is never exceeded — see WorldAvatarCatalog.Emit's remarks).
         WorldAvatarCatalog.Emit(
             builder: builder,
             isActive: client.IsActive,
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
-            probeWorstCase: probeWorstCase
+            probeWorstCase: probeWorstCase,
+            rigFor: (probeWorstCase ? null : index => LookRig(look: ResolveLook(index: index))),
+            scaleFor: (probeWorstCase ? null : index => ResolveLook(index: index).Scale)
         );
 
         return builder.Build();
     }
+
+    // The LOOK row an entity wears: the delivered look table indexed by the snapshot's per-entity look byte, or the
+    // implicit single catalog look when the world authors no `looks` section (the pre-arc runtime exactly).
+    private WorldLook ResolveLook(int index) {
+        var looks = m_client.Definition.Looks;
+
+        if (looks is not { Count: > 0 } rows) {
+            return WorldLook.Implicit;
+        }
+
+        var lookIndex = m_client.LookIndex(index: index);
+
+        return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
+    }
+
+    // The catalog geometry-source rig for a look: a Catalog(Index) pin, or -1 (the entity's own index-derived rig) for
+    // an unpinned catalog look. A Creation look renders through the catalog on the entity's own rig for now — a
+    // documented degradation (never a black/vanished body) until the creation-stamp render path lands.
+    private static int LookRig(WorldLook look) => (look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : -1;
 }

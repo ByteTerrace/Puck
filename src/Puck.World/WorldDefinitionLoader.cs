@@ -90,8 +90,8 @@ internal static class WorldDefinitionLoader {
     // byte-identity holds.
     private static WorldDefinition Normalize(WorldDefinition definition) {
         var assignment = (definition.Assignment is { } authored
-            ? new WorldKitAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
-            : WorldKitAssignment.Hash);
+            ? new WorldRowAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
+            : WorldRowAssignment.Hash);
 
         return (definition with {
             Addons = (definition.Addons ?? []),

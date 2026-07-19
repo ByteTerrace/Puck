@@ -78,6 +78,12 @@ internal sealed class WorldPopulation {
     // by CompileFixedTables and handed to every live body, so a live world.scene.solid / world.collision edit takes
     // effect on the next tick with no restart. Grounded bodies solve their swept position against it.
     private IContactField? m_contactField;
+    // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
+    // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
+    private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];
+    // The compiled spawn policy (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
+    // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
+    private FixedSpawnPolicy m_spawnPolicy = FixedSpawnPolicy.Compile(policy: null, spawnPoints: []);
     private int m_simulatedCount;
     private int m_revision;
     private IntentSource m_defaultPeerSource = IntentSource.Wander;
@@ -117,10 +123,13 @@ internal sealed class WorldPopulation {
 
         for (var index = 0; (index < MaxPopulation); index++) {
             m_entries[index] = new Entry {
-                KitIndex = ((assignmentTable is { Length: > 0 } table) ? table[index % table.Length] : KitFor(index: index, kitCount: m_kits.Length)),
+                KitIndex = ((assignmentTable is { Length: > 0 } table) ? table[index % table.Length] : RowFor(index: index, rowCount: m_kits.Length)),
                 Kind = ((index < LocalSeatCount) ? PopulationKind.LocalSeat : PopulationKind.NetworkPeer),
             };
         }
+
+        // The look table resolves after the entries exist (it writes each entry's LookIndex).
+        ResolveLookIndices(definition: definition);
 
         for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
             SeedSimulated(index: index);
@@ -151,6 +160,51 @@ internal sealed class WorldPopulation {
         // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
         m_contactField = ResolveContactField(definition: definition, solids: solids);
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
+        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none — so an
+        // empty `looks` section is the pre-arc runtime exactly, with no branch special-casing the absence.
+        m_lookRows = (((definition.Looks is { Count: > 0 } looks)) ? looks : [WorldLook.Implicit]);
+        // The compiled spawn policy — read ONLY by SeedSimulated (never the authored floats). The validator has already
+        // resolved every named spawn point, so Compile's lookups always hit.
+        m_spawnPolicy = FixedSpawnPolicy.Compile(policy: definition.Population.SpawnPolicy, spawnPoints: definition.SpawnPoints);
+    }
+
+    // Resolve every entry's LookIndex from the definition's look assignment policy — the SAME primitive as the kit
+    // assignment, distinct hash stream so the two tables do not correlate. Shared by the constructor and Rebuild.
+    private void ResolveLookIndices(WorldDefinition definition) {
+        var lookTable = ResolveLookTable(assignment: definition.LookAssignment);
+
+        for (var index = 0; (index < MaxPopulation); index++) {
+            m_entries[index].LookIndex = ((lookTable is { Length: > 0 } table)
+                ? table[index % table.Length]
+                : RowFor(index: index, rowCount: m_lookRows.Count, stream: LookHashStream));
+        }
+    }
+
+    // The look-row cycle a "table" look assignment resolves to (its look names mapped to row indices), or null under the
+    // "hash" policy. Null LookAssignment ⇒ the hash default. The validator gates the policy token and every table name.
+    private byte[]? ResolveLookTable(WorldRowAssignment? assignment) {
+        if ((assignment is not { } policy) || !string.Equals(a: policy.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
+            return null;
+        }
+
+        var table = new byte[policy.Table.Count];
+
+        for (var entry = 0; (entry < table.Length); entry++) {
+            table[entry] = ResolveLook(name: policy.Table[entry]);
+        }
+
+        return table;
+    }
+
+    // The look row index a kebab name resolves to. The validator gates unknown names at startup / apply.
+    private byte ResolveLook(string name) {
+        for (var look = 0; (look < m_lookRows.Count); look++) {
+            if (string.Equals(a: m_lookRows[look].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return (byte)look;
+            }
+        }
+
+        throw new InvalidOperationException(message: $"No look row named '{name}' in the world definition.");
     }
 
     // The document-selected contact field: null when collision is off (bodies keep their flat ground plane); the analytic
@@ -199,8 +253,12 @@ internal sealed class WorldPopulation {
         var assignmentTable = ResolveAssignmentTable(assignment: definition.Assignment);
 
         for (var index = 0; (index < MaxPopulation); index++) {
-            m_entries[index].KitIndex = ((assignmentTable is { Length: > 0 } table) ? table[index % table.Length] : KitFor(index: index, kitCount: m_kits.Length));
+            m_entries[index].KitIndex = ((assignmentTable is { Length: > 0 } table) ? table[index % table.Length] : RowFor(index: index, rowCount: m_kits.Length));
         }
+
+        // Re-resolve the look table too — a live look row/assignment mutation flows through Rebuild (AffectsRenderEnvelope
+        // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
+        ResolveLookIndices(definition: definition);
 
         // Re-derive the kit/wander-dependent per-entry statics from the fresh tables, but keep the running wander phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.
@@ -246,8 +304,8 @@ internal sealed class WorldPopulation {
 
     // The kit-row cycle a "table" assignment policy resolves to (its kit names mapped to row indices), or null under the
     // "hash" policy (the R1 KitFor default). The validator gates the policy token and every table name at startup.
-    private byte[]? ResolveAssignmentTable(WorldKitAssignment assignment) {
-        if (!string.Equals(a: assignment.Policy, b: WorldKitAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
+    private byte[]? ResolveAssignmentTable(WorldRowAssignment assignment) {
+        if (!string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
             return null;
         }
 
@@ -283,6 +341,14 @@ internal sealed class WorldPopulation {
     /// <summary>The deterministic kit row index assigned to a stable population slot.</summary>
     public byte KitIndex(int index) => m_entries[index].KitIndex;
 
+    /// <summary>The resolved LOOK row index for a stable population slot — carried out on the snapshot for the client's
+    /// renderer (PRESENTATION-ONLY).</summary>
+    /// <param name="index">The 0-based population index.</param>
+    public byte LookIndex(int index) => m_entries[index].LookIndex;
+
+    /// <summary>The live LOOK rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
+    public IReadOnlyList<WorldLook> LookRows => m_lookRows;
+
     /// <summary>Counts the active entities per kit row for console diagnostics (one slot per definition row).</summary>
     public int[] ActiveKitCounts() {
         var counts = new int[m_kits.Length];
@@ -296,21 +362,45 @@ internal sealed class WorldPopulation {
         return counts;
     }
 
-    /// <summary>Assigns a kit row through the R1 low-discrepancy sequence — the implementation of the definition's
-    /// <see cref="WorldKitAssignment.HashPolicy"/>, parameterized by row count. Multiplication into equal intervals
-    /// avoids modulo bands while keeping the mapping a pure function of the stable population index. The
-    /// <see cref="WorldKitAssignment.TablePolicy"/> is the authored-placement alternative (resolved once at
-    /// construction); this hash stays the default policy.</summary>
-    public static byte KitFor(int index, int kitCount) {
+    /// <summary>Counts the active entities per LOOK row for the <c>world.looks</c> census (one slot per look row,
+    /// mirroring <see cref="ActiveKitCounts"/>).</summary>
+    public int[] ActiveLookCounts() {
+        var counts = new int[m_lookRows.Count];
+
+        for (var index = 0; (index < MaxPopulation); index++) {
+            if (m_entries[index].Active) {
+                counts[m_entries[index].LookIndex]++;
+            }
+        }
+
+        return counts;
+    }
+
+    /// <summary>Assigns a row through the R1 low-discrepancy sequence — the implementation of the definition's
+    /// <see cref="WorldRowAssignment.HashPolicy"/>, parameterized by row count and a decorrelation STREAM.
+    /// Multiplication into equal intervals avoids modulo bands while keeping the mapping a pure function of the stable
+    /// population index. The <see cref="WorldRowAssignment.TablePolicy"/> is the authored-placement alternative
+    /// (resolved once at construction); this hash stays the default policy.</summary>
+    /// <param name="index">The stable 0-based population index.</param>
+    /// <param name="rowCount">The number of rows to distribute across (≥ 1).</param>
+    /// <param name="stream">The decorrelation stream — offsets the low-discrepancy index by a per-table stride so the
+    /// look bucket is NOT a monotone image of the kit bucket (which would band every flyer into one look). <c>0</c>
+    /// reproduces the pre-arc <c>R1(index + 1)</c> kit mapping bit-identically; the look table passes a distinct stream.</param>
+    public static byte RowFor(int index, int rowCount, int stream = 0) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: MaxPopulation);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: kitCount, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: rowCount, other: 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: stream);
 
-        var sample = LowDiscrepancy.R1(index: (ulong)(index + 1));
-        var bucket = (int)(((ulong)sample.Value * (uint)kitCount) >> 32);
+        var sample = LowDiscrepancy.R1(index: ((ulong)(index + 1) + ((ulong)stream * MaxPopulation)));
+        var bucket = (int)(((ulong)sample.Value * (uint)rowCount) >> 32);
 
         return (byte)bucket;
     }
+
+    /// <summary>The decorrelation stream the LOOK assignment's hash policy uses — distinct from the kit stream (0) so
+    /// the two hash tables do not correlate (see <see cref="RowFor"/>).</summary>
+    private const int LookHashStream = 1;
 
     /// <summary>Whether the entry at <paramref name="index"/> is active (drawn this frame).</summary>
     /// <param name="index">The population index (0-based, <c>0..</c><see cref="MaxPopulation"/>).</param>
@@ -606,7 +696,10 @@ internal sealed class WorldPopulation {
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
         var fraction = (FixedQ4816.FromInteger(value: ((2L * offset) + 1L)) / FixedQ4816.FromInteger(value: (2L * MaxSimulated)));
-        var spawnRadius = (m_wander.SpawnRadius * FixedQ4816.Sqrt(value: fraction));
+        // The phyllotaxis radius: the policy's override when authored (> 0), else the wander tuning's spawn radius — so
+        // the default policy (radius 0, no points) reproduces the pre-arc golden-angle disc bit-identically.
+        var phyllotaxisRadius = ((m_spawnPolicy.PhyllotaxisRadius > FixedQ4816.Zero) ? m_spawnPolicy.PhyllotaxisRadius : m_wander.SpawnRadius);
+        var spawnRadius = (phyllotaxisRadius * FixedQ4816.Sqrt(value: fraction));
         var angle = (FixedQ4816.FromInteger(value: offset) * m_wander.GoldenAngle);
         // The shared golden-ratio hue walk (WorldColor), same as profile.create's auto-color. The hue also varies the
         // slow weave frequency.
@@ -620,7 +713,12 @@ internal sealed class WorldPopulation {
         var (sin, cos) = FixedQ4816.SinCos(angle: angle);
 
         entry.PreferredAltitude = PreferredAltitudeFor(kit: m_kits[entry.KitIndex], altitudeUnit: altitudeUnit);
-        entry.SpawnPosition = new FixedVector3(X: (spawnRadius * cos), Y: entry.PreferredAltitude, Z: (spawnRadius * sin));
+        // The spawn footprint: the phyllotaxis disc (X/Z) OR — under a `points` policy — the cycled spawn point with a
+        // deterministic R2 jitter scatter (disjoint R2 stream so it never aliases the activity/altitude samples). Y
+        // always rides the kit's preferred altitude.
+        entry.SpawnPosition = ((m_spawnPolicy.Points is { Length: > 0 } points)
+            ? SpawnAtPoint(basePoint: points[offset % points.Length], altitude: entry.PreferredAltitude, jitter: m_spawnPolicy.Jitter, index: index)
+            : new FixedVector3(X: (spawnRadius * cos), Y: entry.PreferredAltitude, Z: (spawnRadius * sin)));
         entry.SpawnYaw = angle;
         entry.WeaveFreq = (m_wander.WeaveFrequencyBase + (m_wander.WeaveFrequencyRange * fixedHue));
         entry.BodyColor = WorldColor.HsvToRgb(h: hue, s: WorldColor.SeedSaturation, v: WorldColor.SeedValue);
@@ -653,6 +751,16 @@ internal sealed class WorldPopulation {
         }
     }
 
+    // The spawn footprint for a `points` policy: the cycled spawn point scattered by a deterministic R2 jitter sample.
+    // The R2 index is offset by MaxPopulation so it never aliases SeedSimulated's activity/altitude R2 stream.
+    private static FixedVector3 SpawnAtPoint(FixedVector3 basePoint, FixedQ4816 altitude, FixedQ4816 jitter, int index) {
+        var (jitterX, jitterZ) = LowDiscrepancy.R2(index: (ulong)(index + 1 + MaxPopulation));
+        var scatterX = (jitter * ((FixedQ4816.FromDouble(value: (double)jitterX) * FixedQ4816.FromInteger(value: 2L)) - FixedQ4816.One));
+        var scatterZ = (jitter * ((FixedQ4816.FromDouble(value: (double)jitterZ) * FixedQ4816.FromInteger(value: 2L)) - FixedQ4816.One));
+
+        return new FixedVector3(X: (basePoint.X + scatterX), Y: altitude, Z: (basePoint.Z + scatterZ));
+    }
+
     // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // rides the ground plane.
     private FixedQ4816 PreferredAltitudeFor(in FixedWorldKit kit, FixedQ4816 altitudeUnit) {
@@ -678,6 +786,9 @@ internal sealed class WorldPopulation {
         public required PopulationKind Kind { get; init; }
         // Reassigned in place by Rebuild when the kit-assignment policy (or kit set) mutates; set at construction.
         public required byte KitIndex { get; set; }
+        // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices
+        // on construction and on every Rebuild.
+        public byte LookIndex { get; set; }
         public FixedQ4816 Phase { get; set; }
         public FixedQ4816 PreferredAltitude { get; set; }
         public FixedVector3 SpawnPosition { get; set; }

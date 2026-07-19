@@ -69,6 +69,14 @@ namespace Puck.World;
 // and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
 [JsonSerializable(typeof(WorldHostDefaults))]
+// The LOOK rows (world.look.set verb accessor + the document `looks`/`lookAssignment` sections). The polymorphic
+// look-source derived types carry explicit TypeInfoPropertyName entries so the source-gen simple names never collide
+// with WorldCreation / other "Catalog"/"Creation" nouns (SYSLIB1031), following the WorldSpeaker precedent above.
+[JsonSerializable(typeof(WorldLook))]
+[JsonSerializable(typeof(WorldLookSource.Catalog), TypeInfoPropertyName = "WorldLookSourceCatalog")]
+[JsonSerializable(typeof(WorldLookSource.Creation), TypeInfoPropertyName = "WorldLookSourceCreation")]
+[JsonSerializable(typeof(WorldSpawnPolicy.Phyllotaxis), TypeInfoPropertyName = "WorldSpawnPolicyPhyllotaxis")]
+[JsonSerializable(typeof(WorldSpawnPolicy.PointCycle), TypeInfoPropertyName = "WorldSpawnPolicyPointCycle")]
 [JsonSourceGenerationOptions(
     Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

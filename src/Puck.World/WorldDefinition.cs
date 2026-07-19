@@ -944,7 +944,16 @@ internal sealed record WorldCamera(string Name, WorldAnchor? Anchor, Vector3 Off
 /// <param name="DefaultPeerSource">The boot intent-source template every network stand-in wakes on (<see
 /// cref="IntentSource.Wander"/> in the built-in world): the durable home for the session peer-source default the
 /// <c>world.population idle|wander</c> verb moves live and <c>world.save</c> folds back into session write-back.</param>
-internal readonly record struct WorldPopulationDefaults(int LocalPlayers, int NetworkPlayers, IntentSource DefaultPeerSource);
+/// <param name="SpawnPolicy">How simulated peers are distributed at spawn (see <see cref="WorldSpawnPolicy"/>).
+/// <see langword="null"/> coalesces to <see cref="WorldSpawnPolicy.Default"/> (the pre-arc golden-angle disc), and is
+/// omitted from the wire when null. A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT
+/// for bodies already standing (a change re-clusters only peers spawned after it), narrated in the accept echo.</param>
+internal readonly record struct WorldPopulationDefaults(
+    int LocalPlayers,
+    int NetworkPlayers,
+    IntentSource DefaultPeerSource,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSpawnPolicy? SpawnPolicy = null
+);
 internal static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
@@ -1023,23 +1032,133 @@ internal sealed record WorldRenderDefaults(
 /// <param name="Position">The seat's spawn position (X/Z used; Y rides the ground plane).</param>
 internal readonly record struct WorldSpawnPoint(string Id, Vector3 Position);
 
-/// <summary>The kit-to-entity assignment policy, resolved once at construction into each entry's fixed kit index
-/// (precompute; zero steady-state cost). SIM-AFFECTING: it selects which kit — and thus which fixed-point
-/// tuning/action bindings — an entity compiles.</summary>
+/// <summary>The row-to-entity assignment policy — nothing about <see cref="Policy"/>/<see cref="Table"/> is kit-specific,
+/// so the SAME primitive distributes the kit table (a way of MOVING) and the look table (a way of LOOKING) across the
+/// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
+/// kit assignment is SIM-AFFECTING (it selects the compiled tuning/action bindings); the look assignment is
+/// PRESENTATION-ONLY (it selects the appearance row).</summary>
 /// <param name="Policy">The assignment policy: <see cref="HashPolicy"/> (the R1 low-discrepancy mapping) or
-/// <see cref="TablePolicy"/> (<c>kit = Table[index % Table.Count]</c>).</param>
-/// <param name="Table">The kit-name cycle for <see cref="TablePolicy"/> (entries resolve to kit rows at compile); empty
+/// <see cref="TablePolicy"/> (<c>row = Table[index % Table.Count]</c>).</param>
+/// <param name="Table">The row-name cycle for <see cref="TablePolicy"/> (entries resolve to rows at compile); empty
 /// and ignored under <see cref="HashPolicy"/>.</param>
-internal sealed record WorldKitAssignment(string Policy, IReadOnlyList<string> Table) {
-    /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.KitFor"/>).</summary>
+internal sealed record WorldRowAssignment(string Policy, IReadOnlyList<string> Table) {
+    /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.RowFor"/>).</summary>
     public const string HashPolicy = "hash";
 
-    /// <summary>The table policy token — <c>kit = Table[index % Table.Count]</c>, a pure function of the stable
+    /// <summary>The table policy token — <c>row = Table[index % Table.Count]</c>, a pure function of the stable
     /// population index.</summary>
     public const string TablePolicy = "table";
 
     /// <summary>The built-in default assignment: the hash policy with an empty table.</summary>
-    public static WorldKitAssignment Hash { get; } = new WorldKitAssignment(Policy: HashPolicy, Table: []);
+    public static WorldRowAssignment Hash { get; } = new WorldRowAssignment(Policy: HashPolicy, Table: []);
+}
+
+/// <summary>Where a <see cref="WorldLook"/> resolves an entity's appearance from — a pinned catalog rig or a sculpted
+/// creation. The appearance peer of a way of MOVING: a new way of LOOKING is a row, never a new renderer.</summary>
+[JsonDerivedType(typeof(WorldLookSource.Catalog), typeDiscriminator: "catalog")]
+[JsonDerivedType(typeof(WorldLookSource.Creation), typeDiscriminator: "creation")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldLookSource {
+    private WorldLookSource() { }
+
+    /// <summary>The procedural humanoid catalog (<see cref="WorldAvatarCatalog"/>) — one look source among others,
+    /// no longer "the avatar system".</summary>
+    /// <param name="Index">The <c>0..</c><see cref="WorldPopulation.MaxPopulation"/>-1 catalog rig to pin, or
+    /// <see langword="null"/> for the index-derived pick (the pre-look behaviour every body had).</param>
+    internal sealed record Catalog(int? Index) : WorldLookSource;
+
+    /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldCreation"/> rows.</summary>
+    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve at validation).</param>
+    internal sealed record Creation(string CreationId) : WorldLookSource;
+}
+
+/// <summary>How a look animates with the body it clothes. PRESENTATION-ONLY: read by the client's stamp pool and the
+/// catalog packer, never by <c>WorldBody</c>. Catalog looks read <see cref="GaitAmplitude"/>; creation looks read
+/// <see cref="ReplayFrames"/> and <see cref="SecondsPerFrame"/>.</summary>
+/// <param name="GaitAmplitude">The catalog rig's limb-swing scale (1 = the pre-look default; 0 stills the gait).</param>
+/// <param name="ReplayFrames">Whether a creation look replays its authored timeline on the render clock.</param>
+/// <param name="SecondsPerFrame">The creation timeline cadence when <see cref="ReplayFrames"/> is set.</param>
+internal readonly record struct WorldLookMotion(float GaitAmplitude, bool ReplayFrames, float SecondsPerFrame) {
+    /// <summary>The implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
+    public static WorldLookMotion Default { get; } = new WorldLookMotion(GaitAmplitude: 1f, ReplayFrames: false, SecondsPerFrame: 0f);
+}
+
+/// <summary>One LOOK row — the appearance peer of <see cref="WorldKit"/>'s way of MOVING. Every appearance a world
+/// offers is a row of this data, never a renderer branch; <c>world.looks</c> prints these names.</summary>
+/// <param name="Name">The look's stable kebab-case name (unique within the definition), assignable by the look table.</param>
+/// <param name="Source">Where the appearance resolves from (a catalog rig or a creation).</param>
+/// <param name="Scale">The uniform render scale. Appearance ONLY — it does not resize the body's motion tuning or its
+/// collision volume.</param>
+/// <param name="Motion">How the look animates with the body (see <see cref="WorldLookMotion"/>).</param>
+internal sealed record WorldLook(string Name, WorldLookSource Source, float Scale, WorldLookMotion Motion) {
+    /// <summary>The implicit single look every body wears when a world authors no <c>looks</c> section — the
+    /// index-derived catalog pick at full gait, so an empty <c>looks</c> list is the pre-arc runtime exactly.</summary>
+    public static WorldLook Implicit { get; } = new WorldLook(Name: "catalog", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default);
+}
+
+/// <summary>How simulated peers are distributed at spawn. SIM-AFFECTING — compiled once to fixed point by
+/// <see cref="FixedSpawnPolicy.Compile"/>; the runtime never re-reads the authored floats.</summary>
+[JsonDerivedType(typeof(WorldSpawnPolicy.Phyllotaxis), typeDiscriminator: "phyllotaxis")]
+[JsonDerivedType(typeof(WorldSpawnPolicy.PointCycle), typeDiscriminator: "points")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldSpawnPolicy {
+    private WorldSpawnPolicy() { }
+
+    /// <summary>The pre-arc behaviour, made nameable: a golden-angle phyllotaxis disc.</summary>
+    /// <param name="Radius">The disc radius; <c>0</c> defers to <c>WanderTuning.SpawnRadius</c>.</param>
+    internal sealed record Phyllotaxis(float Radius) : WorldSpawnPolicy;
+
+    /// <summary>Cycle the named spawn points, scattering each peer inside <paramref name="Jitter"/> by its index's R2
+    /// low-discrepancy sample (no RNG, index-stable across rebuilds). The type is <c>PointCycle</c> (a record property
+    /// cannot share its type's name), but its wire discriminator is <c>points</c> and its list member is <c>points</c>.</summary>
+    /// <param name="Points">The spawn-point id cycle (each must resolve to a <see cref="WorldSpawnPoint"/>).</param>
+    /// <param name="Jitter">The per-peer scatter radius around the cycled point.</param>
+    internal sealed record PointCycle(IReadOnlyList<string> Points, float Jitter) : WorldSpawnPolicy;
+
+    /// <summary>The built-in default — the phyllotaxis disc at the wander tuning's spawn radius (the pre-arc behaviour).</summary>
+    public static WorldSpawnPolicy Default { get; } = new Phyllotaxis(Radius: 0f);
+}
+
+/// <summary>The one-time fixed-point compilation of a <see cref="WorldSpawnPolicy"/>. Runtime spawn seeding reads only
+/// this form (the phyllotaxis radius override in fixed point, or the resolved spawn-point positions plus jitter).</summary>
+internal readonly record struct FixedSpawnPolicy(FixedQ4816 PhyllotaxisRadius, FixedVector3[]? Points, FixedQ4816 Jitter) {
+    /// <summary>Compiles the authored spawn policy against the definition's spawn points. A <see cref="WorldSpawnPolicy.PointCycle"/>
+    /// policy resolves each named id to its position (the validator has already gated the names).</summary>
+    /// <param name="policy">The authored policy (<see langword="null"/> ⇒ <see cref="WorldSpawnPolicy.Default"/>).</param>
+    /// <param name="spawnPoints">The definition's spawn points, for id resolution.</param>
+    public static FixedSpawnPolicy Compile(WorldSpawnPolicy? policy, IReadOnlyList<WorldSpawnPoint> spawnPoints) {
+        switch (policy ?? WorldSpawnPolicy.Default) {
+            case WorldSpawnPolicy.PointCycle points: {
+                var resolved = new FixedVector3[points.Points.Count];
+
+                for (var index = 0; (index < resolved.Length); index++) {
+                    var position = ResolveSpawnPoint(spawnPoints: spawnPoints, id: points.Points[index]);
+
+                    resolved[index] = new FixedVector3(
+                        X: FixedQ4816.FromDouble(value: position.X),
+                        Y: FixedQ4816.FromDouble(value: position.Y),
+                        Z: FixedQ4816.FromDouble(value: position.Z)
+                    );
+                }
+
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.Zero, Points: resolved, Jitter: FixedQ4816.FromDouble(value: points.Jitter));
+            }
+            case WorldSpawnPolicy.Phyllotaxis phyllotaxis:
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.FromDouble(value: phyllotaxis.Radius), Points: null, Jitter: FixedQ4816.Zero);
+            default:
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.Zero, Points: null, Jitter: FixedQ4816.Zero);
+        }
+    }
+
+    private static Vector3 ResolveSpawnPoint(IReadOnlyList<WorldSpawnPoint> spawnPoints, string id) {
+        foreach (var point in spawnPoints) {
+            if (string.Equals(a: point.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return point.Position;
+            }
+        }
+
+        return Vector3.Zero;
+    }
 }
 
 /// <summary>One data-side addon descriptor the world carries — a World-local row carrying Name/ModulePath/Hash/Fuel/
@@ -1277,6 +1396,11 @@ internal sealed record WorldHostDefaults(
 /// layouts (see <see cref="WorldViewDefaults"/>). <see langword="null"/> (the frozen default, no <c>views</c> key)
 /// coalesces to <see cref="WorldViewDefaults.Default"/>, whose empty layout list falls the composer through to the
 /// built-in seat ladder — rendered output byte-unchanged.</param>
+/// <param name="Looks">The LOOK rows (default empty/absent) — authored appearances the population wears, the peer of
+/// <see cref="Kits"/> (see <see cref="WorldLook"/>). Empty coalesces to the implicit single catalog look, the pre-arc
+/// runtime exactly.</param>
+/// <param name="LookAssignment">The look→entity assignment policy (default null ⇒ the hash mapping), the same
+/// <see cref="WorldRowAssignment"/> primitive <see cref="Assignment"/> uses for kits.</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1288,7 +1412,7 @@ internal sealed record WorldDefinition(
     WorldPopulationDefaults Population,
     IReadOnlyList<WorldKit> Kits,
     string DefaultSeatKit,
-    WorldKitAssignment Assignment,
+    WorldRowAssignment Assignment,
     IReadOnlyList<WorldAddonRow> Addons,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
     WorldStorageDefaults Storage,
@@ -1306,7 +1430,13 @@ internal sealed record WorldDefinition(
     // OPT-IN and WhenWritingNull: a world that authors no views section carries no `views` key, so the frozen default
     // world stays byte-identical. Absence coalesces to WorldViewDefaults.Default (empty layouts -> the built-in seat
     // ladder + OrientedFollowRig's own field defaults) at every read.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? Views = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? Views = null,
+    // OPT-IN and WhenWritingNull (R12 trailing-nullable idiom): a world that authors no `looks` section carries no
+    // `looks`/`lookAssignment` keys, so the frozen default world stays byte-identical. An empty/absent Looks list is the
+    // pre-arc runtime EXACTLY — every entity resolves to WorldLook.Implicit (the index-derived catalog pick at full
+    // gait); NO branch special-cases "the author didn't opt in".
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? Looks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignment = null
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1499,7 +1629,7 @@ internal sealed record WorldDefinition(
             ),
         ],
         // The kit→entity assignment: the R1 low-discrepancy hash policy with an empty table.
-        Assignment: WorldKitAssignment.Hash,
+        Assignment: WorldRowAssignment.Hash,
         // No data-side addons in the built-in world; a deployment authors them and the addon driver mounts them as principals.
         Addons: [],
         // No per-world binding overlays in the built-in world — every seat rides the engine default (plus its profile

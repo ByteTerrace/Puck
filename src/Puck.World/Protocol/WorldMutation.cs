@@ -32,10 +32,10 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The kit row name every seat body constructs from.</param>
     internal sealed record SetDefaultSeatKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 
-    /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldKitAssignment"/> row).</summary>
+    /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldRowAssignment"/> row).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Assignment">The assignment policy.</param>
-    internal sealed record SetKitAssignment(WorldPrincipal Principal, WorldKitAssignment Assignment) : WorldMutation(Principal);
+    internal sealed record SetKitAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
 
     /// <summary>Upserts a diegetic screen addressed by <see cref="WorldScreen.Index"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -235,4 +235,24 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The layout name to remove.</param>
     internal sealed record RemoveViewLayout(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Upserts a LOOK row (whole-row, keyed by name) into the <see cref="WorldSection.Looks"/> section. Applies
+    /// LIVE — the population re-resolves the look table and the client rebuilds the avatar program (the appearance
+    /// change is visible the next frame). Riding the render-envelope gate: a creation look changes the emitted program
+    /// word count.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Look">The whole look row.</param>
+    internal sealed record UpsertLook(WorldPrincipal Principal, WorldLook Look) : WorldMutation(Principal);
+
+    /// <summary>Removes a LOOK row by name. Rejected loudly by full-document revalidation while the look assignment
+    /// table still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The look name to remove.</param>
+    internal sealed record RemoveLook(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Sets the look→entity assignment policy (the same <see cref="WorldRowAssignment"/> primitive the kit
+    /// assignment uses). Applies LIVE.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Assignment">The look assignment policy.</param>
+    internal sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
 }

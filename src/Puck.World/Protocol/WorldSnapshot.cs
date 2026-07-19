@@ -50,6 +50,8 @@ internal readonly record struct EntityContinuity(EntityContinuityKind Kind, floa
 /// <param name="Active">Whether the entity is drawn this tick.</param>
 /// <param name="Kit">The entity's kit row index into the server-delivered definition (drives render selection, never
 /// who is driving it).</param>
+/// <param name="Look">The entity's LOOK row index into the server-delivered definition's look table (drives the
+/// client's appearance resolution — catalog rig vs. creation stamp — PRESENTATION-ONLY, never who is driving it).</param>
 /// <param name="Continuity">How the pose changed across this tick — the client's interpolate/snap/ease hint.</param>
 internal readonly record struct EntitySnapshot(
     int Index,
@@ -58,6 +60,7 @@ internal readonly record struct EntitySnapshot(
     Vector3 BodyColor,
     bool Active,
     byte Kit,
+    byte Look,
     EntityContinuity Continuity
 );
 

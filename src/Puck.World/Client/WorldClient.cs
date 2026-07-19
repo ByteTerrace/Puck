@@ -28,6 +28,9 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The kit row index per entity — carried for kit-keyed render selection (today's rig visuals are index-keyed via
     // the avatar catalog, so nothing branches on it yet).
     private readonly byte[] m_kit = new byte[EntityCapacity];
+    // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
+    // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
+    private readonly byte[] m_look = new byte[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
@@ -101,6 +104,11 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_active[index];
 
+    /// <summary>The entity's resolved LOOK row index from the latest snapshot — the frame source's appearance selector
+    /// (PRESENTATION-ONLY).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public byte LookIndex(int index) => m_look[index];
+
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
@@ -149,6 +157,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
             m_seen[index] = true;
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
+            m_look[index] = entry.Look;
 
             if (!m_active[index]) {
                 // Newly active: both interpolation endpoints start at the spawn pose so the first frame never streaks.

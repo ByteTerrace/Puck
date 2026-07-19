@@ -28,6 +28,9 @@ internal static class WorldDefinitionValidator {
     // World-local CPU/GPU screen sources are intentionally presentation-sized. A bad authored extent must fail here,
     // before it can become an unchecked pixel-buffer or offscreen-render allocation.
     private const int MaxSurfaceDimension = 4096;
+    // A look scale feeds the stamp pool's per-instance bound radius; an unbounded one is a GPU-SAFETY issue (a
+    // spatial-cull metadata blow-up), not a taste one, so it carries a hard ceiling beside MaxSurfaceDimension.
+    private const float MaxLookScale = 16f;
     private const float MinimumBasisLengthSquared = 1e-8f;
     // Each camera can carry a persistent offscreen render (a View screen samples it); the bound keeps a floody document
     // from declaring thousands of budgeted offscreen engines (ViewStack.MaxRegisteredViews is the runtime floor).
@@ -83,7 +86,11 @@ internal static class WorldDefinitionValidator {
         var patchIds = ValidatePatches(patches: definition.Patches, errors: errors);
 
         ValidateScene(scene: definition.Scene, patchIds: patchIds, errors: errors);
-        ValidateSpawnPoints(spawnPoints: definition.SpawnPoints, errors: errors);
+
+        var spawnPointIds = ValidateSpawnPoints(spawnPoints: definition.SpawnPoints, errors: errors);
+
+        // The spawn policy runs AFTER ValidateSpawnPoints has produced the id set a `points` policy resolves against.
+        ValidateSpawnPolicy(policy: definition.Population.SpawnPolicy, spawnPointIds: spawnPointIds, errors: errors);
 
         if (definition.Render is null) {
             errors.Add(item: "render is required.");
@@ -113,6 +120,13 @@ internal static class WorldDefinitionValidator {
         ValidateCollision(collision: collision, errors: errors);
 
         var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
+
+        // The LOOK rows go AFTER ValidateCreations (a creation look resolves its CreationId against the id-set that
+        // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
+        // this returns) — the same forward-threading creationIds already rides.
+        var lookNames = ValidateLooks(looks: definition.Looks, creationIds: creationIds, errors: errors);
+
+        ValidateLookAssignment(assignment: definition.LookAssignment, lookNames: lookNames, errors: errors);
 
         var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, patchIds: patchIds, provider: collision.Provider, errors: errors);
 
@@ -683,18 +697,18 @@ internal static class WorldDefinitionValidator {
 
     // The seat spawns (SIM-AFFECTING placement): id presence/uniqueness plus finite positions, and enough rows to cover
     // every local slot (order maps slots).
-    private static void ValidateSpawnPoints(IReadOnlyList<WorldSpawnPoint> spawnPoints, List<string> errors) {
+    private static HashSet<string> ValidateSpawnPoints(IReadOnlyList<WorldSpawnPoint> spawnPoints, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         if (spawnPoints is null) {
             errors.Add(item: "spawnPoints is required.");
 
-            return;
+            return ids;
         }
 
         if (spawnPoints.Count < WorldPopulation.LocalSeatCount) {
             errors.Add(item: $"spawnPoints provides {spawnPoints.Count} entries; {WorldPopulation.LocalSeatCount} local slots require at least that many.");
         }
-
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < spawnPoints.Count); index++) {
             var spawn = spawnPoints[index];
@@ -707,6 +721,139 @@ internal static class WorldDefinitionValidator {
 
             if (!IsFinite(value: spawn.Position)) {
                 errors.Add(item: $"spawnPoints[{index}].position must contain finite coordinates.");
+            }
+        }
+
+        return ids;
+    }
+
+    // The spawn policy (SIM-AFFECTING): a phyllotaxis radius that is finite and non-negative, or a `points` cycle that
+    // names at least one spawn point, every id resolving, with a finite non-negative jitter. Null coalesces to the
+    // default (nothing to validate).
+    private static void ValidateSpawnPolicy(WorldSpawnPolicy? policy, HashSet<string> spawnPointIds, List<string> errors) {
+        switch (policy) {
+            case null:
+                return;
+            case WorldSpawnPolicy.Phyllotaxis phyllotaxis:
+                RequireNonNegative(value: phyllotaxis.Radius, name: "population.spawnPolicy.radius", errors: errors);
+
+                break;
+            case WorldSpawnPolicy.PointCycle points:
+                if ((points.Points is not { Count: > 0 } ids)) {
+                    errors.Add(item: "population.spawnPolicy.points must name at least one spawn point.");
+                } else {
+                    for (var index = 0; (index < ids.Count); index++) {
+                        if (string.IsNullOrWhiteSpace(value: ids[index]) || !spawnPointIds.Contains(item: ids[index])) {
+                            errors.Add(item: $"population.spawnPolicy.points[{index}] '{ids[index]}' names no spawn point.");
+                        }
+                    }
+                }
+
+                RequireNonNegative(value: points.Jitter, name: "population.spawnPolicy.jitter", errors: errors);
+
+                break;
+            default:
+                errors.Add(item: $"population.spawnPolicy is an unknown kind '{policy.GetType().Name}'.");
+
+                break;
+        }
+    }
+
+    // The LOOK rows (PRESENTATION-ONLY): name presence/uniqueness (mirroring the kit-name rule), a source over the
+    // closed catalog|creation set with a loud unknown default, a resolvable creation reference, a positive scale under
+    // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
+    // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
+    // resolved look-name set (a future Inhabit facet resolves its Look against it).
+    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook>? looks, HashSet<string> creationIds, List<string> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (looks is null) {
+            return names;
+        }
+
+        for (var index = 0; (index < looks.Count); index++) {
+            var look = looks[index];
+            var path = $"looks[{index}]";
+
+            if (look is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: look.Name)) {
+                errors.Add(item: $"{path} requires a name.");
+            } else if (!names.Add(item: look.Name)) {
+                errors.Add(item: $"{path} duplicates the name '{look.Name}'.");
+            }
+
+            var isCatalog = false;
+
+            switch (look.Source) {
+                case WorldLookSource.Catalog catalog:
+                    isCatalog = true;
+
+                    if (catalog.Index is { } catalogIndex) {
+                        RequireIntRange(value: catalogIndex, min: 0, max: (WorldPopulation.MaxPopulation - 1), name: $"{path}.source.index", errors: errors);
+                    }
+
+                    break;
+                case WorldLookSource.Creation creation:
+                    if (string.IsNullOrWhiteSpace(value: creation.CreationId) || !creationIds.Contains(item: creation.CreationId)) {
+                        errors.Add(item: $"{path}.source.creationId '{creation.CreationId}' names no creation row.");
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{path}.source is an unknown kind '{look.Source?.GetType().Name ?? "(null)"}'.");
+
+                    break;
+            }
+
+            RequirePositive(value: look.Scale, name: $"{path}.scale", errors: errors);
+
+            if (float.IsFinite(f: look.Scale) && (look.Scale > MaxLookScale)) {
+                errors.Add(item: $"{path}.scale {look.Scale} exceeds the {MaxLookScale} look-scale ceiling.");
+            }
+
+            RequireNonNegative(value: look.Motion.GaitAmplitude, name: $"{path}.motion.gaitAmplitude", errors: errors);
+            RequireNonNegative(value: look.Motion.SecondsPerFrame, name: $"{path}.motion.secondsPerFrame", errors: errors);
+
+            if (look.Motion.ReplayFrames && isCatalog) {
+                errors.Add(item: $"{path}.motion.replayFrames cannot be set on a catalog source — there is no timeline to replay.");
+            }
+
+            if (look.Motion.ReplayFrames && (!float.IsFinite(f: look.Motion.SecondsPerFrame) || (look.Motion.SecondsPerFrame <= 0f))) {
+                errors.Add(item: $"{path}.motion.replayFrames requires a positive secondsPerFrame (a zero-hold replay is an infinite loop).");
+            }
+        }
+
+        return names;
+    }
+
+    // The look assignment policy (PRESENTATION-ONLY): null coalesces to the hash default (nothing to validate); a table
+    // needs a non-empty cycle whose every entry resolves to a declared look name. Reuses the assignment shape verbatim.
+    private static void ValidateLookAssignment(WorldRowAssignment? assignment, HashSet<string> lookNames, List<string> errors) {
+        if (assignment is null) {
+            return;
+        }
+
+        var isHash = string.Equals(a: assignment.Policy, b: WorldRowAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
+        var isTable = string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
+
+        if (!isHash && !isTable) {
+            errors.Add(item: $"lookAssignment.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
+        }
+
+        var table = (assignment.Table ?? []);
+
+        if (isTable && (table.Count == 0)) {
+            errors.Add(item: $"lookAssignment.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
+        }
+
+        for (var index = 0; (index < table.Count); index++) {
+            if (!lookNames.Contains(item: table[index])) {
+                errors.Add(item: $"lookAssignment.table[{index}] '{table[index]}' names no look row.");
             }
         }
     }
@@ -758,24 +905,24 @@ internal static class WorldDefinitionValidator {
 
     // The kit assignment policy (SIM-AFFECTING): hash needs nothing more; table needs a non-empty cycle whose every
     // entry resolves to a declared kit name.
-    private static void ValidateAssignment(WorldKitAssignment assignment, HashSet<string> kitNames, List<string> errors) {
+    private static void ValidateAssignment(WorldRowAssignment assignment, HashSet<string> kitNames, List<string> errors) {
         if (assignment is null) {
             errors.Add(item: "assignment is required.");
 
             return;
         }
 
-        var isHash = string.Equals(a: assignment.Policy, b: WorldKitAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
-        var isTable = string.Equals(a: assignment.Policy, b: WorldKitAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
+        var isHash = string.Equals(a: assignment.Policy, b: WorldRowAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
+        var isTable = string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
 
         if (!isHash && !isTable) {
-            errors.Add(item: $"assignment.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldKitAssignment.HashPolicy}' or '{WorldKitAssignment.TablePolicy}'.");
+            errors.Add(item: $"assignment.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
         }
 
         var table = (assignment.Table ?? []);
 
         if (isTable && (table.Count == 0)) {
-            errors.Add(item: $"assignment.table must be non-empty under the '{WorldKitAssignment.TablePolicy}' policy.");
+            errors.Add(item: $"assignment.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
         }
 
         for (var index = 0; (index < table.Count); index++) {

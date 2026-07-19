@@ -4314,6 +4314,141 @@ branch.** The runtime answer to "does it swim" is the `WorldKit.Model` the autho
 named, not a string parsed per frame. **Do not let both arcs land a companion
 interpreter.**
 
+### Arc 6 execution record
+
+Landed on `claude/puck-realtime-world-editing-4fd13f` atop `d275ee1`. Track C
+fixes are separate leading commits; the arc is one squash.
+
+**Track C fixes (leading commits).**
+- **largechange-06** — `WorldWorkbench.TryEnter` pre-checked only the opening
+  bench's preview, but `WorldFrameSource` composes *every* active bench into the
+  rendered program. Two benches each fitting alone could exceed the frozen floor
+  together. Fix: fold `ComposeCandidate` (all currently-active benches) onto the
+  admission candidate. The "non-throwing capacity-refusal on the final composed
+  program" clause is subsumed — with all benches now charged at admission the
+  frozen floor honestly bounds the composed program, so no `Build` overflow is
+  reachable.
+- **largechange-09** — `ComposeGizmoSeat` emitted one chip per composed speaker
+  with no cap, so a large speaker field × up to `MaxSlots` editing seats could
+  flood the shared 192-record overlay table and starve the binding bar / HUD /
+  toast. Fix: a per-seat `MaxGizmoChipsPerSeat = 16` budget, nearest-to-camera
+  kept (farthest evicted in place), so gizmo admission is a bounded, documented
+  fraction of the table.
+- **largechange-01 / -15** — NOT fixed here (correctly). Their scope is the
+  audio mixer/snapshot capacity math (`WorldAudioMixer`/`WorldAudioSnapshot`),
+  not population/looks; Arc 6 touches the director's anchored-speaker resolution
+  only through the (deferred) resolver reroute, which changes no audio-plan
+  derivation. Per the ordering rule ("fix it if its scope is within
+  population/looks; otherwise note it for Arc 7") they are **carried to Arc 7**,
+  where the hard order is; land -01 and -15 in the same mixer sitting.
+
+**Arc 6 — LANDED (core thesis, verified).** `WorldLook` / `WorldLookSource`
+(`Catalog`/`Creation`) / `WorldLookMotion` / `WorldSpawnPolicy`
+(`Phyllotaxis`/`PointCycle`) records + `FixedSpawnPolicy.Compile`; the **P4
+rename** `WorldKitAssignment → WorldRowAssignment` (all callers, supergreen, no
+alias) and `WorldPopulation.KitFor → RowFor(index, rowCount, stream)` with the
+decorrelating `stream` (`stream: 0` reproduces the kit mapping bit-identically;
+the look table uses a distinct stream so it is not a monotone image of the kit
+bucket); trailing-nullable `Looks`/`LookAssignment` sections (R12) and
+`WorldPopulationDefaults.SpawnPolicy`; `ValidateLooks` (after `ValidateCreations`,
+before `ValidatePlacements`) / `ValidateLookAssignment` / `ValidateSpawnPolicy`
+(after `ValidateSpawnPoints`, which now returns its id set) with the
+`MaxLookScale` GPU-safety ceiling and the loud zero-hold / catalog-replay
+rejections; `UpsertLook`/`RemoveLook`/`SetLookAssignment` mutations + the new
+`WorldSection.Looks`; `WorldServer` `SectionOf`/`TryCompose`/`Describe`, and the
+**`AffectsPopulation`/`AffectsRenderEnvelope` extensions** (the three look
+mutations, plus `UpsertPlacement`/`RemovePlacement` per R13 groundwork, plus
+`SetPopulationDefaults` so `SpawnPolicy` recompiles live) with the third-timing-
+class accept-echo narration; `WorldPopulation` look table (`m_lookRows`,
+`ResolveLookIndices`, `LookIndex`/`ActiveLookCounts`/`LookRows`) and the
+spawn-policy read in `SeedSimulated` (phyllotaxis default is bit-identical;
+`points` cycles named spawn points with a disjoint-R2 jitter); the protocol
+`EntitySnapshot.Look` byte + `WorldClient.LookIndex`; the `WorldLookCommandModule`
+(`world.look.set/.remove/.assign/.tune`, `world.population.spawn`, `world.looks`)
+registered in `Program.cs`; `WorldJsonContext` registration with
+`TypeInfoPropertyName` guards (SYSLIB1031, risk 5); and the **catalog-look render
+integration** in `WorldFrameSource`/`WorldAvatarCatalog` — `Scale` (shape sizes
++ anchor offsets + bound radius), `GaitAmplitude` (scales the gait phase; 0
+stills the limbs), and the `Catalog(Index)` **rig pin** (geometry sourced from
+the pinned rig, written to the entity's own frozen slot range clamped to its leaf
+count, so a pin never grows the frozen capacity). RECOMPILE-KIT hot-swap survives:
+`world.kit.tune` mid-run preserved pose (`player.where` drifted a few cm of wander,
+did not teleport to spawn).
+
+**OQ-7 measurement (construction-probe approach, MEASURED before reserving).**
+Instrumented the boot probe: **ProgramWordCapacity 407 172, InstanceCapacity 2 241,
+DynamicTransformCapacity 2 237** on the default world. The catalog-look path adds
+**zero** to all three — `Scale`/`GaitAmplitude`/`Catalog(Index)` change no
+instruction or instance *count* (scale is bound-radius/shape-size only, the pin is
+clamped to the entity's own slot range), and the probe still emits the identity
+rig at unit scale. **So no render-envelope headroom is reserved for catalog looks —
+none is needed, and per risk 1 an uncapped creation-look path is not shipped.**
+
+**DEFERRED with disposition (severable per the plan's own risk 1 — "the item
+most likely to force the arc's scope to shrink").**
+- **P6 `WorldPlacementAnimator → WorldStampPool` generalization + creation-look
+  stamp-pool rendering.** OQ-7 measured catalog looks at zero reservation; a
+  creation-look body would need a stamp-pool capacity reservation whose honest
+  bound (risk 1) is a new authored headroom field. Rather than ship the uncapped
+  path the envelope exists to forbid, a `Creation`-source look renders through the
+  catalog on the entity's own rig at the look's `Scale`/`GaitAmplitude` — a
+  documented degradation (never a black/vanished body, matching the binder's
+  "never black, never crash" posture), and `world.looks` still censuses it. The
+  stamp-pool root generalization + the boot-consumed creation-look headroom field
+  fold into the creation-look landing (with Arc 7's `Inhabit`).
+- **`WorldLookResolver` reroute of the 5 humanoid-role call sites** (`WorldAudioDirector`
+  ×2, `WorldEditorTargeting` ×2, + the binder site). With the creation-look
+  render path deferred, the resolver is a pure pass-through today (catalog looks
+  resolve exactly as now); the one live nuance — a `Catalog(Index)`-pinned body's
+  anchored-leaf offset still reads the entity's own rig, not the pinned rig — is a
+  minor documented degradation consistent with the deferred creation path. Lands
+  with creation-look rendering so its degradation branch is testable.
+- **P5 `WorldCreationFacets` skeleton** — the `(placements × creations)` looks
+  facet has no consumer until the creation-look/`Inhabit` derivation exists;
+  building an empty entry point now adds a seam with nothing to derive. Folds in
+  with the creation-look landing.
+
+**Demo deletion — (c)-disposition (Arc 1 precedent; NOT deleted).** The arc's
+deletion targets (`Creator/CompanionState`, `CompanionEmitter`, `Garden/`,
+`Rts/`, and the command modules) are consumed by the **pinned OQ-14 survivors** —
+`Overworld/OverworldFrameSource(.Emitters).cs`, `Overworld/OverworldWorld.cs`,
+`Town/TownWorld.cs` — plus the **HELD `Museum/MuseumRenderer.cs`** and the
+`Gravity/*` survivors and `Forge/FlagshipCrtRobot.cs`. Excising them would break
+the Demo library build and require gutting the entire pinned overworld
+crowd-render path (and touching a HELD file), which is disproportionate and out
+of scope. Recorded per Arc 1's precedent: the World-side capability these
+carcasses represent (population + looks + spawn policy) is fully landed in
+`Puck.World` this arc; the Demo shells stay pinned until the survivors are
+removed wholesale on the Demo-retirement trajectory.
+
+**Session capture.** No fold needed: looks are journaled document rows (already
+in `server.Definition`), not live session levers, and `SpawnPolicy` rides the
+existing `CapturePopulation` `with`-preserve. Verified the ouroboros — a fresh
+default-world save gains **no** `looks` key; a looks-present save round-trips
+(`fish` catalog-7 scale-2 reloads to `world.looks: fish=catalog(index 7):128`).
+
+**Verification (stdin, `dotnet run … --exit-after-seconds`).** First `world.looks`
+→ `catalog=catalog(index-derived):128` (the absence-coalesce default). `world.look.set`
+quiet-acks; `[world.mutation: UpsertLook 'stocky' applied]` on stderr. After
+`world.look.assign table stocky` → `stocky=catalog(index 42):128`; after
+`world.population 12` → `stocky=catalog(index 42):16` (12 peers + 4 seats — census
+and look agree). `world.look.tune` bumps dirty; `world.undo 1` walks it back. The
+**first** `world.look.remove stocky` (assignment still names it) is **rejected
+loudly**: "lookAssignment.table[0] 'stocky' names no look row"; after
+`world.look.assign hash` the second remove succeeds. `world.population.spawn points
+3 seat-1 seat-4` narrates the timing split; `world.save` writes the `points` policy
+and resets dirty. R13 regression: `stream: 0` is `R1(index+1)` verbatim, so kit
+counts are unchanged by construction. Full solution builds clean in Release;
+Puck.World boots and runs the 2 s smoke.
+
+**Plan contradictions found.** (1) The target-shape literal
+`WorldSpawnPolicy.Points(IReadOnlyList<string> Points, …)` does not compile — a C#
+record property cannot share its record type's name. Renamed the nested type to
+`PointCycle` (wire discriminator stays `points`, list member stays `points`).
+(2) The plan's expected `world.looks` count "`stocky: 12`" after `world.population
+12` reads `16` here — `ActiveLookCounts` counts the 4 active local seats too, so
+`12 + 4`; the census is internally consistent, the plan's figure was approximate.
+
 ---
 
 ## Arc 7 — Creator & Inhabitation

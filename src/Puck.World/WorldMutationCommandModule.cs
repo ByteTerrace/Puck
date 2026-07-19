@@ -62,14 +62,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 switch (args[0].ToLowerInvariant()) {
-                    case WorldKitAssignment.HashPolicy:
-                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: WorldKitAssignment.Hash));
-                    case WorldKitAssignment.TablePolicy:
+                    case WorldRowAssignment.HashPolicy:
+                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
+                    case WorldRowAssignment.TablePolicy:
                         if (args.Length < 2) {
                             return new CommandResult(Output: "[world.kit.assign: the table policy needs at least one kit name]");
                         }
 
-                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldKitAssignment(Policy: WorldKitAssignment.TablePolicy, Table: args[1..])));
+                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
                     default:
                         return new CommandResult(Output: $"[world.kit.assign: unknown policy '{args[0]}' — hash | table]");
                 }
@@ -183,9 +183,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return Usage(verb: "world.population.defaults", form: "<local> <network>");
                 }
 
-                // Preserve the document's live peer-source default (the world.population idle|wander verb owns it) — this
-                // verb only sets the local/network census figures.
-                return Submit(mutation: new WorldMutation.SetPopulationDefaults(Principal: WorldPrincipal.Console, Population: new WorldPopulationDefaults(LocalPlayers: local, NetworkPlayers: network, DefaultPeerSource: server.Definition.Population.DefaultPeerSource)));
+                // Preserve the document's live peer-source default (the world.population idle|wander verb owns it) and the
+                // spawn policy (world.population.spawn owns it) — this verb only sets the local/network census figures.
+                return Submit(mutation: new WorldMutation.SetPopulationDefaults(Principal: WorldPrincipal.Console, Population: (server.Definition.Population with { LocalPlayers = local, NetworkPlayers = network })));
             }
         );
         yield return Row(
