@@ -11,7 +11,7 @@ namespace Puck.Authoring;
 /// <param name="Shininess">The specular exponent (null = the material default).</param>
 public sealed record PaletteEntryDocument(Vector3 Albedo, float? Emissive, float? Specular, float? Shininess);
 
-/// <summary>One authored shape on the wire (mirrors a creator's live placed-shape state).</summary>
+/// <summary>The persisted form of a placed shape (see <see cref="SculptShape"/>).</summary>
 /// <param name="Id">The shape's stable id.</param>
 /// <param name="Name">The optional player-given name.</param>
 /// <param name="Type">The primitive.</param>
@@ -114,7 +114,7 @@ public sealed record TextRunDocument(
     }
 }
 
-/// <summary>One IK chain on the wire (mirrors a creator's live chain state's DEFINITION — rest geometry is
+/// <summary>One IK chain on the wire (see <see cref="SculptChain"/>'s live DEFINITION — rest geometry is
 /// re-derived from the member shapes' CURRENT positions at load time, never persisted, so a loaded chain always
 /// captures fresh against whatever pose the shapes loaded at).</summary>
 /// <param name="Id">The chain's stable id.</param>
@@ -137,8 +137,8 @@ public sealed record ChainDocument(
     public const string KindSpine = "spine";
 }
 
-/// <summary>One timeline frame on the wire: a named full snapshot of every shape's transform (the animation model —
-/// consumed when the timeline lands; carried in the schema from v1 so saved files stay stable).</summary>
+/// <summary>One timeline frame on the wire: a named full snapshot of every shape's transform. Part of the
+/// hold-style animation timeline — authored frames replayed with no interpolation.</summary>
 /// <param name="Name">The frame's name (<c>rest</c> is the live pose).</param>
 /// <param name="Transforms">The per-shape transform snapshots, keyed by shape id.</param>
 public sealed record FrameDocument(string Name, IReadOnlyList<FrameTransformDocument> Transforms);
@@ -232,8 +232,8 @@ public sealed record CreationSoundDocument(
 /// <c>hover</c> (float in place). Null = walk.</param>
 /// <param name="Faces">The declared screen faces (null = none). A creation with a face shows a feed on its body; the
 /// face's default source is pure data, wirable to any camera feed.</param>
-/// <param name="Sounds">The declared sounds (null = none). Omitted from the wire when null, so a sound-free creation
-/// stays byte-identical to one authored before the member existed.</param>
+/// <param name="Sounds">The declared sounds (null = none). Omitted from the wire when null, so a creation authored
+/// without this member serializes to unchanged bytes.</param>
 public sealed record CreationBehaviorDocument(
     string? Locomotion,
     IReadOnlyList<CreationFaceDocument>? Faces,
@@ -242,7 +242,7 @@ public sealed record CreationBehaviorDocument(
 );
 
 /// <summary>
-/// The <c>puck.creation.v1</c> document — a creator scene as data, the everything-as-data payoff for authoring: a
+/// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
 /// creation can be named, saved, reloaded, and handed to a bake/forge headlessly. Document doctrine applies
 /// throughout: every OPTIONAL member is declared nullable (the polymorphic parse path skips property initializers —
 /// an omitted member arrives null regardless), validated only when present, and normalized at consumption (see
@@ -254,7 +254,7 @@ public sealed record CreationBehaviorDocument(
 /// <param name="BakeStyle">The per-cart bake style knob (null = classic).</param>
 /// <param name="Palette">The material palette (null = the default sweep).</param>
 /// <param name="Shapes">The authored shapes (null = empty).</param>
-/// <param name="Frames">The timeline frames (null = none — the animation workstream consumes these).</param>
+/// <param name="Frames">The animation timeline frames (null = none).</param>
 /// <param name="Chains">The IK rig's chains (null = none). Shapes stay flat; a chain only references shape ids.</param>
 /// <param name="Cameras">The creation's anchored camera eyes (null = none). Each rides a shape and produces a named
 /// feed — the lantern-fish's lure lens is one entry here.</param>
@@ -262,8 +262,8 @@ public sealed record CreationBehaviorDocument(
 /// and any screen faces it declares, so consumers stop re-supplying those facts by hand.</param>
 /// <param name="TextRuns">The engraved/embossed text runs the creation carries (null/empty = none). Each is a string
 /// laid onto a surface, expanded at emission into <see cref="SdfShapeType.Glyph"/> shapes — see
-/// <see cref="TextRunDocument"/>. Omitted from the wire when null (a text-free creation stays byte-identical), so this
-/// member did NOT churn the whole town's committed JSON when it landed.</param>
+/// <see cref="TextRunDocument"/>. Omitted from the wire when null, so a creation authored without this member
+/// serializes to unchanged bytes.</param>
 public sealed record CreationDocument(
     string? Schema,
     string? Name,
@@ -285,8 +285,8 @@ public sealed record CreationDocument(
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 16;
 
-    /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture (the
-    /// run-document precedent). Null when the document carries no unknown members. A settable (not <c>init</c>)
+    /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture. Null
+    /// when the document carries no unknown members. A settable (not <c>init</c>)
     /// accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
@@ -310,17 +310,17 @@ public sealed record CreationDocument(
 /// Loads and saves <see cref="CreationDocument"/>s against a creations folder. Serializes through the ONE shared
 /// <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING: Vector3/Quaternion
 /// expose fields, not properties, and omitting it silently zeroes every transform into degenerate shapes. Root paths
-/// are explicit parameters — this library never bakes in a working-directory convention; a caller's own default
-/// (<see cref="DefaultFolder"/>/<see cref="DefaultCasRoot"/> document what Puck.Demo passes) is the caller's choice.
-/// Both <see cref="Save"/> and <see cref="Load"/> ride <see cref="CreationCanonicalizer"/> exclusively — this store
-/// never validates, normalizes, or hashes a document by any other route.
+/// are explicit parameters — this library never bakes in a working-directory convention;
+/// <see cref="DefaultFolder"/>/<see cref="DefaultCasRoot"/> document one conventional caller's choice, not a
+/// requirement. Both <see cref="Save"/> and <see cref="Load"/> ride <see cref="CreationCanonicalizer"/>
+/// exclusively — this store never validates, normalizes, or hashes a document by any other route.
 /// </summary>
 public static class CreationStore {
-    /// <summary>The conventional creations folder name Puck.Demo passes (relative to the working directory, beside
-    /// forged-avatars/) — documented, not implied: every method still takes the root explicitly.</summary>
+    /// <summary>The conventional creations folder name, beside <c>forged-avatars/</c> — documented, not implied:
+    /// every method still takes the root explicitly.</summary>
     public const string DefaultFolder = "creations";
 
-    /// <summary>The conventional content-addressed store root Puck.Demo passes — documented, not implied.</summary>
+    /// <summary>The conventional content-addressed store root — documented, not implied.</summary>
     public const string DefaultCasRoot = "store";
 
     /// <summary>Serializes a document to indented camel-case JSON.</summary>
@@ -336,8 +336,8 @@ public static class CreationStore {
     /// immediately stampable by name.</summary>
     /// <param name="document">The document to save.</param>
     /// <param name="name">The save handle.</param>
-    /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
-    /// <param name="casRoot">The content-addressed store root (Demo's convention: <see cref="DefaultCasRoot"/>).</param>
+    /// <param name="creationsRoot">The creations folder (defaults to <see cref="DefaultFolder"/>).</param>
+    /// <param name="casRoot">The content-addressed store root (defaults to <see cref="DefaultCasRoot"/>).</param>
     /// <returns>The written path.</returns>
     /// <exception cref="DocumentValidationException"><paramref name="document"/> fails
     /// <see cref="CreationCanonicalizer.Validate"/> (only a structural invariant can fail here, since this stamps the
@@ -371,7 +371,7 @@ public static class CreationStore {
     /// repairing it, and only a document that PASSES validation is normalized — never trust persisted derived
     /// values.</summary>
     /// <param name="nameOrPath">The save handle (resolved under <paramref name="creationsRoot"/>) or an explicit file path.</param>
-    /// <param name="creationsRoot">The creations folder a bare handle resolves against (Demo's convention: <see cref="DefaultFolder"/>).</param>
+    /// <param name="creationsRoot">The creations folder a bare handle resolves against (defaults to <see cref="DefaultFolder"/>).</param>
     /// <returns>The normalized document, or null when nothing readable exists at the location.</returns>
     /// <exception cref="InvalidDataException">The file deserialized to a null document, OR the document declares an
     /// absent/foreign schema, or fails a structural invariant — in the latter two cases the offending
@@ -402,7 +402,7 @@ public static class CreationStore {
     }
 
     /// <summary>Lists the save handles under <paramref name="creationsRoot"/>.</summary>
-    /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
+    /// <param name="creationsRoot">The creations folder (defaults to <see cref="DefaultFolder"/>).</param>
     /// <returns>The handles, sorted ordinally.</returns>
     public static IReadOnlyList<string> List(string creationsRoot) {
         ArgumentException.ThrowIfNullOrEmpty(creationsRoot);

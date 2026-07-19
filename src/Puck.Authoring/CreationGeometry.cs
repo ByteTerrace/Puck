@@ -8,8 +8,8 @@ namespace Puck.Authoring;
 /// a creation's <see cref="ShapeDocument"/> emits through, so a shape renders byte-for-byte the same geometry in every
 /// stamp, workbench, and bake regardless of which project draws it. This is the render-side sibling of the
 /// <see cref="CreationCanonicalizer"/> hash contract: the hash pins a creation's DATA identity; this table pins what
-/// that data MEANS as geometry. Values are copied value-for-value from the Demo authoring reference (the behavioral
-/// oracle) — changing one changes the meaning of every persisted creation and is a schema-scale act.
+/// that data MEANS as geometry. The canonical primitive dimension table. Changing any value changes the meaning of
+/// every persisted creation — a schema-scale act. THIS table is the authority.
 /// </summary>
 public static class CreationGeometry {
     // The canonical unit-scale dimensions (a contract, not a preference: every persisted creation was authored and

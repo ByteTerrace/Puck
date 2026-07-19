@@ -7,8 +7,8 @@ namespace Puck.Authoring;
 /// here every time a goal moves). Deliberately in <c>System.Numerics</c> floats — this is HOST-SIDE AUTHORING/RENDER
 /// math, never simulation state, so it never belongs in <c>Puck.Maths</c>' fixed-point world. The two-bone solver is
 /// analytic: the mid joint sits at the circle-circle intersection of the two bone-length spheres centered on the root
-/// and the (reach-clamped) goal, found via the law of cosines rather than an iterative solve. The math is the settled
-/// authoring-oracle behavior, preserved value-for-value — a persisted creation's pose must re-derive identically.
+/// and the (reach-clamped) goal, found via the law of cosines rather than an iterative solve. A persisted
+/// creation's pose must re-derive identically — a value change here is a schema-scale act.
 /// </summary>
 public static class ChainSolver {
     // Keeps the law-of-cosines argument strictly inside [-1, 1] (float rounding can walk it just past an edge) and

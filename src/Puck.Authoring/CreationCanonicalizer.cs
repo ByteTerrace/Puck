@@ -5,9 +5,8 @@ namespace Puck.Authoring;
 
 /// <summary>
 /// THE strict validate → normalize → canonicalize boundary every <see cref="CreationDocument"/> crosses before it is
-/// trusted, persisted, or embedded — the one public pipeline the World UI/editor implementation review's UIE-6
-/// finding asked for, replacing <see cref="CreationStore"/>'s old load-time behavior of silently relabeling an
-/// absent/foreign schema as the current one. <see cref="CreationStore"/> rides this exclusively: <see cref="CreationStore.Save"/>
+/// trusted, persisted, or embedded — the one public canonicalization pipeline: strict schema, no silent relabel;
+/// doc and hash always come from the same call. <see cref="CreationStore"/> rides this exclusively: <see cref="CreationStore.Save"/>
 /// writes <see cref="Canonicalize"/>'s bytes, and <see cref="CreationStore.Load"/> calls <see cref="ValidateOrThrow"/>
 /// then <see cref="Normalize"/> — nothing in this project deserializes a creation without crossing it.
 /// </summary>
@@ -146,8 +145,8 @@ public static class CreationCanonicalizer {
     /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
     /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
     /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always produce
-    /// byte-identical bytes and therefore the same hash — cite THIS guarantee wherever a creation's identity is pinned
-    /// (the §D6 world-row hash).</summary>
+    /// byte-identical bytes and therefore the same hash — cite THIS guarantee wherever a creation's identity is
+    /// pinned (the world placement row's inline-canonical hash).</summary>
     /// <param name="document">The document to canonicalize.</param>
     /// <param name="source">An optional source label (a file path or save handle) for a validation-failure message.</param>
     /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>

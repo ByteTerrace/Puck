@@ -23,7 +23,7 @@ public enum SynthOscillator {
 /// The <c>puck.synth.v1</c> document — one deterministic synth PATCH as data: the parameter set a world voice synth
 /// renders a creature/phenomenon sound from, integer end to end (no wall-clock, RNG seeds arrive per-trigger, no
 /// float anywhere in the schema). Every field is a RUNTIME unit — frames are mixer-rate audio frames (48000 per
-/// second, the audio arc's A1 ruling) and pitch rides integer millihertz — so a renderer consumes the document
+/// second) and pitch rides integer millihertz — so a renderer consumes the document
 /// without a conversion layer, and the parameter space stays hardware-kin (compilable to APU register writes if ever
 /// wanted). A patch is used without any tune: it is the contract creature sounds and world emission facets embed.
 /// Document doctrine applies throughout: every OPTIONAL member is nullable, validated only when present, and
@@ -76,17 +76,17 @@ public sealed record SynthPatchDocument(
     public const string CurrentSchema = "puck.synth.v1";
 
     /// <summary>The largest pitch-shaped value the schema admits, in millihertz: the Nyquist frequency of the
-    /// 48000 Hz mixer the audio arc's A1 ruling fixed — a contract invariant of the runtime unit, not a tunable
-    /// (a pitch beyond it cannot be rendered at the mixer rate).</summary>
+    /// 48000 Hz mixer — a contract invariant of the runtime unit, not a tunable (a pitch beyond it cannot be
+    /// rendered at the mixer rate).</summary>
     public const int MaxPitchMillihertz = 24_000_000;
 
     /// <summary>The largest frame-count value the schema admits (60 seconds at the 48000 Hz mixer rate) — the
-    /// sanity ceiling that separates a VOICE from a STREAM: content longer than this is a tune (machine-backed music
-    /// is the tracker's job, per the audio arc's A4/A9 split), not a synth patch.</summary>
+    /// sanity ceiling that separates a VOICE from a STREAM: content longer than this is a tune (machine-backed
+    /// music is the tracker's job), not a synth patch.</summary>
     public const int MaxFrames = (48_000 * 60);
 
-    /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture (the
-    /// creation-document precedent). Null when the document carries no unknown members. A settable (not <c>init</c>)
+    /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture. Null
+    /// when the document carries no unknown members. A settable (not <c>init</c>)
     /// accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
@@ -94,10 +94,9 @@ public sealed record SynthPatchDocument(
 
 /// <summary>
 /// THE strict validate → normalize → canonicalize boundary every <see cref="SynthPatchDocument"/> crosses before it
-/// is trusted, persisted, or embedded — the synth family's adapter over <see cref="DocumentCanonicalizer"/>, meeting
-/// the same standard <see cref="CreationCanonicalizer"/> set: an absent or foreign schema rejects loudly (never a
-/// silent relabel), every violation is collected in one pass, and canonical bytes + hash always come from the same
-/// result.
+/// is trusted, persisted, or embedded — the synth family's adapter over <see cref="DocumentCanonicalizer"/>: an
+/// absent or foreign schema rejects loudly (never a silent relabel), every violation is collected in one pass, and
+/// canonical bytes + hash always come from the same result.
 /// </summary>
 public static class SynthPatchCanonicalizer {
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {

@@ -14,9 +14,9 @@ public enum RotationSnap {
     Deg45 = 2,
 }
 
-/// <summary>A captured align-to-shape reference — the frozen guide a moved shape snaps against (see
-/// <see cref="GridSnap"/> §1b/1c). Snapshotted at capture time so a later delete/move of the source shape never
-/// disturbs the guide (the resolved F4 rule). All fields are authoring-side floats.</summary>
+/// <summary>A captured align-to-shape reference — the frozen guide a moved shape snaps against. Snapshotted at
+/// capture time so a later delete/move of the source shape never disturbs the guide. All fields are authoring-side
+/// floats.</summary>
 /// <param name="Origin">The reference frame's origin, world space.</param>
 /// <param name="Frame">The reference frame's orientation (a pure yaw quaternion for a planar reference; the full
 /// shape rotation for an oriented one).</param>
@@ -65,14 +65,14 @@ public readonly record struct SnapConfig(
 }
 
 /// <summary>
-/// Grid-locking's pure snap math — the authoring-side float core shared by every editing surface (see the
-/// grid-locking proposal §1). Every function is pure (no state, no allocation) and takes an explicit
+/// Grid-locking's pure snap math — the authoring-side float core shared by every editing surface. Every function
+/// is pure (no state, no allocation) and takes an explicit
 /// <see cref="SnapConfig"/> so callers stay declarative. This is HOST-SIDE PRESENTATION math: it never enters the
 /// deterministic simulation or a saved wire format (it only changes the DISTRIBUTION of the plain
 /// <c>Position</c>/<c>YawDegrees</c> floats already written).
 /// </summary>
 public static class GridSnap {
-    // The fraction a node must be departed before the magnetize band releases to the next node (the resolved F3 rule).
+    // The fraction a node must be departed before the magnetize band releases to the next node.
     private const float ReleaseBandFraction = 0.6f;
     // How near a value must be to a lattice multiple to count as "resting on a node" for the release band.
     private const float OnNodeEpsilon = 1.0e-4f;
@@ -91,11 +91,11 @@ public static class GridSnap {
             z: ((pitch.Z > 0f) ? (MathF.Round(x: (p.Z / pitch.Z)) * pitch.Z) : p.Z)
         );
 
-    /// <summary>The full position snap (the proposal's combined case §1f). With no reference it is the pure
-    /// world-lattice snap (§1a) with the magnetize release band; with a reference it works in reference-local space,
-    /// competing the object lattice (§1b) against the true face-to-face / inner-flush / center candidates (§1c) per
-    /// axis, face-priority winning inside the capture radius. Returns the intent untouched when snapping is off.</summary>
-    /// <param name="intent">The un-snapped integrated cursor (the retained pre-snap intent — the resolved F3
+    /// <summary>The full position snap. With no reference it is the pure world-lattice snap with the magnetize
+    /// release band; with a reference it works in reference-local space, competing the object lattice against the
+    /// true face-to-face / inner-flush / center candidates per axis, face-priority winning inside the capture
+    /// radius. Returns the intent untouched when snapping is off.</summary>
+    /// <param name="intent">The un-snapped integrated cursor (the retained pre-snap intent — the
     /// magnetize-while-dragging source of truth).</param>
     /// <param name="config">The snap configuration.</param>
     /// <param name="candidateLocalHalfExtents">The MOVED shape's half-extents along the REFERENCE frame's axes (for
@@ -129,7 +129,7 @@ public static class GridSnap {
         );
     }
 
-    /// <summary>Snaps a scalar yaw (degrees) to the rotation increment — world-sculpt's yaw-only path (§1d). Off
+    /// <summary>Snaps a scalar yaw (degrees) to the rotation increment — world-sculpt's yaw-only path. Off
     /// returns the input.</summary>
     /// <param name="yawDegrees">The yaw, degrees.</param>
     /// <param name="mode">The rotation increment.</param>
@@ -140,10 +140,9 @@ public static class GridSnap {
         return ((step > 0f) ? (MathF.Round(x: (yawDegrees / step)) * step) : yawDegrees);
     }
 
-    /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate (creator's path §1d, the
-    /// resolved F2 rule): the nearest element of the 24-element octahedral group (Deg90) or the richer 45°-granular
-    /// set (Deg45) by geodesic distance — argmax |dot(q, candidate)|, robust against quaternion double-cover. Off
-    /// returns the input.</summary>
+    /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate: the nearest element of the
+    /// 24-element octahedral group (Deg90) or the richer 45°-granular set (Deg45) by geodesic distance —
+    /// argmax |dot(q, candidate)|, robust against quaternion double-cover. Off returns the input.</summary>
     /// <param name="orientation">The orientation to snap.</param>
     /// <param name="mode">The rotation increment.</param>
     /// <returns>The snapped orientation (normalized).</returns>
@@ -174,8 +173,8 @@ public static class GridSnap {
         return best;
     }
 
-    // One axis of the reference-space combined pick (§1f): the face/center candidates (§1c) compete with the object
-    // lattice (§1b); face priority inside the capture radius, else the nearest lattice node, else free.
+    // One axis of the reference-space combined pick: the face/center candidates compete with the object lattice;
+    // face priority inside the capture radius, else the nearest lattice node, else free.
     private static float SnapAxisCombined(float value, float previousValue, float pitch, float halfExtent, float candidateHalfExtent, float faceRadius) {
         var faceCandidate = NearestFaceCandidate(value: value, halfExtent: halfExtent, candidateHalfExtent: candidateHalfExtent);
 
@@ -190,7 +189,7 @@ public static class GridSnap {
         return value;
     }
 
-    // The nearest of the true face-to-face / inner-flush / center candidate set (§1c, resolved F1). The moved shape's
+    // The nearest of the true face-to-face / inner-flush / center candidate set. The moved shape's
     // CENTER lands so its near FACE meets the reference face: outer butt-join at ±(h + candH), inner-flush at
     // ±(h - candH), center-align at 0. candH == 0 collapses to the center-on-face set {-h, 0, +h}.
     private static float NearestFaceCandidate(float value, float halfExtent, float candidateHalfExtent) {
@@ -216,8 +215,8 @@ public static class GridSnap {
         return best;
     }
 
-    // One axis of magnetize-while-dragging with the 0.6*pitch release band (§1g, resolved F3): once resting on a node
-    // the intent must move past 0.6*pitch before re-snapping, so stick jitter never buzzes between two nodes.
+    // One axis of magnetize-while-dragging with the 0.6*pitch release band: once resting on a node the intent must
+    // move past 0.6*pitch before re-snapping, so stick jitter never buzzes between two nodes.
     private static float SnapAxisBand(float value, float previousValue, float pitch) {
         if (pitch <= 0f) {
             return value;

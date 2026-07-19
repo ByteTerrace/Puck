@@ -5,9 +5,8 @@ using Puck.SdfVm;
 namespace Puck.Authoring;
 
 /// <summary>One authored shape in a sculpt model — the live, non-nullable twin of <see cref="ShapeDocument"/>.
-/// Every field is baked into whatever program a consumer emits, so any change is a preview-rebuild-scale event
-/// (the model keeps ONE revision counter; there is no transform/program split here — that split belonged to a
-/// dynamic-slot renderer, not the model).</summary>
+/// Every field is baked into whatever program a consumer emits, so any change is a preview-rebuild-scale event.
+/// One revision counter drives all consumers; there is no transform/program split.</summary>
 /// <param name="Id">The shape's stable id (unique within the model; survives deletes/reorders — names and
 /// selection key on it).</param>
 /// <param name="Name">An optional player-given name; null until named.</param>
@@ -52,8 +51,7 @@ public readonly record struct SculptShape(
 public readonly record struct SculptPose(int Id, Vector3 Position, Quaternion Rotation, Vector3 Scale);
 
 /// <summary>One timeline frame: a named FULL snapshot of every shape's transform. The deliberate minimal animation
-/// model — no per-shape keys, no interpolation (hold-style playback, the settled timeline contract every consumer
-/// replays).</summary>
+/// model: hold-style playback, no per-shape keys, no interpolation, by design.</summary>
 /// <param name="Name">The frame's name (auto-named <c>f1</c>, <c>f2</c>… on record).</param>
 /// <param name="Poses">Every shape's pose at record time.</param>
 public sealed record SculptFrame(string Name, IReadOnlyList<SculptPose> Poses);
@@ -64,11 +62,12 @@ public sealed record SculptFrame(string Name, IReadOnlyList<SculptPose> Poses);
 /// Presentation-pure and renderer-blind: no GPU types, no program revisions — consumers watch <see cref="Revision"/>
 /// and re-emit through <see cref="CreationGeometry"/> (so what a preview draws IS what a committed stamp draws,
 /// byte-for-byte). The behavioral contract (edit rates, clamps, blend-group coercion, timeline and IK semantics,
-/// the push-after undo/drag-coalescing protocol) is the settled authoring-oracle behavior, preserved deliberately.
+/// the push-after undo/drag-coalescing protocol) is preserved deliberately: a persisted creation's pose must
+/// re-derive identically.
 /// </summary>
 /// <remarks>The TARGET model: every edit verb acts on the SELECTED shape when one exists, else on the BRUSH — the
-/// style/transform state the NEXT added shape inherits (the oracle's ghost mechanism without its placement UX; the
-/// brush never renders). When a chain GOAL is the target (<see cref="TargetIsGoal"/>), movement drives the goal and
+/// style/transform state the NEXT added shape inherits. The ghost/brush mechanism drives placement previews; the
+/// brush itself never renders. When a chain GOAL is the target (<see cref="TargetIsGoal"/>), movement drives the goal and
 /// the chain re-solves live. Single-threaded like every input-fold type: mutators run in the command pump's apply
 /// window, <see cref="TickPlayback"/>/<see cref="EndInputFrame"/> on the produce path — one window-pump thread.</remarks>
 public sealed class SculptModel {
@@ -127,7 +126,7 @@ public sealed class SculptModel {
     private int m_playCursor;
     private float m_secondsPerFrame = (8f / 60f);
     // THE BRUSH — the style/transform the next added shape inherits, and the target of style verbs while nothing is
-    // selected (the oracle's ghost mechanism, kept; its rendered preview shape, dropped).
+    // selected. The ghost mechanism drives placement previews; the brush itself never renders.
     private AvatarPrimitive m_brushType;
     private Quaternion m_brushRotation = Quaternion.Identity;
     private Vector3 m_brushScale = Vector3.One;
@@ -140,8 +139,8 @@ public sealed class SculptModel {
     private float m_brushDilate;
     private float m_brushOnion;
     // THE RIG (chains + IK): defined chains plus the two cursors — the goal-target index (movement drives that
-    // chain's goal) and the rig-page chain cursor (pole/kind/delete act on it) — deliberately separate, matching
-    // the oracle's target model.
+    // chain's goal) and the rig-page chain cursor (pole/kind/delete act on it) — deliberately separate: a chain
+    // tunes without its goal being the movement target.
     private readonly List<SculptChain> m_chains = [];
     private int m_nextChainId = 1;
     private int m_goalChainIndex = -1;
@@ -836,8 +835,8 @@ public sealed class SculptModel {
 
     // ---- the timeline (frame snapshots — the minimal hold-style animation model) --------------------------------
 
-    /// <summary>Steps the timeline cursor and APPLIES the landed frame's poses (0 restores the rest pose). Stepping
-    /// away from rest captures it first, so the authored pose is never lost.</summary>
+    /// <summary>Steps the timeline cursor and APPLIES the destination frame's poses (0 restores the rest pose).
+    /// Stepping away from rest captures it first, so the authored pose is never lost.</summary>
     /// <param name="direction">+1 forward, -1 back (clamped to [0, <see cref="FrameCount"/>]).</param>
     /// <returns>The new cursor.</returns>
     public int StepFrame(int direction) {
@@ -1616,7 +1615,7 @@ public sealed class SculptModel {
     // EditHistory<T>.Push's contract is "the snapshot AFTER the completed edit" — the pushed value becomes the new
     // undo-stack top, and a later TryUndo steps back to whatever was pushed BEFORE it. So every push here happens
     // AFTER its mutation, never before (pushing before would duplicate the constructor's baseline into the first
-    // edit's "before" state and shift every subsequent undo off by one — the settled push-after contract).
+    // edit's "before" state and shift every subsequent undo off by one).
 
     // Marks a continuous edit's (a drag's) touch for this frame: true only on the drag's START edge, so the caller
     // pushes the post-mutation snapshot exactly once; the drag stays open across frames until EndInputFrame notices

@@ -58,20 +58,18 @@ public sealed record AudioDocument(
     /// <summary>The default row count of the fallback silent pattern.</summary>
     public const int DefaultPatternRowCount = 16;
 
-    /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture (the
-    /// creation-document precedent; the un-matured store dropped these silently). Null when the document carries no
-    /// unknown members. A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during
-    /// deserialization.</summary>
+    /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture. Null
+    /// when the document carries no unknown members. A settable (not <c>init</c>) accessor is required:
+    /// System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 }
 
 /// <summary>
 /// THE strict validate → normalize → canonicalize boundary every <see cref="AudioDocument"/> crosses before it is
-/// trusted, persisted, or embedded — the audio family's adapter over <see cref="DocumentCanonicalizer"/>, meeting the
-/// same standard <see cref="CreationCanonicalizer"/> set: an absent or foreign schema rejects loudly (never a silent
-/// relabel), every violation is collected in one pass, and canonical bytes + hash always come from the same result.
-/// <see cref="AudioDocumentStore"/> rides this exclusively.
+/// trusted, persisted, or embedded — the audio family's adapter over <see cref="DocumentCanonicalizer"/>: an absent
+/// or foreign schema rejects loudly (never a silent relabel), every violation is collected in one pass, and
+/// canonical bytes + hash always come from the same result. <see cref="AudioDocumentStore"/> rides this exclusively.
 /// </summary>
 public static class AudioCanonicalizer {
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
@@ -242,7 +240,7 @@ public static class AudioCanonicalizer {
 /// Loads and saves <see cref="AudioDocument"/>s against a tunes folder, as indented camel-case JSON through the ONE
 /// shared <see cref="DocumentJsonOptions.Shared"/> instance. Root paths are explicit parameters — this library never
 /// bakes in a working-directory convention; <see cref="DefaultFolder"/>/<see cref="DefaultCasRoot"/> document the
-/// conventional roots a host passes (the <see cref="CreationStore"/> precedent). Both <see cref="Save"/> and
+/// conventional roots a caller passes. Both <see cref="Save"/> and
 /// <see cref="Load"/> ride <see cref="AudioCanonicalizer"/> exclusively — this store never validates, normalizes, or
 /// hashes a document by any other route.
 /// </summary>

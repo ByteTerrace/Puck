@@ -15,7 +15,7 @@ namespace Puck.Authoring;
 /// <see cref="ChainSolver.PoseChain"/> can carry it along as the bone reorients.</description></item>
 /// </list>
 /// Solver output lands in ordinary shape transforms, so a recorded frame snapshots the pose and a chain never appears
-/// in <see cref="CreationDocument.Frames"/> — the settled contract that lets any consumer inherit IK for free.
+/// in <see cref="CreationDocument.Frames"/> — the contract that lets any consumer inherit IK for free.
 /// </summary>
 /// <param name="Id">The chain's stable id (unique within the model).</param>
 /// <param name="Name">The player-given name (the console/goal-cycling handle); null for an unnamed chain.</param>
@@ -132,8 +132,7 @@ public sealed record SculptChain(
         if ((m_stiffness is not { Length: > 0 } stiffness) || (stiffness.Length != boneCount)) {
             stiffness = new float[boneCount];
 
-            // A linear stiffness ramp (root floppy, tip stiff) is the natural default for an unweighted spine —
-            // the settled tail/tentacle read.
+            // A linear stiffness ramp (root floppy, tip stiff) is the natural default for an unweighted spine.
             for (var index = 0; (index < stiffness.Length); index++) {
                 stiffness[index] = ((stiffness.Length > 1) ? ((index + 1f) / stiffness.Length) : 1f);
             }

@@ -1,19 +1,25 @@
 namespace Puck.Authoring;
 
 /// <summary>
-/// The primitives a player can place in a creation workbench — the SAME set a creator's ghost cycles through, in the
-/// same order (the wire value IS the cycle index, so an avatar authored in a creator round-trips through a forge
-/// without a mapping table). KEEP the order in lockstep with the creator's own primitive cycle.
+/// The primitive kinds a player can place in a creation workbench, in wire order: each enum value IS its persisted
+/// index — append only, never reorder.
 /// </summary>
 public enum AvatarPrimitive {
+    /// <summary>A sphere.</summary>
     Sphere,
+    /// <summary>A box.</summary>
     Box,
+    /// <summary>A torus.</summary>
     Torus,
+    /// <summary>A cylinder.</summary>
     Cylinder,
+    /// <summary>A capsule.</summary>
     Capsule,
+    /// <summary>An ellipsoid.</summary>
     Ellipsoid,
-    // A tapered capsule (a fat base narrowing to a rounded tip along +Y) — teeth, fangs, dorsal spikes, beaks, horns,
-    // a wizard hat: the "pointy" primitive the six round/boxy ones could never make. Already a builder shape
-    // (SdfShapeType.RoundCone); appended LAST so every avatar authored before it keeps its wire-value cycle index.
+    /// <summary>A tapered capsule (a fat base narrowing to a rounded tip along +Y) — teeth, fangs, dorsal spikes,
+    /// beaks, horns, a wizard hat: the "pointy" primitive the six round/boxy ones could never make. Already a
+    /// builder shape (<see cref="Puck.SdfVm.SdfShapeType.RoundCone"/>); appended LAST so every avatar authored
+    /// before it keeps its wire-value index.</summary>
     RoundCone,
 }
