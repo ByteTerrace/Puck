@@ -1763,8 +1763,8 @@ contract. Nineteen subcommands:
   overhead view rejects engagement.
 - **`worlddoc`** `[--no-build] [--width W] [--height H] [--exit-after-seconds
   N]` — the world-document proof for `puck.world.def.v1` (informational, not a
-  gate): (a) the **ouroboros round-trip** — `world.save` on EVERY checked-in world (`default`, `kart-remap`, and
-  `expo`) reproduces it byte-for-byte, and saving THAT copy again reproduces it a
+  gate): (a) the **ouroboros round-trip** — `world.save` on EVERY checked-in world (`default`, `kart-remap`,
+  `expo`, `kiosk`, `planetoid`) reproduces it byte-for-byte, and saving THAT copy again reproduces it a
   second time (so a save that folds session state stays idempotent on a
   fresh boot, for each); (b) **baked-default parity** — a `--kind hop` feeder run
   against the checked-in file and one against a nonexistent `--world` path

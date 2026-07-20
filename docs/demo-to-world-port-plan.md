@@ -1362,7 +1362,10 @@ world.scene.solid boulder-2 0.05
 world.scene.solid boulder-2 off
 world.contacts 1
 world.grant addon:physics mutate section:collision exclusive
-world.undo 3
+world.undo 3                                        # DENIED by the line above — the exclusive grant
+                                                    #   takes the console's blanket mutate right:
+                                                    #   [world.grant denied: console cannot mutate
+                                                    #    every section — world.undo dropped]
 world.save
 ```
 
@@ -1455,53 +1458,117 @@ Scripted, over stdin:
 Player index is **trailing, 1-based** and altitude needs `player.pose`, never
 `player.warp` — see [Verification](#verification) under the target model.
 
+Three console facts this script is built on, each learned by running it:
+
+- **`;` is not a statement separator.** One line is one verb; `player.warp 0 -6 1
+  ; player.run …` is parsed as a seven-token `player.warp` and refused. Every
+  step below is its own line.
+- **`player.run` does not block** — it *enqueues* a tape segment and returns.
+  A read-back on the next line samples the pose one tick into the motion.
+  `world.wait <ticks>` is the sequencing primitive: the fixed step is 240 Hz, so
+  `world.wait 480` is two seconds of world time, and it is tick-based, so the
+  same script reads the same pose on every run and machine.
+- **Heading comes from `player.pose`, not `player.warp`.** `player.run 1 0 0`
+  drives forward along *facing*, and the boot heading (yaw 0) faces **−Z**, so a
+  warp-then-run never moves in x at all. `yaw = -90` faces **+X**.
+
 ```
 world.contacts                                      # expect 10 solid rows (5 spheres, 5 boxes)
                                                     #   5 boulder-* spheres + 5 screen slabs
-player.warp -4 0.5 1                                # <x> <z> [player] — seat 1
+player.pose -4 0 0.5 -90 0 0 1                      # <x> <y> <z> <yaw> <pitch> <roll> [player] — facing +X
 player.run 1 0 0 2.0 1                              # <fwd> <strafe> <turn> <seconds> [player]
-player.where 1                                      # x must stop short of 0.6-(1.1+0.35) = -0.85
+world.wait 480                                      # 2 s of ticks — the run must PLAY before the read
+player.where 1                                      # stops at (-1.05, 0.00, 0.96): boulder-1 (r 0.9 at
+                                                    #   [-1.2, 0.72, -0.3]) is the first body on this
+                                                    #   lane, and the seat slid around it in z
 world.contacts 1                                    # grounded=true resolved>=1
 
-world.scene.solid boulder-2 off                     # solidity is DATA, not code
-player.warp -4 0.5 1
+world.scene.solid boulder-1 off                     # solidity is DATA, not code
+player.pose -4 0 0.5 -90 0 0 1
 player.run 1 0 0 2.0 1
-player.where 1                                      # x now sails past 0.6 — the facet is the switch
+world.wait 480
+player.where 1                                      # now (-0.87, 0.00, 0.50): the lane is clear through
+                                                    #   boulder-1's old volume and the seat runs on to
+                                                    #   boulder-2's standoff, 0.6-(1.1+0.35) = -0.85,
+                                                    #   with z never deflected. The facet is the switch.
 world.undo 1
 world.contacts                                      # back to 10 solid rows
 
 world.kit.response runner none                      # momentum appears and disappears
-player.warp 0 -6 1 ; player.run 1 0 0 1.0 1 ; player.stop 1 ; player.where 1     # P0
+player.pose 0 0 -6 -90 0 0 1
+player.run 1 0 0 1.0 1
+world.wait 240
+player.where 1                                      # x at the moment the tape ends
+player.stop 1
+world.wait 60
+player.where 1                                      # P0 = the COAST after the stop, measured 9.00 → 9.00
 world.kit.response runner [{"gate":{"$type":"now","fact":"Grounded"},"engageRate":45,"releaseRate":55},{"gate":null,"engageRate":30,"releaseRate":17}]
-player.warp 0 -6 1 ; player.run 1 0 0 1.0 1 ; player.stop 1 ; player.where 1     # P1 > P0 — that delta IS the feature
+player.pose 0 0 -6 -90 0 0 1
+player.run 1 0 0 1.0 1
+world.wait 240
+player.where 1
+player.stop 1
+world.wait 60
+player.where 1                                      # P1 coast = 8.19 → 8.84. P1 > P0 — that delta IS the
+                                                    #   feature. Read the COAST, not the run distance:
+                                                    #   the response table also ramps ACCELERATION, so
+                                                    #   the ungated seat is FURTHER ALONG at the stop
+                                                    #   (9.00 vs 8.19) and a naive end-of-run comparison
+                                                    #   reports the feature backwards.
 
 world.scene.row.set {"$type":"slab","id":"step","center":[0,0.25,-3],"halfExtents":[2,0.25,1],"round":0.05,"smooth":0.2,"albedo":[0.6,0.58,0.55],"solid":{"margin":0}}
-player.pose 0 2 -3 0 0 0 1                          # <x> <y> <z> <yaw> <pitch> <roll> [player] — ABOVE the slab
+player.pose 0 2 -3 0 0 0 1                          # ABOVE the slab
 player.run 0 0 0 0.5 1
-world.contacts 1 ; player.where 1                   # grounded=true at y≈0.5+bodyfoot, NOT y=0 — standing ON the slab
-                                                    # this is the check player.warp structurally cannot make:
+world.wait 120
+world.contacts 1                                    # grounded=true
+player.where 1                                      # (0.00, 0.52, -3.00) — y ≈ 0.5 + skin, NOT y=0:
+                                                    # standing ON the slab. This is the check
+                                                    # player.warp structurally cannot make:
                                                     # WarpHandler pins y=0 (PlayerCommandModule.cs:383)
 
 world.collision.slope 5                             # the slope lever is REACHABLE
-player.pose 0 2 -3 0 0 0 1 ; world.contacts 1       # ...and the slab's flat top still grounds at 5°
-world.collision.slope 91                            # REJECT: "collision.maxSlopeDegrees must be in (0, 90)"
+player.pose 0 2 -3 0 0 0 1
+world.wait 120
+world.contacts 1                                    # ...and the slab's flat top still grounds at 5°
+world.collision.slope 91                            # REJECT: "collision.maxSlopeDegrees must be in (0, 90) (was 91)."
 world.collision.gradient 0.05                       # REJECT: names provider 'analytic'
 world.undo 1
 
-world.placement.set {"id":"probe","creationId":"…","solid":{"margin":0}}
+world.placement.set {"id":"probe","creationId":"lantern-fish","solid":{"margin":0}}
                                                     # REJECT naming the field provider (R3) — the facet is
-                                                    # never silently inert
-world.kit.tune runner bodyHeight 0                  # loud named rejection; dirty unchanged
+                                                    # never silently inert. On a world with no creation rows
+                                                    # the unknown creationId and the default scale are named
+                                                    # in the same refusal; the solid clause is the third of
+                                                    # the three, and it is the one this arc is asserting.
+world.kit.tune runner bodyHeight 0                  # [world.kit.tune: unknown field 'bodyHeight' —
+                                                    #  camelCase MotionTuning fields]; dirty unchanged
 world.kit.response runner [{"gate":{"$type":"usesBelow","limit":1},"engageRate":40,"releaseRate":40}]
-                                                    # "not admissible on a motion response gate"
-world.save scratch/loco.world.json
+                                                    # "kits[3].tuning.response[0].gate is a lane-scoped
+                                                    #  predicate ('usesBelow') — lane-scoped predicates
+                                                    #  apply only to action lanes, not a motion response gate."
+wire.errors                                         # 5 rejected — every deliberate refusal above is counted,
+                                                    #   the synchronous one and the four deferred ones alike
+wire.errors reset                                   # so the block ends on a zero rejection count
+world.save scratch/loco.world.json                  # `mkdir scratch` FIRST — world.save does not create
+                                                    #   directories, it refuses: [world.save: could not
+                                                    #   write scratch/loco.world.json (Could not find a
+                                                    #   part of the path …)]. Paths resolve against the
+                                                    #   process cwd, not the binary's Assets directory.
 ```
 
 Then reload the saved file and confirm the solid facets and response table
-survived. **The negative check that matters most:** boot the unmodified
-`expo.world.json` (no `collision` section), confirm `world.contacts` reports zero
-solid rows and the world behaves as it did before the arc — proving the
-absence-coalesces default (P1) is genuinely inert.
+survived. **The negative check that matters most:** boot `expo.world.json`
+(`--world src/Puck.World/Assets/worlds/expo.world.json` from the repo root) and
+confirm `world.contacts` reports **2 solid rows (0 spheres, 2 boxes)** — expo's
+two screen slabs — with `world.collision.status` reading `on provider=analytic
+instructions=0 revision=0`. The original form of this check ("no `collision`
+section, therefore zero solid rows") was killed by the U1 greenfield refactor
+(§763, sections are present rather than absent-to-protect-bytes) and by
+`a092d48`, which regenerated expo through the author path: every shipped world
+now carries a full `collision` section, so the absence-coalesces default is a
+loader property, no longer demonstrable from a shipped file. What the boot still
+proves is that a world the arc never touched picks up the arc's machinery with
+its own scene and its own colliders.
 
 ### Risks
 
@@ -1870,12 +1937,31 @@ types. Unlike the Demo it is live-editable: `world.scene.row.set {…}` grows a
 mound mid-session and the solid field rebuilds under the walker's feet on the next
 tick.
 
+That world ships as `src/Puck.World/Assets/worlds/planetoid.world.json`, authored
+through the author path (`world.scene.set` / `world.motion.set` /
+`world.collision.*` on top of `default`, then `world.save`) rather than typed by
+hand — so the fixture is a thing the console can produce, not a file that drifts
+from the loader. It keeps `default`'s five screen slabs; the planet and `mound-a`
+are the two spheres, `world.contacts` reads `7 solid rows (2 spheres, 5 boxes)`.
+
 ```
 world.collision.provider field
+world.wait 1
 world.collision.probe 0 8 0
 world.collision.status
 world.undo 1
 ```
+
+**Consecutive mutations of the same section clobber each other.** Each mutation
+verb builds its payload by reading the definition at SUBMIT time, and mutations
+are deferred to the tick boundary, so `world.collision.provider field` followed
+immediately by `world.collision.gradient 0.01` computes the second from the
+PRE-provider snapshot — and the gradient line is then refused for naming the
+analytic provider it thought was still live. `world.wait 1` between them is the
+fix: a wait is Immediate, so the wire's deferred-mutation barrier holds it until
+the preceding mutation has applied. Any read verb (`world.collision.status`) does
+the same job. This is a scripting fact for every section with more than one lever
+verb, not just collision.
 
 ### Flagged engine seams
 
@@ -1933,39 +2019,71 @@ this arc runs, so the six files above are the whole deletion.
 
 ### Verification
 
+Run against the shipped planetoid, from the repo root:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/planetoid.world.json
+```
+
+`;` is not a statement separator and `player.run` does not block — see the three
+console facts under [Arc 1's verification](#verification-1). Every step is its own
+line and every read-back sits behind a `world.wait`.
+
 ```
 # the field the sim reads is inspectable and correct
-world.collision.provider field
-world.collision.status                   # provider=field, instructions>0, revision=1
-world.collision.probe 0 5 0              # distance ~5.00, gradient ~(0, 1, 0)
-world.collision.probe -1.2 0.72 -0.3     # distance NEGATIVE — boulder-1's exact center
+world.collision.status                   # provider=field, instructions=22, revision=1, slope=55°
+world.collision.probe 0 8 0              # distance=1.000  gradient=(0.000, 1.000, 0.000) — 8 above a radius-7 planet
+world.collision.probe 0 7.35 0           # distance=0.350 — the collider's standoff, gradient still radial
+world.collision.probe 0 5 0              # distance=-2.000 — NEGATIVE, two units inside the planet
 
 # the smooth-union contact surface matches the drawn one (the analytic provider cannot do this)
-world.collision.probe <a point in a blend fillet>   # distance < the raw-primitive distance
+world.collision.probe 3.5 6.1 0          # distance=-0.171, and the RAW primitives put this point at
+                                         #   +0.033 (planet sqrt(3.5²+6.1²)-7; mound-a 1.6 at [4.9,4.9,0]).
+                                         #   Outside both spheres, INSIDE the blend fillet: the smooth
+                                         #   union's 1.2 radius swallowed it. An analytic contact set
+                                         #   would call this point free space and let a body sink into
+                                         #   the drawn surface.
 
 # the excluded-op ceiling rejects LOUDLY, never throws
-world.placement.set {…a warped creation…}
-#   expect stderr: [world.mutation rejected: UpsertPlacement — <op name> …]
+world.placement.set {"id":"probe","creationId":"warped","solid":{"margin":0}}
+#   expect stderr: [world.mutation rejected: UpsertPlacement 'probe' — Invalid WorldDefinition:  - …]
+#   The refusal names the id in quotes and every failing clause; there is no bare "<op name> …" form.
 world.collision.status                   # PRE-mutation revision; nothing half-applied
 
-# gradient-as-up on a planetoid (against the world above, via --world)
+# gradient-as-up on a planetoid
 player.pose 0 8 0 0 0 0 1                # <x> <y> <z> <yaw> <pitch> <roll> [player] — an ALTITUDE.
                                          # player.warp cannot express this: WarpHandler pins y=0
                                          # (PlayerCommandModule.cs:383), which is why the walker
                                          # would otherwise start inside the planet.
 player.run 1 0 0 6.0 1                   # <fwd> <strafe> <turn> <seconds> [player]
+world.wait 1440                          # 6 s at the 240 Hz fixed step
 player.where 1
-#   expect: Y DECREASED while |position| stays ~7.35 (planet radius 7 + collider 0.35)
-#   — the signature no flat-plane model can produce
-world.collision.probe 0 7.35 0           # distance ~0.35, gradient ~(0, 1, 0)
+#   measured: (0.00, 4.28, -5.56) — Y fell from 8 to 4.28 while |position| settled at 7.02
+#   (planet radius 7), and pitch reads 308°: the body rolled over the horizon.
+#   That is the signature no flat-plane model can produce.
+world.contacts 1                         # grounded=true, off the ground plane entirely (groundY = -1000)
 
 # the slope lever is authored, not compiled (R3 / constraint 3)
-world.collision.slope 80                 # a near-vertical mound face becomes standable…
-player.pose 4.9 6.6 0 0 0 0 1 ; player.run 1 0 0 2.0 1 ; world.contacts 1   # grounded=true
-world.collision.slope 20                 # …and stops being standable, with no code change
-player.pose 4.9 6.6 0 0 0 0 1 ; player.run 1 0 0 2.0 1 ; world.contacts 1   # grounded=false, it slides
+world.collision.slope 20
+world.wait 1
+player.pose 6.6 4.3 0 0 0 0 1            # dropped onto mound-a's OUTER flank, where the mound's normal
+world.wait 240                           #   and the planet's radial up diverge most
+world.contacts 1                         # grounded=true resolved=1 — standable at 20°
+world.collision.slope 1
+world.wait 1
+player.pose 6.6 4.3 0 0 0 0 1
+world.wait 240
+world.contacts 1                         # grounded=false resolved=0 — it slides, with no code change
 world.undo 2
+wire.errors                              # 1 rejected (the placement above); reset before the next block
 ```
+
+**Why the thresholds are small.** Under the field provider the contact normal IS
+the gradient and "up" is radial, so a smooth field reads as very nearly flat
+almost everywhere on the planetoid — the flank above stays standable all the way
+down to 3° and only lets go at 1°. The lever is fully live; the demonstration
+simply lives at the tight end of the range, not at 80° as an earlier draft of
+this block assumed.
 
 On screen: walk continuously in one direction on the planetoid and watch the
 camera roll over the horizon; the avatar's feet stay on the surface through the
@@ -2410,7 +2528,7 @@ automatic display pacing, on Direct3D 12 on Windows and Vulkan elsewhere, **with
 no launch flags**. A deployment then overrides only what it must:
 
 ```
-dotnet run --project src/Puck.World -c Release -- --world Assets/worlds/kiosk.world.json --width 1280 --height 800
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/kiosk.world.json --width 1280 --height 800
 ```
 
 → 1280×800, still fullscreen, still adaptive, still auto backend.
@@ -2422,7 +2540,7 @@ world.host.tune targetHertz 120
 world.grant seat:1 mutate section:host exclusive
 world.revoke console mutate section:host
 world.undo
-world.save Assets/worlds/kiosk.world.json
+world.save src/Puck.World/Assets/worlds/kiosk.world.json
 ```
 
 A kiosk world hands presentation authority to one seat and takes it from the
@@ -2735,17 +2853,20 @@ shipped ritual; three points where execution refined the aspirational text:
    risk 1 — `PresentMode` keeps the generic converter for **document consistency**.
    `world.host` displays a cosmetic lowercase token and `world.host.tune presentMode`
    parses case-insensitively, so no author-facing surface diverges.
-2. **`Host` is nullable-and-NOT-coalesced in `Normalize`, and `CaptureHost` is
-   null-preserving.** The other opt-in sections (`Audio`/`Storage`/`Authoring`)
-   coalesce to their default in `WorldDefinitionLoader.Normalize`, but they carry a
-   key in the frozen default file so the coalesce round-trips as a no-op. `host` is
-   authored by **no** shipped world, so coalescing it would materialize a `host`
-   key on the first `world.save` and break the frozen default. Instead `Host` stays
-   `null` through load (consumers coalesce at each read), and `CaptureHost` returns
-   `null` when the section was absent AND both live levers still sit at
-   `WorldHostDefaults.Default` — proven: a fresh default `world.save` is
-   byte-identical to the shipped file (no `host` key). A live lever moved off
-   default materializes the section from `Default`.
+2. **`Host` was nullable-and-NOT-coalesced in `Normalize`, and `CaptureHost` was
+   null-preserving — and that rationale is now dead.** At Beat A the other opt-in
+   sections (`Audio`/`Storage`/`Authoring`) coalesced to their default in
+   `WorldDefinitionLoader.Normalize` while `host` stayed `null` through load,
+   because no shipped world authored the section and materializing a `host` key on
+   the first `world.save` would have moved the frozen default's bytes.
+   **STALE as of the U1 greenfield refactor (§763, "sections are present, not
+   absent-to-protect-bytes") and R18.** All three shipped worlds now carry a full
+   `host` object — `{"backend":"auto","width":1280,"height":800,
+   "surfaceFormat":"r8g8b8a8","fullscreen":false,"presentMode":"Immediate",
+   "targetHertz":0,"exitAfterSeconds":0,"rayQuery":true,"timing":false,
+   "genlock":null}` in `default`, and `expo`/`kart-remap` likewise. The
+   null-preserving fold is no longer protecting anything, and byte-identity of a
+   shipped world was never an acceptance criterion to begin with.
 3. **The OQ-16 move folded into `tools/Tools.cs` in-process rather than a new
    loose file.** `tools/` is a set of **file-based .NET 10 apps**, not a
    multi-file project, so the emitter body could not be a standalone `tools/*.cs`
@@ -2784,45 +2905,71 @@ fallback) stays** per its own instruction — World now passes an explicit
 deletion waits for Arc 4's `DiegeticUiInstaller` caller.
 
 **Verified (Windows, Release):** full-solution build clean; `--exit-after-seconds 2`
-with no host section boots byte-identically to pre-arc (1280×800, auto→DirectX, the
-same display-pacing line); the `world.host.*` stdin script exercised every branch —
-the three-column read-back, `tune`→document-with-live-levers-unchanged (`world.status`
+boots the same world as pre-arc (1280×800, auto→DirectX, the same display-pacing
+line); the `world.host.*` stdin script exercised every branch — the three-column
+read-back, `tune`→document-with-live-levers-unchanged (`world.status`
 `session-drift host dirty 1`), `undo`→`none`/`0`, a revoked `mutate section:host`
 loudly denying `world.host.tune width 640`, a `world.host.set width:0` REJECT naming
-`host.width 0 is outside 1..16384`, and a `world.save` that folded the live
+`host.width 0 is outside 1..16384.`, and a `world.save` that folded the live
 `world.target 90` + `world.timing on` into the file; a reboot from that file came up
 with the pacer at `90 Hz (ExplicitTarget)` and `world.timing` reporting `on`; a
 `--width 800 --height 600` override showed the window at 800×600 with the DOCUMENT
-column unchanged and the RESOLVED column at 800×600; and a fresh default
-`world.save` is byte-identical to the shipped `default.world.json`.
+column unchanged and the RESOLVED column at 800×600. The record's closing claim —
+"a fresh default `world.save` is byte-identical to the shipped
+`default.world.json`" — was true at Beat A and is **no longer the shape of the
+tree**: U1 authored the `host` section into every shipped world, and under R18
+byte-identity is not a gate anyway.
 
 ### Verification
 
 ```
-dotnet run --project src/Puck.World -c Release -- --world Assets/worlds/kiosk.world.json --exit-after-seconds 8
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/kiosk.world.json --exit-after-seconds 8
 ```
 
 Look for a borderless-fullscreen 1920×1080 window, the boot line
 `[world] definition: …/kiosk.world.json`, and no `[world.host]` downgrade line on
-a Windows box.
+a Windows box. Measured `world.host` on that boot:
+`document {… width=1920 height=1080 … fullscreen=true …} resolved {backend=directx
+width=1920 height=1080 … fullscreen=true …} live {targetHertz=display timing=off}`.
 
-`kiosk.world.json` is NOT shipped — it is the file the `world.save` step above
-writes. Run that step first: an explicit `--world` path that does not load now
-ends the boot with `[world] --world no file at …` and exit 1 rather than quietly
-booting the baked default, which is what silently hollowed this block out before.
+`kiosk.world.json` **now ships** — it is `default` with one `world.host.set`
+folded in, authored through the author path and saved, exactly the file the
+`world.save` step above writes. **Paths are resolved against the process cwd**,
+not the binary's `Assets` directory, so from the repo root the world lives at
+`src/Puck.World/Assets/worlds/kiosk.world.json`; a bare `Assets/worlds/…` refuses.
+An explicit `--world` path that does not load ends the boot with
+`[world] --world no file at …` and exit 1 rather than quietly booting the baked
+default, which is what silently hollowed this block out before it shipped.
 
 ```
 world.host                                    # DOCUMENT / RESOLVED / LIVE columns
 world.host.tune targetHertz 120
+world.wait 1                                  # the next mutation would otherwise read a pre-tune snapshot
 world.host                                    # DOCUMENT shows 120; LIVE lever unchanged — the
                                               # document-defaults class is honest, not sloppy
-world.status                                  # dirty 1, session-drift naming 'host'
-world.undo ; world.status                     # dirty 0; the row is back at its authored value
+world.status                                  # session-drift host dirty 1 undoable 1
+world.undo                                    # `;` is NOT a separator — `world.undo ; world.status` is
+world.status                                  #   refused with [world.undo: bad count ';' — a positive integer]
+                                              # dirty 0; the row is back at its authored value
 world.revoke console mutate section:host
-world.host.tune width 640                     # loud denial; dirty unchanged — the grant path is real
+world.host.tune width 640                     # [world.grant denied: console cannot mutate section:host —
+                                              #  SetHostDefaults dropped]; dirty unchanged
+world.status
 world.grant console mutate section:host
-world.host.set {"backend":"auto","width":0,…} # REJECT naming "host.width must be in [1, 16384] (was 0)"
-world.save scratch/host-check.world.json      # then reboot with --world scratch/host-check.world.json
+world.host.set {"backend":"auto","width":0,"height":0,"surfaceFormat":"r8g8b8a8","fullscreen":false,"presentMode":"Immediate","targetHertz":0,"exitAfterSeconds":0,"rayQuery":true,"timing":false,"genlock":null}
+                                              # REJECT: "host.width 0 is outside 1..16384." plus
+                                              #   "host.height 0 is outside 1..16384." — every failing
+                                              #   clause in one refusal. The payload must be WHOLE:
+                                              #   an elided `…` drops required fields and adds a third
+                                              #   error ("host.surfaceFormat 'Unknown' must be a defined
+                                              #   non-Unknown SurfaceFormat.") that this check is not about.
+world.target 90
+world.timing on
+world.save scratch/host-check.world.json      # `mkdir scratch` FIRST — world.save does not create
+                                              #   directories. Then reboot with
+                                              #   --world scratch/host-check.world.json
+wire.errors                                   # 2 rejected (the denial and the width/height REJECT);
+                                              #   reset before the next block
 ```
 
 The round-trip is the whole author payoff in one check: the saved file must carry
@@ -2832,7 +2979,7 @@ from it must come up at the saved size with `world.timing` already reporting `on
 **The regression that catches the most likely bug:**
 
 ```
-… --world Assets/worlds/kiosk.world.json --width 1280 --height 800
+… --world src/Puck.World/Assets/worlds/kiosk.world.json --width 1280 --height 800
 ```
 
 must give a 1280×800 window that is **still fullscreen and still adaptive**, with
@@ -2842,8 +2989,12 @@ silently shows 1280×800 instead of 1920×1080 and the whole section is inert.
 
 **The frozen default:** `dotnet run --project src/Puck.World -c Release --
 --exit-after-seconds 2` must boot the same world it booted before the arc — the
-same scene, the same pacing line, no host section authored into the file. That is
-constraint 2's real content: **this arc bakes no feature into the default world.**
+same scene, the same pacing line, `world.host` reading `document {… width=1280
+height=800 … fullscreen=false …}`. That is constraint 2's real content: **this arc
+bakes no feature into the default world.** The original wording of this check
+("no host section authored into the file") is stale — U1 authored a full `host`
+object into all three shipped worlds. What still has to hold is the *values*, and
+those are the pre-arc ones.
 
 **Not a gate (R18).** `git diff --exit-code src/Puck.World/Assets/worlds/…` is an
 optional observation, not an acceptance criterion. If you happen to notice the
@@ -3095,10 +3246,14 @@ The section header in an earlier draft claimed
 the file stayed frozen while the body admitted the camera rows change. They cannot
 both be true, and the header is the one a downstream engineer trusts.
 
-What genuinely stays frozen: the file gains no `views` key — absent → `Default` →
-`Layouts: []` → the composer falls through to the built-in ladder, and `SeatRig`
-reproduces `OrientedFollowRig`'s own field defaults exactly. **Rendered output is
-byte-unchanged.**
+What genuinely stays frozen is the *framing*: `SeatRig` reproduces
+`OrientedFollowRig`'s own field defaults exactly and the composer falls through to
+the built-in ladder, so rendered output does not move. **The "gains no `views`
+key" half of this claim is STALE** — the U1 greenfield refactor (§763) authored a
+full `views` object into all three shipped worlds (`{"seatRig":{"$type":"chase",
+"eyeOffset":[0,2.2,5],"targetOffset":[0,1,0],…}, "layouts":[…]}`). Sections are
+present rather than absent-to-protect-bytes, and under R18 the bytes were never
+the criterion.
 
 What genuinely changes: the collapsed `WorldCamera` retires the `anchored`/`fixed`
 `$type`s, and `fieldOfViewRadians` moves onto the rig. Supergreen forbids
@@ -3130,7 +3285,7 @@ FOV, same render dimensions, no behaviour change:
 The `fixed` row's `position` becomes the camera's `offset` against a null anchor
 (an unanchored camera's offset *is* its world position — the collapsed record's
 whole point), and its `lookAt` becomes `LookAt.Target`. Nothing else moves: no new
-rows, no reordering, no `views` key.
+rows, no reordering. (The companion "no `views` key" claim is stale — see above.)
 
 > **APPROVED by owner ruling, 2026-07-19 (OQ-12).** Re-encode the camera rows in
 > **all three** shipped worlds — `default`, `expo`, `kart-remap`. This was taken
@@ -3237,21 +3392,21 @@ emits SDF geometry.
   "cameras": [
     { "name": "establishing",
       "anchor": { "$type": "group", "indices": null, "smoothRate": 6.0 },
-      "offset": { "x": 0, "y": 0, "z": 0 },
+      "offset": [0, 0, 0],
       "rig": { "$type": "chase",
-               "eyeOffset": { "x": 0, "y": 10, "z": 14 },
-               "targetOffset": { "x": 0, "y": 0.5, "z": -1 },
+               "eyeOffset": [0, 10, 14],
+               "targetOffset": [0, 0.5, -1],
                "worldAxes": true, "spreadPullback": 0.8, "fieldOfViewRadians": 0.8727 },
       "renderWidth": 640, "renderHeight": 360 },
-    { "name": "sweep", "anchor": null, "offset": { "x": 0, "y": 0, "z": 0 },
+    { "name": "sweep", "anchor": null, "offset": [0, 0, 0],
       "rig": { "$type": "dolly",
-               "start": { "x": -18, "y": 3, "z": 12 }, "end": { "x": 18, "y": 3, "z": 12 },
+               "start": [-18, 3, 12], "end": [18, 3, 12],
                "durationSeconds": 12.0, "pingPong": true, "fieldOfViewRadians": 0.9599 },
       "renderWidth": 640, "renderHeight": 360 }
   ],
   "views": {
-    "seatRig": { "$type": "chase", "eyeOffset": { "x": 0, "y": 2.6, "z": 6.5 },
-                 "targetOffset": { "x": 0, "y": 1, "z": 0 },
+    "seatRig": { "$type": "chase", "eyeOffset": [0, 2.6, 6.5],
+                 "targetOffset": [0, 1, 0],
                  "worldAxes": false, "spreadPullback": 0.0, "fieldOfViewRadians": 0.9599 },
     "layouts": [
       { "name": "director", "seatCount": 0,
@@ -3271,15 +3426,25 @@ Slot 1's `"camera": null` shows the seat that owns that slot. `seatCount: 0` mak
 `transitionRenderScale` are `ScreenLayoutDirector`'s `0.6f`/`0.5f`, now authored
 per layout instead of compiled.
 
+**Every `Vector3` in a live payload is a three-element `[x, y, z]` array.** The
+object form (`{"x":0,"y":0,"z":0}`) is retired and refused by name —
+`[world.camera.set: a Vector3 must be a three-element [x, y, z] array.]` — so a
+copied script written in the old shape applies nothing, `world.view.state` never
+leaves `active=builtin`, and a reader concludes this arc regressed. Payloads are
+also WHOLE: an elided `…` inside the JSON is not a valid document.
+
 ```
-world.camera.set {"name":"wide","anchor":{"$type":"group","indices":null,"smoothRate":6.0},…}
-world.view.layout.set {"name":"cinema","seatCount":0,"transitionSeconds":1.2,"transitionRenderScale":0.5,"slots":[…]}
+world.camera.set {"name":"wide","anchor":{"$type":"group","indices":null,"smoothRate":6.0},"offset":[0,0,0],"rig":{"$type":"chase","eyeOffset":[0,10,14],"targetOffset":[0,0.5,-1],"worldAxes":true,"spreadPullback":0.8,"fieldOfViewRadians":0.8727},"renderWidth":640,"renderHeight":360}
+world.view.layout.set {"name":"cinema","seatCount":0,"transitionSeconds":1.2,"transitionRenderScale":0.5,"slots":[{"x":0,"y":0,"width":1,"height":0.7,"camera":"wide"},{"x":0,"y":0.7,"width":1,"height":0.3,"camera":null}]}
 view.layout cinema
 world.view.state
-world.view.rig {"$type":"chase","eyeOffset":{"x":0,"y":3.4,"z":8},…}
-screen.view 0 establishing        # film the establishing shot onto a diegetic screen (existing verb, new reach)
+world.view.rig {"$type":"chase","eyeOffset":[0,3.4,8],"targetOffset":[0,1,0],"worldAxes":false,"spreadPullback":0,"fieldOfViewRadians":0.9599}
+screen.view 0 wide                # film the wide shot onto a diegetic screen (existing verb, new reach)
+                                  # a camera must EXIST first: screen.view of an undeclared name is
+                                  # refused with [screen.view: camera 'establishing' not declared]
 view.layout auto
 world.undo 3
+world.cameras                     # the camera table's read-back — 'wide' is gone again
 ```
 
 ### Flagged engine seams
@@ -3336,17 +3501,24 @@ recorded rather than silently dropped.
 
 ```
 dotnet run --project src/Puck.World -c Release
-world.view.rig {"$type":"chase","eyeOffset":{"x":0,"y":6,"z":14},"targetOffset":{"x":0,"y":1,"z":0},"worldAxes":false,"spreadPullback":0,"fieldOfViewRadians":0.9599}
+world.view.rig {"$type":"chase","eyeOffset":[0,6,14],"targetOffset":[0,1,0],"worldAxes":false,"spreadPullback":0,"fieldOfViewRadians":0.9599}
 ```
 
 The seat camera pulls back and rises **the next frame** — no restart, no hitch.
 `world.undo 1` snaps it back.
 
 ```
-world.camera.set {"name":"wide", …group anchor, chase rig, spreadPullback 0.8…}
+world.camera.set {"name":"wide","anchor":{"$type":"group","indices":null,"smoothRate":6.0},"offset":[0,0,0],"rig":{"$type":"chase","eyeOffset":[0,10,14],"targetOffset":[0,0.5,-1],"worldAxes":true,"spreadPullback":0.8,"fieldOfViewRadians":0.8727},"renderWidth":640,"renderHeight":360}
 world.view.layout.set {"name":"cinema","seatCount":0,"transitionSeconds":1.2,"transitionRenderScale":0.5,"slots":[{"x":0,"y":0,"width":1,"height":0.7,"camera":"wide"},{"x":0,"y":0.7,"width":1,"height":0.3,"camera":null}]}
 view.layout cinema
 ```
+
+These two need no barrier between them: a whole-row upsert carries its own payload
+and is validated at APPLY time against the definition the queued mutations have
+already composed, so the layout finds `wide`. The barrier matters only for the
+read-modify-write levers (`world.collision.*`, `world.host.tune`,
+`world.view.rig`), which build their payload from the definition as it stood at
+SUBMIT time — see Arc 2's note.
 
 The window *eases* over ~1.2 s from the fullscreen seat view into the two-band
 composition: rects move continuously, the occupant cuts at the midpoint, the image
@@ -3355,32 +3527,61 @@ The top band is a wide group shot that widens as you walk a second seat away fro
 the first — `spreadPullback` at work. `view.layout auto` returns to the built-in
 ladder, eased the same way.
 
-Scripted, no sleeps:
+Scripted, with `world.wait` where the ease has to be sampled:
 
-1. First `world.view.state` echoes `active=builtin slots=1` at the full rect —
-   proving the frozen default path is unchanged.
+1. First `world.view.state` echoes `active=builtin selection=builtin` —
+   proving the frozen default path is unchanged. **Do not assert a slot count
+   here.** The built-in ladder's `slots=` is the number of *joined local seats* at
+   that instant, and seats join as pads pair: measured `slots=0` on a machine with
+   no pad yet streaming, `slots=4` (the 2×2 quad) once four have. The stable facts
+   are the two names.
 2. After `world.view.rig`, stderr carries
    `[world.mutation: SetViewDefaults applied]` and `world.status` reads `dirty 1`.
-3. After `view.layout cinema`, `world.view.state` echoes
-   `active=cinema selection=override slots=2` and a `transition=` fraction
-   strictly between 0 and 1 on the first read, reaching 1 on a later read — **the
-   ease is observable, not just asserted structurally.**
-4. `screen.view 0 sweep` then two `screen.state 0` reads show a rising frame count
-   with a bound handle while the dolly's rect stays stable and its eye does not.
-5. After `world.undo 2`, `world.view.state` returns to `active=builtin` and
-   `world.status` reads `dirty 0`.
+3. After `view.layout cinema`, `world.view.state` echoes `active=cinema` and a
+   `transition=` fraction strictly between 0 and 1 on the first read (measured
+   `transition=0.228`, rects still interpolating and `slots=` still the seat
+   count), reaching `transition=1 slots=2
+   slot0=0,0,1,0.7:cam:wide slot1=0,0.7,1,0.3:seat0` on a read a second later —
+   **the ease is observable, not just asserted structurally.** `selection=` is
+   `override` when `view.layout` named the layout and `authored` when the layout
+   was upserted without one, so assert `active=`, not `selection=`.
+4. `screen.view 0 wide` echoes `[screen.view: screen 0 showing camera 'wide']`,
+   and both `screen.state 0` reads print `0 empty …` — `unbound` on the read taken
+   in the same command window as the retarget, `bound` once a frame has gone by.
+   The stable half of the assertion is `empty`.
+   **`screen.state`'s frame count is the MACHINE's, not the view's** — a camera
+   source leaves the screen `empty`, so there is no frame count to rise and the
+   original form of this claim could never have passed. The camera must exist
+   before the `screen.view`: an undeclared name is refused with
+   `[screen.view: camera 'establishing' not declared]`.
+5. After `world.undo 3` — the block performs **three** mutations
+   (`SetViewDefaults`, `UpsertCamera`, `UpsertViewLayout`) — `world.view.state`
+   returns to `active=builtin` and `world.status` reads `dirty 0`. `world.undo 2`
+   leaves `dirty 1`.
+6. `wire.errors` reads `0 rejected` for the whole happy path.
 
 Rejection paths, each a loud one-line rejection leaving the document
-byte-identical: a layout naming an undeclared camera; a slot rect outside `[0,1]`;
+unchanged: a layout naming an undeclared camera; a slot rect outside `[0,1]`
+(`views.layouts[1].slots[0] rect must lie within [0, 1] with positive extents.`);
 a `Group` anchor with an out-of-range entity index; a `Dolly` with
 `durationSeconds: 0`; two layouts sharing a `Name`; a camera whose rig `$type` is
 unknown; **and a camera row still carrying the retired `"$type": "anchored"` —
-which must be a loud unknown-kind rejection, not silent tolerance (R8).**
+which must be a loud unknown-kind rejection, not silent tolerance (R8)**, measured
+as `[world.camera.set: Read unrecognized type discriminator id 'anchored'.
+Path: $.anchor | …]`. The retired object-form `Vector3` is refused the same way:
+`[world.camera.set: a Vector3 must be a three-element [x, y, z] array. (payload: …)]`.
+Both are SYNCHRONOUS refusals — the verb echoes them itself and they never reach
+the mutation wire — while the validator refusals arrive as
+`[world.mutation rejected: …]`. `wire.errors` counts both classes.
 
 **The OQ-12 re-encoding check — behavior, not bytes.** Boot each of the three shipped worlds
 (`default`, `expo`, `kart-remap`) after re-encoding their `cameras` rows and
 confirm `world.cameras` reports the same names, the same anchors, and the same
 field of view as the pre-arc build, and that the rendered first frame is unchanged.
+`world.cameras` is the instrument, and it exists: on `default` it reads
+`[world.cameras: first-person anchor=entity:0 rig=firstPerson 256x144 | overhead
+anchor=none rig=lookAt 256x144]`, one segment per declared row, off the LIVE
+definition — a `world.camera.set` appears in it and a `world.undo` takes it away.
 The re-encoding is required to be *mechanical*: if any of the three needs a
 judgement call about framing, it is not a re-encoding and OQ-12's premise is
 wrong.
@@ -3389,8 +3590,10 @@ This arc moves the shipped worlds' JSON, and **that is fine** — under
 [R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20) there is no
 `git diff --exit-code` gate anywhere in this plan and no baseline arithmetic to
 carry. Note the move in the execution record and move on. What the arc still owes
-is the behavioral check above: the same names, anchors, and framing, and no
-`views` key authored into any shipped world.
+is the behavioral check above: the same names, anchors, and framing, read back
+through `world.cameras`. (An earlier form of this sentence also demanded "no
+`views` key authored into any shipped world" — stale; U1 authored one into all
+three.)
 
 ### Risks
 
@@ -3486,8 +3689,10 @@ Corrections that bind future arcs:
    `Vector3JsonConverter` (array form), not `IncludeFields`** (risk 4 resolved) — so
    a `world.view.rig`/`world.camera.set` JSON argument spells offsets as
    `[x,y,z]` arrays, matching every other authored coordinate. The plan's
-   author-surface examples that show `{"x":..,"y":..}` object form are **aspirational
-   and wrong**; the wire shape is arrays.
+   author-surface and verification examples formerly showed the `{"x":..,"y":..}`
+   object form; every one of them has been **rewritten to the array shape** and
+   re-run. The retired form is refused synchronously and by name —
+   `[world.view.rig: a Vector3 must be a three-element [x, y, z] array. (payload: …)]`.
 5. **The seat rig is now `WorldViewDefaults.Default.SeatRig` compiled through
    `WorldRigCompiler`, reproducing `OrientedFollowRig`'s own field defaults exactly**
    — the frozen default world's seat framing is byte-identical, and `world.view.rig`
@@ -4046,51 +4251,92 @@ unnamed:**
 
 A scripted stdin corpus plus a human pass with a pad.
 
-`arcade.world.json` is NOT shipped either — author it with the `world.save` step
-at the end of this block before replaying the corpus, or `world.load` refuses
-loudly with `[world.load: no file at …]` and swaps nothing.
+> **⛔ THE CART HALF OF THIS BLOCK HAS NEVER BEEN RUNNABLE IN-REPO, AND THAT
+> INCLUDES THE ARC'S SELF-DECLARED MOST IMPORTANT ASSERTION.** `World` ships no
+> SM83 cartridge — there is no `.gb`/`.gbc` file anywhere in the tree — and no
+> shipped world declares a screen magazine. So `screen.insert` refuses with
+> `[screen.insert: content 'roms/brickfall.gb' not found]`, every screen stays
+> machine-less, and **`screen.peek` reading the same byte across a
+> `screen.options` device swap — "the single most important assertion in the arc"
+> — has never once been executed.** The plan's own deferral ledger (§77, "Arc 5
+> deferrals") already conceded "World ships no bundled SM83 cart"; this block
+> simply never caught up. It was also pointed at `arcade.world.json`, a file that
+> does not exist and that nothing in the arc authors, so before `--world` started
+> failing loudly the whole corpus silently measured `default.world.json` while
+> appearing to pass. That is the "verification scripts lie silently" failure mode
+> in its purest form.
+>
+> The block below is therefore split honestly: **RUNS TODAY** is verified against
+> `default.world.json`, and **BLOCKED ON A CART** lists what stays unproven, with
+> the refusal each line actually prints today so nobody mistakes a refusal for a
+> pass.
+
+**RUNS TODAY** (against the shipped `default.world.json`; `world.load` of a
+missing path refuses loudly with `[world.load: no file at …]` and swaps nothing,
+and paths resolve against the process cwd):
 
 ```
-world.load Assets/worlds/arcade.world.json
 world.status                                  # dirty=0, schema accepted
-screen.state 0                                # empty unbound engaged=none
-screen.select 0                               # [screen.select: 0 entry 0/4 …]
-screen.select 0 next                          # selector moves; slot still empty -> "selected (no live source)"
-player.warp -3.0 -6.0 1                       # <x> <z> [player] — inside engageRadius 2.0
-player.engage 0                               # route.autoInsert boots entry 1 THEN engages
-screen.state 0                                # assigned gaming-brick bound frames>0 entry=1/4 engaged=p1
-screen.peek 0 0xC000                          # the booted game's own byte — proves it is really running
+world.screens                                 # 0 view bound engageable | 1 capture bound fixed |
+                                              #   2 view bound fixed | 3 camera bound fixed |
+                                              #   4 machine:advanced-gaming-brick unbound fixed
+screen.state 0                                # 0 empty bound engaged=none — BOUND, not unbound:
+                                              #   screen 0 is a view source
+screen.state 4                                # 4 empty unbound engaged=none fault=no content configured
+                                              #   — the one machine screen, and it names its own fault
 
-screen.options 0                              # [screen.options: 0 'cgb']
-screen.options 0 dmg                          # live device swap
-screen.state 0                                # frames CONTINUE from the previous count -> no reboot
-screen.peek 0 0xC000                          # SAME byte -> progress survived the swap
-screen.options 0 xyzzy                        # IsError + the engine's own reason text
-
-screen.insert 1 roms/brickfall.gb gaming-brick dmg
 screen.link arcade-pair 0 1
-screen.links                                  # arcade-pair 0+1 live transfers=…
-screen.state 0                                # link=arcade-pair
-screen.unlink arcade-pair
+screen.links                                  # arcade-pair 0+1 dormant (screen 0 has no machine)
+                                              #   a dormant link NAMES WHY — it never silently no-ops
+screen.state 0                                # 0 empty bound engaged=none link=arcade-pair
+screen.unlink arcade-pair                     # [screen.unlink: link 'arcade-pair' severed]
 
 world.link.set {"name":"arcade-pair","screens":[0,1]}
+world.wait 1
 world.status                                  # dirty=1 -> journaled
-world.undo 1 ; world.status                   # dirty=0 -> the link row is gone
-world.link.set {"name":"bad","screens":[0,99]}   # loud reject naming screen 99
-world.grant console control screen:0 exclusive
-screen.select 0 next                          # still allowed (console holds it)
-world.revoke console control screen:0
-screen.select 0 next                          # grant denial line
-world.save Assets/worlds/arcade.world.json
+world.undo 1                                  # `;` is NOT a separator — one verb per line
+world.status                                  # dirty=0 -> the link row is gone
+world.link.set {"name":"bad","screens":[0,99]}   # REJECT: links[0].screens names undeclared screen 99.
+wire.errors                                   # 1 rejected
+wire.errors reset
 ```
 
-**What to look for.** `screen.peek` returning the **same byte across a
-`screen.options` swap** is the proof that the device swap is a real retarget and
-not a reboot — the single most important assertion in the arc, and the thing the
-Demo could not honestly claim. `frames=` climbing monotonically across the swap (a
-reboot would reset it). `screen.links` reporting `transfers=` climbing proves the
-cable is actually moving bytes; a dormant link must name *why*, never silently
-no-op.
+**BLOCKED ON A CART** — every line below refuses today, and the refusal is what
+you will see. None of these prove anything about the feature; they prove only
+that the surface names its own gaps:
+
+```
+screen.select 0                               # [screen.select: screen 0 has no magazine]
+screen.select 0 next                          # [screen.select: screen 0 has no magazine]
+player.warp -3.0 -6.0 1                       # <x> <z> [player] — this one works
+player.engage 0                               # [player.engage: screen 0 has no machine to control —
+                                              #  screen.insert a cart first]
+screen.peek 0 0xC000                          # [screen.peek: screen 0 has no machine to read]
+screen.options 0                              # [screen.options: screen 0 has no reconfigurable machine]
+screen.options 0 dmg                          # [screen.options: screen 0 has no machine to reconfigure]
+screen.options 0 xyzzy                        # same — the INVALID-OPTION path is unreachable, so the
+                                              #   "IsError + the engine's own reason text" claim is
+                                              #   untested too
+screen.insert 1 roms/brickfall.gb gaming-brick dmg
+                                              # [screen.insert: content 'roms/brickfall.gb' not found]
+```
+
+The grant pass has the same disease and is called out separately, because it is
+the subtler one: `world.grant console control screen:0 exclusive` /
+`world.revoke console control screen:0` around a `screen.select 0 next` looks like
+it proves the grant path, but on a magazine-less screen **both** reads print
+`[screen.select: screen 0 has no magazine]` — the grant is never consulted and the
+denial line never appears. The assertion proves only that a string printed. It
+must not be re-enabled until a magazine exists.
+
+**What to look for, once a cart ships.** `screen.peek` returning the **same byte
+across a `screen.options` swap** is the proof that the device swap is a real
+retarget and not a reboot — the single most important assertion in the arc, and
+the thing the Demo could not honestly claim. `frames=` climbing monotonically
+across the swap (a reboot would reset it). `screen.links` reporting `transfers=`
+climbing proves the cable is actually moving bytes; a dormant link must name
+*why*, never silently no-op — that last half is the only part of this paragraph
+verified today.
 
 **Human pass — the part a pipe cannot prove.** Run with a pad on a kit whose
 primary action emits `screen-engage` and secondary emits `screen-cycle`. Walk to a
@@ -4697,7 +4943,8 @@ world.look.assign hash
 world.look.remove stocky
 world.population.spawn points 3 seat-1 seat-4
 world.population 12
-world.save ./scratch/looks.world.json
+world.save ./scratch/looks.world.json           # `mkdir scratch` FIRST — world.save does not create
+                                                #   directories; paths are relative to the process cwd
 world.status
 ```
 
@@ -4734,10 +4981,19 @@ What to look for, in order:
 
 The creation-look pass (needs a creation in the document): assign a `creation`
 look and push `world.population 124` — the census **clamps** to the live ceiling
-(the authored `networkPlayers` cap, narrowed further by any inhabitant occupying
-the top of the peer slice) rather than being refused, so confirm the echo's
-`requested 124, GRANTED <n>` line and **assert the granted number**, never merely
-that the verb succeeded.
+rather than being refused, so confirm the echo's `requested 124, GRANTED <n>` line
+and **assert the granted number**, never merely that the verb succeeded.
+
+**The clamp only fires when an INHABITANT is occupying the top of the peer
+slice**, and that is the part this pass has to set up rather than assume. On
+`default` (`networkPlayers 124`) with a creation look but no inhabitant,
+`world.population 124` is granted in full and prints **no** `requested/GRANTED`
+line at all — measured `[world.population: 124 network-human stand-ins active
+(0..124) … | 4 local + 124 = 128/128 avatars rendered …]`. Inhabit two placements
+first and it fires with the arithmetic visible: `[world.population: requested 124,
+GRANTED 122 — clamped to the live ceiling (122: the networkPlayers admission cap
+under 122 free peer slots)]`. The number to assert is `124 − <inhabitants>`; a
+pass that skips the inhabitants asserts against a line that never prints.
 
 **The R13 regression:** re-run `world.population` per-kit counts before and after
 the `WorldRowAssignment` rename with `stream: 0`. They must be identical — a
@@ -5283,7 +5539,7 @@ its analyzer ceiling and splits by verb family by policy):
 | `world.placement.face <id> <faceName> <sourceToken>` | Simulation | RMW sugar upserting one `WorldPlacementFace`; `-` clears back to the creation's default |
 | `world.kit.attend <kit> <notice> <release> <standoff> <approach> <orbit> [face] [seat\|body]` | Simulation | RMW sugar; `-` in place of `<notice>` clears it |
 | `world.inhabitants` | **Immediate** | one line per inhabited placement: id, creationId, kit, source, bodyIndex, position |
-| `world.faces` | **Immediate** | one line per derived face: placementId, faceName, screenIndex, resolvedSource, handle |
+| `world.faces` | **Immediate** | one line per derived face. Measured shape is `placementId/faceName[screen=<n> handle=<h>]` — **no `resolvedSource` field is printed**, and `handle` reads `no-signal` for a face wired to a derived camera (§79) |
 
 **Grants — what must be documented rather than added.** An inhabited body's index
 is inside the peer slice, and `WorldGrants`' permissive seed already gives every
@@ -5301,11 +5557,23 @@ The default world is untouched — it already has `"creations": []` /
 
 ```json
 { "name": "drifter", "model": "Free",
-  "tuning": { "moveSpeed": 1.2, "turnSpeed": 2.4, "groundY": 0.0, "…": "…" },
+  "tuning": { "moveSpeed": 1.2, "turnSpeed": 2.4, "groundY": 0.0,
+              "jumpSpeed": 5.5, "riseGravity": 14, "fallGravity": 23, "maxFallSpeed": 20,
+              "jumpCutMultiplier": 0.45, "coyoteTime": 0.09, "jumpBufferTime": 0.1,
+              "response": [ { "gate": null, "engageRate": 30, "releaseRate": 17 } ] },
   "flavor": { "forward": 0.35, "upWave": 0.16, "pitchWave": 0.10,
-              "altitudeBase": 1.1, "altitudeRange": 0.6, "…": "…" },
+              "altitudeBase": 1.1, "altitudeRange": 0.6 },
   "attend": { "noticeRadius": 6.0, "releaseRadius": 8.0, "standoffRadius": 1.6,
               "approach": 0.55, "orbit": 0.30, "faceTarget": true, "target": "NearestSeat" } }
+```
+
+**The `"…": "…"` elision an earlier draft used here is not a payload.** A kit
+upsert with partial tuning is refused —
+`kits[5].tuning.riseGravity must be finite and positive.` plus `fallGravity` and
+`maxFallSpeed` — because the ellipsis hid three required fields. Every JSON
+argument on the wire must be a WHOLE row.
+
+```json
 ```
 
 That single `attend` block is the whole of the Demo's hardcoded `WanderSpeed` /
@@ -5316,7 +5584,7 @@ authored.
 
 ```json
 { "id": "lure", "creationId": "lantern-fish",
-  "position": { "x": 2.0, "y": 1.2, "z": -3.0 }, "yawDegrees": 0.0, "scale": 1.0,
+  "position": [2.0, 1.2, -3.0], "yawDegrees": 0.0, "scale": 1.0,
   "inhabit": { "kit": "drifter", "look": null, "source": "Attend", "count": 1, "radius": 0 } }
 ```
 
@@ -5329,20 +5597,33 @@ rejected loudly at load **with the list of kits it does declare.**
 
 ```json
 { "id": "greeter", "creationId": "crt-robot",
-  "position": { "x": -1.0, "y": 0.0, "z": -4.0 }, "yawDegrees": 180.0, "scale": 1.0,
+  "position": [-1.0, 0.0, -4.0], "yawDegrees": 180.0, "scale": 1.0,
   "inhabit": { "kit": "drifter", "source": "Wander", "count": 1, "radius": 0 },
-  "faceSources": [ { "face": "face", "source": { "$type": "view", "name": "creation:lure:lantern-lens" } } ] }
+  "faceSources": [ { "face": "face", "source": { "$type": "view", "name": "creation:lure:lure" } } ] }
 ```
 
-`creation:lure:lantern-lens` is the derived camera name for the `lure` placement's
-declared eye whose `feed` is `lantern-lens` — an author reads the exact available
-names back with `world.faces` / `world.cameras`. **Nothing about the two creation
-documents changes**; both already ship in `docs/examples/creations/`.
+`creation:lure:lure` is the derived camera name for the `lure` placement's
+declared eye. The pattern is `creation:<placementId>:<feed>`, and
+`lantern-fish.creation.json` declares exactly one camera whose `"feed"` is
+**`"lure"`** — not `lantern-lens`, which appears nowhere in either document.
+`world.faces` reads the derived faces back; **`world.cameras` does not help here**
+— it lists only the world's DECLARED camera rows (on `default`:
+`first-person anchor=entity:0 rig=firstPerson 256x144 | overhead anchor=none
+rig=lookAt 256x144`), and a derived camera never appears in it. There is no
+read verb for the derived-camera table.
+
+Both creation documents ship in `docs/examples/creations/`, but "nothing about
+them changes" is only half true: `crt-robot.creation.json` declares
+`"cameras": null` and no screens or faces at all, so it has **no face named
+`face`**. The `faceSources` row above is accepted anyway and `world.faces` invents
+`greeter/face` for it — so this step is exercising a face the creation does not
+declare. Either add the face to `crt-robot`, or say plainly that the face name is
+synthesized.
 
 ```
 world.kit.attend drifter 6 8 1.6 0.55 0.30 face seat
 world.placement.inhabit lure drifter attend
-world.placement.face greeter face camera:creation:lure:lantern-lens
+world.placement.face greeter face camera:creation:lure:lure
 world.inhabitants
 world.undo 1
 world.save my.world.json
@@ -5403,37 +5684,76 @@ such a diff would surface. **Use `roslyn-first-analysis`, not grep.**
 
 ### Verification
 
-Boot a throwaway world (`expo.world.json` copied and extended with the `drifter`
-kit and the two placements). **The default world is not touched.**
+Set the world up in-session on top of the shipped `default` — the two creations
+already ship, so `editor.import` reads them straight off disk and no throwaway
+world file is needed. **The default world's FILE is not touched.**
 
 ```
+editor.import docs/examples/creations/lantern-fish.creation.json lantern-fish
+world.wait 1
+editor.import docs/examples/creations/crt-robot.creation.json crt-robot
+world.wait 1
+world.kit.set {"name":"drifter","model":"Free","tuning":{"moveSpeed":1.2,"turnSpeed":2.4,"groundY":0,"jumpSpeed":5.5,"riseGravity":14,"fallGravity":23,"maxFallSpeed":20,"jumpCutMultiplier":0.45,"coyoteTime":0.09,"jumpBufferTime":0.1,"response":[{"gate":null,"engageRate":30,"releaseRate":17}]},"attend":{"noticeRadius":6.0,"releaseRadius":8.0,"standoffRadius":1.6,"approach":0.55,"orbit":0.30,"faceTarget":true,"target":"NearestSeat"}}
+world.wait 1
+world.placement.set {"id":"lure","creationId":"lantern-fish","position":[2,1.2,-3],"yawDegrees":0,"scale":1.0,"inhabit":{"kit":"drifter","look":null,"source":"Attend","count":1,"radius":0}}
+world.wait 1
+world.placement.set {"id":"greeter","creationId":"crt-robot","position":[-1,0,-4],"yawDegrees":180,"scale":1.0,"inhabit":{"kit":"drifter","source":"Wander","count":1,"radius":0},"faceSources":[{"face":"face","source":{"$type":"view","name":"creation:lure:lure"}}]}
+world.wait 1
+
 world.inhabitants
-  -> two rows, 'lure' and 'greeter', with distinct bodyIndex values in [112,127].
-     PROVES the reconciler claimed slots from the top of the peer slice at boot.
+  -> two rows with distinct bodyIndex values in [112,127]. Measured:
+     greeter[creation=crt-robot kit=drifter source=Wander body=126 pos=-1.0,0.0,-4.0]
+     lure[creation=lantern-fish kit=drifter source=Attend body=127 pos=2.0,1.3,-3.1]
+     PROVES the reconciler claimed slots from the top of the peer slice.
+     This read is ALSO the census/kit assertion: it is the only verb that prints kit=.
 
 world.status
-  -> the census echo names 'drifter'; dirty=0.
-     PROVES inhabitants are in the census, unlike Demo companions.
+  -> dirty=5 after the five setup mutations. It prints NO census and NO kit field:
+     source … schema puck.world.def.v1 kits 6 screens 5 cameras 2 creations 2
+     placements 2 session-drift none dirty 5 undoable 5.
+     The older form of this claim ("the census echo names 'drifter'; dirty=0") asserted
+     against a line that has no place for either value. Use world.inhabitants above.
+
+world.population 124
+  -> [world.population: requested 124, GRANTED 122 — clamped to the live ceiling
+      (122: the networkPlayers admission cap under 122 free peer slots)]
+     PROVES inhabitants are in the census, unlike Demo companions: two of them lowered
+     the ceiling by exactly two. With no inhabitant the clamp line does not print at all.
 
 world.faces
-  -> one row: greeter/face -> screenIndex >= DerivedFaceBase, source view:creation:lure:lantern-lens,
-     handle non-zero.
-     PROVES derived cameras AND derived faces both resolved — the fish's eye feeds the robot's face.
+  -> ONE row, measured exactly: greeter/face[screen=24 handle=no-signal], preceded on
+     stderr by [world.screen: camera '' not declared].
+     There is NO resolvedSource field in the output, and the handle is zero whether the
+     name is spelled creation:lure:lure or anything else.
+     PROVES derived FACES resolve — the face row exists at a derived screen index.
+     It does NOT prove the derived CAMERA resolved: the deferral ledger (§79) already
+     concedes "a face wired to a derived camera reads no-signal until the slab enters
+     the render program", and no-signal is exactly what this reads. An earlier form of
+     this block asserted a non-zero handle, i.e. asserted the opposite of the ledger.
 
-player.warp 2 -3 1              # <x> <z> [player] — seat 1 next to 'lure'; wait ~2 s of ticks
-player.where <L>                # twice. READ <L> BACK, never hard-code it: world.inhabitants prints 'lure'
-                                # at body=<n> 0-BASED, and player.where is 1-BASED, so <L> = n + 1. Which of
-                                # the two inhabitants lands on the top slot is the reconciler's ordering, not
+player.pose 2 0 -3 0 0 0 1      # seat 1 next to 'lure' — player.warp pins y=0
+world.wait 480                  # 2 s of ticks. player.run does not block and `;` is not a
+                                # separator; there is no wall-clock wait, only world.wait.
+player.where <L>                # READ <L> BACK, never hard-code it: world.inhabitants prints 'lure'
+world.wait 240                  # at body=<n> 0-BASED, and player.where is 1-BASED, so <L> = n + 1. Which of
+player.where <L>                # the two inhabitants lands on the top slot is the reconciler's ordering, not
                                 # a guarantee — a literal 127 can silently read the OTHER one, or nothing.
   -> the inhabitant has CLOSED to within ~standoffRadius (1.6) and keeps changing between reads.
+     Measured with body=127 -> player.where 128: (1.13, 0.00, -1.29) then (1.34, 0.00, -1.49).
      PROVES the attend producer acquired, approached, and is orbiting — the whole of the Demo's
      companion steering, from authored constants.
 
-player.warp 40 40 1             # wait ~2 s; player.where <L> twice (the same read-back index as above)
+player.warp 40 40 1
+world.wait 480
+player.where <L>
+world.wait 240
+player.where <L>
   -> drifting on its wander flavor, not chasing. PROVES release-radius hysteresis.
 
 world.kit.attend drifter 20 24 4.0 0.55 0.30 face seat
-  -> "[world.mutation: UpsertKit 'drifter' applied]", dirty=1, then it re-acquires the now-in-range seat.
+  -> "[world.mutation: UpsertKit 'drifter' applied]", dirty increments by one (it is not 1 here — the
+     setup above already left five), then it re-acquires the now-in-range seat.
+     On a world with no such kit the verb refuses instead: [world.kit.attend: no kit row named 'drifter'].
      PROVES live retune with no restart, through the normal mutation pipeline.
 
 world.placement.inhabit greeter -
@@ -5443,10 +5763,11 @@ world.placement.inhabit greeter -
 world.undo 1
   -> two rows again, 'greeter' back at a slot. PROVES journal replay reconstructs inhabitation.
 
-world.save <scratch>/out.world.json
-  -> diff against the input modulo the kit's attend block.
-     PROVES derived cameras and faces are NOT written into the document — the derivation stays a
-     derivation and the round-trip stays byte-clean.
+world.save <an EXISTING directory>/out.world.json
+  -> world.save does not create directories and paths are relative to the process cwd; a missing
+     one refuses with [world.save: could not write … (Could not find a part of the path …)].
+     Read the written file and confirm it carries no derived camera and no derived face row.
+     PROVES the derivation stays a derivation. Do NOT diff for byte-identity — R18.
 
 world.placement.set {"id":"bad",…,"inhabit":{"kit":"no-such-kit","source":"Attend","count":1,"radius":0}}
   -> REJECT naming every kit the world declares; dirty unchanged.
@@ -5654,7 +5975,8 @@ body acquires a target and approaches; `world.placement.inhabit … no-such-kit`
 **rejected loudly naming every kit the world declares**; `world.placement.inhabit
 <id> -` retires one body and frees its slot; `world.undo 1` reconstructs it at a
 top slot; `world.save` resets `dirty` to 0 and writes no derived rows; `world.faces`
-reports the derived face at `screen=24` wired to `creation:lure:lure`. The census-fit
+reports the derived face at `screen=24` with `handle=no-signal` (the derived camera
+does not resolve into the render program yet — §79). The census-fit
 rule rejected `networkPlayers 124 + 1 inhabitant` on the default world.
 
 **Plan contradictions found.** (1) The plan's inhabitant slots are "stable, never

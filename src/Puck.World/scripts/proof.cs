@@ -27,7 +27,7 @@
 //       an echo). A population reactivation must not inherit the stale route; eject reveals the declared view.
 //   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The world-document proofs (puck.world.def.v1): (a) the save-idempotence
-//       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) boots, saves,
+//       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo, kiosk, planetoid) boots, saves,
 //       and re-saves from its own output to the same bytes, so a save that folds session state stays
 //       idempotent on a fresh boot (the saved file is never compared against the checked-in one —
 //       R18); (b) baked-default parity — a checked-in-world run and a
@@ -2542,13 +2542,12 @@ static class WorldDocProof {
 
         Console.WriteLine(value: "[proof] === worlddoc (a): the save-idempotence gate (every checked-in world) ===");
 
-        // Cover EVERY checked-in world (default, kart-remap, and — once authored — expo): a save that folds session state
-        // must be a fixed point of the writer on a fresh boot for each. Missing files (e.g. expo before its first
-        // authoring) are skipped with a note rather than failing the gate.
+        // Cover EVERY checked-in world: a save that folds session state must be a fixed point of the writer on a
+        // fresh boot for each. Missing files are skipped with a note rather than failing the gate.
         var worldsDir = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds");
         var ouroborosPassed = true;
 
-        foreach (var worldName in new[] { "default.world.json", "kart-remap.world.json", "expo.world.json" }) {
+        foreach (var worldName in new[] { "default.world.json", "kart-remap.world.json", "expo.world.json", "kiosk.world.json", "planetoid.world.json" }) {
             var worldPath = Path.Combine(path1: worldsDir, path2: worldName);
 
             if (!File.Exists(path: worldPath)) {
