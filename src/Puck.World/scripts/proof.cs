@@ -118,9 +118,9 @@
 //   editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The camera live-apply proof, run on BOTH backends like editor-mode. Each session boots the
 //       baked default (two declared View screens → two registered camera views, witnessed by world.view-refresh's
-//       count echo) and asserts: (a) a fixed-camera pose/aim edit applies LIVE — the '[world.camera: ... pose updated
-//       live]' reconcile line, and a stale "applies at next boot" narration must NOT appear; (b) the anchored
-//       camera's pose edit takes the same live lane; (c) a NEW camera row + a screen re-point (View→View) binds the
+//       count echo) and asserts: (a) an unanchored camera's pose/aim edit applies LIVE — the '[world.camera: ... pose
+//       updated live]' reconcile line, and a stale "applies at next boot" narration must NOT appear; (b) the
+//       entity-anchored camera's pose edit takes the same live lane; (c) a NEW camera row + a screen re-point (View→View) binds the
 //       new camera and releases the orphaned one, the pool count holding; (d) a dimension change recreates the
 //       offscreen view ('recreated live (WxH)'); (e) THE VIEW→NONE TRANSITION — re-sourcing the screen View→None unbinds
 //       the slot AND releases the camera registration (view-refresh count drops, world.screens reads none/unbound —
@@ -7946,7 +7946,8 @@ static class EditorEditProof {
 
 // ============================================================================================
 // EDITOR-CAMERAS — the camera live-apply proof: camera rows edit LIVE. The
-// baked default declares two View screens (0 → 'overhead' fixed, 2 → 'first-person' anchored),
+// baked default declares two View screens (0 → 'overhead', unanchored with a lookAt rig; 2 →
+// 'first-person', entity-anchored with a firstPerson rig),
 // so the offscreen pool boots with two registered camera views — world.view-refresh's count
 // echo is the pipe-observable witness. A pose/aim edit rewrites the running view's rig in
 // place ('pose updated live'), a dimension change recreates it ('recreated live (WxH)'), a
@@ -8002,22 +8003,22 @@ static class EditorCamerasProof {
             // Baseline: both declared View screens registered their cameras' offscreen renders at boot.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "boot-two-camera-views");
 
-            // (a) LIVE POSE EDIT (fixed): re-aim 'overhead'. The mutation applies, the client reconcile rewrites the
-            // running view's rig in place, and a stale "applies at next boot" narration must never appear.
+            // (a) LIVE POSE EDIT (unanchored): re-aim 'overhead'. The mutation applies, the client reconcile rewrites
+            // the running view's rig in place, and a stale "applies at next boot" narration must never appear.
             var mark = ctx.Collector.Count;
 
-            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"fixed\",\"position\":[0,18,0],\"lookAt\":[0,0.5,-2.5],\"name\":\"overhead\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.96}");
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"name\":\"overhead\",\"anchor\":null,\"offset\":[0,18,0],\"rig\":{\"$type\":\"lookAt\",\"target\":[0,0.5,-2.5],\"fieldOfViewRadians\":0.96},\"renderWidth\":256,\"renderHeight\":144}");
 
             var poseLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
                 predicate: l => l.Contains(value: "[world.camera: 'overhead' pose updated live]"), deadlineSeconds: 15.0);
 
-            passed &= ComposedShotKit.Check(name: "fixed-pose-updates-live", ok: (poseLine is not null),
+            passed &= ComposedShotKit.Check(name: "unanchored-pose-updates-live", ok: (poseLine is not null),
                 detail: (poseLine?.Trim() ?? "(no reconcile line for 'overhead')"));
             passed &= AssertNoNextBoot(ctx: ctx, mark: mark, name: "no-next-boot-narration");
 
             // (b) The anchored camera's pose edit rides the same live lane (rig property writes + a fresh anchor id).
             mark = ctx.Collector.Count;
-            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"anchored\",\"anchor\":{\"$type\":\"entity\",\"index\":0},\"offset\":[0,1.5,0],\"name\":\"first-person\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":1.4}");
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"name\":\"first-person\",\"anchor\":{\"$type\":\"entity\",\"index\":0},\"offset\":[0,1.5,0],\"rig\":{\"$type\":\"firstPerson\",\"eyeOffset\":[0,0,0],\"focusDistance\":0,\"fieldOfViewRadians\":1.4},\"renderWidth\":256,\"renderHeight\":144}");
 
             var anchoredLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
                 predicate: l => l.Contains(value: "[world.camera: 'first-person' pose updated live]"), deadlineSeconds: 15.0);
@@ -8028,7 +8029,7 @@ static class EditorCamerasProof {
             // (c) NEW ROW + RE-POINT (View→View): 'birdseye' enters the document, then screen 0 films it. The new
             // camera registers, the orphaned 'overhead' releases, and the pool count holds at 2.
             passed &= ComposedShotKit.SendAwait(ctx: ctx,
-                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.9}",
+                line: "world.camera.set {\"name\":\"birdseye\",\"anchor\":null,\"offset\":[12,10,0],\"rig\":{\"$type\":\"lookAt\",\"target\":[0,0,0],\"fieldOfViewRadians\":0.9},\"renderWidth\":256,\"renderHeight\":144}",
                 expect: "[world.mutation: UpsertCamera 'birdseye' applied]", name: "new-camera-row-applies");
 
             mark = ctx.Collector.Count;
@@ -8049,7 +8050,7 @@ static class EditorCamerasProof {
 
             // (d) DIMENSION CHANGE: an offscreen render target cannot resize — the registration recreates in place.
             passed &= ComposedShotKit.SendAwait(ctx: ctx,
-                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":320,\"renderHeight\":180,\"fieldOfViewRadians\":0.9}",
+                line: "world.camera.set {\"name\":\"birdseye\",\"anchor\":null,\"offset\":[12,10,0],\"rig\":{\"$type\":\"lookAt\",\"target\":[0,0,0],\"fieldOfViewRadians\":0.9},\"renderWidth\":320,\"renderHeight\":180}",
                 expect: "[world.camera: 'birdseye' recreated live (320x180)]", name: "dimension-change-recreates");
 
             // (e) THE VIEW→NONE TRANSITION: the slot unbinds AND the camera registration releases — the pool
@@ -8075,6 +8076,10 @@ static class EditorCamerasProof {
             // applies with no view work left to do.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.camera.remove birdseye",
                 expect: "[world.mutation: RemoveCamera 'birdseye' applied]", name: "camera-remove-applies");
+
+            // Every line above was meant to SUCCEED: a stale payload the validator refuses would leave a nonzero count
+            // here even when the awaits above time out into vacuous passes.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "wire.errors", expect: "[wire.errors: 0 rejected]", name: "no-silent-rejections");
 
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
