@@ -2153,13 +2153,14 @@ Console.WriteLine($"quasicrystal: exact Z[phi] chain, Next/Previous inverse, phi
 if (!SilverQuasicrystal.Contains(a: 0, b: 0)) {
     throw new InvalidOperationException("SILVERQUASICRYSTAL ORIGIN IS NOT A MEMBER");
 }
-// Independent oracle: a + b*sqrt2 is a point exactly when its conjugate a - b*sqrt2 lies in [0, 2). Over |a|,|b| <= 400
-// the conjugate is never within 1e-3 of a window edge except the exact integer points (0,0) [included] and (2,0)
-// [excluded], both of which the 2.0 boundary handles, so the double computation is a faithful, code-independent oracle.
+// Independent oracle: a + b*sqrt2 is a point exactly when a is even AND its conjugate a - b*sqrt2 lies in [0, 2) -- the
+// even-a parity is the index-two sublattice the chain lives on, and the odd-a points are the interleaved companion chain.
+// Over |a|,|b| <= 400 the conjugate is never within 1e-3 of a window edge except the exact integer points (0,0) [included]
+// and (2,0) [excluded], both handled by the 2.0 boundary, so the double-plus-parity computation is a code-independent oracle.
 for (var oracleB = -400; (oracleB <= 400); ++oracleB) {
     for (var oracleA = -400; (oracleA <= 400); ++oracleA) {
         var conjugate = (oracleA - (oracleB * 1.4142135623730951));
-        var expected = ((conjugate >= 0.0) && (conjugate < 2.0));
+        var expected = (((oracleA & 1) == 0) && (conjugate >= 0.0) && (conjugate < 2.0));
 
         if (SilverQuasicrystal.Contains(a: oracleA, b: oracleB) != expected) {
             throw new InvalidOperationException("SILVERQUASICRYSTAL MEMBERSHIP DISAGREES WITH THE CUT-AND-PROJECT ORACLE");
@@ -2210,7 +2211,28 @@ var silverDensity = ((double)silverLong / silverShort);
 if (Math.Abs((silverDensity - (1.0 + Math.Sqrt(2.0)))) > 0.01) {
     throw new InvalidOperationException("SILVERQUASICRYSTAL TILE DENSITY IS NOT THE SILVER RATIO");
 }
-Console.WriteLine($"silverquasicrystal: exact Z[sqrt2] chain, membership vs oracle, Next/Previous inverse, sqrt2/2+sqrt2 steps, no SS/LLLL, density {silverDensity:F4} -> 1+sqrt2 OK");
+// The invariant that keeps Contains and the traversal ONE object: each row b holds exactly one Contains-member, and it is
+// the point the walk visits. A window that also admitted the odd-a companion chain would pass every check above yet make
+// Contains mean a denser set than Next traces -- so this is the assertion that forbids the two implementations to diverge.
+var silverRow = (A: 0, B: 0);
+for (var rowB = 0; (rowB < 4000); ++rowB) {
+    var rowLo = (((int)Math.Floor(rowB * 1.4142135623730951)) - 2);
+    var rowHi = (((int)Math.Ceiling(rowB * 1.4142135623730951)) + 3);
+    var member = int.MinValue;
+
+    for (var rowA = rowLo; (rowA <= rowHi); ++rowA) {
+        if (SilverQuasicrystal.Contains(a: rowA, b: rowB)) {
+            if (member != int.MinValue) { throw new InvalidOperationException("SILVERQUASICRYSTAL ROW HAS TWO MEMBERS -- CONTAINS IS DENSER THAN THE WALKED CHAIN"); }
+
+            member = rowA;
+        }
+    }
+
+    if (member != silverRow.A) { throw new InvalidOperationException("SILVERQUASICRYSTAL CONTAINS DISAGREES WITH THE WALKED CHAIN"); }
+
+    silverRow = SilverQuasicrystal.Next(a: silverRow.A, b: silverRow.B);
+}
+Console.WriteLine($"silverquasicrystal: exact Z[sqrt2] chain, Contains == walk (one member/row), Next/Previous inverse, sqrt2/2+sqrt2 steps, no SS/LLLL, density {silverDensity:F4} -> 1+sqrt2 OK");
 
 // ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
 // The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;

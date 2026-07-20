@@ -2,9 +2,11 @@ namespace Puck.Maths;
 
 /// <summary>
 /// An infinite, aperiodic, never-repeating point set — a quasicrystal — built by the cut-and-project method from the
-/// silver-ratio ring <c>ℤ[√2]</c>. This is the one-dimensional silver-mean case (the Pell chain): the points of
-/// <c>ℤ[√2]</c> whose Galois conjugate falls inside a length-two window, which along the line space into exactly two
-/// tile lengths in the ratio <c>δ = 1 + √2</c>, arranged as the silver-mean word. Membership and traversal are exact
+/// silver-ratio ring <c>ℤ[√2]</c>. This is the one-dimensional silver-mean case (the Pell chain): the ring elements
+/// <c>a + b·√2</c> with <c>a</c> even — the index-two sublattice <c>2ℤ ⊕ √2ℤ</c> — whose Galois conjugate falls inside
+/// the window <c>[0, 2)</c>, which along the line space into exactly the two tile lengths <c>√2</c> and <c>2 + √2</c>
+/// (ratio <c>δ = 1 + √2</c>), arranged as the silver-mean word. The odd-<c>a</c> elements in the same window form the
+/// one interleaved companion chain; this type is the chain through the origin. Membership and traversal are exact
 /// integer arithmetic, so the structure never drifts and never repeats — the same region regenerates identically on
 /// every machine with no stored data.
 /// </summary>
@@ -25,10 +27,12 @@ public static class SilverQuasicrystal {
     /// <summary>Determines whether the ring element <c>a + b·√2</c> is a point of the quasicrystal.</summary>
     /// <param name="a">The integer part of the ring element.</param>
     /// <param name="b">The coefficient of √2.</param>
-    /// <returns><see langword="true"/> when the element's conjugate lies in the acceptance window <c>[0, 2)</c>.</returns>
+    /// <returns><see langword="true"/> when <paramref name="a"/> is even and the element's conjugate lies in the acceptance window <c>[0, 2)</c>.</returns>
     public static bool Contains(int a, int b) =>
-        // Accept when the Galois conjugate a − b·√2 lies in [0, 2): the projection into internal space hits the window.
-        ((SignSqrt2(rational: a, coefficient: -b) >= 0) && (SignSqrt2(rational: (a - 2), coefficient: -b) < 0));
+        // The chain lives on the even-a sublattice — both tiles add an even amount to a — so a must be even; then accept
+        // when the Galois conjugate a − b·√2 lies in [0, 2). The odd-a points are the interleaved companion chain, so the
+        // parity gate is what makes Contains describe exactly the set that Next and Previous walk.
+        (((a & 1) == 0) && (SignSqrt2(rational: a, coefficient: -b) >= 0) && (SignSqrt2(rational: (a - 2), coefficient: -b) < 0));
     /// <summary>Determines whether the longer of the two tiles begins at the point <c>a + b·√2</c>.</summary>
     /// <param name="a">The integer part of the point.</param>
     /// <param name="b">The coefficient of √2.</param>
