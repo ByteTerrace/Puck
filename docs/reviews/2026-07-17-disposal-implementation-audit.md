@@ -66,6 +66,8 @@ DirectXSurfaceUpload's extent-change rebuild path releases the sampled texture w
 
 **Action:** In D:\Source\ByteTerrace\Puck\src\Puck.DirectX\Interop\DirectXSurfaceUpload.cs, at the top of the EnsureResources rebuild path (immediately before the DisposeImageResources() call at line 275), drain the queue first: if ((0 != m_texture) && (0 != m_fence) && (0 != m_deviceContext.CommandQueueHandle)) { WaitForGpu(); }. The fence/event already exist (created in the constructor) and WaitForGpu is the existing private helper at :411. Apply the same fix to the Vulkan peer: in src/Puck.Vulkan/VulkanSurfaceUpload.cs EnsureResources, when the rebuild path fires with an existing image (0 != m_imageViewHandle), call m_device?.TryWaitIdle() before DisposeResources() at :238 (mirroring the Dispose path at :340). The drain only fires on an extent/format/device change, matching the precedent and rationale documented at GamingBrickChildNode.cs:1840-1844.
 
+**Resolved 2026-07-19 — `3827ccd`.** A guarded `WaitForGpu()` (`if (0 != m_texture)`) now precedes `DisposeImageResources()` on the rebuild path. Confirmed by reading + clean Release build + boot smoke on each backend; the resize/format-change rebuild path has not yet been exercised on GPU, so this is not called proven.
+
 ### HIGH-2. VulkanSurfaceUpload — `missing-gpu-sync` (batch: vulkan-b)
 
 Mid-life rebuild (extent/format/device change) destroys the sampled image and view without draining GPU consumers — only the public Dispose() waits idle.
@@ -75,6 +77,8 @@ Mid-life rebuild (extent/format/device change) destroys the sampled image and vi
 **Failure scenario:** Live demo: a WGC capture/console feed changes extent (user resizes the captured window, cabinet pane relayout) while frame N-1 — which sampled the upload's image view in the SDF views kernel or the presenter blit — is still in flight. EnsureResources destroys that image/view mid-execution: validation error, undefined behavior, potential device-lost on stricter drivers. Public Dispose is safe; only the rebuild path races.
 
 **Action:** In src/Puck.Vulkan/VulkanSurfaceUpload.cs EnsureResources, before the DisposeResources() call at line 238, drain the device when rebuilding an existing set: `if (m_device is not null) { m_device.TryWaitIdle(); }` (mirroring Dispose() at line 340). Rebuilds only fire on extent/format/device changes, so the stall is rare and acceptable.
+
+**Resolved 2026-07-19 — commit "GPU-sync: drain the Vulkan upload rebuild path (HIGH-2 twin)".** `m_device?.TryWaitIdle()` now precedes `DisposeResources()` on the rebuild path (the null-conditional is the first-allocation guard), mirroring Dispose's drain. This is the twin of HIGH-1 (`3827ccd`), fixed together so the two backends behave identically under a resize/format/device change. Confirmed by reading + clean Release build + boot smoke on each backend; the rebuild path has not yet been exercised on GPU, so this is not called proven.
 
 ## Medium severity (7)
 

@@ -8002,12 +8002,16 @@ provenance, decides when a bug is fixed.
 
 | ID | Defect | Target | Status | Size |
 |---|---|---|---|---|
-| **HIGH-1** | The rebuild path disposes GPU resources **without a GPU wait** — a use-after-free whenever the GPU is still reading the resource being torn down | `src/Puck.DirectX/Interop/DirectXSurfaceUpload.cs:275` (`DisposeImageResources()` after the format/extent early-return) | CONFIRMED-OPEN | S |
-| **HIGH-2** | The same defect, Vulkan side — resources disposed on the rebuild path with no preceding GPU wait | `src/Puck.Vulkan/VulkanSurfaceUpload.cs:238` (`DisposeResources()`, same shape) | CONFIRMED-OPEN | S |
+| **HIGH-1** | The rebuild path disposes GPU resources **without a GPU wait** — a use-after-free whenever the GPU is still reading the resource being torn down | `src/Puck.DirectX/Interop/DirectXSurfaceUpload.cs:275` (`DisposeImageResources()` after the format/extent early-return) | **FIXED `3827ccd`** (guarded `WaitForGpu()` before `DisposeImageResources()`) | S |
+| **HIGH-2** | The same defect, Vulkan side — resources disposed on the rebuild path with no preceding GPU wait | `src/Puck.Vulkan/VulkanSurfaceUpload.cs:238` (`DisposeResources()`, same shape) | **FIXED** — this commit, "GPU-sync: drain the Vulkan upload rebuild path (HIGH-2 twin)" (guarded `m_device?.TryWaitIdle()` before `DisposeResources()`, mirroring Dispose) | S |
 
-**Fix both together.** They are one defect shape across two backends; fixing one
-leaves the other live and leaves the backends behaving differently under the same
-authoring action. Neither touches `src/Puck.Demo`, neither collides with any arc,
+**Fix both together — done 2026-07-19.** They are one defect shape across two
+backends; fixing one leaves the other live and leaves the backends behaving
+differently under the same authoring action. HIGH-1 landed in the owner's
+adversarial pass (`3827ccd`); HIGH-2 restores symmetry with the same drain idiom.
+Both are **confirmed by reading + clean Release build + boot smoke on each
+backend**; a real resize/format-change exercise (which forces the rebuild path)
+is still owed before either is called proven on GPU. Neither touches `src/Puck.Demo`, neither collides with any arc,
 and neither waits on the chartered pass below — that pass takes the *remaining*
 23 findings in the same block plus the two paired halves.
 
