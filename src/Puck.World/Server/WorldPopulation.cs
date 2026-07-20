@@ -6,23 +6,22 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>What a <see cref="WorldPopulation"/> entry stands for — the local seats driven by client-submitted intents,
-/// and the network-human peers represented locally until a transport supplies their intent. Every entry is an
-/// authoritative body advanced from a <see cref="PlayerIntent"/>; a driver (a client seat, a network peer, AI, a replay
-/// tape) may only produce intents, never write a pose. The render path is driven by kind, so it never learns who is
-/// driving an entry.</summary>
+/// and the peer slice that hosts every OTHER joined body: remote-human peers and the loopback-joined inhabitants alike.
+/// Every entry is an authoritative body advanced from a <see cref="PlayerIntent"/>; a driver (a client seat, a network
+/// peer, AI, an inhabitant's attend producer, a replay tape) may only produce intents, never write a pose. An inhabitant
+/// is not a separate kind — it is a <see cref="NetworkPeer"/> whose body is bound to a placement (see
+/// <see cref="WorldPopulation"/>), joined over the loopback link exactly as a peer is. The render path is driven by kind,
+/// so it never learns who is driving an entry.</summary>
 internal enum PopulationKind {
     /// <summary>Slots 0..3 — a local roster seat: its body is minted by a session join and advanced from the client's
     /// per-tick submitted intent.</summary>
     LocalSeat,
 
-    /// <summary>Slots 4..127 — a network-human peer that owns its own <see cref="WorldBody"/> state. Until a transport
-    /// supplies its intent stream, the built-in scene's deterministic driver stands in for that remote human.</summary>
+    /// <summary>Slots 4..127 — a joined peer body. A remote-human peer owns its own <see cref="WorldBody"/> state and,
+    /// until a transport supplies its intent stream, runs the built-in deterministic driver; an inhabited peer (its
+    /// entry carries a placement back-reference) is driven by its kit's attend producer. Admitted while a slot is free,
+    /// bounded only by the entity table itself.</summary>
     NetworkPeer,
-
-    /// <summary>A body bound to a placement's INHABIT facet — a creation living in the world. Allocated downward from
-    /// slot 127, it holds a normal <see cref="WorldBody"/> under the placement's kit and is driven by the placement's
-    /// intent source. Its slot survives unrelated placement edits so an anchor referencing it stays valid.</summary>
-    Inhabitant,
 }
 
 /// <summary>
@@ -59,16 +58,18 @@ internal sealed class WorldPopulation {
     /// <summary>The reserved local-seat count — four seats, always at the front of the entity table.</summary>
     public const int LocalSeatCount = 4;
 
-    /// <summary>The absolute ceiling on simulated bodies behind the four local seats (<c>128 - 4</c>) — the static bound
-    /// the document validator and the <c>world.population</c> input grammar reference. The LIVE ceiling
-    /// (<see cref="MaxSimulated"/>) shrinks below this by the inhabitant count.</summary>
+    /// <summary>The absolute ceiling on peer bodies behind the four local seats (<c>128 - 4</c>) — the static bound the
+    /// document validator and the <c>world.population</c> input grammar reference. The LIVE census ceiling
+    /// (<see cref="MaxSimulated"/>) shrinks below this only by the count of live inhabitants physically occupying the
+    /// table — occupancy, not a static reservation.</summary>
     public const int MaxPopulationSimulated = (MaxPopulation - LocalSeatCount);
 
-    /// <summary>The most census peers that fit RIGHT NOW behind the four local seats and BELOW the lowest inhabited body
-    /// (R6). Inhabited bodies allocate downward from slot 127, census peers upward from slot 4, so this is exactly "they
-    /// must not meet." A live <c>world.population &lt;n&gt;</c> clamps against it, so adding an inhabited placement lowers
-    /// the peer ceiling rather than silently stealing a peer's body. Reading the FLOOR (not a count) keeps existing
-    /// inhabitant slots stable — a retired inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
+    /// <summary>The most census/remote peers that fit RIGHT NOW behind the four local seats and BELOW the lowest inhabited
+    /// body. Inhabited bodies (loopback-joined players) allocate downward from slot 127, census peers upward from slot 4,
+    /// so this floor is exactly where the two packings meet; it moves only with LIVE inhabitant occupancy, never a boot
+    /// reservation. A live <c>world.population &lt;n&gt;</c> clamps against it AND against the remote admission cap
+    /// (<c>networkPlayers</c>). Reading the FLOOR (not a count) keeps existing inhabitant slots stable — a retired
+    /// inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
     public int MaxSimulated => (m_inhabitantFloor - LocalSeatCount);
 
     private readonly Entry[] m_entries = new Entry[MaxPopulation];
@@ -99,8 +100,12 @@ internal sealed class WorldPopulation {
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedSpawnPolicy m_spawnPolicy = FixedSpawnPolicy.Compile(policy: null, spawnPoints: []);
     private int m_simulatedCount;
-    // The lowest slot index an inhabited body occupies (MaxPopulation = none). Inhabited bodies claim the top of the
-    // entity table (slots 127 downward); the peer ceiling reads this floor so census peers never reach an inhabitant.
+    // The remote-principal admission cap (the document's networkPlayers): the most census/remote peers world.population
+    // may raise. It is a CEILING, never a boot reservation — at boot the census stands at zero (only the joined seats are
+    // live) so the peer slice is entirely free for inhabitants. Refreshed by CompileFixedTables on a swap/rebuild.
+    private int m_remoteCap;
+    // The lowest slot index a live inhabited body occupies (MaxPopulation = none). Inhabited bodies claim the top of the
+    // entity table (slots 127 downward); the census ceiling reads this floor so census peers never reach an inhabitant.
     // Reconciled by ReconcileInhabitants.
     private int m_inhabitantFloor = MaxPopulation;
     private int m_revision;
@@ -114,10 +119,11 @@ internal sealed class WorldPopulation {
     private static readonly FixedQ4816 s_activityRateRange = FixedQ4816.FromDouble(value: 1.3);
 
     /// <summary>Initializes a new instance of the <see cref="WorldPopulation"/> class: the four local slots reserved for
-    /// session joins, every network peer seeded with its deterministic color, kit, activity phase, and spawn pose, then
-    /// the definition's configured peer census activated immediately. The color must be valid for all 128 from frame 1,
-    /// since the program's material capacity is probed from a worst-case all-avatars build. An entry receives its
-    /// <see cref="WorldBody"/> when activated.</summary>
+    /// session joins, every peer slot seeded with its deterministic color, kit, activity phase, and spawn pose. The census
+    /// stands at ZERO at boot — <c>networkPlayers</c> is the remote admission CAP, not a static reservation, so the whole
+    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for all 128
+    /// from frame 1, since the program's material capacity is probed from a worst-case all-avatars build. An entry
+    /// receives its <see cref="WorldBody"/> when activated.</summary>
     /// <param name="definition">The world definition supplying the kit rows, the wander tuning, and the profileless
     /// locomotion feel.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -153,7 +159,8 @@ internal sealed class WorldPopulation {
             SeedSimulated(index: index);
         }
 
-        _ = SetSimulatedCount(count: definition.Population.NetworkPlayers);
+        // No boot census: the peer slice stays free until world.population raises it or an inhabitant joins. m_remoteCap
+        // (set by CompileFixedTables above) caps a later raise; m_simulatedCount stays 0.
     }
 
     // Compile the definition's sim-affecting sections to the fixed-point tables runtime simulation reads: the profileless
@@ -184,6 +191,9 @@ internal sealed class WorldPopulation {
         // The compiled spawn policy — read ONLY by SeedSimulated (never the authored floats). The validator has already
         // resolved every named spawn point, so Compile's lookups always hit.
         m_spawnPolicy = FixedSpawnPolicy.Compile(policy: definition.Population.SpawnPolicy, spawnPoints: definition.SpawnPoints);
+        // The remote admission cap moves with the live document (a swap can raise or lower networkPlayers); the running
+        // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
+        m_remoteCap = definition.Population.NetworkPlayers;
     }
 
     // Resolve every entry's LookIndex from the definition's look assignment policy — the SAME primitive as the kit
@@ -310,22 +320,26 @@ internal sealed class WorldPopulation {
     }
 
     /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
-    /// Install AFTER <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's INHABIT facet claims live
-    /// entity-table slots downward from 127, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// the placement's intent source. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
-    /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); activate new bodies at the
-    /// highest free slots. The peer ceiling (<see cref="MaxSimulated"/>) follows the resulting inhabitant floor, and the
-    /// census is re-clamped so peers never reach an inhabitant.</summary>
+    /// Install AFTER <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's INHABIT facet joins bodies
+    /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
+    /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
+    /// its kit's attend producer. Bodies claim the HIGHEST FREE slots (127 downward) so an existing inhabitant never
+    /// renumbers; admission is bounded ONLY by the table itself and rejects loudly when it is genuinely full — there is no
+    /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
+    /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
+    /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows the resulting inhabitant floor (physical
+    /// occupancy), and the census is re-clamped so census peers never reach an inhabitant.</summary>
     /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
     public void ReconcileInhabitants(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // Pass 1 — retire inhabitant slots whose placement/facet/creation-kit binding no longer holds. A surviving slot
-        // keeps its body (pose preserved); a kit change recompiles in place.
+        // Pass 1 — retire inhabited slots whose placement/facet/creation-kit binding no longer holds. A surviving slot
+        // keeps its body (pose preserved); a kit change recompiles in place. An inhabited entry is a peer carrying a
+        // placement back-reference; a plain census peer (no PlacementId) is left untouched.
         for (var index = MaxPopulation - 1; (index >= LocalSeatCount); index--) {
             var entry = m_entries[index];
 
-            if (entry.Kind != PopulationKind.Inhabitant) {
+            if (entry.PlacementId is null) {
                 continue;
             }
 
@@ -373,12 +387,12 @@ internal sealed class WorldPopulation {
             }
         }
 
-        // The inhabitant floor is the lowest slot any inhabitant now occupies; re-clamp the census to it so peers never
-        // reach an inhabitant, then bump the revision (the declared set moved).
+        // The inhabitant floor is the lowest slot any live inhabitant now occupies; re-clamp the census to it so peers
+        // never reach an inhabitant, then bump the revision (the declared set moved).
         m_inhabitantFloor = MaxPopulation;
 
         for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
-            if (m_entries[index].Kind == PopulationKind.Inhabitant) {
+            if (m_entries[index].PlacementId is not null) {
                 m_inhabitantFloor = index;
 
                 break;
@@ -389,12 +403,13 @@ internal sealed class WorldPopulation {
         m_revision++;
     }
 
-    // The placement id an inhabitant slot holds (null unless the slot is an inhabitant) — the frame source / anchor
-    // back-reference.
-    public string? InhabitantPlacementId(int index) => ((m_entries[index].Kind == PopulationKind.Inhabitant) ? m_entries[index].PlacementId : null);
+    // The placement id an inhabited peer slot holds (null for a plain census peer or an empty slot) — the frame source /
+    // anchor back-reference.
+    public string? InhabitantPlacementId(int index) => m_entries[index].PlacementId;
 
-    // Activate one inhabited body at a claimed slot: mint its body from the resolved kit spawned at the placement's
-    // scatter pose, seat its intent source, and tag the slot as an inhabitant of the placement.
+    // Join one inhabited body at a claimed peer slot: mint its body from the resolved kit spawned at the placement's
+    // scatter pose, seat its intent source, and tag the peer with the placement back-reference (the entry stays a
+    // NetworkPeer — an inhabitant is a peer, not a separate kind).
     private void ActivateInhabitant(int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
         var entry = m_entries[index];
         var kit = m_kits[kitIndex];
@@ -416,7 +431,6 @@ internal sealed class WorldPopulation {
 
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
-        entry.Kind = PopulationKind.Inhabitant;
         entry.PlacementId = placement.Id;
         entry.KitIndex = kitIndex;
         entry.Attend = kit.Attend;
@@ -426,12 +440,12 @@ internal sealed class WorldPopulation {
         entry.Active = true;
     }
 
-    // Retire an inhabitant slot back to an inactive network peer (its body dropped, its placement tag cleared).
+    // Retire an inhabited peer slot back to an inactive census peer (its body dropped, its placement tag cleared). The
+    // slot was already a NetworkPeer; only the placement back-reference and body go.
     private void RetireInhabitant(int index) {
         var entry = m_entries[index];
 
         entry.Body = null;
-        entry.Kind = PopulationKind.NetworkPeer;
         entry.PlacementId = null;
         entry.Active = false;
         entry.AcquiredTarget = -1;
@@ -441,7 +455,7 @@ internal sealed class WorldPopulation {
         var count = 0;
 
         for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
-            if ((m_entries[index].Kind == PopulationKind.Inhabitant) && string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
                 count++;
             }
         }
@@ -451,7 +465,7 @@ internal sealed class WorldPopulation {
 
     private int LowestInhabitant(string placementId) {
         for (var index = LocalSeatCount; (index < MaxPopulation); index++) {
-            if ((m_entries[index].Kind == PopulationKind.Inhabitant) && string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: m_entries[index].PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
                 return index;
             }
         }
@@ -459,13 +473,14 @@ internal sealed class WorldPopulation {
         return -1;
     }
 
-    // The highest slot (127 downward) not currently claimed by an active seat/peer or an inhabitant — where a new
-    // inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer.
+    // The highest slot (127 downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
+    // new inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer. A free slot is one
+    // that holds no placement back-reference and no active census body.
     private int HighestFreeSlot() {
         for (var index = MaxPopulation - 1; (index >= LocalSeatCount); index--) {
             var entry = m_entries[index];
 
-            if ((entry.Kind != PopulationKind.Inhabitant) && !entry.Active) {
+            if ((entry.PlacementId is null) && !entry.Active) {
                 return index;
             }
         }
@@ -782,26 +797,28 @@ internal sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Activates the first <paramref name="count"/> simulated stand-ins (indices <c>4..</c>), clamped to
-    /// <c>0..</c><see cref="MaxSimulated"/>, and deactivates the rest. A newly-activated entry is re-seeded to a fresh
-    /// spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that pose); a deactivated
-    /// entry drops its body; entries already active keep wandering. Bumps the revision only when an occupancy flips.</summary>
-    /// <param name="count">The requested active simulated count.</param>
+    /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to
+    /// <c>0..min(networkPlayers cap, </c><see cref="MaxSimulated"/><c>)</c>, and deactivates the rest. A newly-activated
+    /// entry is re-seeded to a fresh spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that
+    /// pose); a deactivated entry drops its body; entries already active keep wandering. Bumps the revision only when an
+    /// occupancy flips.</summary>
+    /// <param name="count">The requested active census count.</param>
     /// <returns>The clamped count actually applied.</returns>
     public int SetSimulatedCount(int count) {
-        // Clamp against the LIVE ceiling (R6): inhabited bodies at the top of the table lower the peer ceiling, so a
-        // request past it is clamped rather than allowed to collide with an inhabitant.
-        var clamped = Math.Clamp(value: count, min: 0, max: MaxSimulated);
+        // Clamp against the remote admission cap (networkPlayers) AND the live inhabitant floor: inhabited peers at the
+        // top of the table lower the census ceiling by their physical occupancy, so a request past either is clamped
+        // rather than allowed to collide with an inhabitant or breach the cap.
+        var clamped = Math.Clamp(value: count, min: 0, max: Math.Min(val1: m_remoteCap, val2: MaxSimulated));
         var changed = false;
 
         for (var offset = 0; (offset < MaxPopulationSimulated); offset++) {
             var index = (LocalSeatCount + offset);
             var entry = m_entries[index];
 
-            // Inhabitant slots are owned by ReconcileInhabitants; the census never activates or clears them. Because
+            // Inhabited peer slots are owned by ReconcileInhabitants; the census never activates or clears them. Because
             // inhabitants claim the TOP of the peer slice and `clamped <= MaxSimulated`, `offset < clamped` never names
-            // an inhabitant slot, so census peers and inhabitants cannot meet.
-            if (entry.Kind == PopulationKind.Inhabitant) {
+            // an inhabited slot, so census peers and inhabitants cannot meet.
+            if (entry.PlacementId is not null) {
                 continue;
             }
 
@@ -1156,20 +1173,21 @@ internal sealed class WorldPopulation {
 
     // One entity-table entry. A mutable class; Kind and KitIndex are fixed at construction. SpawnYaw is the
     // index-seeded heading a fresh activation faces the new body toward. Body is the entry's own sim — null while
-    // inactive, minted on activation (a session join for a seat, the census for a peer).
+    // inactive, minted on activation (a session join for a seat, the census or an inhabitant join for a peer).
     private sealed class Entry {
         public FixedQ4816 ActivityPhase { get; set; }
         public FixedQ4816 ActivityRate { get; set; }
         public bool Active { get; set; }
         public WorldBody? Body { get; set; }
         public Vector3 BodyColor { get; set; }
-        // Kind is fixed at construction for seats/peers; an inhabitant reconcile flips a peer slot to Inhabitant and
-        // back, so Kind is settable rather than init-only.
-        public required PopulationKind Kind { get; set; }
-        // The placement row this entry inhabits (null unless Kind == Inhabitant) — the back-reference the frame source
-        // and anchor resolver look up by. Set/cleared by ReconcileInhabitants.
+        // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer for 4..127) and never changes: an
+        // inhabitant is a NetworkPeer distinguished by its PlacementId, not a kind flip.
+        public required PopulationKind Kind { get; init; }
+        // The placement row this peer inhabits (null for a plain census peer or an empty slot) — the back-reference the
+        // frame source and anchor resolver look up by, and the flag that marks a peer as an inhabitant. Set/cleared by
+        // ReconcileInhabitants.
         public string? PlacementId { get; set; }
-        // The compiled attend flavor an Inhabitant/Wander body's Attend producer reads (null = the kit declares none).
+        // The compiled attend flavor an inhabited/Wander body's Attend producer reads (null = the kit declares none).
         public FixedAttendFlavor? Attend { get; set; }
         // The attend producer's acquired target index (-1 = none) — the hysteresis latch that stops edge flicker across
         // the notice/release band.

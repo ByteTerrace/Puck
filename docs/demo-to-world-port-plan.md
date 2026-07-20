@@ -501,11 +501,23 @@ rule). **Arc 7 owns** the record, the reconciler, slot reservation, and
 field's vocabulary. Sequence 6 → 7 so `Inhabit` lands whole, once.
 `WorldPlacement.Role` is deleted exactly once, by Arc 7.
 
-### R6 — `MaxSimulated` is computed, once
+### R6 — `MaxSimulated` is computed, once — **OVERRIDDEN by R-C (owner, 2026-07-19)**
 
 Arc 7's computed property (`MaxPopulation - LocalSeatCount - inhabitantCount`) is
 the implementation; Arc 6's validator census-fit rule folds into Arc 7's
 `ValidatePlacements`. Do not implement it twice.
+
+**OVERRIDDEN — R-C, owner ruling 2026-07-19 (see the R-C execution record under the
+Arc 7 record).** The census-fit *validator* rule (`networkPlayers + sum(Inhabit.Count)
+<= MaxPopulationSimulated`) is **deleted, not folded** — it was a static pre-reservation
+that made `networkPlayers` compete with inhabitants and made the shipped
+`default.world.json` (`networkPlayers 124`) un-inhabitable. Rationale: **inhabitants are
+players.** An inhabitant now JOINS a free peer slot over the loopback link exactly as a
+peer does; `networkPlayers` is a remote **admission cap**, not a boot reservation (the boot
+census is zero — only the joined seats are live); total occupancy is bounded by the entity
+table itself, and a genuinely full table is rejected loudly at JOIN time (a runtime fact the
+static validator cannot know). `MaxSimulated` survives as the *live* census ceiling — the
+inhabitant floor, moved only by physical occupancy — but it is no longer a validation rule.
 
 ### R7 — `WorldStampPool` is Arc 6's, generalized once
 
@@ -5472,6 +5484,81 @@ low count); `expo.world.json` does not exist in the tree, so a saved default +
 lowered count stood in. (3) `default.world.json`'s authoring block had to be
 re-goldened for the two new fields (they are not a WhenWritingNull section), or the
 frozen probe reads 0 derived-face slots.
+
+### R-C execution record — INHABITANTS ARE PLAYERS (owner ruling, 2026-07-19)
+
+Landed on `claude/puck-realtime-world-editing-4fd13f` atop the R-B island sweep
+(`86a8a88`). R-C reworks the Arc 7 population integration so an inhabitant is a
+first-class **player** — a peer that joins the entity table over the loopback link —
+instead of a separate reserved population region. It **overturns Arc 7 plan
+contradiction #2 above**: the default world (`networkPlayers 124`) is now inhabitable
+live, verified on the *untouched* shipped file.
+
+**What died (delete, don't deprecate — supergreen).**
+- **`PopulationKind.Inhabitant`** — the enum member is gone. An inhabitant is a
+  `PopulationKind.NetworkPeer` whose `Entry.PlacementId` is non-null; every
+  `Kind == Inhabitant` test became a `PlacementId is not null` test. `Entry.Kind` is
+  `init`-only again (it never flips).
+- **The R6 census-fit validator rule** (`networkPlayers + sum(Inhabit.Count) <=
+  MaxPopulationSimulated`) and its `inhabitantCount` accumulator — deleted from
+  `ValidatePlacements`. There is no static pre-rejection; a full table rejects loudly at
+  JOIN time (`ReconcileInhabitants`' existing "no free entity slot — the 128-slot table
+  is full" line).
+- **The static boot crowd reservation.** `WorldPopulation`'s constructor no longer calls
+  `SetSimulatedCount(networkPlayers)`; the boot census is **zero**. `networkPlayers`
+  becomes the remote **admission cap** (`m_remoteCap`), applied when `world.population`
+  raises the live census, never a boot reservation.
+
+**What changed.**
+- **Admission = a peer join.** `ReconcileInhabitants` mints inhabited bodies into the
+  HIGHEST FREE slots (127 downward, stable across reconciles), tags the peer with its
+  placement, and drives it by its kit's attend producer (server-side `StageAttend`, the
+  same `Source == Attend` mechanism any peer/seat uses). Admission is bounded ONLY by the
+  table; retire/keep/recompile-in-place (`RecompileKit`) semantics survive intact.
+- **`MaxSimulated`** survives as the *live* census ceiling (`m_inhabitantFloor -
+  LocalSeatCount`) — physical occupancy, not a reservation — and `SetSimulatedCount`
+  clamps `world.population` against `min(networkPlayers cap, MaxSimulated)` so census
+  peers (bottom-up from slot 4) and inhabitants (top-down from 127) never collide.
+- **Authority is a grant (unchanged, affirmed).** An inhabited peer holds `Control/all`
+  but **not** `Drive`; its attend producer needs no grant; explicit possession is
+  `world.grant … drive body:<index>`. The inhabit verb's gate (Placements-`Mutate`
+  capability) is untouched. `WorldGrants`' seed comment already states this.
+- **Session capture.** `CapturePopulation` no longer folds the live `SimulatedCount` into
+  `networkPlayers` — the cap is durable document config, the running census is transient —
+  so a boot-census-zero default saves byte-clean.
+- `EntitySnapshot.PlacementId`, the `world.placement.inhabit`/`.face`/`world.kit.attend`
+  verb surface, face/camera derivation, and hot-swap all preserved. No new mutation kinds,
+  sections, or capabilities. `default.world.json` untouched.
+
+**Files:** `src/Puck.World/Server/WorldPopulation.cs` (the core rework),
+`WorldDefinitionValidator.cs` (R6 deleted), `WorldSessionCapture.cs` (cap preserved),
+`Server/WorldServer.cs` (boot-reconcile comment).
+
+**Verification (Windows, Release; DirectX; stdin, `--exit-after-seconds`).** Full solution
+builds clean (0/0), Demo as a library. On the **untouched** `default.world.json`
+(`networkPlayers 124`): `world.status` shows 4 seats and zero census (slots free);
+`editor.import` a creation + `world.kit.attend runner …` + `world.placement.set …
+inhabit` is **ACCEPTED** — `[world.mutation: UpsertPlacement 'lure' applied]`, no
+census-fit rejection — and `world.inhabitants` reports `body=127`; after
+`player.warp 6 -3 1` the body's position tracks the seat across reads (attend acquired,
+approached, orbiting); `world.placement.inhabit lure -` frees the slot
+(`world.inhabitants: none`); `world.undo 1` reconstructs it at slot 127;
+`world.save` preserves `networkPlayers 124` (not the live count) and a clean default
+boot→save round-trips **byte-identical** (expo/kart-remap too). Synthetic full table:
+`world.population 124` clamps to **123** (the lone inhabitant lowered the ceiling by its
+occupancy), and a second inhabited placement rejects loudly —
+`[world.placement: inhabited 'lure2' has no free entity slot — the 128-slot table is
+full]` — while its document row still applies. Every R-C acceptance criterion holds.
+
+**Plan contradictions found / resolved.** (1) R-C **overrides R6** (marked at R6 above)
+and overturns Arc 7 contradiction #2 ("the default world is un-inhabitable live … expected")
+— it is now inhabitable, which was the ruling's point. (2) The biggest behavioral
+consequence: the default world no longer boots a static 124-body wander crowd; the crowd is
+**summonable** via `world.population <n>` (capped by `networkPlayers`, bounded by free
+slots) but boot shows only the joined seats. This is the direct, owner-ruled meaning of
+"`networkPlayers` becomes an admission cap, not a static reservation … only 4 seats are
+live; slots are free." (3) The live census count is no longer persisted by `world.save`
+(the cap is what persists) — a deliberate consequence of the cap reframing.
 
 ---
 

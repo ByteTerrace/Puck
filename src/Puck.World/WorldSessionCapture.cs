@@ -181,10 +181,11 @@ internal static class WorldSessionCapture {
         return (((host is null) && (folded == WorldHostDefaults.Default)) ? null : folded);
     }
 
-    // Fold the live census: the current simulated stand-in count and the live peer-source default become the boot
-    // census. The local-seat default is document-level, not a live seating figure, so it stays as authored.
+    // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
+    // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
+    // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
+    // world byte-clean through a boot-and-save round-trip even though its boot census is zero.
     private static WorldPopulationDefaults CapturePopulation(WorldPopulation population, WorldPopulationDefaults defaults) => (defaults with {
-        NetworkPlayers = population.SimulatedCount,
         DefaultPeerSource = population.DefaultPeerSource,
     });
 

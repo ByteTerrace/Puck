@@ -1123,7 +1123,6 @@ internal static class WorldDefinitionValidator {
         }
 
         var animatedCount = 0;
-        var inhabitantCount = 0;
 
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
@@ -1198,7 +1197,6 @@ internal static class WorldDefinitionValidator {
             // The INHABIT facet: a placement's binding to live population bodies (Arc 7). Resolve its kit, gate its
             // source/look/count, and reject the lattice facets (one body cannot be a repeat grid).
             if (placement.Inhabit is { } inhabit) {
-                inhabitantCount += Math.Max(val1: inhabit.Count, val2: 0);
                 ValidateInhabit(inhabit: inhabit, placement: placement, path: $"{path}.inhabit", definition: definition, kitNames: kitNames, attendCapableKits: attendCapableKits, lookNames: lookNames, errors: errors);
 
                 if ((placement.Repeat is not null) || (placement.Mirror is not null)) {
@@ -1216,12 +1214,10 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: $"{animatedCount} animated placements exceed the {WorldPlacementPolicy.MaxStampRegistrations}-slot replay pool.");
         }
 
-        // The census fit rule (R6): network peers pack up from slot 4, inhabited bodies down from slot 127, so their
-        // sum must not exceed the simulated ceiling — reported naming both terms.
-        if ((definition.Population.NetworkPlayers + inhabitantCount) > WorldPopulation.MaxPopulationSimulated) {
-            errors.Add(item: $"population.networkPlayers ({definition.Population.NetworkPlayers}) + inhabited bodies ({inhabitantCount}) exceed the {WorldPopulation.MaxPopulationSimulated}-body simulated ceiling.");
-        }
-
+        // No census-fit rule (R-C OVERRIDES R6): networkPlayers is a remote admission CAP, not a static reservation an
+        // inhabitant competes with. An inhabitant is a peer that JOINS a free slot; total occupancy is bounded by the
+        // entity table itself, and a genuinely full table is rejected loudly at JOIN time (a runtime fact the static
+        // document validator cannot know), never pre-rejected here.
         return ids;
     }
 

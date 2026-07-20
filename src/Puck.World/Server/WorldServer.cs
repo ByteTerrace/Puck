@@ -97,8 +97,9 @@ internal sealed class WorldServer {
         // construction) — the server owns it from here without a second build.
         m_solids = population.SolidField;
         m_solidRevision = ((m_solids is null) ? 0 : 1);
-        // Claim the entity-table slots the boot definition's inhabited placements declare (the population constructor
-        // minted only seats + census peers). Every later Install re-runs this after Rebuild.
+        // Join the bodies the boot definition's inhabited placements declare into free peer slots (the population
+        // constructor activates nothing — the boot census is zero, the whole peer slice is free). Every later Install
+        // re-runs this after Rebuild.
         m_population.ReconcileInhabitants(definition: definition);
     }
 
