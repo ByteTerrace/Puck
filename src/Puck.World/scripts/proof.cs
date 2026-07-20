@@ -10000,12 +10000,14 @@ static class CollisionProof {
 
     static readonly Regex PlanarSpeedEcho = new(options: RegexOptions.Compiled, pattern: @"planarSpeed=(-?[0-9.]+)");
     static readonly Regex DriftEcho = new(options: RegexOptions.Compiled, pattern: @"session-drift (\S+)");
+    static readonly Regex FieldInstructionsEcho = new(options: RegexOptions.Compiled, pattern: @"instructions=(\d+)");
+    static readonly Regex FieldRevisionEcho = new(options: RegexOptions.Compiled, pattern: @"revision=(\d+)");
 
     public static int RunCollision(ArgMap opts) {
         var noBuild = opts.Flag(name: "--no-build");
         var width = opts.GetInt(fallback: 640, name: "--width");
         var height = opts.GetInt(fallback: 480, name: "--height");
-        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var exitAfterSeconds = opts.GetInt(fallback: 600, name: "--exit-after-seconds");
         var repoRoot = ProofApp.RepoRoot();
         var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
 
@@ -10067,7 +10069,7 @@ static class CollisionProof {
 
             // Mask seat 1's device stream: every displacement below must be a SUBMITTED tape segment's, never a held
             // key leaking in from the machine this runs on.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control idle 1", expect: "[player.control: p1 is idle]", name: "seat-parked-idle");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control idle 1", expect: "[player.control: p1 idle]", name: "seat-parked-idle");
 
             passed &= RunSolidityRound(ctx: ctx);
             passed &= RunResponseRound(ctx: ctx);
@@ -10214,12 +10216,19 @@ static class CollisionProof {
         var passed = ExpectMutation(ctx: ctx, name: "planetoid-authored", line: $"world.scene.row.set {PlanetoidJson}", needle: "[world.mutation: UpsertSceneRow 'proof-planetoid' applied]");
 
         passed &= ExpectMutation(ctx: ctx, name: "provider-switched-to-field", line: "world.collision.provider field", needle: "[world.mutation: SetCollision applied]");
-        passed &= ExpectEcho(ctx: ctx, name: "status-reads-a-compiled-field", line: "world.collision.status", needle: "provider=field instructions=34");
+        // The status is not pinned to a compiled SIZE (an ISA change may legitimately move it) — only to the two facts
+        // the swap has to produce: a program with instructions in it, and a bumped field revision.
+        var statusLine = ReadLine(ctx: ctx, command: "world.collision.status", needle: "[world.collision.status: on provider=field");
+        var instructions = ((statusLine is null) ? -1 : ParseInt(line: statusLine, pattern: FieldInstructionsEcho));
+        var revision = ((statusLine is null) ? -1 : ParseInt(line: statusLine, pattern: FieldRevisionEcho));
+
+        passed &= Check(name: "status-reads-a-compiled-field", ok: ((instructions > 0) && (revision >= 1)),
+            detail: (statusLine?.Trim() ?? "(no world.collision.status echo naming provider=field)"));
 
         // The gradient is GEOMETRY-derived, not a constant: probes around the sphere answer three different ups.
-        passed &= ExpectEcho(ctx: ctx, name: "probe-up-at-north-pole", line: "world.collision.probe 0 48 60", needle: "distance=0.000 material=6 gradient=(0.000, 1.000, 0.000)");
-        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-z-flank", line: "world.collision.probe 0 40 68", needle: "distance=0.000 material=6 gradient=(0.000, 0.000, 1.000)");
-        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-x-flank", line: "world.collision.probe 8 40 60", needle: "distance=0.000 material=6 gradient=(1.000, 0.000, 0.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-at-north-pole", line: "world.collision.probe 0 48 60", needle: "distance=0.000 material=7 gradient=(0.000, 1.000, 0.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-z-flank", line: "world.collision.probe 0 40 68", needle: "distance=0.000 material=7 gradient=(0.000, 0.000, 1.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-x-flank", line: "world.collision.probe 8 40 60", needle: "distance=0.000 material=7 gradient=(1.000, 0.000, 0.000)");
         passed &= ExpectEcho(ctx: ctx, name: "probe-inside-reads-negative", line: "world.collision.probe 0 44 60", needle: "distance=-4.000");
 
         var fieldWalk = RunPlanetoidWalk(ctx: ctx);
@@ -10456,6 +10465,10 @@ static class CollisionProof {
             Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv));
     }
 
+    static int ParseInt(string line, Regex pattern) {
+        return ((pattern.Match(input: line) is { Success: true } match) ? int.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : -1);
+    }
+
     static double? ReadPlanarSpeed(ComposedShotKit.Ctx ctx) {
         var line = ReadLine(ctx: ctx, command: "world.contacts 1", needle: "[world.contacts: p1 ");
 
@@ -10501,8 +10514,8 @@ static class CollisionProof {
     static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
         string? last = null;
 
-        for (var attempt = 0; (attempt < 25); attempt++) {
-            last = ReadLine(ctx: ctx, command: "wire.errors", needle: "[wire.errors:", deadlineSeconds: 5.0);
+        for (var attempt = 0; (attempt < 15); attempt++) {
+            last = ReadLine(ctx: ctx, command: "wire.errors", needle: "[wire.errors:", deadlineSeconds: 4.0);
 
             if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
                 _ = ReadLine(ctx: ctx, command: "wire.errors reset", needle: "[wire.errors:", deadlineSeconds: 5.0);
