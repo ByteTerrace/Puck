@@ -15,6 +15,9 @@
 //     stream-decorrelation tripwires, advance/seek algebra, snapshot round-trips
 //   - gaussian moments/CDF/tails, alias-table distributions and weight overloads, shuffle uniformity,
 //     field-noise statistics/continuity, low-discrepancy coverage
+//   - modular-group determinant/adjugate-inverse/associativity, trace classification, cusp action vs BigInteger
+//     rationals, Gauss reduction into the fundamental domain (contravariant form action + discriminant + idempotence),
+//     and quadratic-surd continued-fraction periods (golden [1], silver [2]) with convergents approaching the value
 //   - quaternion/complex/rigid-transform/dual accuracy against mathematical references, incl. the
 //     exp/log bridges (bivector at the quaternion level, screw at the rigid level) and the FromTo shortest-arc
 //     constructors at both planar and spatial level; vector2 wedge/dot bit-identity against an independent
@@ -2140,6 +2143,242 @@ if (Math.Abs((qcDensity - ((1.0 + Math.Sqrt(5.0)) / 2.0))) > 0.01) {
 }
 Console.WriteLine($"quasicrystal: exact Z[phi] chain, Next/Previous inverse, phi/phi-squared steps, no SS/LLL, density {qcDensity:F4} -> phi OK");
 
+// ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
+// The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
+// the Mobius action on cusps is a group action agreeing with exact BigInteger rational arithmetic; Gauss reduction
+// carries every positive-definite form into the fundamental domain by a determinant-one word verified against the
+// independent contravariant form action; and quadratic surds expand to eventually periodic continued fractions, the
+// golden and silver ratios coding the two shortest closed geodesics [1] and [2]. Oracles: the trace, BigInteger rational
+// reduction, the substitution form action, and the convergent recurrence -- never the implementation's own branches.
+if (ModularTransform.S.Classify() != ModularClass.Elliptic) {
+    throw new InvalidOperationException("MODULAR S IS NOT ELLIPTIC");
+}
+if ((ModularTransform.S * ModularTransform.T).Classify() != ModularClass.Elliptic) {
+    throw new InvalidOperationException("MODULAR S*T IS NOT ELLIPTIC");
+}
+if (ModularTransform.T.Classify() != ModularClass.Parabolic) {
+    throw new InvalidOperationException("MODULAR T IS NOT PARABOLIC");
+}
+if (ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L).Classify() != ModularClass.Hyperbolic) {
+    throw new InvalidOperationException("MODULAR [2,1,1,1] IS NOT HYPERBOLIC");
+}
+// S is order four and S*T order six in SL2(Z) (the elliptic orders); neither returns to the identity earlier.
+var modularSpin = ModularTransform.Identity;
+for (var power = 1; (power <= 4); ++power) {
+    modularSpin = (modularSpin * ModularTransform.S);
+
+    if ((modularSpin == ModularTransform.Identity) != (power == 4)) {
+        throw new InvalidOperationException("MODULAR S IS NOT ORDER FOUR");
+    }
+}
+var modularHex = ModularTransform.Identity;
+for (var power = 1; (power <= 6); ++power) {
+    modularHex = (modularHex * (ModularTransform.S * ModularTransform.T));
+
+    if ((modularHex == ModularTransform.Identity) != (power == 6)) {
+        throw new InvalidOperationException("MODULAR S*T IS NOT ORDER SIX");
+    }
+}
+// Random elements of SL2(Z), built as words in S and T: determinant one, adjugate inverse, associativity, class boundary.
+var modularRng = new Random(20260720);
+var modularWords = new ModularTransform[512];
+for (var index = 0; (index < modularWords.Length); ++index) {
+    var word = ModularTransform.Identity;
+
+    for (var step = 0; (step < 7); ++step) {
+        word = ((modularRng.Next(2) == 0)
+            ? (ModularTransform.S * word)
+            : (ModularTransform.Create(a: 1L, b: modularRng.Next(-3, 4), c: 0L, d: 1L) * word));
+    }
+
+    modularWords[index] = word;
+
+    if (Int128.One != (((Int128)word.A * word.D) - ((Int128)word.B * word.C))) {
+        throw new InvalidOperationException("MODULAR WORD DETERMINANT IS NOT ONE");
+    }
+    if ((word * word.Inverse) != ModularTransform.Identity) {
+        throw new InvalidOperationException("MODULAR INVERSE IS NOT THE ADJUGATE INVERSE");
+    }
+
+    var absoluteTrace = Int128.Abs(value: ((Int128)word.A + word.D));
+    var expectedClass = ((absoluteTrace < 2)
+        ? ModularClass.Elliptic
+        : ((absoluteTrace == 2) ? ModularClass.Parabolic : ModularClass.Hyperbolic));
+
+    if (word.Classify() != expectedClass) {
+        throw new InvalidOperationException("MODULAR CLASSIFY DISAGREES WITH THE TRACE");
+    }
+}
+for (var index = 0; (index < 200); ++index) {
+    var x = modularWords[modularRng.Next(modularWords.Length)];
+    var y = modularWords[modularRng.Next(modularWords.Length)];
+    var z = modularWords[modularRng.Next(modularWords.Length)];
+
+    if (((x * y) * z) != (x * (y * z))) {
+        throw new InvalidOperationException("MODULAR COMPOSITION IS NOT ASSOCIATIVE");
+    }
+}
+// Cusp action: agrees with exact BigInteger rational reduction, is a group action, and S acts as an involution on cusps.
+for (var index = 0; (index < modularWords.Length); ++index) {
+    var word = modularWords[index];
+
+    for (var trial = 0; (trial < 6); ++trial) {
+        var p = modularRng.Next(-40, 41);
+        var q = modularRng.Next(0, 41);
+
+        if ((p == 0) && (q == 0)) { q = 1; }
+
+        if (word.Apply(numerator: p, denominator: q) != ModularCuspOracle(g: word, p: p, q: q)) {
+            throw new InvalidOperationException("MODULAR CUSP ACTION DISAGREES WITH THE RATIONAL ORACLE");
+        }
+
+        var other = modularWords[modularRng.Next(modularWords.Length)];
+        var composed = (word * other).Apply(numerator: p, denominator: q);
+        var (innerP, innerQ) = other.Apply(numerator: p, denominator: q);
+
+        if (composed != word.Apply(numerator: innerP, denominator: innerQ)) {
+            throw new InvalidOperationException("MODULAR CUSP ACTION IS NOT A GROUP ACTION");
+        }
+
+        var (sP, sQ) = ModularTransform.S.Apply(numerator: p, denominator: q);
+
+        if (ModularTransform.S.Apply(numerator: sP, denominator: sQ) != ModularCuspOracle(g: ModularTransform.Identity, p: p, q: q)) {
+            throw new InvalidOperationException("MODULAR S IS NOT A CUSP INVOLUTION");
+        }
+    }
+}
+// Gauss reduction: reduced inequalities, discriminant preserved, the word carries the form (exact form action), idempotence,
+// and the reduced root lands in the fundamental domain through the approximate FixedComplex seam.
+var modularReductions = 0;
+for (var reduceA = 1L; (reduceA <= 24L); ++reduceA) {
+    for (var reduceB = -24L; (reduceB <= 24L); ++reduceB) {
+        for (var reduceC = 1L; (reduceC <= 24L); ++reduceC) {
+            if ((((Int128)reduceB * reduceB) - (((Int128)reduceA * reduceC) * 4)) >= Int128.Zero) { continue; }
+
+            var reduction = ModularTransform.GaussReduce(a: reduceA, b: reduceB, c: reduceC);
+
+            if (!((-reduction.A < reduction.B) && (reduction.B <= reduction.A) && (reduction.A <= reduction.C))) {
+                throw new InvalidOperationException("MODULAR REDUCED FORM VIOLATES -A < B <= A <= C");
+            }
+            if (Int128.One != (((Int128)reduction.Transform.A * reduction.Transform.D) - ((Int128)reduction.Transform.B * reduction.Transform.C))) {
+                throw new InvalidOperationException("MODULAR REDUCTION TRANSFORM IS NOT DETERMINANT ONE");
+            }
+            if ((((Int128)reduceB * reduceB) - (((Int128)reduceA * reduceC) * 4)) != (((Int128)reduction.B * reduction.B) - (((Int128)reduction.A * reduction.C) * 4))) {
+                throw new InvalidOperationException("MODULAR REDUCTION DID NOT PRESERVE THE DISCRIMINANT");
+            }
+            if (ModularFormAction(a: reduceA, b: reduceB, c: reduceC, g: reduction.Transform.Inverse) != (reduction.A, reduction.B, reduction.C)) {
+                throw new InvalidOperationException("MODULAR REDUCTION TRANSFORM DOES NOT CARRY THE FORM");
+            }
+            if (ModularTransform.GaussReduce(a: reduction.A, b: reduction.B, c: reduction.C).Transform != ModularTransform.Identity) {
+                throw new InvalidOperationException("MODULAR REDUCTION IS NOT IDEMPOTENT");
+            }
+
+            // Approximate seam: the transform applied to the original root approximates the reduced root, which lies in F.
+            if ((reduceA <= 8L) && (reduceB >= -8L) && (reduceB <= 8L) && (reduceC <= 8L)) {
+                var sourceRoot = FormRoot(a: reduceA, b: reduceB, c: reduceC);
+                var reducedRoot = FormRoot(a: reduction.A, b: reduction.B, c: reduction.C);
+                var mapped = reduction.Transform.Apply(point: sourceRoot);
+                var realError = Math.Abs((double)(mapped.Real - reducedRoot.Real));
+                var imaginaryError = Math.Abs((double)(mapped.Imaginary - reducedRoot.Imaginary));
+
+                if ((realError > 0.02) || (imaginaryError > 0.02)) {
+                    throw new InvalidOperationException("MODULAR REDUCTION SEAM DID NOT MAP THE ROOT INTO THE FUNDAMENTAL DOMAIN");
+                }
+            }
+
+            ++modularReductions;
+        }
+    }
+}
+// Continued fractions: the golden and silver periods, a table of surd expansions, and convergents that approach the value.
+Span<long> continuedFractionTerms = stackalloc long[64];
+(long P, long Q, long D, long R, int Start, long[] Period)[] continuedFractionCases = [
+    (1L, 1L, 5L, 2L, 0, [1L]),                       // golden ratio (1 + sqrt 5) / 2
+    (1L, 1L, 2L, 1L, 0, [2L]),                       // silver ratio 1 + sqrt 2
+    (0L, 1L, 2L, 1L, 1, [2L]),                       // sqrt 2 = [1; (2)]
+    (0L, 1L, 3L, 1L, 1, [1L, 2L]),                   // sqrt 3 = [1; (1, 2)]
+    (0L, 1L, 7L, 1L, 1, [1L, 1L, 1L, 4L]),           // sqrt 7 = [2; (1, 1, 1, 4)]
+    (0L, 1L, 13L, 1L, 1, [1L, 1L, 1L, 1L, 6L]),      // sqrt 13 = [3; (1, 1, 1, 1, 6)]
+];
+foreach (var continuedFractionCase in continuedFractionCases) {
+    var written = ContinuedFraction.Expand(
+        p: continuedFractionCase.P,
+        q: continuedFractionCase.Q,
+        d: continuedFractionCase.D,
+        r: continuedFractionCase.R,
+        terms: continuedFractionTerms,
+        periodStart: out var expansionStart,
+        periodLength: out var expansionLength
+    );
+
+    if ((expansionStart != continuedFractionCase.Start) || (expansionLength != continuedFractionCase.Period.Length)) {
+        throw new InvalidOperationException("CONTINUED FRACTION PERIOD STRUCTURE IS WRONG");
+    }
+
+    for (var offset = 0; (offset < expansionLength); ++offset) {
+        if (continuedFractionTerms[expansionStart + offset] != continuedFractionCase.Period[offset]) {
+            throw new InvalidOperationException("CONTINUED FRACTION PERIOD BLOCK IS WRONG");
+        }
+    }
+
+    // Independent convergence oracle: unfold head + several periods, run the convergent recurrence, approach the true value.
+    var value = ((continuedFractionCase.P + (continuedFractionCase.Q * Math.Sqrt(continuedFractionCase.D))) / continuedFractionCase.R);
+    double previousNumerator = 0.0, numerator = 1.0;
+    double previousDenominator = 1.0, denominator = 0.0;
+
+    for (var repeat = 0; (repeat < 24); ++repeat) {
+        var term = ((repeat < expansionStart) ? continuedFractionTerms[repeat] : continuedFractionTerms[expansionStart + ((repeat - expansionStart) % expansionLength)]);
+        (previousNumerator, numerator) = (numerator, ((term * numerator) + previousNumerator));
+        (previousDenominator, denominator) = (denominator, ((term * denominator) + previousDenominator));
+    }
+
+    if (Math.Abs(((numerator / denominator) - value)) > 1e-9) {
+        throw new InvalidOperationException("CONTINUED FRACTION CONVERGENTS DO NOT APPROACH THE VALUE");
+    }
+}
+Console.WriteLine($"modular: 3 classes + orders {{4,6,inf}}, det-1 adjugate inverse, cusp group action, {modularReductions} Gauss reductions into F, CF periods [1]/[2] (golden/silver) + surd table OK");
+
+static Puck.Maths.FixedComplex FormRoot(long a, long b, long c) {
+    // The upper-half-plane root of the positive-definite form: (-b + i*sqrt(4ac - b^2)) / (2a). Reference double build.
+    var twiceA = (2.0 * a);
+
+    return new Puck.Maths.FixedComplex(
+        Real: FixedQ4816.FromDouble(value: (-b / twiceA)),
+        Imaginary: FixedQ4816.FromDouble(value: (Math.Sqrt((((4.0 * a) * c) - ((double)b * b))) / twiceA))
+    );
+}
+static (long A, long B, long C) ModularFormAction(long a, long b, long c, ModularTransform g) {
+    // The substitution action f(alpha*x + beta*y, gamma*x + delta*y): the contravariant right action that carries a root.
+    var alpha = ((Int128)g.A);
+    var beta = ((Int128)g.B);
+    var gamma = ((Int128)g.C);
+    var delta = ((Int128)g.D);
+    var actedA = ((((Int128)a * alpha) * alpha) + (((Int128)b * alpha) * gamma) + (((Int128)c * gamma) * gamma));
+    var actedB = ((((2 * (Int128)a) * alpha) * beta) + ((Int128)b * ((alpha * delta) + (beta * gamma))) + (((2 * (Int128)c) * gamma) * delta));
+    var actedC = ((((Int128)a * beta) * beta) + (((Int128)b * beta) * delta) + (((Int128)c * delta) * delta));
+
+    return (checked((long)actedA), checked((long)actedB), checked((long)actedC));
+}
+static (long Numerator, long Denominator) ModularCuspOracle(ModularTransform g, long p, long q) {
+    var numerator = (((BigInteger)g.A * p) + ((BigInteger)g.B * q));
+    var denominator = (((BigInteger)g.C * p) + ((BigInteger)g.D * q));
+
+    if (denominator.IsZero) { return (1L, 0L); }
+    if (numerator.IsZero) { return (0L, 1L); }
+
+    var divisor = BigInteger.GreatestCommonDivisor(left: numerator, right: denominator);
+
+    numerator /= divisor;
+    denominator /= divisor;
+
+    if (denominator.Sign < 0) {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    return ((long)numerator, (long)denominator);
+}
+
 static long VectorNormLocal(long x, long y, long z) {
     // Mirror of the internal FixedQuaternion.VectorNorm: nearest integer sqrt of the exact raw Q32 product sum
     // (no rounded Q16 intermediate).
@@ -2639,6 +2878,24 @@ quatTimer.Restart();
 for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.Quasicrystal.Next(a: n, b: (n / 2)).A; }
 quatTimer.Stop();
 Console.WriteLine($"quasicrystal next    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+var benchModularA = ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L);
+var benchModularB = ModularTransform.Create(a: 1L, b: 1L, c: 0L, d: 1L);
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (long)(benchModularA * benchModularB).A + n; }
+quatTimer.Stop();
+Console.WriteLine($"modular compose      : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (long)benchModularA.Classify(); }
+quatTimer.Stop();
+Console.WriteLine($"modular classify     : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= benchModularA.Apply(numerator: n, denominator: (n | 1)).Numerator; }
+quatTimer.Stop();
+Console.WriteLine($"modular cusp apply   : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 5_000_000); n++) { quatSink ^= ModularTransform.GaussReduce(a: (30L + (n & 15)), b: 1L, c: 1L).A; }
+quatTimer.Stop();
+Console.WriteLine($"modular gauss reduce : {(quatTimer.Elapsed.TotalNanoseconds / 5_000_000d),8:F2} ns/op");
 sink ^= quatSink;
 Console.WriteLine($"(sink {sink})");
 Console.WriteLine();
