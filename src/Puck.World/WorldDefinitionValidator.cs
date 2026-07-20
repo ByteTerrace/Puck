@@ -105,7 +105,7 @@ internal static class WorldDefinitionValidator {
 
         // The host section: absent-in-JSON coalesces to the built-in default HERE (the same absence convention the
         // storage/authoring/audio sections use). Called early — it references no other section.
-        ValidateHost(host: (definition.Host ?? WorldHostDefaults.Default), errors: errors);
+        ValidateHost(host: definition.Host, errors: errors);
 
         // The editor/authoring policy row: absent-in-JSON coalesces to the built-in default HERE (the
         // same absence-coalesce convention WorldStorageDefaults uses) so every downstream read below sees a concrete row, never null.
@@ -115,7 +115,7 @@ internal static class WorldDefinitionValidator {
 
         // The contact-solver tuning (SIM-AFFECTING): absent-in-JSON coalesces to WorldCollision.None (collision off,
         // the plan-wide new-section idiom), so every downstream solidity read sees a concrete provider.
-        var collision = (definition.Collision ?? WorldCollision.None);
+        var collision = definition.Collision;
 
         ValidateCollision(collision: collision, errors: errors);
 
@@ -177,7 +177,7 @@ internal static class WorldDefinitionValidator {
         // The window-composition defaults: absent-in-JSON coalesces to the built-in default (empty layouts -> the
         // built-in seat ladder), so every downstream read sees a concrete row. Named cameras a layout slot references
         // must resolve against the camera set just built.
-        ValidateViews(views: (definition.Views ?? WorldViewDefaults.Default), cameras: cameras, errors: errors);
+        ValidateViews(views: definition.Views, cameras: cameras, errors: errors);
 
         var screenIndices = new HashSet<int>();
         // The declared-live console sources (screens[*].source, NOT magazine entries): the feed owns ONE upload surface,
@@ -749,12 +749,8 @@ internal static class WorldDefinitionValidator {
     // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
     // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
     // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook>? looks, HashSet<string> creationIds, List<string> errors) {
+    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        if (looks is null) {
-            return names;
-        }
 
         for (var index = 0; (index < looks.Count); index++) {
             var look = looks[index];
@@ -816,21 +812,15 @@ internal static class WorldDefinitionValidator {
         return names;
     }
 
-    // The look assignment policy (PRESENTATION-ONLY): null coalesces to the hash default (nothing to validate); a table
-    // needs a non-empty cycle whose every entry resolves to a declared look name. Reuses the assignment shape verbatim.
-    // The optional look assignment (PRESENTATION-ONLY, a trailing nullable section): absent is valid; a present row
-    // validates through the shared row-assignment gate against the look-name set.
-    private static void ValidateLookAssignment(WorldRowAssignment? assignment, HashSet<string> lookNames, List<string> errors) {
-        if (assignment is null) {
-            return;
-        }
-
+    // The look assignment policy (PRESENTATION-ONLY): a table needs a non-empty cycle whose every entry resolves to a
+    // declared look name. Reuses the shared row-assignment gate verbatim.
+    private static void ValidateLookAssignment(WorldRowAssignment assignment, HashSet<string> lookNames, List<string> errors) {
         ValidateRowAssignment(assignment: assignment, section: "lookAssignment", rowNoun: "look", rowNames: lookNames, errors: errors);
     }
 
     // The shared hash/table policy gate for a row-assignment section (kit assignment and look assignment carry the SAME
     // shape): a defined policy, a non-empty cycle under the table policy, and every table entry resolving to a declared
-    // row name. Each caller owns its own null policy (kit assignment is required; look assignment is optional).
+    // row name.
     private static void ValidateRowAssignment(WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
         var isHash = string.Equals(a: assignment.Policy, b: WorldRowAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
         var isTable = string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
@@ -1592,11 +1582,7 @@ internal static class WorldDefinitionValidator {
     // rate never converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped
     // CooldownElapsed/UsesBelow kinds are rejected by name), and a null (always) gate before the final row makes every
     // later row unreachable.
-    private static void ValidateResponse(IReadOnlyList<MotionResponse>? response, string path, List<string> errors) {
-        if (response is null) {
-            return;
-        }
-
+    private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
         for (var index = 0; (index < response.Count); index++) {
             var row = response[index];
             var rowPath = $"{path}[{index}]";
@@ -1929,11 +1915,7 @@ internal static class WorldDefinitionValidator {
     // The cable links: name required/kebab/unique; two or more screens; every index declared; no duplicate within a link;
     // no screen in two links. NOT validated: engine identity of the members — that is a RUNTIME fact (a screen.insert
     // changes it), so the binder reports a dormant link with a reason rather than the validator rejecting the row.
-    private static void ValidateLinks(IReadOnlyList<WorldScreenLink>? links, HashSet<int> screenIndices, List<string> errors) {
-        if (links is null) {
-            return;
-        }
-
+    private static void ValidateLinks(IReadOnlyList<WorldScreenLink> links, HashSet<int> screenIndices, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var claimed = new HashSet<int>();
 

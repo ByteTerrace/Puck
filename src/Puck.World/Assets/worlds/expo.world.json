@@ -9,7 +9,8 @@
     "maxFallSpeed": 20,
     "jumpCutMultiplier": 0.45,
     "coyoteTime": 0.09,
-    "jumpBufferTime": 0.1
+    "jumpBufferTime": 0.1,
+    "response": []
   },
   "wander": {
     "driftSpeed": 1.5,
@@ -280,7 +281,11 @@
   "population": {
     "localPlayers": 4,
     "networkPlayers": 32,
-    "defaultPeerSource": "Wander"
+    "defaultPeerSource": "Wander",
+    "spawnPolicy": {
+      "$type": "phyllotaxis",
+      "radius": 0
+    }
   },
   "kits": [
     {
@@ -296,7 +301,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.62,
@@ -344,7 +350,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.38,
@@ -392,7 +399,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0,
@@ -495,7 +503,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0,
@@ -598,7 +607,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.88,
@@ -701,7 +711,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.5,
@@ -760,5 +771,51 @@
     "defaultBedFadeSeconds": 0.5,
     "listener": "focus"
   },
+  "collision": {
+    "enabled": false,
+    "provider": "Analytic",
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "backend": "auto",
+    "width": 1280,
+    "height": 800,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null
+  },
+  "views": {
+    "seatRig": {
+      "$type": "chase",
+      "eyeOffset": [
+        0,
+        2.2,
+        5
+      ],
+      "targetOffset": [
+        0,
+        1,
+        0
+      ],
+      "worldAxes": false,
+      "spreadPullback": 0,
+      "fieldOfViewRadians": 0.9599311
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "policy": "hash",
+    "table": []
+  },
+  "links": [],
   "schema": "puck.world.def.v1"
 }

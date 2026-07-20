@@ -104,7 +104,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             description: "Sets a kit's velocity-response table (RMW → UpsertKit) from one inline-JSON MotionResponse array: world.kit.response <name> <json-array> | <name> none. Rows evaluate in order, first match wins; 'none' clears the table (instant snap).",
             handler: (context, args) => {
                 if ((args.Length == 2) && string.Equals(a: args[1], b: "none", comparisonType: StringComparison.Ordinal)) {
-                    return EditKit(verb: "world.kit.response", name: args[0], edit: static kit => (kit with { Tuning = (kit.Tuning with { Response = null }) }));
+                    return EditKit(verb: "world.kit.response", name: args[0], edit: static kit => (kit with { Tuning = (kit.Tuning with { Response = [] }) }));
                 }
 
                 if (args.Length < 2) {
@@ -203,7 +203,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
     // collider table (radius x height) so the whole grounded-contact configuration is one Immediate read.
     private CommandResult Status() {
-        var collision = (server.Definition.Collision ?? WorldCollision.None);
+        var collision = server.Definition.Collision;
         var provider = collision.Provider.ToString().ToLowerInvariant();
         var instructions = (server.SolidField?.InstructionCount ?? 0);
         var colliders = new List<string>();
@@ -251,14 +251,14 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             }
         }
 
-        var enabled = ((server.Definition.Collision ?? WorldCollision.None).Enabled ? "on" : "off");
+        var enabled = (server.Definition.Collision.Enabled ? "on" : "off");
 
         return new CommandResult(Output: $"[world.contacts: collision {enabled} — {spheres + boxes} solid rows ({spheres} spheres, {boxes} boxes)]");
     }
 
     // RMW one collision-section field into a whole-section SetCollision (the protocol stays coarse).
     private CommandResult SubmitCollision(Func<WorldCollision, WorldCollision> edit) {
-        var current = (server.Definition.Collision ?? WorldCollision.None);
+        var current = server.Definition.Collision;
 
         return Submit(mutation: new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: edit(arg: current)));
     }
@@ -268,7 +268,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             return Usage(verb: verb, form: "<value>");
         }
 
-        var current = (server.Definition.Collision ?? WorldCollision.None);
+        var current = server.Definition.Collision;
 
         return Submit(mutation: new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: edit(arg1: current, arg2: value)));
     }

@@ -30,7 +30,7 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
                     return new CommandResult(Output: $"[world.view.rig: {error}]") { IsError = true };
                 }
 
-                var views = (server.Definition.Views ?? WorldViewDefaults.Default);
+                var views = server.Definition.Views;
 
                 return Submit(mutation: new WorldMutation.SetViewDefaults(Principal: WorldPrincipal.Console, Views: (views with { SeatRig = rig })));
             }

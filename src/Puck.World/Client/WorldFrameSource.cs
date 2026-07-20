@@ -169,7 +169,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_animator = animator;
         m_workbench = workbench;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
-        RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
+        RebuildSeatRigs(seatRig: m_client.Definition.Views.SeatRig);
 
         // Resolve the primer snapshot's render poses once so the initial program and camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -309,7 +309,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
             if (definitionRevision != m_builtDefinitionRevision) {
                 // A views-section edit recompiles each seat's chase rig from the delivered seat rig (world.view.rig live).
-                RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
+                RebuildSeatRigs(seatRig: m_client.Definition.Views.SeatRig);
                 // Derive the creation facets (P5): a creation's eyes become cameras on WorldAnchor.Placement, its faces
                 // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
                 // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
@@ -318,7 +318,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 m_binder.ReconcileCameras(cameras: Concat(first: m_client.Definition.Cameras, second: facets.Cameras));
                 m_binder.ReconcileScreens(screens: Concat(first: m_client.Definition.Screens, second: facets.Faces));
                 // Cable links reconcile AFTER screens (a link resolves against the live slot set).
-                m_binder.ReconcileLinks(links: (m_client.Definition.Links ?? []));
+                m_binder.ReconcileLinks(links: m_client.Definition.Links);
                 // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
                 // after the stamp pool reconcile (placement-anchored emitters read its registrations at Publish).
                 m_audio.ReconcileSpeakers(definition: m_client.Definition);
@@ -469,7 +469,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             joinedCount: joinedCount,
             soleEditorIndex: soleEditorViewIndex,
             workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction,
-            views: (m_client.Definition.Views ?? WorldViewDefaults.Default),
+            views: m_client.Definition.Views,
             layoutOverride: m_composition.ActiveLayout,
             cameraOverride: m_composition.SelectedCamera,
             elapsedSeconds: m_elapsedSeconds
@@ -1131,9 +1131,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // The LOOK row an entity wears: the delivered look table indexed by the snapshot's per-entity look byte, or the
     // implicit single catalog look when the world authors no `looks` section (the pre-arc runtime exactly).
     private WorldLook ResolveLook(int index) {
-        var looks = m_client.Definition.Looks;
+        var rows = m_client.Definition.Looks;
 
-        if (looks is not { Count: > 0 } rows) {
+        if (rows.Count == 0) {
             return WorldLook.Implicit;
         }
 

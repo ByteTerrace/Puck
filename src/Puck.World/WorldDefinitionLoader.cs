@@ -83,11 +83,9 @@ internal static class WorldDefinitionLoader {
         }
     }
 
-    // Coalesce absent-in-JSON optional sections (source-gen skips a positional collection's initializer when the JSON
-    // property is absent, leaving null — the run-document doctrine's trap) so the validator and downstream consumers
-    // never dereference null. Required sections stay null → the validator reports them → loud fallback. A fully-authored
-    // document (every section present, as the canonical writer always emits) is unchanged by this pass, so load→save
-    // byte-identity holds.
+    // Coalesce absent-in-JSON members (source generation leaves a member null when its JSON property is absent, even
+    // where the type declares it non-nullable — the run-document doctrine's trap) so the validator and downstream
+    // consumers never dereference null. A fully-authored document is unchanged by this pass.
     internal static WorldDefinition Normalize(WorldDefinition definition) {
         var assignment = (definition.Assignment is { } authored
             ? new WorldRowAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
@@ -98,13 +96,19 @@ internal static class WorldDefinitionLoader {
             Assignment = assignment,
             Audio = (definition.Audio ?? WorldAudioDefaults.Default),
             BindingOverlays = (definition.BindingOverlays ?? []),
+            Collision = (definition.Collision ?? WorldCollision.None),
             Creations = (definition.Creations ?? []),
+            Host = (definition.Host ?? WorldHostDefaults.Default),
+            LookAssignment = (definition.LookAssignment ?? WorldRowAssignment.Hash),
+            Looks = (definition.Looks ?? []),
+            Links = (definition.Links ?? []),
             Patches = (definition.Patches ?? []),
             Placements = (definition.Placements ?? []),
             Speakers = (definition.Speakers ?? []),
             Storage = (definition.Storage ?? WorldStorageDefaults.None),
             Authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default),
             Tunes = (definition.Tunes ?? []),
+            Views = (definition.Views ?? WorldViewDefaults.Default),
         });
     }
 }

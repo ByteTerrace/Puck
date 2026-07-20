@@ -54,7 +54,7 @@ internal sealed class WorldColliderSet : IContactField {
     /// plane.</param>
     /// <returns>The analytic field, or <see langword="null"/> when collision is disabled.</returns>
     public static WorldColliderSet? Build(WorldDefinition definition) {
-        var collision = (definition.Collision ?? WorldCollision.None);
+        var collision = definition.Collision;
 
         if (!collision.Enabled) {
             return null;

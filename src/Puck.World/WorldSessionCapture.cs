@@ -173,15 +173,9 @@ internal static class WorldSessionCapture {
     });
 
     // Fold the two host live levers (world.target's present Hz, world.timing's armed state) into the host section; every
-    // boot-only field is preserved as authored. A world that authored no host section (null) keeps it absent when the
-    // levers still sit at their document defaults, so a fresh default world saves without gaining a `host` key (the
-    // ouroboros); a live lever moved off default materializes the section from WorldHostDefaults.Default.
-    private static WorldHostDefaults? CaptureHost(WorldHostDefaults? host, PresentPacingControl pacing) {
-        var basis = (host ?? WorldHostDefaults.Default);
-        var folded = (basis with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
-
-        return (((host is null) && (folded == WorldHostDefaults.Default)) ? null : folded);
-    }
+    // boot-only field is preserved as authored.
+    private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
+        (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
 
     // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
@@ -213,10 +207,9 @@ internal static class WorldSessionCapture {
     }
 
     // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.link.set).
-    // When the binder holds no runtime links, the document's own Links carries forward unchanged — so a world with no
-    // links (null) keeps its `links` key absent (the ouroboros), and declared links not yet established at boot are
-    // preserved rather than dropped.
-    private static IReadOnlyList<WorldScreenLink>? CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
+    // When the binder holds no runtime links, the document's own Links carries forward unchanged, so declared links not
+    // yet established at boot are preserved rather than dropped.
+    private static IReadOnlyList<WorldScreenLink> CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
         var live = binder.CaptureLinks();
 
         return ((live.Count == 0) ? definition.Links : live);
@@ -234,15 +227,14 @@ internal static class WorldSessionCapture {
         }
 
         var declared = definition.Links;
-        var capturedCount = (captured?.Count ?? 0);
 
-        if (capturedCount != (declared?.Count ?? 0)) {
+        if (captured.Count != declared.Count) {
             return true;
         }
 
-        for (var index = 0; (index < capturedCount); index++) {
-            var live = captured![index];
-            var row = declared![index];
+        for (var index = 0; (index < captured.Count); index++) {
+            var live = captured[index];
+            var row = declared[index];
 
             if (!string.Equals(a: live.Name, b: row.Name, comparisonType: StringComparison.Ordinal) || (live.Screens.Count != row.Screens.Count)) {
                 return true;

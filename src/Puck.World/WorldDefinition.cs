@@ -31,9 +31,8 @@ namespace Puck.World;
 /// <param name="JumpCutMultiplier">The early-release up-velocity cut (a dimensionless ratio) — a tap is a short hop.</param>
 /// <param name="CoyoteTime">The grace after leaving ground where a jump still fires (seconds — a time, so unscaled).</param>
 /// <param name="JumpBufferTime">The window before landing where a press is remembered and fires on touchdown (seconds — unscaled).</param>
-/// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING; <see langword="null"/>
-/// (the default) is the empty table, which snaps planar velocity instantly (today's exact behavior). Omitted from the
-/// wire when null.</param>
+/// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING. The empty
+/// table snaps planar velocity instantly.</param>
 internal readonly record struct MotionTuning(
     float MoveSpeed,
     float TurnSpeed,
@@ -45,8 +44,18 @@ internal readonly record struct MotionTuning(
     float JumpCutMultiplier,
     float CoyoteTime,
     float JumpBufferTime,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null
+    IReadOnlyList<MotionResponse> Response
 ) {
+    private readonly IReadOnlyList<MotionResponse> m_response = (Response ?? []);
+
+    /// <summary>The velocity-response table. The type's ONE absence-coalesce: source generation constructs this struct
+    /// through its parameterless constructor and the init accessors, leaving an absent JSON property null, so the
+    /// accessor — not each reader — makes the table a list.</summary>
+    public IReadOnlyList<MotionResponse> Response {
+        get => m_response;
+        init => m_response = (value ?? []);
+    }
+
     /// <summary>The factor <see cref="Default"/> scales its jump-kit spatial constants by (World runs at half the speed
     /// scale the constants were authored at). See the type remarks for why the ratios and windows are exempt.</summary>
     public const float DefaultActionScale = 0.5f;
@@ -63,7 +72,8 @@ internal readonly record struct MotionTuning(
         MaxFallSpeed: (40f * DefaultActionScale),
         JumpCutMultiplier: 0.45f,
         CoyoteTime: 0.09f,
-        JumpBufferTime: 0.10f
+        JumpBufferTime: 0.10f,
+        Response: []
     );
 }
 
@@ -105,8 +115,8 @@ internal enum WorldContactProvider : byte {
     Field,
 }
 
-/// <summary>The contact solver's world-scale tuning. Collision is OFF by default: a world declaring nothing keeps the
-/// flat <see cref="MotionTuning.GroundY"/> plane it had before, byte-identically.</summary>
+/// <summary>The contact solver's world-scale tuning. Collision is OFF under <see cref="None"/>: the world keeps its
+/// flat <see cref="MotionTuning.GroundY"/> plane.</summary>
 /// <param name="Enabled">Whether contact resolution runs at all.</param>
 /// <param name="Provider">Which contact field answers. <c>analytic</c> derives convex colliders from the document's own
 /// solid rows (cheap, the default); <c>field</c> compiles them into an SDF (Arc 2).</param>
@@ -968,7 +978,7 @@ internal readonly record struct FixedMotionTuning(
 
     /// <summary>Compiles the authored floating-point motion tuning to its fixed-point form.</summary>
     public static FixedMotionTuning Compile(in MotionTuning tuning) {
-        var rows = (tuning.Response ?? []);
+        var rows = tuning.Response;
         var response = new FixedMotionResponse[rows.Count];
         var recencyFacts = new List<ActionFact>();
         var recencyWindows = new List<ulong>();
@@ -1081,15 +1091,23 @@ internal sealed record WorldCamera(string Name, WorldAnchor? Anchor, Vector3 Off
 /// cref="IntentSource.Wander"/> in the built-in world): the durable home for the session peer-source default the
 /// <c>world.population idle|wander</c> verb moves live and <c>world.save</c> folds back into session write-back.</param>
 /// <param name="SpawnPolicy">How simulated peers are distributed at spawn (see <see cref="WorldSpawnPolicy"/>).
-/// <see langword="null"/> coalesces to <see cref="WorldSpawnPolicy.Default"/> (the pre-arc golden-angle disc), and is
-/// omitted from the wire when null. A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT
-/// for bodies already standing (a change re-clusters only peers spawned after it), narrated in the accept echo.</param>
+/// A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT for bodies already standing
+/// (a change re-clusters only peers spawned after it), narrated in the accept echo.</param>
 internal readonly record struct WorldPopulationDefaults(
     int LocalPlayers,
     int NetworkPlayers,
     IntentSource DefaultPeerSource,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSpawnPolicy? SpawnPolicy = null
-);
+    WorldSpawnPolicy SpawnPolicy
+) {
+    private readonly WorldSpawnPolicy m_spawnPolicy = (SpawnPolicy ?? WorldSpawnPolicy.Default);
+
+    /// <summary>How simulated peers are distributed at spawn. The absence-coalesce lives in the accessor for the same
+    /// reason <see cref="MotionTuning.Response"/>'s does.</summary>
+    public WorldSpawnPolicy SpawnPolicy {
+        get => m_spawnPolicy;
+        init => m_spawnPolicy = (value ?? WorldSpawnPolicy.Default);
+    }
+}
 internal static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
@@ -1260,10 +1278,10 @@ internal abstract record WorldSpawnPolicy {
 internal readonly record struct FixedSpawnPolicy(FixedQ4816 PhyllotaxisRadius, FixedVector3[]? Points, FixedQ4816 Jitter) {
     /// <summary>Compiles the authored spawn policy against the definition's spawn points. A <see cref="WorldSpawnPolicy.PointCycle"/>
     /// policy resolves each named id to its position (the validator has already gated the names).</summary>
-    /// <param name="policy">The authored policy (<see langword="null"/> ⇒ <see cref="WorldSpawnPolicy.Default"/>).</param>
+    /// <param name="policy">The authored policy.</param>
     /// <param name="spawnPoints">The definition's spawn points, for id resolution.</param>
-    public static FixedSpawnPolicy Compile(WorldSpawnPolicy? policy, IReadOnlyList<WorldSpawnPoint> spawnPoints) {
-        switch (policy ?? WorldSpawnPolicy.Default) {
+    public static FixedSpawnPolicy Compile(WorldSpawnPolicy policy, IReadOnlyList<WorldSpawnPoint> spawnPoints) {
+        switch (policy) {
             case WorldSpawnPolicy.PointCycle points: {
                 var resolved = new FixedVector3[points.Points.Count];
 
@@ -1435,8 +1453,7 @@ internal enum WorldBackendPreference : byte {
 /// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on; <see cref="WorldSessionCapture"/>
 /// folds the live values back at <c>world.save</c>.</description></item>
 /// </list>
-/// <see cref="Default"/> reproduces World's current boot exactly, so a world that authors no host section boots
-/// identically (its <c>host</c> key is absent and coalesces to <see cref="Default"/>).
+/// <see cref="Default"/> reproduces World's current boot exactly.
 /// </summary>
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable).</param>
 /// <param name="Width">The window client width in pixels.</param>
@@ -1527,24 +1544,20 @@ internal sealed record WorldHostDefaults(
 /// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
 /// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
 /// <see cref="WorldAudioDefaults.Default"/>.</param>
-/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING. <see langword="null"/>
-/// in JSON coalesces to <see cref="WorldCollision.None"/> (collision OFF), so an existing world keeps its flat ground
-/// plane byte-identically; omitted from the wire when null (the plan-wide new-section idiom).</param>
+/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING.
+/// <see cref="WorldCollision.None"/> is collision OFF (the flat ground plane).</param>
 /// <param name="Host">The host-section defaults — how the world asks to be PRESENTED (window/backend/present/pacing/
-/// timing/genlock — see <see cref="WorldHostDefaults"/>). OPT-IN: <see langword="null"/> (the frozen default, no
-/// <c>host</c> key) coalesces to <see cref="WorldHostDefaults.Default"/>, which reproduces World's current boot exactly.
-/// The CLI window/backend flags override it at boot (a deployment surface laid over the author's intent).</param>
+/// timing/genlock — see <see cref="WorldHostDefaults"/>). The CLI window/backend flags override it at boot (a
+/// deployment surface laid over the author's intent).</param>
 /// <param name="Views">The window-composition defaults — the seat framing every seat wakes on plus the authored named
-/// layouts (see <see cref="WorldViewDefaults"/>). <see langword="null"/> (the frozen default, no <c>views</c> key)
-/// coalesces to <see cref="WorldViewDefaults.Default"/>, whose empty layout list falls the composer through to the
-/// built-in seat ladder — rendered output byte-unchanged.</param>
-/// <param name="Looks">The LOOK rows (default empty/absent) — authored appearances the population wears, the peer of
-/// <see cref="Kits"/> (see <see cref="WorldLook"/>). Empty coalesces to the implicit single catalog look, the pre-arc
-/// runtime exactly.</param>
-/// <param name="LookAssignment">The look→entity assignment policy (default null ⇒ the hash mapping), the same
-/// <see cref="WorldRowAssignment"/> primitive <see cref="Assignment"/> uses for kits.</param>
-/// <param name="Links">The cable-link rows (default empty/absent) — groups of screens whose machines advance as one
-/// interleaved unit (see <see cref="WorldScreenLink"/>). Absence coalesces to the empty list at every read.</param>
+/// layouts (see <see cref="WorldViewDefaults"/>). An empty layout list falls the composer through to the built-in seat
+/// ladder.</param>
+/// <param name="Looks">The LOOK rows (default empty) — authored appearances the population wears, the peer of
+/// <see cref="Kits"/> (see <see cref="WorldLook"/>). Empty resolves every entity to the implicit single catalog look.</param>
+/// <param name="LookAssignment">The look→entity assignment policy, the same <see cref="WorldRowAssignment"/> primitive
+/// <see cref="Assignment"/> uses for kits.</param>
+/// <param name="Links">The cable-link rows (default empty) — groups of screens whose machines advance as one
+/// interleaved unit (see <see cref="WorldScreenLink"/>).</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1567,23 +1580,14 @@ internal sealed record WorldDefinition(
     IReadOnlyList<WorldTune> Tunes,
     IReadOnlyList<WorldPatch> Patches,
     WorldAudioDefaults Audio,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? Collision = null,
-    // OPT-IN and WhenWritingNull: a world that authors no host section carries no `host` key, so the frozen default
-    // world stays byte-identical. Absence coalesces to WorldHostDefaults.Default (World's current boot) at every read.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? Host = null,
-    // OPT-IN and WhenWritingNull: a world that authors no views section carries no `views` key, so the frozen default
-    // world stays byte-identical. Absence coalesces to WorldViewDefaults.Default (empty layouts -> the built-in seat
-    // ladder + OrientedFollowRig's own field defaults) at every read.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? Views = null,
-    // OPT-IN and WhenWritingNull (R12 trailing-nullable idiom): a world that authors no `looks` section carries no
-    // `looks`/`lookAssignment` keys, so the frozen default world stays byte-identical. An empty/absent Looks list is the
-    // pre-arc runtime EXACTLY — every entity resolves to WorldLook.Implicit (the index-derived catalog pick at full
-    // gait); NO branch special-cases "the author didn't opt in".
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? Looks = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignment = null,
-    // OPT-IN and WhenWritingNull (R12 trailing-nullable idiom): a world that authors no cable links carries no `links`
-    // key, so the frozen default world stays byte-identical. Absence coalesces to the empty list (`?? []`) at every read.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenLink>? Links = null
+    WorldCollision Collision,
+    WorldHostDefaults Host,
+    WorldViewDefaults Views,
+    // An empty Looks list resolves every entity to WorldLook.Implicit (the index-derived catalog pick at full gait);
+    // NO branch special-cases "the author authored none".
+    IReadOnlyList<WorldLook> Looks,
+    WorldRowAssignment LookAssignment,
+    IReadOnlyList<WorldScreenLink> Links
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1661,7 +1665,7 @@ internal sealed record WorldDefinition(
             new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 0f, y: 0f, z: 4f)),
         ],
         Render: WorldRenderDefaults.Default,
-        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxPopulationSimulated, DefaultPeerSource: IntentSource.Wander),
+        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxPopulationSimulated, DefaultPeerSource: IntentSource.Wander, SpawnPolicy: WorldSpawnPolicy.Default),
         // THE PLAZA — the built-in broadcast showcase, all faces normal +Z toward a player spawned at the origin looking -Z (the
         // frame source only TRANSLATES a slab, so every screen keeps world-axis Right/Up). Two TIERS keep the sight lines
         // clean from spawn: a LOW front pair (bottoms just above the grass at y = 0.2) and a
@@ -1797,8 +1801,13 @@ internal sealed record WorldDefinition(
         Tunes: [],
         Patches: [],
         Audio: WorldAudioDefaults.Default,
-        // No authored host section: the baked default boots on WorldHostDefaults.Default (World's current boot), and a
-        // world.save from the baked default gains no `host` key (the ouroboros — see WorldSessionCapture.CaptureHost).
-        Host: null
+        // Collision off (the flat ground plane), World's current boot for the host row, the built-in seat ladder for
+        // views, and no authored looks or cable links.
+        Collision: WorldCollision.None,
+        Host: WorldHostDefaults.Default,
+        Views: WorldViewDefaults.Default,
+        Looks: [],
+        LookAssignment: WorldRowAssignment.Hash,
+        Links: []
     );
 }

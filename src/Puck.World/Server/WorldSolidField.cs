@@ -81,7 +81,7 @@ internal sealed class WorldSolidField : IContactField {
         built = null;
         reason = string.Empty;
 
-        var tuning = FixedWorldCollision.Compile(collision: (definition.Collision ?? WorldCollision.None));
+        var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
         var builder = new SdfProgramBuilder();
 
         // The ground half-space (material 0), the same seed the picker lays down first. The plane SDF is dot(p, +Y) +

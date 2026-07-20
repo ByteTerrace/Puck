@@ -242,7 +242,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
     }
 
     private WorldLook? FindLook(string name) {
-        foreach (var look in (server.Definition.Looks ?? [])) {
+        foreach (var look in server.Definition.Looks) {
             if (string.Equals(a: look.Name, b: name, comparisonType: StringComparison.Ordinal)) {
                 return look;
             }

@@ -131,7 +131,7 @@ var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
 var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
 var hostSettings = WorldHostSettings.Resolve(
-    defaults: (worldSource.Definition.Host ?? WorldHostDefaults.Default),
+    defaults: worldSource.Definition.Host,
     directXAvailable: directXAvailable,
     backendOverride: backendOverride,
     widthOverride: parseResult.GetValue(option: widthOption),

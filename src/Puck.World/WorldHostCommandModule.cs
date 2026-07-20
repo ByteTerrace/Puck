@@ -59,7 +59,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
                     return Usage(verb: "world.host.tune", form: "<field> <value>");
                 }
 
-                if (WithHostField(host: (server.Definition.Host ?? WorldHostDefaults.Default), field: args[0], value: args[1], error: out var error) is not { } tuned) {
+                if (WithHostField(host: server.Definition.Host, field: args[0], value: args[1], error: out var error) is not { } tuned) {
                     return new CommandResult(Output: $"[world.host.tune: {error}]") { IsError = true };
                 }
 
@@ -72,7 +72,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
     // The three-way read-back: DOCUMENT (the coalesced authored row), RESOLVED (the boot values after CLI override), and
     // LIVE (the two session levers). One line, pipe-separated, so it stays greppable over stdout.
     private string DescribeHost() {
-        var document = (server.Definition.Host ?? WorldHostDefaults.Default);
+        var document = server.Definition.Host;
         var targetRate = (pacing.TargetHertz > 0.0 ? pacing.TargetHertz.ToString(provider: CultureInfo.InvariantCulture) : "display");
 
         return $"[world.host: document {{{DescribeRow(host: document)}}} " +

@@ -98,7 +98,7 @@ internal sealed class WorldPopulation {
     private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];
     // The compiled spawn policy (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
-    private FixedSpawnPolicy m_spawnPolicy = FixedSpawnPolicy.Compile(policy: null, spawnPoints: []);
+    private FixedSpawnPolicy m_spawnPolicy = FixedSpawnPolicy.Compile(policy: WorldSpawnPolicy.Default, spawnPoints: []);
     private int m_simulatedCount;
     // The remote-principal admission cap (the document's networkPlayers): the most census/remote peers world.population
     // may raise. It is a CEILING, never a boot reservation — at boot the census stands at zero (only the joined seats are
@@ -187,7 +187,7 @@ internal sealed class WorldPopulation {
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
         // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none — so an
         // empty `looks` section is the pre-arc runtime exactly, with no branch special-casing the absence.
-        m_lookRows = (((definition.Looks is { Count: > 0 } looks)) ? looks : [WorldLook.Implicit]);
+        m_lookRows = ((definition.Looks.Count > 0) ? definition.Looks : [WorldLook.Implicit]);
         // The compiled spawn policy — read ONLY by SeedSimulated (never the authored floats). The validator has already
         // resolved every named spawn point, so Compile's lookups always hit.
         m_spawnPolicy = FixedSpawnPolicy.Compile(policy: definition.Population.SpawnPolicy, spawnPoints: definition.SpawnPoints);
@@ -209,16 +209,16 @@ internal sealed class WorldPopulation {
     }
 
     // The look-row cycle a "table" look assignment resolves to (its look names mapped to row indices), or null under the
-    // "hash" policy. Null LookAssignment ⇒ the hash default. The validator gates the policy token and every table name.
-    private byte[]? ResolveLookTable(WorldRowAssignment? assignment) {
-        if ((assignment is not { } policy) || !string.Equals(a: policy.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
+    // "hash" policy. The validator gates the policy token and every table name.
+    private byte[]? ResolveLookTable(WorldRowAssignment assignment) {
+        if (!string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
             return null;
         }
 
-        var table = new byte[policy.Table.Count];
+        var table = new byte[assignment.Table.Count];
 
         for (var entry = 0; (entry < table.Length); entry++) {
-            table[entry] = ResolveLook(name: policy.Table[entry]);
+            table[entry] = ResolveLook(name: assignment.Table[entry]);
         }
 
         return table;
@@ -240,7 +240,7 @@ internal sealed class WorldPopulation {
     // server hands the pre-built field (built once at apply time for its loud excluded-op rejection); at boot (solids ==
     // null) the field is compiled here and a bad-op world fails loudly.
     private static IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids) {
-        var collision = (definition.Collision ?? WorldCollision.None);
+        var collision = definition.Collision;
 
         if (!collision.Enabled) {
             return null;

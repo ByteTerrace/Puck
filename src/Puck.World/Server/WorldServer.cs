@@ -490,7 +490,7 @@ internal sealed class WorldServer {
             // (a slope/skin drag never rebuilds hundreds of instructions). Every other solid-affecting edit, and a
             // provider/enabled flip, rebuilds from scratch.
             if ((mutation is WorldMutation.SetCollision) && (m_solids is { } live) && UsesFieldProvider(definition: candidate)) {
-                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: (candidate.Collision ?? WorldCollision.None)));
+                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: candidate.Collision));
             } else if (!TryBuildSolids(definition: candidate, solids: out solids, reason: out var solidReason)) {
                 Reject(mutation: mutation, reason: solidReason);
 
@@ -1171,14 +1171,14 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.UpsertViewLayout m: {
-                var views = (current.Views ?? WorldViewDefaults.Default);
+                var views = current.Views;
 
                 candidate = (current with { Views = (views with { Layouts = Upsert(list: (views.Layouts ?? []), item: m.Layout, keyOf: static layout => layout.Name) }) });
 
                 return true;
             }
             case WorldMutation.RemoveViewLayout m: {
-                var views = (current.Views ?? WorldViewDefaults.Default);
+                var views = current.Views;
 
                 if (!Remove(list: (views.Layouts ?? []), key: m.Name, keyOf: static layout => layout.Name, result: out var layouts)) {
                     candidate = current;
@@ -1203,11 +1203,11 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.UpsertLook m:
-                candidate = (current with { Looks = Upsert(list: (current.Looks ?? []), item: m.Look, keyOf: static look => look.Name) });
+                candidate = (current with { Looks = Upsert(list: current.Looks, item: m.Look, keyOf: static look => look.Name) });
 
                 return true;
             case WorldMutation.RemoveLook m:
-                if (!Remove(list: (current.Looks ?? []), key: m.Name, keyOf: static look => look.Name, result: out var looks)) {
+                if (!Remove(list: current.Looks, key: m.Name, keyOf: static look => look.Name, result: out var looks)) {
                     candidate = current;
                     reason = $"no look row named '{m.Name}'";
 
@@ -1222,11 +1222,11 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.UpsertScreenLink m:
-                candidate = (current with { Links = Upsert(list: (current.Links ?? []), item: m.Link, keyOf: static link => link.Name) });
+                candidate = (current with { Links = Upsert(list: current.Links, item: m.Link, keyOf: static link => link.Name) });
 
                 return true;
             case WorldMutation.RemoveScreenLink m:
-                if (!Remove(list: (current.Links ?? []), key: m.Name, keyOf: static link => link.Name, result: out var links)) {
+                if (!Remove(list: current.Links, key: m.Name, keyOf: static link => link.Name, result: out var links)) {
                     candidate = current;
                     reason = $"no cable link named '{m.Name}'";
 
