@@ -573,9 +573,13 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
     var editorWorkbench = sp.GetRequiredService<WorldWorkbench>();
     var audioDirector = sp.GetRequiredService<WorldAudioDirector>();
+    var consoleMirror = sp.GetRequiredService<WorldConsoleMirror>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
         toasts.Publish(message: echo.Message, isError: echo.Rejected);
+        // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
+        // capacity reason too long for the toast stays readable where the operator is already looking.
+        consoleMirror.RecordEcho(message: echo.Message, refused: echo.Rejected);
 
         // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
         if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {

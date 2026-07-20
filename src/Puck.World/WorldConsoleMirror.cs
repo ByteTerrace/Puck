@@ -55,6 +55,18 @@ internal sealed class WorldConsoleMirror {
         Publish();
     }
 
+    /// <summary>Records one UNSOLICITED edit-boundary echo — a tick-boundary mutation outcome has no submitted line
+    /// to hang off, so without this the panel would never show it and only the (wrapped, still bounded) toast and
+    /// stderr would carry the reason.</summary>
+    /// <param name="message">The echo text.</param>
+    /// <param name="refused">Whether the echo narrates a rejection/denial.</param>
+    public void RecordEcho(string message, bool refused) {
+        ArgumentNullException.ThrowIfNull(argument: message);
+
+        Append(line: message, refused: refused);
+        Publish();
+    }
+
     /// <summary>Shows or hides the panel (the <c>world.console</c> verb's seam).</summary>
     /// <param name="visible">Whether the panel is shown.</param>
     public void SetVisible(bool visible) {
