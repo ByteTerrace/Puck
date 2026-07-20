@@ -439,23 +439,16 @@ non-null `bindings` section additionally gated through the existing
 `BindingProfile.Compile`); a malformed stored document falls back LOUDLY to
 the built-in default rather than taking the game down.
 
-**It discontinues `puck.world.profiles.v1`.** `WorldProfileStore`
+**One on-disk layout.** `WorldProfileStore`
 (`Server/WorldProfileStore.cs`) persists the catalog as a PER-PROFILE split
 layout — `world/player.json` (the catalog) plus one `world/profiles/<id>.json`
 blob per entry, with the machine-local boot-seat sidecar at `world/local.json`
 — the same address model the future cloud container uses (see **Storage**
-below for why the split and the ordering/version-token fields exist). Loading
-migrates the first legacy layout it finds, ONCE: a single-file
-`profiles/player.json` (the whole document in one blob) splits straight into
-the new layout, or the legacy `profiles/profiles.json` (name → id +
-identity, speeds → `motion`, bindings start `null`) migrates through the same
-validate-then-split path. Either way: validate → write the split layout →
-**delete its superseded file** — no read-side tolerance kept, one loud
-`[profiles] migrated the Phase 3 single-file layout (...) ...]` or
-`[profiles] migrated N profile(s) from the retired puck.world.profiles.v1 to
-<path>; the old profiles.json was deleted.]` line. A migration that fails to
-validate leaves its file in place (for inspection) and seeds the built-in
-default instead. Machine-local boot seating and the sync cursor (which
+below for why the split and the ordering/version-token fields exist). That is
+the ONLY shape the store reads: a present catalog is assembled from its
+per-profile blobs, and an absent one seeds the built-in default. No migration
+ladder, no read-side tolerance for a superseded layout — supergreen means
+there is no installed base to absorb. Machine-local boot seating and the sync cursor (which
 profile player 1 wakes on, `LastSyncedRevision`) live ONLY in `world/local.json`
 — they must never roam to the cloud.
 
@@ -543,14 +536,9 @@ asserts the engine-default composed mapping, live-rebinds a source
 (`puck.world.player.v1` persistence) and a plain boot does not itself bump the
 revision; session C boots `--world kart-remap.world.json`, asserts the overlay
 merges from tick 0, then `world.bindings.remove` live-recomposes every seat
-back to the engine default; sessions D and E each synthesize one legacy
-layout — the `profiles/profiles.json` catalog and a single-file
-`profiles/player.json` — and assert its one-time migration (the matching loud
-boot line, the split `world/player.json` + `world/profiles/*.json` +
-`world/local.json` written, the old file deleted, `profile.list` showing the
-migrated names). There is no CLI override for the store path, so the proof
-backs up and restores the REAL `world/` + `profiles/` subtrees whole
-(byte-for-byte) around every session — the real catalog is never destroyed.
+back to the engine default. There is no CLI override for the store path, so the
+proof backs up and restores the REAL `world/` subtree whole (byte-for-byte)
+around every session — the real catalog is never destroyed.
 
 **Editor mode** is the editor
 GROUP's tenancy: a per-seat client mode entered with the ordered **LT-then-RT
@@ -1811,18 +1799,10 @@ contract. Nineteen subcommands:
   survived and the revision did not bump again on a plain boot; (c) session C
   boots `--world kart-remap.world.json` and asserts its `bindingOverlays` entry
   merges over the engine default, then `world.bindings.remove` live-recomposes
-  it back; (d) a synthesized legacy `puck.world.profiles.v1`
-  `profiles/profiles.json` proves that migration path (the loud `[profiles]
-  migrated ... retired puck.world.profiles.v1 ...]` line, the split
-  `world/player.json`/`world/profiles/*.json`/`world/local.json` written,
-  `profiles/profiles.json` deleted, `profile.list` showing the migrated
-  names); (e) a synthesized single-file `profiles/player.json` proves
-  the OTHER migration path (the loud `[profiles] migrated ... Phase 3
-  single-file layout ...]` line, the same split layout written,
-  `profiles/player.json` deleted). There is no CLI override for the
+  it back. There is no CLI override for the
   player-document store path, so this proof backs up the REAL
-  `world/` + `profiles/` subtrees whole (byte-for-byte) before every session
-  and restores them in a `finally` — the real catalog is never destroyed.
+  `world/` subtree whole (byte-for-byte) before every session
+  and restores it in a `finally` — the real catalog is never destroyed.
 - **`storage`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
   — the cloud-readiness proof (see **Storage**), proven against
   the local backend only: (a) a fresh boot against the cleared REAL store

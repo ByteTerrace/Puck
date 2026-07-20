@@ -7,8 +7,7 @@ namespace Puck.World;
 /// <summary>
 /// The serializable root of a user's player-scoped state (<c>puck.world.player.v1</c>): a CATALOG of profiles every
 /// participant seats on, carried with a monotonic <see cref="Revision"/> so cloud sync can order two copies and
-/// an <see cref="Extensions"/> bag so unknown sections survive a round-trip (the data-side plugin posture). It
-/// discontinues <c>puck.world.profiles.v1</c>: the store migrates its file once at load, then deletes it.
+/// an <see cref="Extensions"/> bag so unknown sections survive a round-trip (the data-side plugin posture).
 /// </summary>
 /// <remarks>Persisted through the reflection-based <c>JsonObjectBlobStore</c> (Web defaults), so every member is a
 /// property of a primitive/string/nested-record type — no <see cref="System.Numerics.Vector3"/> field STJ would

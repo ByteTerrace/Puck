@@ -49,8 +49,8 @@
 //       restores it; (h) PROFILE SUBJECT — Edit is checked against the concrete profile:<id> subject: the
 //       seeded Edit/all wildcard passes, revoking it denies profile.section, and a narrow profile:amber grant
 //       restores exactly amber while cobalt stays denied. (h) writes the player store, so this proof now backs up +
-//       restores the REAL world/ + profiles/ subtrees like the bindings proof (the cleared store reseeds the
-//       deterministic amber/cobalt catalog ids).
+//       restores the REAL world/ subtree like the bindings proof (the cleared store reseeds the deterministic
+//       amber/cobalt catalog ids).
 //   bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The player-document + layered binding-resolution proof (engine default ⊕ world overlay ⊕ profile ⊕ session): (a) session A boots the
 //       REAL local player-document store fresh, asserts the engine-default composed mapping (player.bindings), live-
@@ -58,14 +58,9 @@
 //       (revision bumps, read back through profile.doc); (b) session B relaunches and asserts the rebind survived and
 //       the revision did not bump again on a plain boot; (c) session C boots --world kart-remap.world.json and asserts
 //       the world's bindingOverlays entry merges over the engine default (gamepad.buttonEast -> player.primary), then
-//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized legacy
-//       puck.world.profiles.v1 profiles.json migrates once at boot (the loud "... retired puck.world.profiles.v1 ..."
-//       line, world/player.json + world/local.json written, profiles/profiles.json deleted, profile.list showing the
-//       migrated names); (e) a synthesized single-file profiles/player.json migrates once at boot the other
-//       migration path (the loud "... Phase 3 single-file layout ..." line, the split world/ layout written,
-//       profiles/player.json deleted). There is no CLI override for the player-document store path (see
-//       WorldProfileStore), so this proof backs up the REAL world/ + profiles/ subtrees (whole directories,
-//       byte-for-byte) before every session and restores them in a finally — the real catalog is never destroyed.
+//       world.bindings.remove live-recomposes it back to the engine default. There is no CLI override for the
+//       player-document store path (see WorldProfileStore), so this proof backs up the REAL world/ subtree (the whole
+//       directory, byte-for-byte) before every session and restores it in a finally — the real catalog is never destroyed.
 //   storage [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The cloud-readiness proof, proven against the local backend only: (a) a fresh boot against the REAL
 //       cleared local store asserts storage.status's honest baseline (tier local authoritative/cloud unwired,
@@ -74,8 +69,8 @@
 //       flip dirty on; the on-disk split layout (world/player.json + world/profiles/*.json + world/local.json) is
 //       asserted present; (b) a relaunch against the same store asserts storage.status reports the same persisted
 //       revision; (c) a boot with --user-id <a valid oid Guid> asserts the "identity explicit override" echo; (d) a
-//       boot with --user-id not-a-guid asserts the declining echo. Backs up + restores the REAL world/ + profiles/
-//       subtrees exactly like the bindings proof — the real catalog is never destroyed.
+//       boot with --user-id not-a-guid asserts the declining echo. Backs up + restores the REAL world/ subtree
+//       exactly like the bindings proof — the real catalog is never destroyed.
 //   expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]
 //       Regenerates the second world reproducibly. Boots a baked-default Puck.World, feeds the checked-in
 //       scripts/expo-world.txt authoring session (a new kit row + retunings + a table policy, a warmer four-pillar scene,
@@ -1626,8 +1621,8 @@ readonly record struct Pose(double X, double Y, double Z, int Yaw, int Pitch, in
 // ============================================================================================
 // Shared player-document store paths + directory backup — used by BindingsProof and StorageProof, the two
 // suites that boot against the REAL local player-document store (WorldProfileStore has no CLI override; no
-// --user-id, no env var). Both back up the FULL world/ + profiles/ subtrees before touching anything and
-// restore them in a finally, so the real catalog is never left mutated.
+// --user-id, no env var). Both back up the FULL world/ subtree before touching anything and restore it in a
+// finally, so the real catalog is never left mutated.
 // ============================================================================================
 
 // The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths
@@ -1653,21 +1648,6 @@ static class PlayerStorePaths {
     }
     public static string ProfilesDir() {
         return Path.Combine(path1: WorldDir(), path2: "profiles");
-    }
-    // The two legacy single-file layouts this store migrates away from, both under the shared "profiles/" directory:
-    // the whole-document pair (profiles/player.json + profiles/local.json) and the puck.world.profiles.v1 catalog
-    // (profiles/profiles.json).
-    public static string PhaseThreeDir() {
-        return Path.Combine(path1: StoreRoot(), path2: "profiles");
-    }
-    public static string PhaseThreePlayerPath() {
-        return Path.Combine(path1: PhaseThreeDir(), path2: "player.json");
-    }
-    public static string PhaseThreeLocalPath() {
-        return Path.Combine(path1: PhaseThreeDir(), path2: "local.json");
-    }
-    public static string LegacyPath() {
-        return Path.Combine(path1: PhaseThreeDir(), path2: "profiles.json");
     }
 }
 
@@ -4407,15 +4387,12 @@ static class GrantsProof {
         // The (h) profile-subject round edits the player document, so the REAL store is backed up whole and restored
         // in the finally (the bindings-proof discipline); the cleared store reseeds deterministic catalog ids.
         var worldDir = PlayerStorePaths.WorldDir();
-        var phaseDir = PlayerStorePaths.PhaseThreeDir();
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
-        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
         bool mountedSaved;
         bool sessionPassed;
 
         try {
             DirectoryBackup.Clear(dir: worldDir);
-            DirectoryBackup.Clear(dir: phaseDir);
 
             Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
             mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
@@ -4430,7 +4407,6 @@ static class GrantsProof {
         }
         finally {
             DirectoryBackup.Restore(snapshot: worldBackup);
-            DirectoryBackup.Restore(snapshot: phaseBackup);
         }
 
         var passed = (mountedSaved && sessionPassed);
@@ -4992,12 +4968,11 @@ static class GrantsProof {
 // ============================================================================================
 // BINDINGS — the player-document + layered binding-resolution proof
 // (engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
-// (player.bind / player.bindings / profile.save / profile.doc), persistence through
-// puck.world.player.v1, and the one-time migration off the legacy puck.world.profiles.v1. Four
-// sessions against the REAL local player-document store — there is no CLI override for its path
-// (WorldProfileStore addresses a fixed %LOCALAPPDATA% location) — so this proof backs up whatever
-// the real player.json/local.json/profiles.json hold (or their absence) before touching
-// anything, and restores them in a finally no matter how the sessions finish. Never delete or
+// (player.bind / player.bindings / profile.save / profile.doc), and persistence through
+// puck.world.player.v1. Sessions against the REAL local player-document store — there is no CLI
+// override for its path (WorldProfileStore addresses a fixed %LOCALAPPDATA% location) — so this
+// proof backs up whatever the real world/ subtree holds (or its absence) before touching
+// anything, and restores it in a finally no matter how the sessions finish. Never delete or
 // revert files this proof did not itself create.
 // ============================================================================================
 static class BindingsProof {
@@ -5032,24 +5007,15 @@ static class BindingsProof {
             return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
         }
 
-        // The current split layout (world/) plus the shared directory the two legacy single-file layouts land in
-        // (profiles/ — the whole-document pair AND the puck.world.profiles.v1 catalog).
         var worldDir = PlayerStorePaths.WorldDir();
-        var phaseDir = PlayerStorePaths.PhaseThreeDir();
-        var catalogPath = PlayerStorePaths.CatalogPath();
-        var worldLocalPath = PlayerStorePaths.LocalPath();
-        var legacyPath = PlayerStorePaths.LegacyPath();
-        var phaseThreePlayerPath = PlayerStorePaths.PhaseThreePlayerPath();
 
-        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
-        // -byte) before this proof touches anything.
+        // Snapshot whatever the REAL catalog holds (the whole world/ subtree, byte-for-byte) before this proof
+        // touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
-        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
         var passed = true;
 
         try {
             DirectoryBackup.Clear(dir: worldDir);
-            DirectoryBackup.Clear(dir: phaseDir);
 
             Console.WriteLine(value: "[proof] === bindings (a): session A — engine defaults, a live rebind, profile.save ===");
 
@@ -5075,20 +5041,9 @@ static class BindingsProof {
             var kartRemapPath = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds", path4: "kart-remap.world.json");
 
             passed &= RunSessionC(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: kartRemapPath);
-
-            Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (d): the legacy puck.world.profiles.v1 migration ===");
-            passed &= RunMigrationLegacy(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
-                worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, legacyPath: legacyPath);
-
-            Console.WriteLine();
-            Console.WriteLine(value: "[proof] === bindings (e): the single-file player.json migration ===");
-            passed &= RunMigrationPhaseThree(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
-                worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, phaseThreePlayerPath: phaseThreePlayerPath);
         }
         finally {
             DirectoryBackup.Restore(snapshot: worldBackup);
-            DirectoryBackup.Restore(snapshot: phaseBackup);
         }
 
         Console.WriteLine();
@@ -5291,177 +5246,6 @@ static class BindingsProof {
             passed &= Check(name: "overlay-remove-applied", ok: (removedLine is not null), detail: (removedLine?.Trim() ?? "(no '[world.mutation: RemoveBindingOverlay ...]' echo)"));
             passed &= ExpectBindingsContains(ctx: ctx, name: "removal-recomposes-east-secondary", seat: 1, needle: "gamepad.buttonEast→player.secondary", wantPresent: true);
             passed &= ExpectBindingsContains(ctx: ctx, name: "removal-drops-east-primary", seat: 1, needle: "gamepad.buttonEast→player.primary", wantPresent: false);
-        }
-        finally {
-            Console.CancelKeyPress -= cancelHandler;
-            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
-
-            if (started && !process.HasExited) {
-                KillQuietly(process: process);
-            }
-        }
-
-        return passed;
-    }
-
-    // Session D: synthesize a legacy puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
-    // the store's migration precondition), boot, and assert the one-time migration: the loud "... retired
-    // puck.world.profiles.v1 ..." boot line, the split world/ layout written (world/player.json + world/local.json),
-    // profiles/profiles.json deleted, and profile.list showing the migrated names.
-    static bool RunMigrationLegacy(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
-        string worldDir, string phaseDir, string catalogPath, string worldLocalPath, string legacyPath) {
-        DirectoryBackup.Clear(dir: worldDir);
-        DirectoryBackup.Clear(dir: phaseDir);
-        _ = Directory.CreateDirectory(path: phaseDir);
-
-        const string legacyJson = """
-            {
-              "version": "puck.world.profiles.v1",
-              "lastUsed": "crimson",
-              "profiles": [
-                { "name": "crimson", "color": "#CC3333", "moveSpeed": 5, "turnSpeed": 3, "invertLookX": true },
-                { "name": "azure", "color": "#3355CC" }
-              ]
-            }
-            """;
-
-        File.WriteAllText(path: legacyPath, contents: legacyJson);
-
-        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
-        var process = new Process { StartInfo = psi };
-        var stopwatch = new Stopwatch();
-        var collector = new OutputCollector();
-        var passed = true;
-        var started = false;
-
-        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
-        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
-
-        Console.CancelKeyPress += cancelHandler;
-        AppDomain.CurrentDomain.ProcessExit += exitHandler;
-
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized legacy profiles.json at {legacyPath})");
-
-        try {
-            _ = process.Start();
-            started = true;
-            stopwatch.Start();
-            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
-            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
-
-            var stdin = process.StandardInput;
-
-            stdin.AutoFlush = true;
-
-            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
-
-            var migratedLine = Await(collector: ctx.Collector, mark: 0, predicate: l => l.Contains(value: "retired puck.world.profiles.v1"), deadlineSeconds: 30.0);
-
-            passed &= Check(name: "migration-boot-line-legacy", ok: (migratedLine is not null), detail: (migratedLine?.Trim() ?? "(no '... retired puck.world.profiles.v1 ...' boot line)"));
-
-            if (!WaitForConsole(ctx: ctx)) {
-                return false;
-            }
-
-            passed &= Check(name: "catalog-json-written-legacy", ok: File.Exists(path: catalogPath), detail: catalogPath);
-            passed &= Check(name: "local-json-written-legacy", ok: File.Exists(path: worldLocalPath), detail: worldLocalPath);
-            passed &= Check(name: "legacy-profiles-json-deleted", ok: !File.Exists(path: legacyPath), detail: legacyPath);
-
-            var mark = ctx.Collector.Count;
-
-            Send(ctx: ctx, line: "profile.list");
-
-            var listLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.list:"), deadlineSeconds: 15.0);
-            var listText = (listLine ?? string.Empty);
-
-            passed &= Check(name: "profile-list-has-crimson", ok: listText.Contains(value: "crimson", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
-            passed &= Check(name: "profile-list-has-azure", ok: listText.Contains(value: "azure", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
-        }
-        finally {
-            Console.CancelKeyPress -= cancelHandler;
-            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
-
-            if (started && !process.HasExited) {
-                KillQuietly(process: process);
-            }
-        }
-
-        return passed;
-    }
-
-    // Session E: synthesize a single-file profiles/player.json (world/ absent — the store's migration
-    // precondition once the catalog blob and the legacy multi-file schema are both cleared), boot, and assert the
-    // OTHER migration path: the loud "... Phase 3 single-file layout ..." boot line, the split world/ layout written,
-    // and profiles/player.json deleted.
-    static bool RunMigrationPhaseThree(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
-        string worldDir, string phaseDir, string catalogPath, string worldLocalPath, string phaseThreePlayerPath) {
-        DirectoryBackup.Clear(dir: worldDir);
-        DirectoryBackup.Clear(dir: phaseDir);
-        _ = Directory.CreateDirectory(path: phaseDir);
-
-        const string phaseThreeJson = """
-            {
-              "schema": "puck.world.player.v1",
-              "revision": 3,
-              "updatedAtUtc": "2026-01-01T00:00:00.0000000+00:00",
-              "profiles": [
-                { "id": "goldenrod", "identity": { "name": "goldenrod", "color": "#DAA520" }, "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "invertLookX": false } },
-                { "id": "seafoam", "identity": { "name": "seafoam", "color": "#93E9BE" }, "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "invertLookX": false } }
-              ]
-            }
-            """;
-
-        File.WriteAllText(path: phaseThreePlayerPath, contents: phaseThreeJson);
-
-        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
-        var process = new Process { StartInfo = psi };
-        var stopwatch = new Stopwatch();
-        var collector = new OutputCollector();
-        var passed = true;
-        var started = false;
-
-        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
-        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
-
-        Console.CancelKeyPress += cancelHandler;
-        AppDomain.CurrentDomain.ProcessExit += exitHandler;
-
-        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized single-file player.json at {phaseThreePlayerPath})");
-
-        try {
-            _ = process.Start();
-            started = true;
-            stopwatch.Start();
-            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
-            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
-
-            var stdin = process.StandardInput;
-
-            stdin.AutoFlush = true;
-
-            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
-
-            var migratedLine = Await(collector: ctx.Collector, mark: 0, predicate: l => l.Contains(value: "Phase 3 single-file layout"), deadlineSeconds: 30.0);
-
-            passed &= Check(name: "migration-boot-line-phase-three", ok: (migratedLine is not null), detail: (migratedLine?.Trim() ?? "(no '... Phase 3 single-file layout ...' boot line)"));
-
-            if (!WaitForConsole(ctx: ctx)) {
-                return false;
-            }
-
-            passed &= Check(name: "catalog-json-written-phase-three", ok: File.Exists(path: catalogPath), detail: catalogPath);
-            passed &= Check(name: "local-json-written-phase-three", ok: File.Exists(path: worldLocalPath), detail: worldLocalPath);
-            passed &= Check(name: "phase-three-player-json-deleted", ok: !File.Exists(path: phaseThreePlayerPath), detail: phaseThreePlayerPath);
-
-            var mark = ctx.Collector.Count;
-
-            Send(ctx: ctx, line: "profile.list");
-
-            var listLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.list:"), deadlineSeconds: 15.0);
-            var listText = (listLine ?? string.Empty);
-
-            passed &= Check(name: "profile-list-has-goldenrod", ok: listText.Contains(value: "goldenrod", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
-            passed &= Check(name: "profile-list-has-seafoam", ok: listText.Contains(value: "seafoam", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5872,20 +5656,17 @@ static class StorageProof {
         }
 
         var worldDir = PlayerStorePaths.WorldDir();
-        var phaseDir = PlayerStorePaths.PhaseThreeDir();
         var catalogPath = PlayerStorePaths.CatalogPath();
         var worldLocalPath = PlayerStorePaths.LocalPath();
         var profilesDir = PlayerStorePaths.ProfilesDir();
 
-        // Snapshot whatever the REAL catalog holds (the whole world/ + profiles/ subtrees, byte-for
-        // -byte) before this proof touches anything.
+        // Snapshot whatever the REAL catalog holds (the whole world/ subtree, byte-for-byte) before this proof
+        // touches anything.
         var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
-        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
         var passed = true;
 
         try {
             DirectoryBackup.Clear(dir: worldDir);
-            DirectoryBackup.Clear(dir: phaseDir);
 
             Console.WriteLine(value: "[proof] === storage (a): fresh boot — honest baseline, a revision-bumping mutation, the on-disk split layout ===");
 
@@ -5913,7 +5694,6 @@ static class StorageProof {
         }
         finally {
             DirectoryBackup.Restore(snapshot: worldBackup);
-            DirectoryBackup.Restore(snapshot: phaseBackup);
         }
 
         Console.WriteLine();
