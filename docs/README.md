@@ -33,6 +33,7 @@ sources remain useful to engineering decisions.
 | [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
 | [World authoring, audio, and Forge implementation review](reviews/2026-07-19-large-change-set-review.md) | Static review of the landed P3–P6, audio, Forge, and overlay work: capacity contracts, transactional/lifetime defects, proof gaps, and ordered remediation. |
 | [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
+| [Greenfield refactor verdict](greenfield-refactor-verdict.md) | Closeout of the greenfield/compat refactor: what it removed, what verification now discriminates, and the sized ledger of every audit finding still open. |
 | [Demo port ledger](reviews/2026-07-18-demo-port-ledger.md) | Superseded as an execution plan by the Demo → World port; survives as the Arc-12 orientation-doc-sweep checklist (row-by-row Demo-capability → World re-home mapping). |
 
 The moldable-state, World UI/editor, World audio, and branch-closeout documents
