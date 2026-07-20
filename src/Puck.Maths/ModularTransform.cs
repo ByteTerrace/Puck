@@ -24,7 +24,7 @@ public readonly record struct GaussReduction(ModularTransform Transform, long A,
 /// acts on the hyperbolic plane by the Möbius map <c>z ↦ (A·z + B) / (C·z + D)</c>. This is the single object beneath the
 /// library's three motions: the elliptic rotations (the sixth root of unity of <see cref="HexCoord"/>), the parabolic
 /// tick shear (the kinematics update of <see cref="LayerSequence"/>), and the hyperbolic golden inflation (the step of
-/// <see cref="Quasicrystal"/>) are the three conjugacy classes <see cref="Classify"/> distinguishes by trace.
+/// <see cref="GoldenQuasicrystal"/>) are the three conjugacy classes <see cref="Classify"/> distinguishes by trace.
 /// </summary>
 /// <remarks>
 /// The determinant one invariant makes the inverse the adjugate <c>[[D, −B], [−C, A]]</c> — exact, with no division —
@@ -32,7 +32,7 @@ public readonly record struct GaussReduction(ModularTransform Transform, long A,
 /// moves a cusp (a rational <c>p/q</c>, with <c>∞</c> written <c>1/0</c>) to another cusp, reduced to lowest terms. The one
 /// approximate seam is <see cref="Apply(FixedComplex)"/>, which realizes the Möbius map on a fixed-point interior point:
 /// the combinatorial action on cusps and forms above it is exact, only the interior evaluation rounds — the same seam
-/// convention as <see cref="Quasicrystal.Position(int, int)"/>. <see cref="GaussReduce(long, long, long)"/> reduces a
+/// convention as <see cref="GoldenQuasicrystal.Position(int, int)"/>. <see cref="GaussReduce(long, long, long)"/> reduces a
 /// positive-definite integer form — a point of the upper half-plane addressed by its integer minimal polynomial — into the
 /// fundamental domain, returning the exact word that takes it there.
 /// </remarks>
@@ -132,7 +132,7 @@ public readonly record struct ModularTransform
         );
     /// <summary>Applies the Möbius map to an interior point of the upper half-plane.</summary>
     /// <param name="point">The fixed-point interior point.</param>
-    /// <returns>The image <c>(A·point + B) / (C·point + D)</c>. This is the one approximate operation: the integer action on cusps and forms is exact, but this interior evaluation rounds each complex product and the final division, like <see cref="Quasicrystal.Position(int, int)"/>.</returns>
+    /// <returns>The image <c>(A·point + B) / (C·point + D)</c>. This is the one approximate operation: the integer action on cusps and forms is exact, but this interior evaluation rounds each complex product and the final division, like <see cref="GoldenQuasicrystal.Position(int, int)"/>.</returns>
     public FixedComplex Apply(FixedComplex point) {
         var numerator = ((FromInteger(value: A) * point) + FromInteger(value: B));
         var denominator = ((FromInteger(value: C) * point) + FromInteger(value: D));
@@ -176,34 +176,30 @@ public readonly record struct ModularTransform
         var formC = c;
 
         while (true) {
-            // Translate the root by an integer so the middle coefficient lands in (−A, A]: this is |Re z| ≤ ½.
-            var twiceA = (2L * ((Int128)formA));
-            var shift = FloorDivide(numerator: ((Int128)formB + formA), denominator: twiceA);
-            var nextB = ((Int128)formB - (twiceA * shift));
+            // Translate the root so the middle coefficient lands in (−A, A]: this is |Re z| ≤ ½. When B is already there the
+            // step is a no-op, so the common already-normalized pass (which every S step produces) skips the wide division.
+            if ((formB <= -formA) || (formB > formA)) {
+                var twiceA = (2L * ((Int128)formA));
+                var shift = FloorDivide(numerator: ((Int128)formB + formA), denominator: twiceA);
+                var nextB = ((Int128)formB - (twiceA * shift));
 
-            if (nextB == -formA) {
-                nextB = formA;
-                shift -= Int128.One;
-            }
+                if (nextB == -formA) {
+                    nextB = formA;
+                    shift -= Int128.One;
+                }
 
-            if (shift != Int128.Zero) {
-                var stepShift = checked((long)shift);
-                var nextC = checked((long)(((((Int128)formA * shift) * shift) - ((Int128)formB * shift)) + formC));
-
-                formC = nextC;
+                formC = checked((long)(((((Int128)formA * shift) * shift) - ((Int128)formB * shift)) + formC));
                 formB = checked((long)nextB);
-                transform = (Translation(amount: stepShift) * transform);
-            } else {
-                formB = checked((long)nextB);
+                transform = transform.LeftTranslate(amount: checked((long)shift));
             }
 
             // Reduced once the trailing coefficient is no smaller than the leading one: this is |z| ≥ 1.
             if (formC < formA) {
                 (formA, formB, formC) = (formC, checked(-formB), formA);
-                transform = (S * transform);
+                transform = transform.LeftInvert();
             } else if ((formC == formA) && (0L > formB)) {
                 formB = checked(-formB);
-                transform = (S * transform);
+                transform = transform.LeftInvert();
 
                 break;
             } else {
@@ -224,8 +220,12 @@ public readonly record struct ModularTransform
             Real: FixedQ4816.FromInteger(value: value),
             Imaginary: FixedQ4816.Zero
         );
-    private static ModularTransform Translation(long amount) =>
-        new(a: 1L, b: amount, c: 0L, d: 1L);
+    private ModularTransform LeftInvert() =>
+        // S · this = [[−C, −D], [A, B]] — the inversion applied on the left, skipping the general product's zero and one multiplies.
+        new(a: checked(-C), b: checked(-D), c: A, d: B);
+    private ModularTransform LeftTranslate(long amount) =>
+        // Tᵃᵐᵒᵘⁿᵗ · this = [[A + amount·C, B + amount·D], [C, D]] — the translation applied on the left, two products instead of four.
+        new(a: checked(A + (amount * C)), b: checked(B + (amount * D)), c: C, d: D);
     private static Int128 FloorDivide(Int128 numerator, Int128 denominator) {
         var quotient = (numerator / denominator);
         var remainder = (numerator - (quotient * denominator));

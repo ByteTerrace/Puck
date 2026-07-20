@@ -17,7 +17,7 @@ namespace Puck.Maths;
 /// pairs the rings of <see cref="SymmetryLattice"/>. The same construction in higher dimensions yields the Penrose
 /// (5-fold) and Ammann–Beenker (8-fold) tilings; this is their line.
 /// </remarks>
-public static class Quasicrystal {
+public static class GoldenQuasicrystal {
     // round(φ · 2^16): the golden ratio in Q48.16, for the fixed-point physical position only.
     private const long GoldenRatioRawQ16 = 106040L;
 
