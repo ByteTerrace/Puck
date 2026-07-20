@@ -4696,16 +4696,19 @@ What to look for, in order:
 
 1. `world.population 12` **leads** — the peer slice boots EMPTY, and
    `ActiveLookCounts()` counts only ACTIVE entries, so without a summon every row
-   reads `: 1` (the joined seat) and the rest of this block has no crowd to act
-   on. The first `world.looks` then prints one implicit row
-   (`catalog (index-derived): 12`) on a world with no `looks` section — **proving
-   the absence-coalesces default.**
+   reads `:4` (the four local seats, which ARE active at boot — the count is
+   seats + summoned peers, never one) and the rest of this block has no crowd to
+   act on. Measured: `[world.looks: catalog=catalog(index-derived):4]` at boot,
+   `[world.looks: catalog=catalog(index-derived):16]` after the summon (4 local +
+   12). Either way it is ONE implicit row on a world with no `looks` section —
+   **proving the absence-coalesces default.**
 2. `[world.mutation: UpsertLook 'stocky' applied]` on **stderr**, with
    `world.look.set` itself echoing nothing — the quiet-ack contract.
 3. **On screen:** after `world.look.assign table stocky`, every visible body
    switches to the same rig at 1.4×. **This is the whole capability; if the crowd
    does not change, nothing else matters.**
-4. `world.looks` after the assignment shows `stocky: 12` — census and look agree.
+4. `world.looks` after the assignment shows `[world.looks: stocky=catalog(index
+   42):16]` — census and look agree (4 local seats + 12 summoned peers).
 5. `world.look.tune stocky scale 0.6` shrinks the crowd live; `dirty` increments
    per mutation.
 6. `world.undo 1` restores 1.4× **visually** — proving replay-based undo works

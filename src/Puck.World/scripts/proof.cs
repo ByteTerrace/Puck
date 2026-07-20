@@ -2921,8 +2921,21 @@ static class ExpoProof {
             Send(ctx: ctx, line: $"world.save {outPath}");
 
             var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 45.0);
+            var saved = Check(name: "authoring-save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
 
-            return Check(name: "authoring-save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
+            // Every line of the authoring script is meant to APPLY. Without this the script's failure mode is silent:
+            // a retired payload shape or a misspelled verb is refused, the artifact is written anyway missing whatever
+            // that line authored, and the save echo above still reads green. The sleep lets a deferred refusal (counted
+            // a tick after the line is accepted) land before the read.
+            Thread.Sleep(millisecondsTimeout: 400);
+            mark = collector.Count;
+
+            Send(ctx: ctx, line: "wire.errors");
+
+            var errors = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 15.0);
+
+            return (saved & Check(name: "authoring-refused-nothing", ok: ((errors is not null) && errors.Contains(value: "[wire.errors: 0 rejected]")),
+                detail: (errors?.Trim() ?? "(no '[wire.errors: ...]' echo)")));
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -4388,7 +4401,10 @@ static class GrantsProof {
     const int ExclusiveBodyIndex = 12;              // exclusive-then-ordinary + sole-driver test body
     const int ExclusivePlayerIndex = (ExclusiveBodyIndex + 1); // player.run's 1-based index for the sole-driver test
     const int CensusForBodies = (ExclusiveBodyIndex + 1); // the world.population raise that admits every body index above
-    const double MovedEpsilon = 0.5;                // u — the addon's steady walk covers ~2.6 u over 1 s, far past ambient wander drift
+    // u — the addon's steady walk covers ~2.6 u over 1 s. The floor discriminates only because the census below parks
+    // every stand-in at IntentSource.Idle: under the 'wander' default a body drifts ~3.4 u over the same window and
+    // clears this floor with NOTHING driving it. The ambient-drift-nulled check measures that premise every run.
+    const double MovedEpsilon = 0.5;
     const double FrozenEpsilon = 0.02;               // u — a revoked, un-driven body must not move at all (2-decimal echo precision)
 
     public static int RunGrants(ArgMap opts) {
@@ -4563,13 +4579,31 @@ static class GrantsProof {
             // The census stands at ZERO at boot — `population.networkPlayers` is the remote-admission CAP, not a
             // reservation — so the stand-in bodies this suite drives and contends over must be admitted first.
             // Without the raise, body:9/11/12 have no population entry and every pose readback below reads "(?)".
+            // The `idle` token is load-bearing, not decoration: it sweeps every peer's IntentSource to Idle, so the
+            // wander producer never touches the bodies this suite measures and every displacement below is a
+            // SUBMITTED intent's.
             var censusMark = ctx.Collector.Count;
 
-            Send(ctx: ctx, line: $"world.population {CensusForBodies}");
+            Send(ctx: ctx, line: $"world.population {CensusForBodies} idle");
 
             var censusLine = Await(collector: ctx.Collector, mark: censusMark, predicate: l => l.Contains(value: "[world.population:"), deadlineSeconds: 15.0);
 
             passed &= Check(name: "census-admits-stand-ins", ok: (censusLine is not null), detail: (censusLine?.Trim() ?? "(no '[world.population: ...]' echo)"));
+
+            // (a2) THE NEGATIVE CONTROL for (b). Read the parked source back, then sample the SAME window the drive
+            // check uses with nothing driving the body. Ambient motion is measured, not assumed: if the idle sweep ever
+            // stops taking, this fails here instead of quietly re-floating the drive check on wander.
+            passed &= ExpectControl(ctx: ctx, name: "stand-in-parked-idle", index: AutopilotPlayerIndex, word: "idle");
+
+            var beforeAmbient = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+
+            Thread.Sleep(millisecondsTimeout: 1000);
+
+            var afterAmbient = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+            var ambientDrift = Distance(a: beforeAmbient, b: afterAmbient);
+
+            passed &= Check(name: "ambient-drift-nulled", ok: ((beforeAmbient is not null) && (afterAmbient is not null) && (ambientDrift <= FrozenEpsilon)),
+                detail: $"p{AutopilotPlayerIndex} {Fmt(pose: beforeAmbient)} -> {Fmt(pose: afterAmbient)} (delta {ambientDrift:0.000} u, want <= {FrozenEpsilon})");
 
             // (b) grant Drive over a network stand-in body: the addon starts driving through the SAME wire a seat
             // uses, and the driver flips the body's IntentSource to Live, so the movement below is unambiguously
@@ -4584,6 +4618,10 @@ static class GrantsProof {
 
             // Give the driver a couple of ticks to discover the grant and flip IntentSource before the first sample.
             Thread.Sleep(millisecondsTimeout: 300);
+
+            // ASSERT THE LATCH the drive check rests on: the body left Idle because the addon put it on Live. Nothing
+            // asserted this before, so a driver that silently stopped latching would have read as a pass.
+            passed &= ExpectControl(ctx: ctx, name: "addon-latches-body-live", index: AutopilotPlayerIndex, word: "live");
 
             var beforeMove = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
 
@@ -4620,6 +4658,9 @@ static class GrantsProof {
 
             passed &= Check(name: "revoked-body-frozen", ok: ((beforeFreeze is not null) && (afterFreeze is not null) && (freezeDrift <= FrozenEpsilon)),
                 detail: $"p{AutopilotPlayerIndex} {Fmt(pose: beforeFreeze)} -> {Fmt(pose: afterFreeze)} (delta {freezeDrift:0.000} u, want <= {FrozenEpsilon})");
+            // (a)-(c) piped no line the wire should refuse: the revoke's dropped intent is the ADDON's submission over
+            // the link, not a console line.
+            passed &= SettleWireErrors(ctx: ctx, name: "drive-round-refused-nothing", expected: 0);
 
             // (d) denied-mutation honesty: strip console's Mutate/kits grant, prove the tune is rejected AND the
             // document (world.status's dirty counter) is genuinely unchanged, then re-grant and prove it applies.
@@ -4634,6 +4675,11 @@ static class GrantsProof {
 
             // (h) PROFILE SUBJECT: Edit checks the concrete profile:<id> subject.
             passed &= RunProfileSubjectRound(ctx: ctx);
+
+            // Every deliberate refusal above was settled and cleared by its own round. A nonzero count here is a line
+            // this suite MEANT to succeed and the wire refused — the failure mode that reads as green everywhere else,
+            // because an await satisfied by other means never notices the step that no-opped.
+            passed &= SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -4692,6 +4738,8 @@ static class GrantsProof {
         passed &= Check(name: "console-regains-kits-mutate", ok: (grantLine is not null), detail: (grantLine?.Trim() ?? "(no '[world.grant: ...]' echo)"));
         passed &= MutateAndExpectStatus(ctx: ctx, name: "tune-reapplies-after-regrant", command: "world.kit.tune runner moveSpeed 6",
             appliedNeedle: "[world.mutation: UpsertKit 'runner' applied]", dirty: 1);
+        // One deliberate refusal: the denied world.kit.tune.
+        passed &= SettleWireErrors(ctx: ctx, name: "mutate-round-refused-only-the-denied-tune", expected: 1);
 
         return passed;
     }
@@ -4727,15 +4775,27 @@ static class GrantsProof {
         passed &= ExpectGrant(ctx: ctx, name: "ordinary-after-exclusive-rejected", line: $"world.grant seat3 drive body:{ExclusiveBodyIndex}",
             needle: $"[world.grant rejected: seat3 drive body:{ExclusiveBodyIndex}");
 
-        // Sole-driver enforcement: while the addon holds body:12 exclusively, the console — which holds the seeded
-        // Drive/all wildcard — is OVERRIDDEN at the intent boundary, so its command to that body is denied. Exactly one
-        // principal (the addon) can drive an exclusively-held body; the wildcard cannot.
+        // Sole-driver enforcement: an exclusively-held body admits its HOLDER's intents and nobody else's — not even the
+        // console, which holds the seeded Drive/all wildcard.
         //
-        // The segment is a full-forward one, not the all-zero hold it used to be: a zero segment moves nothing even when
-        // accepted, so a denial of it proved only that a string was printed. The SAME line is re-issued after the revoke
-        // below, where it must actually travel.
+        // Hand the hold from the addon to seat4 first — a principal that submits nothing. That swap is what makes the
+        // pose pair below mean anything: while the ADDON held body:12 it was also DRIVING it (the grant IS the driver's
+        // body binding), so the body travelled under the hold whether the console's segment was denied or applied, and
+        // no sample could tell the two apart. Under an inert holder the body has no effective driver at all, so the
+        // hold sample is the released check's negative control.
+        Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
+
+        passed &= ExpectGrant(ctx: ctx, name: "inert-holder-takes-exclusive", line: $"world.grant seat4 drive body:{ExclusiveBodyIndex} exclusive",
+            needle: $"[world.grant: seat4 drive body:{ExclusiveBodyIndex} exclusive]");
+
+        Thread.Sleep(millisecondsTimeout: 400);
+
+        var beforeHold = ReadWhere(ctx: ctx, index: ExclusivePlayerIndex);
         var mark = ctx.Collector.Count;
 
+        // A full-forward segment, not the all-zero hold it used to be: a zero segment moves nothing even when accepted,
+        // so a denial of it proved only that a string was printed. The IDENTICAL line is re-issued after the release
+        // below, where it must actually travel.
         Send(ctx: ctx, line: $"player.run 1 0 0 1 {ExclusivePlayerIndex}");
 
         var deniedLine = Await(collector: ctx.Collector, mark: mark,
@@ -4745,13 +4805,20 @@ static class GrantsProof {
         passed &= Check(name: "exclusive-overrides-console-wildcard", ok: (deniedLine is not null),
             detail: (deniedLine?.Trim() ?? $"(no '[world.grant denied: console ... body:{ExclusiveBodyIndex} ...]' line — the wildcard was not overridden)"));
 
-        // GROUND THE LEASE IN THE BODY. A denial line alone would prove only that some string was printed: a command
-        // that could never move body:12 anyway would produce the same green. So drop the hold and re-issue the
-        // IDENTICAL command — it must now be accepted (no fresh denial) and the body must actually travel. The lease is
-        // exactly that difference: the same input, over the same real body, inert under the hold and effective without
-        // it. The revoked body idles first (the driver left IntentSource at Live, so nothing else moves it), which is
-        // what makes the post-release displacement attributable to the console's segment and nothing else.
-        Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
+        // The denial is only half the claim. Sample the body over the window the dropped segment would have covered:
+        // a denial that still let the segment through would show up here as travel.
+        Thread.Sleep(millisecondsTimeout: 1400);
+
+        var afterHold = ReadWhere(ctx: ctx, index: ExclusivePlayerIndex);
+        var holdDrift = Distance(a: beforeHold, b: afterHold);
+
+        passed &= Check(name: "held-body-inert-under-lease", ok: ((beforeHold is not null) && (afterHold is not null) && (holdDrift <= FrozenEpsilon)),
+            detail: $"p{ExclusivePlayerIndex} {Fmt(pose: beforeHold)} -> {Fmt(pose: afterHold)} (delta {holdDrift:0.000} u, want <= {FrozenEpsilon})");
+
+        // GROUND THE LEASE IN THE BODY. Drop the hold and re-issue the IDENTICAL command — it must now be accepted (no
+        // fresh denial) and the body must actually travel. The lease is exactly that difference: the same input, over
+        // the same real body, inert under the hold and effective without it — both halves now measured on the pose.
+        Send(ctx: ctx, line: $"world.revoke seat4 drive body:{ExclusiveBodyIndex}");
 
         Thread.Sleep(millisecondsTimeout: 600);
 
@@ -4790,6 +4857,10 @@ static class GrantsProof {
             line: $"world.grant addon:{AutopilotName} drive all exclusive",
             needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
         Send(ctx: ctx, line: $"world.revoke seat2 drive body:{OrdinaryBodyIndex}");
+
+        // Five deliberate refusals: the two order rejections, the console segment denied under the lease, and the two
+        // exclusive-'all' rejections.
+        passed &= SettleWireErrors(ctx: ctx, name: "exclusivity-round-refused-only-its-five", expected: 5);
 
         return passed;
     }
@@ -4836,6 +4907,9 @@ static class GrantsProof {
         passed &= Check(name: "revoke-restores-console-mutate", ok: (composeLine is not null),
             detail: (composeLine?.Trim() ?? "(no compose-stage '[world.mutation rejected: ...]' line — the grant boundary still denies)"));
 
+        // Two deliberate refusals: the grant-boundary denial and the compose-stage rejection that replaces it.
+        passed &= SettleWireErrors(ctx: ctx, name: "section-round-refused-only-its-two", expected: 2);
+
         return passed;
     }
 
@@ -4867,6 +4941,8 @@ static class GrantsProof {
         passed &= ExpectGrant(ctx: ctx, name: "edit-all-restored",
             line: "world.grant console edit all",
             needle: "[world.grant: console edit all]");
+        // Two deliberate refusals: the ungranted amber edit and the never-granted cobalt one.
+        passed &= SettleWireErrors(ctx: ctx, name: "profile-round-refused-only-its-two", expected: 2);
 
         return passed;
     }
@@ -4880,6 +4956,49 @@ static class GrantsProof {
         var hit = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 15.0);
 
         return Check(name: name, ok: (hit is not null), detail: (hit?.Trim() ?? $"(no line containing '{needle}')"));
+    }
+
+    // Settle the wire's refused-line counter: poll `wire.errors` until it reads the number of refusals the round just
+    // ahead of the call DELIBERATELY provoked, then zero it. Polling (rather than one read) is required because a
+    // capability denial is DEFERRED — the line is accepted, and the refusal is counted a tick later through the
+    // edit-echo tap. Clearing the deliberate ones is what lets the final zero assertion mean "nothing ELSE was
+    // refused": a stale payload or a retired verb spelling anywhere between two settle points survives to the end.
+    static bool SettleWireErrors(Ctx ctx, string name, int expected) {
+        string? last = null;
+
+        for (var attempt = 0; (attempt < 25); attempt++) {
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "wire.errors");
+
+            last = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+
+            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
+                mark = ctx.Collector.Count;
+
+                Send(ctx: ctx, line: "wire.errors reset");
+                _ = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+
+                return Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+
+        return Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+    }
+
+    // Read a body's INTENT SOURCE back through player.control's echo form and assert it. Every displacement check in
+    // this suite is an argument about WHO moved a body, and the source is the premise that argument rests on: it says
+    // whether the ambient wander producer can touch the body at all.
+    static bool ExpectControl(Ctx ctx, string name, int index, string word) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.control {index}");
+
+        var hit = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[player.control: p{index} is "), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((hit is not null) && hit.Contains(value: $"is {word}]")), detail: (hit?.Trim() ?? $"(no '[player.control: p{index} is ...]' echo)"));
     }
 
     // A mutation verb (Simulation-routed, quiet ack) followed by a world.status read: the stdin drain barrier holds the
