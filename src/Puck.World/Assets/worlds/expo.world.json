@@ -761,7 +761,8 @@
     "defaultSpeakerRadius": 8,
     "defaultCurve": "smoothstep",
     "defaultBedFadeSeconds": 0.5,
-    "listener": "focus"
+    "listener": "focus",
+    "cues": []
   },
   "collision": {
     "enabled": false,

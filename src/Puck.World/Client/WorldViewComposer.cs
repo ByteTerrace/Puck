@@ -116,7 +116,7 @@ internal sealed class WorldViewComposer {
 
     // Selects the target layout, filling m_targetSlots with its resolved (rect, occupant) slots.
     private (string Name, string Reason, float Seconds, float RenderScale) Select(int joinedCount, int soleEditorIndex, float workbenchFraction, WorldViewDefaults views, string? layoutOverride) {
-        var layouts = (views.Layouts ?? []);
+        var layouts = views.Layouts;
 
         if ((layoutOverride is { } wanted) && (FindLayout(layouts: layouts, name: wanted) is { } overridden)) {
             ResolveLayoutSlots(layout: overridden);
@@ -146,7 +146,7 @@ internal sealed class WorldViewComposer {
 
         var seatOrder = 0;
 
-        foreach (var slot in (layout.Slots ?? [])) {
+        foreach (var slot in layout.Slots) {
             var region = new NormalizedRect(X: slot.X, Y: slot.Y, Width: slot.Width, Height: slot.Height);
 
             if (slot.Camera is null) {

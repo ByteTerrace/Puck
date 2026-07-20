@@ -1575,8 +1575,7 @@ internal sealed record WorldHostDefaults(
 /// <see cref="WorldPlacement"/>).</param>
 /// <param name="Authoring">The editor/authoring policy row — headroom, placement
 /// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
-/// (see <see cref="WorldAuthoringDefaults"/>). <see langword="null"/> in JSON coalesces to
-/// <see cref="WorldAuthoringDefaults.Default"/> (the same absence-coalesce convention <see cref="WorldStorageDefaults"/> uses).</param>
+/// (see <see cref="WorldAuthoringDefaults"/>) — a REQUIRED section every document carries.</param>
 /// <param name="Speakers">The placeable speaker rows (default empty) — the camera family's audio sibling (see
 /// <see cref="WorldSpeaker"/>): name-keyed transducers whose feeds tap shared sources.</param>
 /// <param name="Tunes">The tune ASSET rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
@@ -1584,8 +1583,7 @@ internal sealed record WorldHostDefaults(
 /// <param name="Patches">The synth-patch ASSET rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
 /// inline-canonical with pinned hashes (see <see cref="WorldPatch"/>).</param>
 /// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
-/// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
-/// <see cref="WorldAudioDefaults.Default"/>.</param>
+/// listener policy — see <see cref="WorldAudioDefaults"/>) — a REQUIRED section every document carries.</param>
 /// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING.
 /// <see cref="WorldCollision.None"/> is collision OFF (the flat ground plane).</param>
 /// <param name="Host">The host-section defaults — how the world asks to be PRESENTED (window/backend/present/pacing/

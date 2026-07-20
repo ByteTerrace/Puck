@@ -591,8 +591,8 @@ but the byte check it was built to satisfy, and it cost the repo two competing
 conventions for "world section" side by side plus ~26 duplicated `?? Default`
 reads. Every section is now a plain non-nullable member with a real default, the
 canonical writer emits all of them, and absence is resolved in exactly one place
-(`WorldDefinitionLoader.Normalize` for the optional sections, a validator error
-for the structural ones — see the Greenfield refactor record below).
+(a validator error naming the missing section — see the Greenfield refactor
+record below).
 
 Constraint 2 is unaffected: "do not bake YOUR FEATURE into the default world"
 still holds. It never meant "the file may not gain a key."
@@ -768,11 +768,11 @@ already worked that way. `MotionTuning.Response` and
 `WorldPopulationDefaults.SpawnPolicy` lost the same nullability — their own doc
 comments admitted null *was* the default. All eight
 `JsonIgnore(WhenWritingNull)` attributes and 26 duplicated `?? Default` / `?? []`
-/ `?? None` reads are gone; absence resolves once, in
-`WorldDefinitionLoader.Normalize` (top-level sections) or in the declaring type's
-`init` accessor (the two nested rows, which the verb-parse path reaches without
-crossing the loader — source generation builds record structs through the
-parameterless constructor, so a property initializer would not have run).
+/ `?? None` reads are gone; absence resolves once — a top-level section that is
+absent is a validator error naming it (U7, below), and a nested collection
+coalesces in its declaring type's `init` accessor (source generation builds
+record structs through the parameterless constructor, so a property initializer
+would not have run).
 
 `WorldSessionCapture.CaptureHost` folds honestly instead of computing the folded
 value and discarding it to keep a `host` key absent; `CaptureLinks` and
@@ -3927,8 +3927,8 @@ absent-defaulted.
   "screens": [
     {
       "index": 0,
-      "origin": { "X": -3.0, "Y": 1.4, "Z": -7.6 },
-      "right": { "X": 1.0, "Y": 0.0, "Z": 0.0 }, "up": { "X": 0.0, "Y": 1.0, "Z": 0.0 },
+      "origin": [-3.0, 1.4, -7.6],
+      "right": [1.0, 0.0, 0.0], "up": [0.0, 1.0, 0.0],
       "halfWidth": 0.62, "halfHeight": 0.56, "halfDepth": 0.05, "round": 0.03,
       "source": { "$type": "machine", "engine": "gaming-brick", "contentPath": "", "options": "dmg" },
       "route": { "engageable": true, "engageRadius": 2.0, "autoInsert": true,
@@ -3974,7 +3974,7 @@ screen.options  0 cgb
 screen.link     ad-hoc 2 3
 screen.links
 screen.state    0
-world.grant console control screen 0 exclusive     # narrow who may touch a cabinet
+world.grant console control screen:0 exclusive     # narrow who may touch a cabinet
 world.save
 ```
 
@@ -4066,9 +4066,9 @@ world.link.set {"name":"arcade-pair","screens":[0,1]}
 world.status                                  # dirty=1 -> journaled
 world.undo 1 ; world.status                   # dirty=0 -> the link row is gone
 world.link.set {"name":"bad","screens":[0,99]}   # loud reject naming screen 99
-world.grant console control screen 0 exclusive
+world.grant console control screen:0 exclusive
 screen.select 0 next                          # still allowed (console holds it)
-world.revoke console control screen 0
+world.revoke console control screen:0
 screen.select 0 next                          # grant denial line
 world.save Assets/worlds/arcade.world.json
 ```
@@ -4283,8 +4283,8 @@ is proven-built, not proven-live, pending a ROM.
   deferred with the deletion.
 
 **Plan contradictions found.**
-- The verification script's grant lines (`world.grant console control screen 0
-  exclusive` → revoke `screen 0` → "grant denial line") do **not** produce a
+- The verification script's grant lines (`world.grant console control screen:0
+  exclusive` → revoke `screen:0` → "grant denial line") do **not** produce a
   denial: `WorldGrants` seeds the console `Control/All` (`SeedDomain`), so a
   concrete `screen:0` revoke leaves the wildcard and the console still holds
   Control. The exclusive `screen:0` grant is meaningful against OTHER principals,
@@ -6852,7 +6852,7 @@ No touch to `Puck.SdfVm`, `Puck.Maths`, `Puck.Platform`, `Puck.Commands`, or
 | `Overworld/CaptureSequencer.cs` (hole H6 — capture choreography; `RecordingTap` + `capture.*` are its World successor) | 198 |
 | `src/Puck.Scene/BrickVictoryCondition.cs` | 148 |
 | `src/Puck.Post/Stages/VictoryGateStage.cs` | 255 |
-| `docs/examples/scripts/reveal-ladder.console` | — |
+| `docs/examples/scripts/reveal-ladder.console` (retired with the rest of that directory) | — |
 
 Post-R0 the members this arc would otherwise have had to excise from
 `OverworldRenderNode` / `OverworldFrameSource*` / `GamingBrickChildNode` are already
@@ -7561,7 +7561,7 @@ canonical reference **in the same change**; then delete the file; then update
 | `docs/project-map.md` | Delete the `Puck.Demo` row and split-project rules 4–5. |
 | `docs/capability-catalog.md` | Re-point every Demo entry point at its World verb. |
 | `docs/game-studio-plan.md` | Update the "Toolkit home" settled decision (the framework is in `Puck.Forge` after Arc 8 P1) and the working rules that name `Puck.Demo` as a staging ground. |
-| `docs/examples/*.json`, `docs/examples/scripts/*.console` | Demo run documents and console scripts. Retire or re-author against `puck.world.def.v1`. `puckton.world.json` dies with Arc 3. |
+| `docs/examples/*.json` | Demo run documents. Retire or re-author against `puck.world.def.v1`. `puckton.world.json` dies with Arc 3. **`docs/examples/scripts/` is already deleted** — all 27 `.console` scripts drove the retired Demo composition root and 35 of their lines named verbs no `Puck.World` run registers. |
 | `src/Puck.Demo/README.md`, `src/Puck.Demo/Forge/{Bake,Framework}/README.md` | Die with the project. **Migrate first** — the root README's "Where it's going" section carries items that overlap the roadmaps; the two `Forge/` READMEs document contracts that move to `Puck.Forge` with their code in Arc 8 and should land there, not be deleted. |
 | `src/Puck.Scripting/README.md:127` | **Concretely broken by the port**: its worked example is `ModulePath: "Assets/Addons/autopilot-ghost.wat"`, a `Puck.Demo` asset Arc 3 deletes. Re-point at a `Puck.World` addon path. **The doc sweep covers `src/*/README.md`, not only `docs/*`** — grep both. |
 | `CLAUDE.md` | The "The demo is the overworld" section becomes false the moment the Demo is gone, and core rules 1 and 3 name `Puck.Demo` directly. **The owner rewrites this; do not edit `CLAUDE.md` unilaterally.** |

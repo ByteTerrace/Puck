@@ -19,10 +19,11 @@
 //   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
 //       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
 //   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
-//       The world-document proofs (puck.world.def.v1): (a) the ouroboros
-//       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) round-trips
-//       world.save byte-for-byte, twice over, so a save that folds session state stays
-//       idempotent on a fresh boot; (b) baked-default parity — a checked-in-world run and a
+//       The world-document proofs (puck.world.def.v1): (a) the save-idempotence
+//       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) boots, saves,
+//       and re-saves from its own output to the same bytes, so a save that folds session state stays
+//       idempotent on a fresh boot (the saved file is never compared against the checked-in one —
+//       R18); (b) baked-default parity — a checked-in-world run and a
 //       missing-world (baked-default fallback) run of the same short hop corpus compare
 //       byte-identical, and the loud "[world] definition: baked default (...)" line appears only
 //       in the fallback run.
@@ -238,7 +239,7 @@ static class ProofApp {
         var opts = new ArgMap(args: args.AsSpan(start: 1).ToArray());
 
         try {
-            return subcommand switch {
+            return Guarded(code: subcommand switch {
                 "generate" => Generators.RunGenerate(opts: opts),
                 "run" => Feeder.RunFeeder(opts: opts),
                 "compare" => Comparer.RunCompare(opts: opts),
@@ -260,13 +261,29 @@ static class ProofApp {
                 "audio" => AudioProof.RunAudio(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
                 _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt|audio)"),
-            };
+            });
         }
         catch (ArgException ex) {
             Console.Error.WriteLine(value: $"[proof] argument error: {ex.Message}");
 
             return 2;
         }
+    }
+
+    // Fails an otherwise-green run that piped a line Puck.World REFUSED. A rejected step does not fail on its own — it
+    // manifests as a timeout only if the suite happened to await something that step would have caused, so a rejected
+    // setup verb before an assertion satisfied by other means reads as a pass. This is the one place every suite's
+    // verdict funnels through, so the check lands on all of them at once.
+    static int Guarded(int code) {
+        var rejected = OutputCollector.RejectedTotal;
+
+        if (rejected == 0) {
+            return code;
+        }
+
+        Console.Error.WriteLine(value: $"[proof]   FAIL wire-rejections: {rejected} piped line(s) were REFUSED (search the transcript for '{OutputCollector.RejectSigil}') — an unknown verb or an unparsable line no-ops silently, so any pass above it is unproven.");
+
+        return ((code == 0) ? 1 : code);
     }
 
     static int PrintHelp() {
@@ -1599,6 +1616,19 @@ static class ExpoBuilder {
 // ============================================================================================
 
 sealed class OutputCollector {
+    // The registry's rejection sigil. It is emitted ONLY when a submitted line named a verb no module registers or
+    // failed to parse — never by a verb that ran and refused its arguments (those name themselves, e.g.
+    // "[world.kit.tune: bad value …]", and several suites raise them on purpose to prove loud rejection). So a sigil in
+    // ANY suite's transcript is a bug in the SCRIPT: a step that silently no-opped while a later assertion, satisfied by
+    // other means, kept the run green. That is why the count is process-wide and asserted once, centrally — a per-suite
+    // guard would have been added to only some of the nineteen stdin sessions.
+    public const string RejectSigil = "[wire.reject:";
+
+    static int s_rejected;
+
+    /// <summary>The number of REFUSED lines seen across every session this process has driven.</summary>
+    public static int RejectedTotal => Volatile.Read(location: ref s_rejected);
+
     readonly ConcurrentQueue<string> m_lines = new();
 
     public int Count => m_lines.Count;
@@ -1608,6 +1638,10 @@ sealed class OutputCollector {
             string? line;
 
             while ((line = reader.ReadLine()) is not null) {
+                if (line.Contains(value: RejectSigil, comparisonType: StringComparison.Ordinal)) {
+                    _ = Interlocked.Increment(location: ref s_rejected);
+                }
+
                 m_lines.Enqueue(item: string.Format(arg0: stopwatch.Elapsed.TotalSeconds, arg1: line, format: "[{0,7:0.00}s] {1}", provider: ProofApp.Inv));
             }
         });
@@ -2393,8 +2427,10 @@ static class Comparer {
 
 // ============================================================================================
 // WORLDDOC — the world-document proofs (puck.world.def.v1):
-//   (a) the ouroboros gate: the checked-in Assets/worlds/default.world.json round-trips
-//       world.save byte-for-byte, twice over (load->save->load reproduces the file exactly).
+//   (a) the save-idempotence gate: every checked-in Assets/worlds/*.world.json boots, saves, and
+//       re-saves from its own output to the same bytes (the writer is a fixed point). The saved
+//       file is NOT compared against the checked-in one — a shipped world's JSON gaining a key is
+//       fine (R18), so byte identity against a repo file is not acceptance criteria.
 //   (b) baked-default parity: booting from the checked-in file and booting from a missing
 //       --world path (the loud baked-default fallback) must simulate byte-identically over the
 //       same short corpus, with the "[world] definition: baked default (...)" line present only
@@ -2438,10 +2474,10 @@ static class WorldDocProof {
             return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
         }
 
-        Console.WriteLine(value: "[proof] === worlddoc (a): the ouroboros gate (every checked-in world) ===");
+        Console.WriteLine(value: "[proof] === worlddoc (a): the save-idempotence gate (every checked-in world) ===");
 
         // Cover EVERY checked-in world (default, kart-remap, and — once authored — expo): a save that folds session state
-        // must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
+        // must be a fixed point of the writer on a fresh boot for each. Missing files (e.g. expo before its first
         // authoring) are skipped with a note rather than failing the gate.
         var worldsDir = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds");
         var ouroborosPassed = true;
@@ -2471,8 +2507,8 @@ static class WorldDocProof {
         return (passed ? 0 : 1);
     }
 
-    // world.save(checked-in) must equal the checked-in bytes; world.save(that copy) must equal it again — the
-    // load->save byte-identity property proven twice, once from the committed source and once from its own output.
+    // world.save(checked-in) must be a fixed point: saving again from that output reproduces it exactly. The
+    // checked-in bytes are REPORTED, never asserted — a shipped world may legitimately gain a key (R18).
     static bool RunOuroboros(string exe, string repoRoot, string checkedInPath, int width, int height, int exitAfterSeconds) {
         var pid = Environment.ProcessId;
         var temp1 = Path.Combine(Path.GetTempPath(), $"puck-world-ouroboros-1-{pid}.json");
@@ -2486,13 +2522,9 @@ static class WorldDocProof {
         var temp1Bytes = File.ReadAllBytes(path: temp1);
         var checkedInHash = Convert.ToHexStringLower(SHA256.HashData(source: checkedInBytes));
         var temp1Hash = Convert.ToHexStringLower(SHA256.HashData(source: temp1Bytes));
-        var stage1Ok = string.Equals(a: checkedInHash, b: temp1Hash, comparisonType: StringComparison.Ordinal);
+        var matchesCheckedIn = string.Equals(a: checkedInHash, b: temp1Hash, comparisonType: StringComparison.Ordinal);
 
-        Console.WriteLine(value: $"[proof]   {(stage1Ok ? "PASS" : "FAIL")} checked-in == world.save(checked-in): {checkedInBytes.Length} vs {temp1Bytes.Length} bytes | sha256 {checkedInHash[..12]} vs {temp1Hash[..12]} ({temp1})");
-
-        if (!stage1Ok) {
-            return false;
-        }
+        Console.WriteLine(value: $"[proof]   (note) checked-in vs world.save(checked-in): {(matchesCheckedIn ? "identical" : "DIFFERS — re-save the file if you want it current")} | {checkedInBytes.Length} vs {temp1Bytes.Length} bytes | sha256 {checkedInHash[..12]} vs {temp1Hash[..12]} ({temp1})");
 
         if (!LaunchAndSave(exe: exe, repoRoot: repoRoot, worldArg: temp1, savePath: temp2, width: width, height: height, exitAfterSeconds: exitAfterSeconds)) {
             return false;
@@ -2502,7 +2534,7 @@ static class WorldDocProof {
         var temp2Hash = Convert.ToHexStringLower(SHA256.HashData(source: temp2Bytes));
         var stage2Ok = string.Equals(a: temp1Hash, b: temp2Hash, comparisonType: StringComparison.Ordinal);
 
-        Console.WriteLine(value: $"[proof]   {(stage2Ok ? "PASS" : "FAIL")} world.save(checked-in) == world.save(world.save(checked-in)): {temp1Bytes.Length} vs {temp2Bytes.Length} bytes | sha256 {temp1Hash[..12]} vs {temp2Hash[..12]} ({temp2})");
+        Console.WriteLine(value: $"[proof]   {(stage2Ok ? "PASS" : "FAIL")} world.save is a fixed point — world.save(checked-in) == world.save(world.save(checked-in)): {temp1Bytes.Length} vs {temp2Bytes.Length} bytes | sha256 {temp1Hash[..12]} vs {temp2Hash[..12]} ({temp2})");
 
         return stage2Ok;
     }

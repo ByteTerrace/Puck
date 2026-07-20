@@ -22,18 +22,34 @@ internal readonly record struct WorldViewSlot(float X, float Y, float Width, flo
 /// <param name="TransitionRenderScale">The render scale (0, 1] applied to every slot mid-transition (a soft dip that
 /// sharpens on settle), the compiled director's <c>0.5f</c> now authored per layout.</param>
 internal sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<WorldViewSlot> Slots,
-    float TransitionSeconds, float TransitionRenderScale);
+    float TransitionSeconds, float TransitionRenderScale) {
+    private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);
+
+    /// <summary>The slots, in order. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="MotionTuning.Response"/>'s does.</summary>
+    public IReadOnlyList<WorldViewSlot> Slots {
+        get => m_slots;
+        init => m_slots = (value ?? []);
+    }
+}
 
 /// <summary>The <c>views</c> document section — the seat framing every seat wakes on plus the authored named layouts. A
-/// nullable section (the plan-wide new-section idiom): <see langword="null"/> in JSON coalesces to <see cref="Default"/>,
-/// whose empty layout list falls the composer through to the built-in seat ladder, reproducing today's window composition
-/// byte-for-byte.</summary>
+/// REQUIRED section every document carries; an empty layout list falls the composer through to the built-in seat
+/// ladder.</summary>
 /// <param name="SeatRig">The chase framing every seat's view resolves through (the non-editing default).</param>
-/// <param name="Layouts">The authored named layouts (default empty = the built-in ladder).</param>
+/// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
 internal sealed record WorldViewDefaults(WorldRig SeatRig, IReadOnlyList<WorldViewLayout> Layouts) {
+    private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
+
+    /// <summary>The authored named layouts. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="MotionTuning.Response"/>'s does.</summary>
+    public IReadOnlyList<WorldViewLayout> Layouts {
+        get => m_layouts;
+        init => m_layouts = (value ?? []);
+    }
+
     /// <summary>The built-in defaults: the engine chase framing every seat wakes on (<see cref="OrientedFollowRig"/>'s own
-    /// field defaults, so the frozen default world renders identically), and NO authored layouts — an empty list means
-    /// the built-in seat ladder composes the window exactly as it does today.</summary>
+    /// field defaults), and NO authored layouts — an empty list means the built-in seat ladder composes the window.</summary>
     public static WorldViewDefaults Default { get; } = new(
         SeatRig: new WorldRig.Chase(
             EyeOffset: new(x: 0f, y: 2.2f, z: 5f),

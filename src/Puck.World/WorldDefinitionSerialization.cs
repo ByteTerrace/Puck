@@ -247,19 +247,27 @@ internal static class WorldDefinitionSerialization {
         return stream.ToArray();
     }
 
-    /// <summary>Deserializes a definition from its canonical UTF-8 JSON bytes — the inverse of <see cref="Serialize"/>
-    /// for an in-memory round-trip (the replay recording's rehydration path). The bytes come from this engine's own
-    /// <see cref="Serialize"/>, which emits every section, so this is the trusted-input twin of the file loader's
-    /// defensive parse.</summary>
+    /// <summary>Deserializes and validates a definition from its canonical UTF-8 JSON bytes — the inverse of
+    /// <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes ride a
+    /// file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as one
+    /// <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.</summary>
     /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
-    /// <returns>The deserialized, normalized definition.</returns>
+    /// <returns>The deserialized, validated definition.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The bytes do not deserialize to a definition.</exception>
+    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.def.v1</c> document.</exception>
     public static WorldDefinition Deserialize(byte[] utf8Json) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
 
-        return (JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
-            ?? throw new InvalidDataException(message: "replay definition deserialized to null."));
+        try {
+            var definition = (JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
+                ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null."));
+
+            WorldDefinitionValidator.Validate(definition: definition);
+
+            return definition;
+        } catch (Exception exception) when (exception is JsonException or InvalidOperationException) {
+            throw new InvalidDataException(message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}", innerException: exception);
+        }
     }
 
     /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path).</summary>

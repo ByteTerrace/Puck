@@ -742,11 +742,14 @@ internal static class WorldDefinitionValidator {
     }
 
     // The spawn policy (SIM-AFFECTING): a phyllotaxis radius that is finite and non-negative, or a `points` cycle that
-    // names at least one spawn point, every id resolving, with a finite non-negative jitter. Null coalesces to the
-    // default (nothing to validate).
+    // names at least one spawn point, every id resolving, with a finite non-negative jitter. A null policy means the
+    // whole `population` object was absent (default(WorldPopulationDefaults) — a value type, so its init accessor
+    // never ran); name it rather than faulting on it.
     private static void ValidateSpawnPolicy(WorldSpawnPolicy policy, HashSet<string> spawnPointIds, List<string> errors) {
         switch (policy) {
             case null:
+                errors.Add(item: "population.spawnPolicy is required.");
+
                 return;
             case WorldSpawnPolicy.Phyllotaxis phyllotaxis:
                 RequireNonNegative(value: phyllotaxis.Radius, name: "population.spawnPolicy.radius", errors: errors);
@@ -858,7 +861,7 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: $"{section}.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
         }
 
-        var table = (assignment.Table ?? []);
+        var table = assignment.Table;
 
         if (isTable && (table.Count == 0)) {
             errors.Add(item: $"{section}.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
@@ -967,7 +970,7 @@ internal static class WorldDefinitionValidator {
     private static void ValidateAddons(IReadOnlyList<WorldAddonRow> addons, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var addon in (addons ?? [])) {
+        foreach (var addon in addons) {
             if ((addon is null) || string.IsNullOrWhiteSpace(value: addon.Name)) {
                 errors.Add(item: "an addon requires a name.");
             } else if (!names.Add(item: addon.Name)) {
@@ -1268,7 +1271,7 @@ internal static class WorldDefinitionValidator {
 
     // The creation's Locomotion token, resolved as a kit name (the creator's rule; null when the creation/token is absent).
     private static string? ResolveLocomotionKit(WorldDefinition definition, string creationId) {
-        foreach (var creation in (definition.Creations ?? [])) {
+        foreach (var creation in definition.Creations) {
             if ((creation is not null) && string.Equals(a: creation.Id, b: creationId, comparisonType: StringComparison.Ordinal)) {
                 return creation.Document.Behavior?.Locomotion;
             }
@@ -1317,7 +1320,7 @@ internal static class WorldDefinitionValidator {
     }
 
     private static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {
-        foreach (var creation in (creations ?? [])) {
+        foreach (var creation in creations) {
             if ((creation is not null) && string.Equals(a: creation.Id, b: id, comparisonType: StringComparison.Ordinal)) {
                 return creation;
             }
@@ -1327,7 +1330,7 @@ internal static class WorldDefinitionValidator {
     }
 
     private static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement> placements, string id) {
-        foreach (var placement in (placements ?? [])) {
+        foreach (var placement in placements) {
             if ((placement is not null) && string.Equals(a: placement.Id, b: id, comparisonType: StringComparison.Ordinal)) {
                 return placement;
             }
@@ -1480,7 +1483,7 @@ internal static class WorldDefinitionValidator {
         ValidateRig(rig: views.SeatRig, path: "views.seatRig", errors: errors);
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var layouts = (views.Layouts ?? []);
+        var layouts = views.Layouts;
 
         for (var index = 0; (index < layouts.Count); index++) {
             var layout = layouts[index];
@@ -1510,7 +1513,7 @@ internal static class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.transitionRenderScale must be finite and within (0, 1].");
             }
 
-            var slots = (layout.Slots ?? []);
+            var slots = layout.Slots;
 
             if (slots.Count == 0) {
                 errors.Add(item: $"{path}.slots must declare at least one slot.");
@@ -1620,6 +1623,14 @@ internal static class WorldDefinitionValidator {
     // CooldownElapsed/UsesBelow kinds are rejected by name), and a null (always) gate before the final row makes every
     // later row unreachable.
     private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
+        // A tuning read from an absent JSON object arrives as default(MotionTuning) — a value type, so its init
+        // accessor never ran and this table is null. Name the absent section rather than faulting on it.
+        if (response is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
         for (var index = 0; (index < response.Count); index++) {
             var row = response[index];
             var rowPath = $"{path}[{index}]";

@@ -20,7 +20,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private readonly bool m_activateOnStream;
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly CancellationTokenSource m_cancellation = new();
-    private readonly IInputClock? m_clock;
+    private readonly IInputClock m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly IHidDevice m_hid;
     private readonly GamepadOutput m_output;
@@ -43,10 +43,11 @@ internal sealed class GamepadDevice : IGamepadConnection {
         IGamepadParser parser,
         InputDeviceId deviceId,
         int playerIndex,
+        IInputClock clock,
         Action<string>? diagnostics = null,
-        IInputClock? clock = null,
         bool activateOnStream = false
     ) {
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(hid);
         ArgumentNullException.ThrowIfNull(parser);
 
@@ -203,7 +204,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
                         // per-device sequence, so the coalescer can carry true sub-frame edge times forward and a
                         // drain can order what it folded. The parser stays pure; timing is layered on here.
                         state = state with {
-                            ArrivalTicks = (m_clock?.NowTicks ?? 0UL),
+                            ArrivalTicks = m_clock.NowTicks,
                             SequenceNumber = ++m_sequence,
                         };
                         m_coalescer.Update(state: in state);
@@ -291,10 +292,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
                     break;
                 case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
-                    // Apply immediately when unscheduled, the clock is absent, or its fire tick has already passed;
-                    // otherwise hold it until the capture clock reaches that tick (serviced below). A new effect
-                    // supersedes any still-pending schedule.
-                    if ((command.ScheduleTick == 0UL) || (m_clock is null) || (m_clock.NowTicks >= command.ScheduleTick)) {
+                    // Apply immediately when unscheduled or its fire tick has already passed; otherwise hold it
+                    // until the capture clock reaches that tick (serviced below). A new effect supersedes any
+                    // still-pending schedule.
+                    if ((command.ScheduleTick == 0UL) || (m_clock.NowTicks >= command.ScheduleTick)) {
                         m_scheduledTriggerActive = false;
 
                         await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
@@ -324,7 +325,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
         // Fire a scheduled trigger effect once the capture clock reaches its tick. This runs each loop iteration
         // (≈ once per arriving report, so sub-frame on a streaming pad); the device clock is the timing authority.
-        if (m_scheduledTriggerActive && (m_clock is not null) && (m_clock.NowTicks >= m_scheduledTriggerFireTick) && (m_parser is ITriggerEffectParser scheduledParser)) {
+        if (m_scheduledTriggerActive && (m_clock.NowTicks >= m_scheduledTriggerFireTick) && (m_parser is ITriggerEffectParser scheduledParser)) {
             m_scheduledTriggerActive = false;
 
             await scheduledParser.SetTriggerEffectAsync(left: m_scheduledTriggerLeft, right: m_scheduledTriggerRight, cancellationToken: cancellationToken);

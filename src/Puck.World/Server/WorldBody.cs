@@ -162,16 +162,13 @@ internal sealed class WorldBody {
     private EntityContinuity m_continuity = EntityContinuity.Continuous;
 
     /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a locomotion/jump feel and its
-    /// kit's lane bindings. A <see langword="null"/> tuning falls back to <see cref="MotionTuning.Default"/>; a
-    /// <see langword="null"/> binding leaves that lane inert.</summary>
-    /// <param name="tuning">The locomotion/jump feel to integrate under, or <see langword="null"/> for the default.</param>
+    /// kit's lane bindings. A <see langword="null"/> binding leaves that lane inert.</summary>
+    /// <param name="tuning">The locomotion/jump feel to integrate under (the body's kit tuning).</param>
     /// <param name="primary">The Primary lane's compiled binding.</param>
     /// <param name="secondary">The Secondary lane's compiled binding.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
-    public WorldBody(MotionTuning? tuning = null, CompiledActionSpec? primary = null, CompiledActionSpec? secondary = null, FixedWorldCollider? collider = null) {
-        var authoredTuning = (tuning ?? MotionTuning.Default);
-
-        m_tuning = FixedMotionTuning.Compile(tuning: in authoredTuning);
+    public WorldBody(MotionTuning tuning, CompiledActionSpec? primary = null, CompiledActionSpec? secondary = null, FixedWorldCollider? collider = null) {
+        m_tuning = FixedMotionTuning.Compile(tuning: in tuning);
         m_laneBindings[0] = primary;
         m_laneBindings[1] = secondary;
         m_collider = collider;

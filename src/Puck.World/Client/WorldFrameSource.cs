@@ -463,8 +463,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             joinedRosterSlots[joinedRosterCount++] = slot;
         }
 
-        // Compose the window: layout selection + eased transition. An empty authored layout list (the frozen default)
-        // falls through to the built-in seat ladder, reproducing today's composition exactly.
+        // Compose the window: layout selection + eased transition. An empty authored layout list falls through to
+        // the built-in seat ladder.
         m_composer.Compose(
             joinedCount: joinedCount,
             soleEditorIndex: soleEditorViewIndex,
@@ -721,9 +721,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         );
     }
 
-    // Recompiles every seat's chase rig from the authored seat rig (the built-in default reproduces OrientedFollowRig's
-    // own field defaults, so the frozen world's seat framing is byte-identical). Called at construction and on any
-    // views-section delivery (world.view.rig live).
+    // Recompiles every seat's chase rig from the authored seat rig (the built-in default carries OrientedFollowRig's
+    // own field defaults). Called at construction and on any views-section delivery (world.view.rig live).
     private void RebuildSeatRigs(WorldRig seatRig) {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_cameraRigs[slot] = WorldRigCompiler.Compile(rig: seatRig);

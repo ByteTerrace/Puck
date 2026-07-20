@@ -1173,14 +1173,14 @@ internal sealed class WorldServer {
             case WorldMutation.UpsertViewLayout m: {
                 var views = current.Views;
 
-                candidate = (current with { Views = (views with { Layouts = Upsert(list: (views.Layouts ?? []), item: m.Layout, keyOf: static layout => layout.Name) }) });
+                candidate = (current with { Views = (views with { Layouts = Upsert(list: views.Layouts, item: m.Layout, keyOf: static layout => layout.Name) }) });
 
                 return true;
             }
             case WorldMutation.RemoveViewLayout m: {
                 var views = current.Views;
 
-                if (!Remove(list: (views.Layouts ?? []), key: m.Name, keyOf: static layout => layout.Name, result: out var layouts)) {
+                if (!Remove(list: views.Layouts, key: m.Name, keyOf: static layout => layout.Name, result: out var layouts)) {
                     candidate = current;
                     reason = $"no view layout named '{m.Name}'";
 

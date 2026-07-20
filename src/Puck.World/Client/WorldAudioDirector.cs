@@ -711,7 +711,7 @@ internal sealed class WorldAudioDirector {
     private void BuildCueTable(WorldAudioDefaults audio) {
         m_cueRows.Clear();
 
-        foreach (var cue in (audio.Cues ?? [])) {
+        foreach (var cue in audio.Cues) {
             CuePlacement placement;
             string? speakerName = null;
 

@@ -181,8 +181,8 @@ services.AddSingleton(implementationInstance: new PresentationOptions {
     SurfaceFormat = hostSettings.SurfaceFormat,
 });
 // The external-clock election policy from the host section's genlock field. Registered BEFORE AddWorldGpuHost →
-// AddLauncherTerminal so the launcher's TryAddSingleton<ExternalClockRegistry> defers to this one. A null genlock is the
-// launcher's automatic election (exactly the current behavior — the frozen default carries no genlock).
+// AddLauncherTerminal so the launcher's TryAddSingleton<ExternalClockRegistry> defers to this one. An explicitly-null
+// genlock (every shipped world writes the host section) is the launcher's automatic election.
 services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: hostSettings.Genlock));
 
 // The storage host-section: the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
@@ -378,7 +378,7 @@ services.AddSingleton<IScreenMachineEngine, AdvancedGamingBrickEngine>();
 services.AddSingleton(implementationFactory: sp => new WorldScreenBinder(
     // Reserve the derived-face slot range up front (None-sourced placeholders) so a creation FACE appearing at a later
     // delivery re-points a slot that already exists — the render provider key set is frozen at boot (Arc 7).
-    screens: [.. sp.GetRequiredService<WorldDefinition>().Screens, .. Puck.World.Client.WorldCreationFacets.ReservedFaceSlots(derivedFaceBase: Puck.World.Client.WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: (sp.GetRequiredService<WorldDefinition>().Authoring ?? WorldAuthoringDefaults.Default).DerivedFaceScreens)],
+    screens: [.. sp.GetRequiredService<WorldDefinition>().Screens, .. Puck.World.Client.WorldCreationFacets.ReservedFaceSlots(derivedFaceBase: Puck.World.Client.WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: sp.GetRequiredService<WorldDefinition>().Authoring.DerivedFaceScreens)],
     engagement: sp.GetRequiredService<WorldEngagement>(),
     engines: sp.GetServices<IScreenMachineEngine>(),
     cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
@@ -485,7 +485,14 @@ services.AddSingleton(implementationFactory: static sp => {
     return new TextCommandSource(
         onResult: (line, result) => {
             if (!string.IsNullOrEmpty(value: result.Output)) {
-                output.WriteLine(value: result.Output);
+                // A REFUSED line goes to stderr, an accepted one to the buffered stdout — the same split the launcher's
+                // own sink makes (this one replaces it to also feed the on-screen console mirror). Without it a
+                // rejection is byte-shaped like success on the same stream and a scripted run reads green.
+                if (result.IsError) {
+                    output.WriteErrorLine(value: result.Output);
+                } else {
+                    output.WriteLine(value: result.Output);
+                }
             }
 
             mirror.Record(line: line, result: result);

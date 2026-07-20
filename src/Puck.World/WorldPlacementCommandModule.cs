@@ -179,7 +179,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         var definition = server.Definition;
         var builder = new StringBuilder(value: "[world.faces:");
         var faceIndex = WorldCreationFacets.DerivedFaceBase;
-        var limit = (WorldCreationFacets.DerivedFaceBase + (definition.Authoring ?? WorldAuthoringDefaults.Default).DerivedFaceScreens);
+        var limit = (WorldCreationFacets.DerivedFaceBase + definition.Authoring.DerivedFaceScreens);
         var any = false;
 
         foreach (var placement in definition.Placements) {
