@@ -63,6 +63,41 @@ it compiles so the surviving pinned files build, and Arc 12 deletes it.
   collision/motion, Arc 4 OQ-12 cameras). It is byte-preserving in intent but is an
   unmentioned touch **awaiting owner accept/reverse**.
 
+**Adversarial-pass follow-up (2026-07-19).** `3827ccd` was an owner-authored
+adversarial review (the settled-answers register, `docs/vision.md`, doc/skill
+truth-up, and the DirectX half of the HIGH GPU-sync defect). Its "handed to the
+implementer" list, verified-not-fixed there, is now closed on three mechanical
+items:
+
+- **HIGH-2 twin** — `aa4d7f6`→`241d1af` (this session's GPU-sync commit): the
+  Vulkan upload rebuild path now drains via `m_device?.TryWaitIdle()` before
+  `DisposeResources()`, restoring backend symmetry with `3827ccd`. Both HIGH rows
+  are FIXED in the [Immediate action](#immediate-action--two-high-severity-gpu-sync-fixes)
+  table; confirmed by reading + clean build + boot smoke on each backend, a real
+  resize/format-change GPU exercise still owed.
+- **Sculpt dirty-tracking** — `9d9aac8`: the bench's clean flag now flips only on
+  the server's accept (delivered creation row at the submitted hash), so a
+  rejected commit reports dirty, not clean; `editor.exit` refuses loudly on dirty
+  sculpt work (`editor.exit force` is the hatch). Verified over stdin on both
+  backends.
+- **RecordingClock.Sim determinism** — `3288d37`: `CapturingRenderNode` stamps
+  `ElapsedTicks` (the fixed-step sim clock), not `RenderTicks` (which folded in
+  the wall-paced `AccumulatorTicks`), honoring the `CaptureFrame` contract. Wall
+  timestamps (QPC) and the validator's `clock:"sim"` semantics are untouched.
+  capture.* smoke wrote valid webm on both backends.
+
+**Still owed the owner** from that same list:
+
+- **`networkPlayers` headroom.** `default.world.json` ships `networkPlayers 124`
+  against a ceiling of 124 — Arc 7's inhabitation has no headroom in the shipped
+  world. Lowering it changes the default scene, so it is a deliberate owner call,
+  left untouched here.
+- **OQ-14 / the replay tape.** The review confirmed the tape is *unwired, not
+  missing*: `SnapshotRecording`, `InputRecorder`, `ReplaySnapshotSource`, and
+  `DeterminismHarness` all sit in `Puck.Commands` below both composition roots,
+  gated bit-for-bit by Post, with zero references under `src/Puck.World`. Wiring
+  it is `Program.cs` construction — this informs OQ-14's introspection half.
+
 **THE NEXT ACTION.** **Arc 8 Phase P1 (fork collapse)** is the plan's named
 pull-forward and the natural resumption point (it depends only on the landed teardown).
 **[OQ-14](#open-questions)** is the one owed **owner decision** — an explicit, recorded
