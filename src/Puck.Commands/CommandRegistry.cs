@@ -37,7 +37,7 @@ public sealed class CommandRegistry : ICommandSink {
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
     private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly string[] m_nameById;
-    // The text-dispatch FAST PATH table (see Submit): every command built via CommandDefinition.WithTrailingArgs with
+    // The text-dispatch FAST PATH table (see Submit): every command built via CommandDefinition.WithWireArgs with
     // Immediate routing, keyed ORDINAL by its name and each alias — ordinal because System.CommandLine matches command
     // names case-SENSITIVELY, so a case-insensitive key here would fast-path a line the full parse would reject. Frozen
     // once at construction (read-only, read-heavy). A miss falls through to the unchanged System.CommandLine parse.
@@ -46,7 +46,7 @@ public sealed class CommandRegistry : ICommandSink {
     // the verb token never materializes as a string. StringComparer.Ordinal supplies the IAlternateEqualityComparer that
     // makes this legal; built once, reused every dispatch.
     private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_fastPathAlt;
-    // The Digital impulse every fast-path verb carries (WithTrailingArgs and WithWireArgs are always Digital), hoisted to
+    // The Digital impulse every fast-path verb carries (a WithWireArgs command is always Digital), hoisted to
     // a constant so a fast-path dispatch neither recomputes it nor rebuilds the CommandContext around it.
     private static readonly CommandValue s_digitalImpulse = CommandValue.Digital(active: true);
     // The ONE reused context for every fast-path dispatch: Parse/Phase/Registry are constant on this path and Value is
@@ -55,7 +55,7 @@ public sealed class CommandRegistry : ICommandSink {
     private readonly CommandContext m_fastContext;
     // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
     // quiet`) drops the SUCCESS acks of wire-native verbs, so a flood of accepted commands costs no echo bytes. Errors
-    // and query (EchoesData) verbs are never suppressed. Toggled by the built-in `wire.ack` verb.
+    // and answer-bearing verbs (anything not AcknowledgementOnly) are never suppressed. Toggled by the built-in `wire.ack` verb.
     private bool m_acksQuiet;
     // The built-in `wire.ack [on|quiet]` verb, registered beside `help`: it reports or flips m_acksQuiet. Handled inline
     // in Submit (like help), so it never enters a module or the fast path.
@@ -157,14 +157,14 @@ public sealed class CommandRegistry : ICommandSink {
             m_idByName[name] = m_idByName[definition.Name];
         }
 
-        // The fast-path table: every name/alias whose definition carries a trailing-args handler (built via
-        // CommandDefinition.WithTrailingArgs) AND runs inline (Immediate routing — a Simulation command must still fold
+        // The fast-path table: every name/alias whose definition carries a wire handler (built via
+        // CommandDefinition.WithWireArgs) AND runs inline (Immediate routing — a Simulation command must still fold
         // into the snapshot stream, so it is excluded and takes the full parse). Ordinal-keyed to mirror
         // System.CommandLine's case-sensitive command matching. m_byName's keys carry each name and alias verbatim.
         var fastPath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.Ordinal);
 
         foreach (var (name, definition) in m_byName) {
-            if ((definition.TrailingArgsHandler is not null) && (definition.Routing == CommandRouting.Immediate)) {
+            if ((definition.WireArgsHandler is not null) && (definition.Routing == CommandRouting.Immediate)) {
                 fastPath[name] = definition;
             }
         }
@@ -618,7 +618,7 @@ public sealed class CommandRegistry : ICommandSink {
     private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, bool suppressWireAck = false) {
         var result = definition.Handler(arg: context);
 
-        if (suppressWireAck && m_acksQuiet && (definition.WireArgsHandler is not null) && !definition.EchoesData && !result.IsError) {
+        if (suppressWireAck && m_acksQuiet && definition.AcknowledgementOnly && !result.IsError) {
             result = CommandResult.None;
         }
 
@@ -693,17 +693,17 @@ public sealed class CommandRegistry : ICommandSink {
         // ~8.6 KB per line at the World's ~34-verb surface), the measured cause of the stdin proof's worst-frame dips
         // when a burst of lines lands in one Collect. Eligible ONLY when the line carries neither `"` (System.CommandLine's
         // one quote char) nor `@` (its response-file sigil) AND the first whitespace-delimited token EXACTLY names a
-        // command registered via WithTrailingArgs/WithWireArgs with Immediate routing. Anything else — an unknown/other-
+        // command registered via WithWireArgs with Immediate routing. Anything else — an unknown/other-
         // shape first token, a quoted or response-file line, help, wire.ack — falls through to the parse below UNCHANGED,
         // so all error text and rich behavior stay byte-identical.
         //
         // ZERO-COPY: the line is tokenized into a stackalloc Span<Range> (Tokenize reproduces
         // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
         // the frozen alternate lookup (so the verb token never materializes), and the reused m_fastContext is handed to
-        // the handler. A WIRE-NATIVE verb (WithWireArgs) receives a zero-copy WireArgs over the trailing token ranges —
-        // no substrings, no argument array; a trailing-args verb (WithTrailingArgs, still the majority of the live
-        // World verbs) gets a materialized string[], built only now, at dispatch. The context's Parse is null: no fast-path handler reads context.Parse/Value/Phase/
-        // DeviceId (they read only their args) — a Verb like the movement keys does, but a Verb never enters this path.
+        // the handler, which receives a zero-copy WireArgs over the trailing token ranges — no substrings, no argument
+        // array, nothing heap-allocated by the dispatch itself. The context's Parse is null: no fast-path handler reads
+        // context.Parse/Value/Phase/DeviceId (they read only their args) — a Verb like the movement keys does, but a
+        // Verb never enters this path.
         if ((line.IndexOf(value: '"') < 0) && (line.IndexOf(value: '@') < 0)) {
             Span<Range> tokenRanges = stackalloc Range[MaxFastPathTokens];
             var tokenCount = Tokenize(line: line, tokens: tokenRanges);
@@ -713,32 +713,18 @@ public sealed class CommandRegistry : ICommandSink {
 
                 m_state[fast.Name] = s_digitalImpulse;
 
-                if (fast.WireArgsHandler is { } wireHandler) {
-                    var result = wireHandler(
-                        arg1: m_fastContext,
-                        arg2: new WireArgs(line: line, ranges: argRanges, echo: !m_acksQuiet)
-                    );
-
-                    // Quiet mode drops a SUCCESSFUL wire-native ack (the handler already skipped building it via
-                    // WireArgs.Echo, so this is the contract backstop): a query verb's data (EchoesData) and every error
-                    // (IsError) always survive, so a scripted run still reads back poses and still sees its failures.
-                    return ((m_acksQuiet && !fast.EchoesData && !result.IsError)
-                        ? CommandResult.None
-                        : result);
-                }
-
-                // Trailing-args verb (not yet wire-native): materialize the argument strings now (only the trailing tokens, and only on
-                // an actual dispatch — the verb token is never substringed).
-                var args = new string[argRanges.Length];
-
-                for (var index = 0; (index < args.Length); index++) {
-                    args[index] = line[argRanges[index]];
-                }
-
-                return fast.TrailingArgsHandler!(
+                var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
+                var result = fast.WireArgsHandler!(
                     arg1: m_fastContext,
-                    arg2: args
+                    arg2: new WireArgs(line: line, ranges: argRanges, echo: !quiet)
                 );
+
+                // Quiet mode drops a SUCCESSFUL acknowledgement-only echo (the handler already skipped building it via
+                // WireArgs.Echo, so this is the contract backstop): an answer-bearing verb's output and every error
+                // (IsError) always survive, so a scripted run still reads back poses and still sees its failures.
+                return ((quiet && !result.IsError)
+                    ? CommandResult.None
+                    : result);
             }
         }
 
@@ -805,9 +791,9 @@ public sealed class CommandRegistry : ICommandSink {
             ));
 
             // Apply the same quiet-mode ack suppression the fast path does, so a quoted or many-token wire line (which
-            // takes this full parse) obeys wire.ack identically: a successful side-effecting wire-native ack is dropped,
-            // while a query verb's data and every error survive. Non-wire verbs are never suppressed.
-            return ((m_acksQuiet && (definition.WireArgsHandler is not null) && !definition.EchoesData && !result.IsError)
+            // takes this full parse) obeys wire.ack identically: a successful acknowledgement-only echo is dropped,
+            // while an answer-bearing verb's output and every error survive.
+            return ((m_acksQuiet && definition.AcknowledgementOnly && !result.IsError)
                 ? CommandResult.None
                 : result);
         }

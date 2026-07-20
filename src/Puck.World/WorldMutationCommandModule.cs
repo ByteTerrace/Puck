@@ -35,64 +35,65 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.kit.remove",
             description: "Removes a kit row by name: world.kit.remove <name>. Rejected loudly if the composed document then names no seat kit or leaves an assignment table dangling.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.kit.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveKit(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveKit(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Simulation(
             name: "world.kit.default",
             description: "Sets the default seat kit (by name): world.kit.default <name>. Rejected if the name matches no kit row.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.kit.default", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.SetDefaultSeatKit(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.SetDefaultSeatKit(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Simulation(
             name: "world.kit.assign",
             description: "Sets the kit→entity assignment policy: world.kit.assign hash | table <kit> [<kit>…]. hash keeps the R1 low-discrepancy mapping; table cycles the named kits by index.",
             handler: (context, args) => {
-                if (args.Length == 0) {
+                if (args.Count == 0) {
                     return Usage(verb: "world.kit.assign", form: "hash | table <kit> [<kit>…]");
                 }
 
-                switch (args[0].ToLowerInvariant()) {
-                    case WorldRowAssignment.HashPolicy:
-                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
-                    case WorldRowAssignment.TablePolicy:
-                        if (args.Length < 2) {
-                            return new CommandResult(Output: "[world.kit.assign: the table policy needs at least one kit name]") { IsError = true };
-                        }
-
-                        return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
-                    default:
-                        return new CommandResult(Output: $"[world.kit.assign: unknown policy '{args[0]}' — hash | table]") { IsError = true };
+                if (args.Is(index: 0, value: WorldRowAssignment.HashPolicy)) {
+                    return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
                 }
+
+                if (args.Is(index: 0, value: WorldRowAssignment.TablePolicy)) {
+                    if (args.Count < 2) {
+                        return new CommandResult(Output: "[world.kit.assign: the table policy needs at least one kit name]") { IsError = true };
+                    }
+
+                    return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: TailTokens(args: args, start: 1))));
+                }
+
+                return new CommandResult(Output: $"[world.kit.assign: unknown policy '{args[0].ToString()}' — hash | table]") { IsError = true };
             }
         );
         yield return Simulation(
             name: "world.kit.tune",
             description: "Console sugar: read-modify-write ONE MotionTuning field of a kit row into a whole-row upsert (the protocol stays coarse): world.kit.tune <name> <field> <value>. Field names are camelCase (moveSpeed, turnSpeed, groundY, jumpSpeed, riseGravity, fallGravity, maxFallSpeed, jumpCutMultiplier, coyoteTime, jumpBufferTime).",
             handler: (context, args) => {
-                if (args.Length != 3) {
+                if (args.Count != 3) {
                     return Usage(verb: "world.kit.tune", form: "<name> <field> <value>");
                 }
 
                 if (!float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) {
-                    return new CommandResult(Output: $"[world.kit.tune: bad value '{args[2]}' — a number]") { IsError = true };
+                    return new CommandResult(Output: $"[world.kit.tune: bad value '{args[2].ToString()}' — a number]") { IsError = true };
                 }
 
-                if (FindKit(name: args[0]) is not { } kit) {
-                    return new CommandResult(Output: $"[world.kit.tune: no kit row named '{args[0]}']") { IsError = true };
+                if (FindKit(name: args[0].ToString()) is not { } kit) {
+                    return new CommandResult(Output: $"[world.kit.tune: no kit row named '{args[0].ToString()}']") { IsError = true };
                 }
 
-                if (WithTuningField(tuning: kit.Tuning, field: args[1], value: value) is not { } tuned) {
-                    return new CommandResult(Output: $"[world.kit.tune: unknown field '{args[1]}' — camelCase MotionTuning fields]") { IsError = true };
+                if (WithTuningField(tuning: kit.Tuning, field: args[1].ToString(), value: value) is not { } tuned) {
+                    return new CommandResult(Output: $"[world.kit.tune: unknown field '{args[1].ToString()}' — camelCase MotionTuning fields]") { IsError = true };
                 }
 
                 return Submit(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: (kit with { Tuning = tuned })));
@@ -108,7 +109,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.screen.remove",
             description: "Removes a screen by index: world.screen.remove <index>.",
             handler: (context, args) => {
-                if ((args.Length != 1) || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var index)) {
+                if ((args.Count != 1) || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var index)) {
                     return Usage(verb: "world.screen.remove", form: "<index>");
                 }
 
@@ -125,11 +126,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.link.remove",
             description: "Removes a cable-link row by name: world.link.remove <name>. Rejected if no row declares that name.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.link.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveScreenLink(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveScreenLink(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Row(
@@ -142,11 +143,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.camera.remove",
             description: "Removes a camera by name: world.camera.remove <name>. Rejected if a View screen still references it; a runtime screen.view of it unbinds and its offscreen render is released live.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.camera.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveCamera(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveCamera(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Row(
@@ -165,11 +166,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.scene.row.remove",
             description: "Removes a static-scene shape row by id: world.scene.row.remove <id>. Rejected if no row declares that id.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.scene.row.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveSceneRow(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveSceneRow(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -194,7 +195,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.population.defaults",
             description: "Sets the census defaults (document-only; the live census stays the world.population verb): world.population.defaults <local> <network>.",
             handler: (context, args) => {
-                if ((args.Length != 2) ||
+                if ((args.Count != 2) ||
                     !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var local) ||
                     !int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var network)) {
                     return Usage(verb: "world.population.defaults", form: "<local> <network>");
@@ -221,11 +222,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.addon.remove",
             description: "Removes an addon descriptor by name: world.addon.remove <name>.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.addon.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveAddon(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveAddon(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Row(
@@ -238,11 +239,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.bindings.remove",
             description: "Removes a per-world binding overlay by id: world.bindings.remove <id>. Rejected if no overlay declares that id. Recomposes every seat on apply.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.bindings.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveBindingOverlay(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveBindingOverlay(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -255,11 +256,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.creation.remove",
             description: "Removes a creation asset row by id: world.creation.remove <id>. Rejected loudly while live placements still reference it (no cascade — remove them first).",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.creation.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveCreation(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveCreation(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -272,11 +273,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.placement.remove",
             description: "Removes a placement row by id: world.placement.remove <id>.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.placement.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemovePlacement(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemovePlacement(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -312,8 +313,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             handler: (context, args) => {
                 var count = 1;
 
-                if ((args.Length >= 1) && (!int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out count) || (count < 1))) {
-                    return new CommandResult(Output: $"[world.undo: bad count '{args[0]}' — a positive integer]") { IsError = true };
+                if ((args.Count >= 1) && (!int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out count) || (count < 1))) {
+                    return new CommandResult(Output: $"[world.undo: bad count '{args[0].ToString()}' — a positive integer]") { IsError = true };
                 }
 
                 link.SubmitUndo(count: count, principal: WorldPrincipal.Console);
@@ -321,11 +322,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return CommandResult.None;
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.save",
             description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded --world file; booted from the baked default with no path is an error.",
             handler: (_, args) => {
-                var target = ((args.Length >= 1) ? string.Join(separator: ' ', values: args) : definitionSource.SourcePath);
+                var target = ((args.Count >= 1) ? args.Tail(0) : definitionSource.SourcePath);
 
                 if (string.IsNullOrWhiteSpace(value: target)) {
                     return new CommandResult(Output: "[world.save: booted from the baked default — provide a path: world.save <path>]") {
@@ -347,7 +348,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.status",
             description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path (or baked default), schema, kit/screen/camera counts, a cheap session-drift hint (which live session dimensions — render/population/screens — differ from the document's defaults, none when a save would reproduce the file), and dirty = journal length. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (_, _) => {
@@ -364,7 +365,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     // A row-valued mutation verb: parse ONE inline-JSON argument (the document-section wire shape) from the raw line and
     // submit the composed mutation. A parse error echoes inline and submits nothing.
     private CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<T, WorldMutation> toMutation) {
-        return CommandDefinition.WithTrailingArgs(
+        return CommandDefinition.WithWireArgs(
             name: name,
             description: description,
             handler: (context, args) => {
@@ -381,8 +382,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     }
 
     // A non-JSON mutation verb — a thin Simulation-routed wrapper so every mutation verb shares the routing discipline.
-    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, string[], CommandResult> handler) {
-        return CommandDefinition.WithTrailingArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
     }
 
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
@@ -401,7 +402,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
     // The raw argument text after the verb token — reconstructed from the submitted line so inline-JSON quotes survive
     // the console tokenizer. A Simulation dispatch always carries the raw text; the split-args join is a defensive fallback.
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -409,7 +410,25 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
+    }
+
+    // Materializes the trailing tokens from <paramref name="start"/> onward as an array — the ONE place a mutation
+    // verb needs each token as its own string (a kit-name table), rather than the joined free-text Tail does.
+    private static string[] TailTokens(in WireArgs args, int start) {
+        var count = args.Count;
+
+        if (start >= count) {
+            return [];
+        }
+
+        var tokens = new string[(count - start)];
+
+        for (var index = start; (index < count); index++) {
+            tokens[index - start] = args[index].ToString();
+        }
+
+        return tokens;
     }
 
     private static bool TryParseJson<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {

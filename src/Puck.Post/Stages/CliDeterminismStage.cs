@@ -197,12 +197,12 @@ internal sealed class CliDeterminismStage : IPostStage {
         public List<string> Seen { get; } = [];
 
         public IEnumerable<CommandDefinition> GetCommands() {
-            yield return CommandDefinition.WithTrailingArgs(
+            yield return CommandDefinition.WithWireArgs(
                 name: "fifo",
                 description: "Same-tick FIFO probe.",
                 handler: (context, args) => {
-                    if (args.Length == 1) {
-                        Seen.Add(item: $"{context.Slot}:{args[0]}");
+                    if (args.Count == 1) {
+                        Seen.Add(item: $"{context.Slot}:{args[0].ToString()}");
                     }
 
                     return CommandResult.None;

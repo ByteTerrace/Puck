@@ -21,10 +21,10 @@ internal sealed class WorldStorageCommandModule(WorldProfiles profiles, IPlayerS
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "storage.status",
             description: "Reports the honest player-catalog storage state (Immediate): tier (local authoritative; cloud unwired), the identity resolver's decision, the reserved endpoint, and the per-catalog revision / last-synced cursor / derived dirty flag / storage version token / last-write precondition result.",
-            handler: (_, args) => (args.Length > 0)
+            handler: (_, args) => (args.Count > 0)
                 ? new CommandResult(Output: "[storage.status: expected no arguments]") { IsError = true }
                 : new CommandResult(Output: Describe())
         );

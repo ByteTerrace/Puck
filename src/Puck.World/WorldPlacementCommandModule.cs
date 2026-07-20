@@ -20,68 +20,68 @@ namespace Puck.World;
 internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.placement.inhabit",
             description: "Molds a placement's INHABIT facet (RMW): world.placement.inhabit <id> <kit|auto|-> [idle|wander|attend|live] [count] [radius]. '-' as <kit> clears the facet (the placement reverts to furniture); 'auto' resolves the creation's own locomotion token as the kit name. Applies LIVE; a full-document revalidation rejects loudly (e.g. an unresolved kit names every kit the world declares).",
             handler: (_, args) => Inhabit(args: args),
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.placement.face",
             description: "Overrides one declared creation FACE's feed (RMW upserting a WorldPlacementFace): world.placement.face <id> <faceName> <sourceToken>. The token is none|test|camera:<name>|feed:<name>; '-' clears the override back to the creation's declared default. Applies LIVE.",
             handler: (_, args) => Face(args: args),
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.kit.attend",
             description: "Molds a kit's ATTEND flavor (RMW): world.kit.attend <kit> <notice> <release> <standoff> <approach> <orbit> [face] [seat|body]. '-' in place of <notice> clears the flavor (the kit can no longer attend). releaseRadius > noticeRadius >= standoffRadius; approach/orbit in 0..1. Applies LIVE.",
             handler: (_, args) => Attend(args: args),
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.inhabitants",
             description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, creationId, kit, source, bodyIndex, position.",
             handler: (_, _) => new CommandResult(Output: DescribeInhabitants())
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.faces",
             description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = the no-signal card).",
             handler: (_, _) => new CommandResult(Output: DescribeFaces())
         );
     }
 
-    private CommandResult Inhabit(string[] args) {
-        if ((args.Length < 2) || (args.Length > 5)) {
+    private CommandResult Inhabit(in WireArgs args) {
+        if ((args.Count < 2) || (args.Count > 5)) {
             return Usage(verb: "world.placement.inhabit", form: "<id> <kit|auto|-> [idle|wander|attend|live] [count] [radius]");
         }
 
-        if (FindPlacement(id: args[0]) is not { } placement) {
-            return new CommandResult(Output: $"[world.placement.inhabit: no placement row named '{args[0]}']") { IsError = true };
+        if (FindPlacement(id: args[0].ToString()) is not { } placement) {
+            return new CommandResult(Output: $"[world.placement.inhabit: no placement row named '{args[0].ToString()}']") { IsError = true };
         }
 
-        if (args[1] == "-") {
+        if (args.Is(index: 1, value: "-")) {
             return Submit(mutation: new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: (placement with { Inhabit = null })));
         }
 
-        var kit = (string.Equals(a: args[1], b: "auto", comparisonType: StringComparison.Ordinal) ? null : args[1]);
+        var kit = (args.Is(index: 1, value: "auto") ? null : args[1].ToString());
         var source = IntentSource.Wander;
 
-        if ((args.Length >= 3) && (ParseSource(token: args[2]) is not { } parsed)) {
-            return new CommandResult(Output: $"[world.placement.inhabit: bad source '{args[2]}' — idle|wander|attend|live]") { IsError = true };
-        } else if (args.Length >= 3) {
+        if ((args.Count >= 3) && (ParseSource(token: args[2]) is not { } parsed)) {
+            return new CommandResult(Output: $"[world.placement.inhabit: bad source '{args[2].ToString()}' — idle|wander|attend|live]") { IsError = true };
+        } else if (args.Count >= 3) {
             source = ParseSource(token: args[2])!.Value;
         }
 
         var count = 1;
 
-        if ((args.Length >= 4) && (!int.TryParse(s: args[3], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out count))) {
-            return new CommandResult(Output: $"[world.placement.inhabit: bad count '{args[3]}' — an integer]") { IsError = true };
+        if ((args.Count >= 4) && (!int.TryParse(s: args[3], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out count))) {
+            return new CommandResult(Output: $"[world.placement.inhabit: bad count '{args[3].ToString()}' — an integer]") { IsError = true };
         }
 
         var radius = 0f;
 
-        if ((args.Length >= 5) && (!float.TryParse(s: args[4], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out radius))) {
-            return new CommandResult(Output: $"[world.placement.inhabit: bad radius '{args[4]}' — a number]") { IsError = true };
+        if ((args.Count >= 5) && (!float.TryParse(s: args[4], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out radius))) {
+            return new CommandResult(Output: $"[world.placement.inhabit: bad radius '{args[4].ToString()}' — a number]") { IsError = true };
         }
 
         var inhabit = new WorldPlacementInhabit(Kit: kit, Look: placement.Inhabit?.Look, Source: source, Count: count, Radius: radius);
@@ -89,42 +89,44 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         return Submit(mutation: new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: (placement with { Inhabit = inhabit })));
     }
 
-    private CommandResult Face(string[] args) {
-        if (args.Length != 3) {
+    private CommandResult Face(in WireArgs args) {
+        if (args.Count != 3) {
             return Usage(verb: "world.placement.face", form: "<id> <faceName> <sourceToken>");
         }
 
-        if (FindPlacement(id: args[0]) is not { } placement) {
-            return new CommandResult(Output: $"[world.placement.face: no placement row named '{args[0]}']") { IsError = true };
+        if (FindPlacement(id: args[0].ToString()) is not { } placement) {
+            return new CommandResult(Output: $"[world.placement.face: no placement row named '{args[0].ToString()}']") { IsError = true };
         }
 
-        var overrides = new List<WorldPlacementFace>(collection: (placement.FaceSources ?? []).Where(predicate: face => !string.Equals(a: face.Face, b: args[1], comparisonType: StringComparison.Ordinal)));
+        // Hoisted before the LINQ predicate below: WireArgs is a ref struct and cannot be captured by a lambda.
+        var faceName = args[1].ToString();
+        var overrides = new List<WorldPlacementFace>(collection: (placement.FaceSources ?? []).Where(predicate: face => !string.Equals(a: face.Face, b: faceName, comparisonType: StringComparison.Ordinal)));
 
-        if (args[2] != "-") {
+        if (!args.Is(index: 2, value: "-")) {
             if (ParseSourceToken(token: args[2]) is not { } source) {
-                return new CommandResult(Output: $"[world.placement.face: bad source '{args[2]}' — none|test|camera:<name>|feed:<name>]") { IsError = true };
+                return new CommandResult(Output: $"[world.placement.face: bad source '{args[2].ToString()}' — none|test|camera:<name>|feed:<name>]") { IsError = true };
             }
 
-            overrides.Add(item: new WorldPlacementFace(Face: args[1], Source: source));
+            overrides.Add(item: new WorldPlacementFace(Face: faceName, Source: source));
         }
 
         return Submit(mutation: new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: (placement with { FaceSources = ((overrides.Count > 0) ? overrides : null) })));
     }
 
-    private CommandResult Attend(string[] args) {
-        if ((args.Length < 1) || (args.Length > 8)) {
+    private CommandResult Attend(in WireArgs args) {
+        if ((args.Count < 1) || (args.Count > 8)) {
             return Usage(verb: "world.kit.attend", form: "<kit> <notice> <release> <standoff> <approach> <orbit> [face] [seat|body]");
         }
 
-        if (FindKit(name: args[0]) is not { } kit) {
-            return new CommandResult(Output: $"[world.kit.attend: no kit row named '{args[0]}']") { IsError = true };
+        if (FindKit(name: args[0].ToString()) is not { } kit) {
+            return new CommandResult(Output: $"[world.kit.attend: no kit row named '{args[0].ToString()}']") { IsError = true };
         }
 
-        if ((args.Length >= 2) && (args[1] == "-")) {
+        if ((args.Count >= 2) && args.Is(index: 1, value: "-")) {
             return Submit(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: (kit with { Attend = null })));
         }
 
-        if (args.Length < 6) {
+        if (args.Count < 6) {
             return Usage(verb: "world.kit.attend", form: "<kit> <notice> <release> <standoff> <approach> <orbit> [face] [seat|body]");
         }
 
@@ -136,14 +138,17 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         var faceTarget = true;
         var target = AttendTarget.NearestSeat;
 
-        for (var index = 6; (index < args.Length); index++) {
-            switch (args[index].ToLowerInvariant()) {
-                case "face": faceTarget = true; break;
-                case "noface": faceTarget = false; break;
-                case "seat": target = AttendTarget.NearestSeat; break;
-                case "body": target = AttendTarget.NearestBody; break;
-                default:
-                    return new CommandResult(Output: $"[world.kit.attend: unknown flag '{args[index]}' — face|noface|seat|body]") { IsError = true };
+        for (var index = 6; (index < args.Count); index++) {
+            if (args.Is(index: index, value: "face")) {
+                faceTarget = true;
+            } else if (args.Is(index: index, value: "noface")) {
+                faceTarget = false;
+            } else if (args.Is(index: index, value: "seat")) {
+                target = AttendTarget.NearestSeat;
+            } else if (args.Is(index: index, value: "body")) {
+                target = AttendTarget.NearestBody;
+            } else {
+                return new CommandResult(Output: $"[world.kit.attend: unknown flag '{args[index].ToString()}' — face|noface|seat|body]") { IsError = true };
             }
         }
 
@@ -204,36 +209,48 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         return builder.Append(value: (any ? "" : " none")).Append(value: ']').ToString();
     }
 
-    private static IntentSource? ParseSource(string token) => token.ToLowerInvariant() switch {
-        "idle" => IntentSource.Idle,
-        "wander" => IntentSource.Wander,
-        "attend" => IntentSource.Attend,
-        "live" => IntentSource.Live,
-        _ => null,
-    };
-
-    // The closed four-token face source grammar, mirroring WorldCreationFacets.ParseDefaultSource.
-    private static WorldScreenSource? ParseSourceToken(string token) {
-        if (string.Equals(a: token, b: "none", comparisonType: StringComparison.Ordinal)) {
-            return new WorldScreenSource.None();
+    private static IntentSource? ParseSource(ReadOnlySpan<char> token) {
+        if (token.Equals(other: "idle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return IntentSource.Idle;
         }
 
-        if (string.Equals(a: token, b: "test", comparisonType: StringComparison.Ordinal)) {
-            return new WorldScreenSource.TestPattern(Width: 256, Height: 192);
+        if (token.Equals(other: "wander", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return IntentSource.Wander;
         }
 
-        if (token.StartsWith(value: "camera:", comparisonType: StringComparison.Ordinal)) {
-            return new WorldScreenSource.View(CameraName: token["camera:".Length..]);
+        if (token.Equals(other: "attend", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return IntentSource.Attend;
         }
 
-        if (token.StartsWith(value: "feed:", comparisonType: StringComparison.Ordinal)) {
-            return new WorldScreenSource.View(CameraName: token["feed:".Length..]);
+        if (token.Equals(other: "live", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return IntentSource.Live;
         }
 
         return null;
     }
 
-    private static bool TryFloat(string value, out float result) =>
+    // The closed four-token face source grammar, mirroring WorldCreationFacets.ParseDefaultSource.
+    private static WorldScreenSource? ParseSourceToken(ReadOnlySpan<char> token) {
+        if (token.Equals(other: "none", comparisonType: StringComparison.Ordinal)) {
+            return new WorldScreenSource.None();
+        }
+
+        if (token.Equals(other: "test", comparisonType: StringComparison.Ordinal)) {
+            return new WorldScreenSource.TestPattern(Width: 256, Height: 192);
+        }
+
+        if (token.StartsWith(value: "camera:", comparisonType: StringComparison.Ordinal)) {
+            return new WorldScreenSource.View(CameraName: token["camera:".Length..].ToString());
+        }
+
+        if (token.StartsWith(value: "feed:", comparisonType: StringComparison.Ordinal)) {
+            return new WorldScreenSource.View(CameraName: token["feed:".Length..].ToString());
+        }
+
+        return null;
+    }
+
+    private static bool TryFloat(ReadOnlySpan<char> value, out float result) =>
         float.TryParse(s: value, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out result);
 
     private WorldPlacement? FindPlacement(string id) {

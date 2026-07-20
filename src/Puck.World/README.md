@@ -1703,7 +1703,7 @@ Run it: `dotnet run --project src/Puck.World -c Release` (`--backend directx|vul
 no Post stages, no `--validate` flags. A typical assertion session over stdin:
 `world.timing on` → `world.population 124` → `world.gpu` → `player.run 1 0 0 2`
 → `player.where`. Engine seams this project drove (viewport-capacity floor,
-binding `AnyModifiers`, shadow participation, `WithTrailingArgs`) are gated by
+binding `AnyModifiers`, shadow participation, `WithWireArgs`) are gated by
 the Post battery as usual.
 
 ## The proof suite (`scripts/proof.cs`)

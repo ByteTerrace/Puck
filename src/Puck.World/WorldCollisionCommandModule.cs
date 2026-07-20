@@ -49,7 +49,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             name: "world.collision.gradient",
             description: "Sets the field-provider gradient probe step (RMW): world.collision.gradient <value> | -. '-' restores the evaluator default (0). Meaningful only under provider 'field'.",
             handler: (_, args) => {
-                if ((args.Length == 1) && string.Equals(a: args[0], b: "-", comparisonType: StringComparison.Ordinal)) {
+                if ((args.Count == 1) && args.Is(index: 0, value: "-")) {
                     return SubmitCollision(edit: static collision => (collision with { GradientProbe = 0f }));
                 }
 
@@ -60,12 +60,12 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             name: "world.collision.provider",
             description: "Sets the contact provider (RMW): world.collision.provider <analytic|field>. analytic derives convex colliders from the document's solid rows; field compiles them into an SDF (Arc 2).",
             handler: (_, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.collision.provider", form: "<analytic|field>");
                 }
 
-                if (!Enum.TryParse<WorldContactProvider>(value: args[0], ignoreCase: true, result: out var provider)) {
-                    return new CommandResult(Output: $"[world.collision.provider: unknown provider '{args[0]}' — analytic | field]") { IsError = true };
+                if (!Enum.TryParse<WorldContactProvider>(value: args[0].ToString(), ignoreCase: true, result: out var provider)) {
+                    return new CommandResult(Output: $"[world.collision.provider: unknown provider '{args[0].ToString()}' — analytic | field]") { IsError = true };
                 }
 
                 return SubmitCollision(edit: collision => (collision with { Provider = provider }));
@@ -75,43 +75,47 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             name: "world.kit.collider",
             description: "Sets a kit's body VOLUME (RMW → UpsertKit): world.kit.collider <name> <radius> <height> | <name> none. A vertical capsule; height must be at least twice the radius. 'none' removes the volume.",
             handler: (_, args) => {
-                if ((args.Length == 2) && string.Equals(a: args[1], b: "none", comparisonType: StringComparison.Ordinal)) {
-                    return EditKit(verb: "world.kit.collider", name: args[0], edit: static kit => (kit with { Collider = null }));
+                if ((args.Count == 2) && args.Is(index: 1, value: "none")) {
+                    return EditKit(verb: "world.kit.collider", name: args[0].ToString(), edit: static kit => (kit with { Collider = null }));
                 }
 
-                if ((args.Length != 3) ||
+                if ((args.Count != 3) ||
                     !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius) ||
                     !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var height)) {
                     return Usage(verb: "world.kit.collider", form: "<name> <radius> <height> | <name> none");
                 }
 
-                return EditKit(verb: "world.kit.collider", name: args[0], edit: kit => (kit with { Collider = new WorldCollider(Radius: radius, Height: height) }));
+                var name = args[0].ToString();
+
+                return EditKit(verb: "world.kit.collider", name: name, edit: kit => (kit with { Collider = new WorldCollider(Radius: radius, Height: height) }));
             }
         );
         yield return Simulation(
             name: "world.kit.model",
             description: "Sets a kit's motion model (RMW → UpsertKit): world.kit.model <name> <grounded|free>.",
             handler: (_, args) => {
-                if ((args.Length != 2) || !Enum.TryParse<MotionModel>(value: args[1], ignoreCase: true, result: out var model)) {
+                if ((args.Count != 2) || !Enum.TryParse<MotionModel>(value: args[1].ToString(), ignoreCase: true, result: out var model)) {
                     return Usage(verb: "world.kit.model", form: "<name> <grounded|free>");
                 }
 
-                return EditKit(verb: "world.kit.model", name: args[0], edit: kit => (kit with { Model = model }));
+                var name = args[0].ToString();
+
+                return EditKit(verb: "world.kit.model", name: name, edit: kit => (kit with { Model = model }));
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.kit.response",
             description: "Sets a kit's velocity-response table (RMW → UpsertKit) from one inline-JSON MotionResponse array: world.kit.response <name> <json-array> | <name> none. Rows evaluate in order, first match wins; 'none' clears the table (instant snap).",
             handler: (context, args) => {
-                if ((args.Length == 2) && string.Equals(a: args[1], b: "none", comparisonType: StringComparison.Ordinal)) {
-                    return EditKit(verb: "world.kit.response", name: args[0], edit: static kit => (kit with { Tuning = (kit.Tuning with { Response = [] }) }));
+                if ((args.Count == 2) && args.Is(index: 1, value: "none")) {
+                    return EditKit(verb: "world.kit.response", name: args[0].ToString(), edit: static kit => (kit with { Tuning = (kit.Tuning with { Response = [] }) }));
                 }
 
-                if (args.Length < 2) {
+                if (args.Count < 2) {
                     return Usage(verb: "world.kit.response", form: "<name> <json-array> | <name> none");
                 }
 
-                var raw = RawArgument(context: context, args: args);
+                var raw = RawArgument(context: context, args: in args);
                 var separator = raw.AsSpan().IndexOfAny(value0: ' ', value1: '\t');
 
                 if (separator < 0) {
@@ -133,27 +137,29 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             name: "world.scene.solid",
             description: "Marks a static-scene row SOLID or decorative (RMW → UpsertSceneRow): world.scene.solid <row-id> <margin> | <row-id> off. Solidity is DATA — the facet is the switch; 'off' drops it.",
             handler: (_, args) => {
-                if ((args.Length == 2) && string.Equals(a: args[1], b: "off", comparisonType: StringComparison.Ordinal)) {
-                    return EditSceneRow(id: args[0], edit: static row => (row with { Solid = null }));
+                if ((args.Count == 2) && args.Is(index: 1, value: "off")) {
+                    return EditSceneRow(id: args[0].ToString(), edit: static row => (row with { Solid = null }));
                 }
 
-                if ((args.Length != 2) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var margin)) {
+                if ((args.Count != 2) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var margin)) {
                     return Usage(verb: "world.scene.solid", form: "<row-id> <margin> | <row-id> off");
                 }
 
-                return EditSceneRow(id: args[0], edit: row => (row with { Solid = new WorldSolid(Margin: margin) }));
+                var id = args[0].ToString();
+
+                return EditSceneRow(id: id, edit: row => (row with { Solid = new WorldSolid(Margin: margin) }));
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.contacts",
             description: "Reports the solidity state (Immediate read): world.contacts prints the solid-row census (spheres + boxes); world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, and grounded witness (resolved=1 when grounded, else 0).",
             handler: (_, args) => {
-                if (args.Length == 0) {
+                if (args.Count == 0) {
                     return Census();
                 }
 
-                if (!int.TryParse(s: args[0], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, out var index) || (index < 1) || (index > WorldPopulation.MaxPopulation)) {
-                    return new CommandResult(Output: $"[world.contacts: bad body index '{args[0]}' — 1..{WorldPopulation.MaxPopulation}]") { IsError = true };
+                if (!args.TryInt(index: 0, value: out var index) || (index < 1) || (index > WorldPopulation.MaxPopulation)) {
+                    return new CommandResult(Output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{WorldPopulation.MaxPopulation}]") { IsError = true };
                 }
 
                 if (server.Population.EntryBody(index: (index - 1)) is not { } body) {
@@ -163,12 +169,12 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount}]"));
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.collision.probe",
             description: "Reads the live FIELD the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints the signed distance, material, and unit gradient (the up direction) at that point. Requires provider 'field'.",
             handler: (_, args) => Probe(args: args)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.collision.status",
             description: "Reports the contact-solver status (Immediate): enabled, provider, solid instruction count, field revision, contact skin, and the per-kit collider table.",
             handler: (_, _) => Status()
@@ -176,8 +182,8 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     }
 
     // The live-field point read (world.collision.probe): sample distance/material/gradient exactly as the resolver does.
-    private CommandResult Probe(string[] args) {
-        if ((args.Length != 3)
+    private CommandResult Probe(WireArgs args) {
+        if ((args.Count != 3)
             || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var x)
             || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var y)
             || !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var z)) {
@@ -263,8 +269,8 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         return Submit(mutation: new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: edit(arg: current)));
     }
 
-    private CommandResult Scalar(string verb, string[] args, Func<WorldCollision, float, WorldCollision> edit) {
-        if ((args.Length != 1) || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, out var value)) {
+    private CommandResult Scalar(string verb, WireArgs args, Func<WorldCollision, float, WorldCollision> edit) {
+        if ((args.Count != 1) || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, out var value)) {
             return Usage(verb: verb, form: "<value>");
         }
 
@@ -305,11 +311,11 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
 
     // A row-valued mutation verb: parse ONE inline-JSON argument from the raw line and submit the composed mutation.
     private CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<T, WorldMutation> toMutation) {
-        return CommandDefinition.WithTrailingArgs(
+        return CommandDefinition.WithWireArgs(
             name: name,
             description: description,
             handler: (context, args) => {
-                var raw = RawArgument(context: context, args: args);
+                var raw = RawArgument(context: context, args: in args);
 
                 if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
                     return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
@@ -321,8 +327,8 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         );
     }
 
-    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, string[], CommandResult> handler) {
-        return CommandDefinition.WithTrailingArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
     }
 
     private CommandResult Submit(WorldMutation mutation) {
@@ -337,7 +343,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         };
     }
 
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -345,7 +351,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
     }
 
     private static bool TryParseJson<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {

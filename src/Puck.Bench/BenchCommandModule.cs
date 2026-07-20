@@ -1,4 +1,3 @@
-using System.CommandLine;
 using System.Globalization;
 using System.Text;
 
@@ -33,9 +32,9 @@ public sealed class BenchCommandModule : ICommandModule {
             handler: _ => new CommandResult(ListText()),
             name: "bench.list"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Runs a scored benchmark suite: bench.run [suite] [samples] (suite defaults to 'standard'; add 'samples' to dump raw per-frame arrays).",
-            handler: (_, args) => new CommandResult(RunFromArgs(args: args)),
+            handler: (_, args) => new CommandResult(RunFromArgs(args: in args)),
             name: "bench.run"
         );
         yield return Plain(
@@ -43,39 +42,39 @@ public sealed class BenchCommandModule : ICommandModule {
             handler: _ => new CommandResult(m_bench.Abort()),
             name: "bench.abort"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Sweeps a suite once per switch value: bench.sweep <switch>=<v1,v2,...> [suite].",
-            handler: (_, args) => new CommandResult(SweepFromArgs(args: args)),
+            handler: (_, args) => new CommandResult(SweepFromArgs(args: in args)),
             name: "bench.sweep"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Compares two puck.bench.v1 reports and prints the per-scene diff table: bench.compare <a> <b> (each a report path or the alias 'latest'/'prev', resolved by filename sort under bench-reports/). Read-only; refuses on a scoreFormula mismatch. A CI regression-gating exit code is deliberately deferred (the headless --bench-compare is the same diff).",
-            handler: (_, args) => new CommandResult(CompareFromArgs(args: args)),
+            handler: (_, args) => new CommandResult(CompareFromArgs(args: in args)),
             name: "bench.compare"
         );
     }
 
     // Parses bench.compare <a> <b>: two report paths (or the aliases 'latest'/'prev'). The full diff table streams to
     // Console.Out (the room.bench long-output precedent); the verb echoes only the one-line summary.
-    private static string CompareFromArgs(string[] args) {
-        if (args.Length < 2) {
+    private static string CompareFromArgs(in WireArgs args) {
+        if (args.Count < 2) {
             return "[bench.compare: usage — bench.compare <a> <b> (report paths, or the aliases 'latest'/'prev')]";
         }
 
-        return BenchReportComparer.Run(pathA: args[0], pathB: args[1], writer: Console.Out).Summary;
+        return BenchReportComparer.Run(pathA: args[0].ToString(), pathB: args[1].ToString(), writer: Console.Out).Summary;
     }
 
     // Parses bench.run [suite] [samples]: the suite is the first non-'samples' token, 'samples' anywhere requests a raw
     // dump (usage strings + forgiving parsing beat parser errors on a game console).
-    private string RunFromArgs(string[] args) {
+    private string RunFromArgs(in WireArgs args) {
         var suite = BenchRuntime.StandardSuite;
         var includeSamples = false;
 
-        foreach (var token in args) {
-            if (string.Equals(a: token, b: "samples", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        for (var index = 0; (index < args.Count); index++) {
+            if (args.Is(index: index, value: "samples")) {
                 includeSamples = true;
             } else {
-                suite = token;
+                suite = args[index].ToString();
             }
         }
 
@@ -83,26 +82,27 @@ public sealed class BenchCommandModule : ICommandModule {
     }
 
     // Parses bench.sweep <switch>=<v1,v2,...> [suite].
-    private string SweepFromArgs(string[] args) {
-        if (args.Length == 0) {
+    private string SweepFromArgs(in WireArgs args) {
+        if (args.Count == 0) {
             return "[bench.sweep: usage — bench.sweep <switch>=<v1,v2,...> [suite]]";
         }
 
-        var separator = args[0].IndexOf(value: '=');
+        var pair = args[0];
+        var separator = pair.IndexOf(value: '=');
 
         if (separator <= 0) {
             return "[bench.sweep: usage — bench.sweep <switch>=<v1,v2,...> [suite]]";
         }
 
-        var switchName = args[0][..separator];
-        var valuesText = args[0][(separator + 1)..];
+        var switchName = pair[..separator].ToString();
+        var valuesText = pair[(separator + 1)..].ToString();
         var values = valuesText.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         if (values.Length == 0) {
             return $"[bench.sweep: give at least one value — bench.sweep {switchName}=<v1,v2,...>]";
         }
 
-        var suite = ((args.Length > 1) ? args[1] : BenchRuntime.StandardSuite);
+        var suite = ((args.Count > 1) ? args[1].ToString() : BenchRuntime.StandardSuite);
 
         return m_bench.StartSweep(switchName: switchName, values: values, suite: suite);
     }
@@ -138,23 +138,4 @@ public sealed class BenchCommandModule : ICommandModule {
     // A bare-verb command definition.
     private static CommandDefinition Plain(string description, Func<CommandContext, CommandResult> handler, string name) =>
         CommandDefinition.Verb(description: description, handler: handler, name: name, valueKind: CommandValueKind.Digital);
-
-    // An argument-taking command definition: one trailing token list parsed by the handler (usage strings beat parser
-    // errors on a game console) — the AddonCommandModule idiom.
-    private static CommandDefinition WithArgs(string description, Func<CommandContext, string[], CommandResult> handler, string name) {
-        var rest = new Argument<string[]>(name: "args") {
-            Arity = ArgumentArity.ZeroOrMore,
-            Description = description,
-        };
-
-        return new CommandDefinition(
-            Description: description,
-            Handler: context => handler(arg1: context, arg2: (context.Parse?.GetValue(argument: rest) ?? [])),
-            Name: name,
-            TextCommand: new Command(description: description, name: name) {
-                rest,
-            },
-            ValueKind: CommandValueKind.Digital
-        );
-    }
 }

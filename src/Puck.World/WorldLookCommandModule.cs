@@ -22,11 +22,11 @@ namespace Puck.World;
 internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation population, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.look.set",
             description: "Upserts a LOOK row (whole-row, keyed by name) from one inline-JSON WorldLook {name, source ($type catalog|creation), scale, motion {gaitAmplitude, replayFrames, secondsPerFrame}}: world.look.set <look-json>. Applies LIVE within the probed render envelope; a full-document revalidation rejects loudly.",
             handler: (context, args) => {
-                var raw = RawArgument(context: context, args: args);
+                var raw = RawArgument(context: context, args: in args);
 
                 if (string.IsNullOrWhiteSpace(value: raw)) {
                     return Usage(verb: "world.look.set", form: "<look-json>");
@@ -44,54 +44,63 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.look.remove",
             description: "Removes a look row by name: world.look.remove <name>. Rejected loudly by full-document revalidation while the look assignment table still names it.",
             handler: (_, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.look.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveLook(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveLook(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.look.assign",
             description: "Sets the look→entity assignment policy (the same primitive as world.kit.assign): world.look.assign hash | table <look> [<look>…]. hash keeps the R1 low-discrepancy mapping (a distinct stream from the kit table); table cycles the named looks by index.",
             handler: (_, args) => {
-                if (args.Length == 0) {
+                if (args.Count == 0) {
                     return Usage(verb: "world.look.assign", form: "hash | table <look> [<look>…]");
                 }
 
-                switch (args[0].ToLowerInvariant()) {
-                    case WorldRowAssignment.HashPolicy:
-                        return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
-                    case WorldRowAssignment.TablePolicy:
-                        if (args.Length < 2) {
-                            return new CommandResult(Output: "[world.look.assign: the table policy needs at least one look name]") { IsError = true };
-                        }
-
-                        return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
-                    default:
-                        return new CommandResult(Output: $"[world.look.assign: unknown policy '{args[0]}' — hash | table]") { IsError = true };
+                if (args.Is(index: 0, value: WorldRowAssignment.HashPolicy)) {
+                    return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
                 }
+
+                if (args.Is(index: 0, value: WorldRowAssignment.TablePolicy)) {
+                    if (args.Count < 2) {
+                        return new CommandResult(Output: "[world.look.assign: the table policy needs at least one look name]") { IsError = true };
+                    }
+
+                    var table = new string[args.Count - 1];
+
+                    for (var index = 1; (index < args.Count); index++) {
+                        table[index - 1] = args[index].ToString();
+                    }
+
+                    return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: table)));
+                }
+
+                return new CommandResult(Output: $"[world.look.assign: unknown policy '{args[0].ToString()}' — hash | table]") { IsError = true };
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.look.tune",
             description: "Console sugar: read-modify-write ONE look field into a whole-row upsert: world.look.tune <name> <field> <value>. Fields (camelCase): scale, gaitAmplitude, secondsPerFrame (numbers); replayFrames (true|false); catalogIndex (an integer 0..127, or - to clear the pin to the index-derived catalog pick — both switch the source to catalog).",
             handler: (_, args) => {
-                if (args.Length != 3) {
+                if (args.Count != 3) {
                     return Usage(verb: "world.look.tune", form: "<name> <field> <value>");
                 }
 
-                if (FindLook(name: args[0]) is not { } look) {
-                    return new CommandResult(Output: $"[world.look.tune: no look row named '{args[0]}']") { IsError = true };
+                var name = args[0].ToString();
+
+                if (FindLook(name: name) is not { } look) {
+                    return new CommandResult(Output: $"[world.look.tune: no look row named '{name}']") { IsError = true };
                 }
 
-                if (WithLookField(look: look, field: args[1], value: args[2], error: out var error) is not { } tuned) {
+                if (WithLookField(look: look, field: args[1].ToString(), value: args[2].ToString(), error: out var error) is not { } tuned) {
                     return new CommandResult(Output: $"[world.look.tune: {error}]") { IsError = true };
                 }
 
@@ -99,15 +108,15 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.population.spawn",
             description: "Sets how simulated peers are distributed at spawn (RMW on the population defaults' spawn policy — LIVE for future activations, standing bodies unmoved): world.population.spawn phyllotaxis <radius> | points <jitter> <id> [<id>…]. The <jitter> leads deliberately so the open-ended spawn-point id list stays unambiguous.",
             handler: (_, args) => {
-                if (args.Length == 0) {
+                if (args.Count == 0) {
                     return Usage(verb: "world.population.spawn", form: "phyllotaxis <radius> | points <jitter> <id> [<id>…]");
                 }
 
-                if (ParseSpawnPolicy(args: args, error: out var policyError) is not { } policy) {
+                if (ParseSpawnPolicy(args: in args, error: out var policyError) is not { } policy) {
                     return new CommandResult(Output: $"[world.population.spawn: {policyError}]") { IsError = true };
                 }
 
@@ -117,7 +126,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.looks",
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
             handler: (_, _) => new CommandResult(Output: DescribeLooks())
@@ -145,31 +154,38 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
     };
 
     // Parse a spawn policy from the verb args: `phyllotaxis <radius>` or `points <jitter> <id> [<id>…]`.
-    private static WorldSpawnPolicy? ParseSpawnPolicy(string[] args, out string error) {
+    private static WorldSpawnPolicy? ParseSpawnPolicy(in WireArgs args, out string error) {
         error = string.Empty;
 
-        switch (args[0].ToLowerInvariant()) {
-            case "phyllotaxis":
-                if ((args.Length != 2) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius)) {
-                    error = "phyllotaxis needs one <radius> number";
-
-                    return null;
-                }
-
-                return new WorldSpawnPolicy.Phyllotaxis(Radius: radius);
-            case "points":
-                if ((args.Length < 3) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var jitter)) {
-                    error = "points needs a <jitter> number then at least one spawn-point id";
-
-                    return null;
-                }
-
-                return new WorldSpawnPolicy.PointCycle(Points: args[2..], Jitter: jitter);
-            default:
-                error = $"unknown distribution '{args[0]}' — phyllotaxis | points";
+        if (args.Is(index: 0, value: "phyllotaxis")) {
+            if ((args.Count != 2) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius)) {
+                error = "phyllotaxis needs one <radius> number";
 
                 return null;
+            }
+
+            return new WorldSpawnPolicy.Phyllotaxis(Radius: radius);
         }
+
+        if (args.Is(index: 0, value: "points")) {
+            if ((args.Count < 3) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var jitter)) {
+                error = "points needs a <jitter> number then at least one spawn-point id";
+
+                return null;
+            }
+
+            var points = new string[args.Count - 2];
+
+            for (var index = 2; (index < args.Count); index++) {
+                points[index - 2] = args[index].ToString();
+            }
+
+            return new WorldSpawnPolicy.PointCycle(Points: points, Jitter: jitter);
+        }
+
+        error = $"unknown distribution '{args[0].ToString()}' — phyllotaxis | points";
+
+        return null;
     }
 
     // RMW ONE look field (camelCase names matching the JSON), or null with a reason on an unknown field / bad value.
@@ -263,7 +279,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
 
     // The raw argument text after the verb token — reconstructed from the submitted line so inline-JSON quotes survive
     // the console tokenizer (the WorldMutationCommandModule.Row idiom).
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -271,6 +287,6 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
     }
 }

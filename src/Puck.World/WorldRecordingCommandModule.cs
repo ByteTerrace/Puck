@@ -36,25 +36,25 @@ internal sealed class WorldRecordingCommandModule(
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "capture.start",
             description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms the render tap, and echoes the negotiated codec and any declines.",
             handler: (_, args) => Start(args: args)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "capture.stop",
             description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
             handler: (_, args) => Stop(args: args)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "capture.status",
             description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
             handler: (_, args) => Status(args: args)
         );
     }
 
-    private CommandResult Start(string[] args) {
-        if (args.Length > 1) {
+    private CommandResult Start(WireArgs args) {
+        if (args.Count > 1) {
             return Error(text: "[capture.start: expected at most one argument (an output path)]");
         }
 
@@ -64,8 +64,8 @@ internal sealed class WorldRecordingCommandModule(
 
         var document = m_source.Document;
 
-        if ((args.Length == 1) && !string.IsNullOrWhiteSpace(value: args[0])) {
-            document = document with { Output = args[0] };
+        if ((args.Count == 1) && !args[0].IsWhiteSpace()) {
+            document = document with { Output = args[0].ToString() };
         }
 
         // B's coordination point: re-anchor the shared audio clock so the WASAPI sources stamp from the same instant the
@@ -96,8 +96,8 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: $"[capture.start: recording -> {session.OutputPath} | codec {session.CodecLanded} | audio tracks {status.AudioTrackCount} | {notes}]");
     }
 
-    private CommandResult Stop(string[] args) {
-        if (args.Length > 0) {
+    private CommandResult Stop(WireArgs args) {
+        if (args.Count > 0) {
             return Error(text: "[capture.stop: expected no arguments]");
         }
 
@@ -118,8 +118,8 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: $"[capture.stop: wrote {session.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio drops {status.AudioSamplesDropped} | bytes {bytes}]");
     }
 
-    private CommandResult Status(string[] args) {
-        if (args.Length > 0) {
+    private CommandResult Status(WireArgs args) {
+        if (args.Count > 0) {
             return Error(text: "[capture.status: expected no arguments]");
         }
 

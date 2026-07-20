@@ -32,11 +32,11 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "world.speaker.remove",
             description: "Removes a speaker by name: world.speaker.remove <name>.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.speaker.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveSpeaker(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveSpeaker(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Row(
@@ -49,11 +49,11 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "world.tune.remove",
             description: "Removes a tune asset row by id: world.tune.remove <id>. Rejected loudly while speakers still reference it (no cascade — the dependents are named).",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.tune.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveTune(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveTune(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -66,11 +66,11 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "world.patch.remove",
             description: "Removes a synth-patch asset row by id: world.patch.remove <id>. Rejected loudly while speakers or emission facets still reference it (no cascade — the dependents are named).",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.patch.remove", form: "<id>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemovePatch(Principal: WorldPrincipal.Console, Id: args[0]));
+                return Submit(mutation: new WorldMutation.RemovePatch(Principal: WorldPrincipal.Console, Id: args[0].ToString()));
             }
         );
         yield return Row(
@@ -82,36 +82,31 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             name: "world.speakers",
             description: "Lists every declared speaker, one segment each — name, kind (fixed|anchored|bed), source token (none|machine:<slot>|tune:<id>|synth:<id>), channel, and gain. The document rows (the LIVE definition); audio.emitters lists the derived emitter table. A query — always echoes.",
-            handler: SpeakersHandler,
-            echoesData: true
+            handler: SpeakersHandler
         );
         yield return CommandDefinition.WithWireArgs(
             name: "audio.state",
             description: "Echoes the live speaker-device state (the device-state half; speaker.state joins it with per-row facts): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
-            handler: StateHandler,
-            echoesData: true
+            handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
             name: "speaker.state",
             description: "Echoes every speaker row's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>). A query — always echoes.",
             handler: (context, args) => ((args.Count != 0)
                 ? new CommandResult(Output: "[speaker.state: no arguments — echoes every speaker row's live status]") { IsError = true }
-                : new CommandResult(Output: director.DescribeSpeakerState())),
-            echoesData: true
+                : new CommandResult(Output: director.DescribeSpeakerState()))
         );
         yield return CommandDefinition.WithWireArgs(
             name: "world.volume",
             description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
-            handler: VolumeHandler,
-            echoesData: true
+            handler: VolumeHandler
         );
         yield return CommandDefinition.WithWireArgs(
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
             handler: (context, args) => ((args.Count != 0)
                 ? new CommandResult(Output: "[audio.emitters: no arguments — dumps the derived emitter table]") { IsError = true }
-                : new CommandResult(Output: director.DescribeEmitters())),
-            echoesData: true
+                : new CommandResult(Output: director.DescribeEmitters()))
         );
     }
 
@@ -202,7 +197,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // The Row/Simulation/Submit helpers duplicate WorldMutationCommandModule's: each module owns its own copies to
     // stay under the analyzer ceiling.
     private CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<T, WorldMutation> toMutation) {
-        return CommandDefinition.WithTrailingArgs(
+        return CommandDefinition.WithWireArgs(
             name: name,
             description: description,
             handler: (context, args) => {
@@ -218,8 +213,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         );
     }
 
-    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, string[], CommandResult> handler) {
-        return CommandDefinition.WithTrailingArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
     }
 
     private CommandResult Submit(WorldMutation mutation) {
@@ -234,7 +229,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         };
     }
 
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -242,7 +237,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
     }
 
     private static bool TryParseJson<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {

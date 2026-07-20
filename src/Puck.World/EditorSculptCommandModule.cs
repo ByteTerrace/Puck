@@ -57,52 +57,52 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.new",
             description: "Opens a seat's sculpt workbench on a BLANK model authoring toward a new creation row: editor.sculpt.new <rowId> [<x> <y> <z>] [seat]. The bench anchors at the given world position (default: the seat's editor focus, dropped to the ground plane); the live preview stamps there through the SAME canonical geometry a committed placement uses; the seat's binding group flips to the sculpt pages and the camera orbits the bench. Requires editor mode; a rowId matching an existing creation row rejects (editor.sculpt.edit loads it).",
             handler: NewHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.edit",
             description: "Opens a seat's sculpt workbench on an EXISTING creation row: editor.sculpt.edit <rowId> [<x> <y> <z>] [seat]. The row's document loads into the model (carried cameras/behavior/text-runs/extensions ride along untouched); commit upserts the same row, and live placements of it refresh on delivery.",
             handler: EditHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: ExitCommand,
             description: "Closes a seat's sculpt workbench, DISCARDING uncommitted edits and the local ring (commit first to keep the work): editor.sculpt.exit [seat]. The binding group flips back to the editor pages. The chord twin is Back/Tab on the sculpt page.",
             handler: ExitHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: CommitCommand,
             description: "Commits the seat's sculpt: canonicalize (validate + normalize + hash) and submit ONE UpsertCreation carrying doc + hash from the same canonical pipeline: editor.sculpt.commit [seat]. The world journal gains exactly one entry (world.undo reverts it — the POST-commit undo domain; mid-sculpt undo is editor.sculpt.undo's local ring). Live placements of the row refresh on delivery; an animated row restarts its replay through the hash-diff release+recreate. The chord twin is North on the LT bench page.",
             handler: CommitHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: EaselCommand,
             description: "Authors the diegetic preview EASEL beside the seat's workbench: editor.sculpt.easel [screenIndex] [seat] — upserts a fixed camera ('easel-<seat>') framing the bench and re-points an existing screen row (default: the first declared screen) at its feed, moved beside the bench. Two ordinary mutations through the live camera/screen reconcile — the screen's offscreen view renders the composed world program, sculpt preview included. world.undo twice retires it.",
             handler: EaselHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.status",
             description: "Echoes a seat's sculpt state: editor.sculpt.status [seat] — row id, stamp-shape budget, selection target, timeline cursor, chain count, local-ring depth, and uncommitted-edit count. The scripted assertion point for the bench.",
             handler: StatusHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: UndoCommand,
             description: "Steps the seat's LOCAL sculpt ring back one edit (the mid-sculpt undo domain — the world journal is untouched; post-commit undo is world.undo): editor.sculpt.undo [seat]. The chord twin is West on the sculpt page.",
-            handler: (context, args) => RingHandler(context: context, args: args, redo: false, verb: UndoCommand)
+            handler: (context, args) => RingHandler(context: context, args: in args, redo: false, verb: UndoCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: RedoCommand,
             description: "Steps the seat's LOCAL sculpt ring forward one edit: editor.sculpt.redo [seat]. The chord twin is East on the sculpt page.",
-            handler: (context, args) => RingHandler(context: context, args: args, redo: true, verb: RedoCommand)
+            handler: (context, args) => RingHandler(context: context, args: in args, redo: true, verb: RedoCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.zoom",
             description: "Sets the seat's workbench orbit distance: editor.sculpt.zoom <in|out|distance> [seat] (clamped 1.5..60). The chord twins are D-pad Up/Down on the LT bench page.",
             handler: ZoomHandler
@@ -130,8 +130,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
     /// <param name="session">The editor session (the mode guard).</param>
     /// <param name="workbench">The workbench (the bench guard).</param>
     /// <returns>The slot and model, or an error result.</returns>
-    internal static (int Slot, SculptModel? Model, CommandResult? Error) ResolveBench(CommandContext context, string[] args, int at, string verb, WorldEditorSession session, WorldWorkbench workbench) {
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: at, verb: verb);
+    internal static (int Slot, SculptModel? Model, CommandResult? Error) ResolveBench(CommandContext context, in WireArgs args, int at, string verb, WorldEditorSession session, WorldWorkbench workbench) {
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: at, verb: verb);
 
         if (error is { } resolveError) {
             return (Slot: slot, Model: null, Error: resolveError);
@@ -148,34 +148,34 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         return (Slot: slot, Model: model, Error: null);
     }
 
-    private CommandResult NewHandler(CommandContext context, string[] args) =>
-        OpenHandler(context: context, args: args, verb: "editor.sculpt.new", loadExisting: false);
+    private CommandResult NewHandler(CommandContext context, WireArgs args) =>
+        OpenHandler(context: context, args: in args, verb: "editor.sculpt.new", loadExisting: false);
 
-    private CommandResult EditHandler(CommandContext context, string[] args) =>
-        OpenHandler(context: context, args: args, verb: "editor.sculpt.edit", loadExisting: true);
+    private CommandResult EditHandler(CommandContext context, WireArgs args) =>
+        OpenHandler(context: context, args: in args, verb: "editor.sculpt.edit", loadExisting: true);
 
     // The shared bench-open flow: resolve the row id + optional explicit origin + seat, guard the mode, load or
     // refuse against the existing rows, envelope-check the composed preview, then flip the binding group and seed
     // the orbit.
-    private CommandResult OpenHandler(CommandContext context, string[] args, string verb, bool loadExisting) {
-        if (args.Length is (< 1 or > 5)) {
+    private CommandResult OpenHandler(CommandContext context, in WireArgs args, string verb, bool loadExisting) {
+        if (args.Count is (< 1 or > 5)) {
             return Error(text: $"[{verb}: expected <rowId> [<x> <y> <z>] [seat]]");
         }
 
-        var rowId = args[0];
-        var hasPosition = (args.Length >= 4);
+        var rowId = args[0].ToString();
+        var hasPosition = (args.Count >= 4);
 
         var x = 0f;
         var y = 0f;
         var z = 0f;
 
-        if (hasPosition && (!EditorCommandModule.TryFloat(args: args, at: 1, value: out x) ||
-            !EditorCommandModule.TryFloat(args: args, at: 2, value: out y) ||
-            !EditorCommandModule.TryFloat(args: args, at: 3, value: out z))) {
+        if (hasPosition && (!EditorCommandModule.TryFloat(args: in args, at: 1, value: out x) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out y) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 3, value: out z))) {
             return Error(text: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
         }
 
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: (hasPosition ? 4 : 1), verb: verb);
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: (hasPosition ? 4 : 1), verb: verb);
 
         if (error is { } resolveError) {
             return resolveError;
@@ -217,8 +217,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         ));
     }
 
-    private CommandResult ExitHandler(CommandContext context, string[] args) {
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: ExitCommand);
+    private CommandResult ExitHandler(CommandContext context, WireArgs args) {
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: 0, verb: ExitCommand);
 
         if (error is { } resolveError) {
             return resolveError;
@@ -238,8 +238,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         return Echo(slot: slot, verb: ExitCommand, detail: $"closed '{rowId}'{((discarded > 0) ? $" ({discarded} uncommitted edits discarded)" : string.Empty)} — group editor");
     }
 
-    private CommandResult CommitHandler(CommandContext context, string[] args) {
-        var (slot, model, error) = ResolveBench(context: context, args: args, at: 0, verb: CommitCommand, session: m_session, workbench: m_workbench);
+    private CommandResult CommitHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = ResolveBench(context: context, args: in args, at: 0, verb: CommitCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -269,10 +269,10 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         ));
     }
 
-    private CommandResult EaselHandler(CommandContext context, string[] args) {
+    private CommandResult EaselHandler(CommandContext context, WireArgs args) {
         // Shapes: none = default screen + acting seat; [screenIndex] and/or trailing [seat].
-        var hasIndex = ((args.Length >= 2) || ((args.Length == 1) && !SeatToken(token: args[0])));
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: (hasIndex ? 1 : 0), verb: EaselCommand);
+        var hasIndex = ((args.Count >= 2) || ((args.Count == 1) && !SeatToken(token: args[0])));
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: (hasIndex ? 1 : 0), verb: EaselCommand);
 
         if (error is { } resolveError) {
             return resolveError;
@@ -291,8 +291,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         WorldScreen? target = null;
 
         if (hasIndex) {
-            if (!int.TryParse(s: args[0], provider: CultureInfo.InvariantCulture, result: out var index)) {
-                return Error(text: $"[{EaselCommand}: could not parse screen index '{args[0]}']");
+            if (!args.TryInt(index: 0, value: out var index)) {
+                return Error(text: $"[{EaselCommand}: could not parse screen index '{args[0].ToString()}']");
             }
 
             foreach (var screen in screens) {
@@ -338,8 +338,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         return Echo(slot: slot, verb: EaselCommand, detail: $"camera '{cameraName}' + screen {target.Index} re-pointed at its view beside the bench — two mutations submitted (world.undo twice retires the easel)");
     }
 
-    private CommandResult StatusHandler(CommandContext context, string[] args) {
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: "editor.sculpt.status");
+    private CommandResult StatusHandler(CommandContext context, WireArgs args) {
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: 0, verb: "editor.sculpt.status");
 
         if (error is { } resolveError) {
             return resolveError;
@@ -368,8 +368,8 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         ));
     }
 
-    private CommandResult RingHandler(CommandContext context, string[] args, bool redo, string verb) {
-        var (slot, model, error) = ResolveBench(context: context, args: args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
+    private CommandResult RingHandler(CommandContext context, in WireArgs args, bool redo, string verb) {
+        var (slot, model, error) = ResolveBench(context: context, args: in args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -384,12 +384,12 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         return Echo(slot: slot, verb: verb, detail: $"local ring — restored ({(model.CanUndo ? "more undo available" : "at the baseline")}); world journal untouched");
     }
 
-    private CommandResult ZoomHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 1 or > 2)) {
+    private CommandResult ZoomHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return Error(text: "[editor.sculpt.zoom: expected <in|out|distance> plus an optional seat 1..4]");
         }
 
-        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 1, verb: "editor.sculpt.zoom");
+        var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: in args, at: 1, verb: "editor.sculpt.zoom");
 
         if (error is { } resolveError) {
             return resolveError;
@@ -401,11 +401,11 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
 
         float applied;
 
-        if (string.Equals(a: args[0], b: "in", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (args.Is(index: 0, value: "in")) {
             applied = m_session.StepOrbitDistance(slot: slot, zoomIn: true);
-        } else if (string.Equals(a: args[0], b: "out", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (args.Is(index: 0, value: "out")) {
             applied = m_session.StepOrbitDistance(slot: slot, zoomIn: false);
-        } else if (EditorCommandModule.TryFloat(args: args, at: 0, value: out var distance)) {
+        } else if (EditorCommandModule.TryFloat(args: in args, at: 0, value: out var distance)) {
             applied = m_session.SetOrbitDistance(slot: slot, distance: distance);
         } else {
             return Error(text: "[editor.sculpt.zoom: expected in, out, or a finite distance]");
@@ -455,7 +455,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
     }
 
     // Whether a lone token reads as a seat number (1..4) — the easel's [screenIndex]-vs-[seat] discriminator.
-    private static bool SeatToken(string token) =>
+    private static bool SeatToken(ReadOnlySpan<char> token) =>
         (int.TryParse(s: token, provider: CultureInfo.InvariantCulture, result: out var value) && (value is >= 1 and <= PlayerRoster.MaxSlots));
 
     private static CommandResult Echo(int slot, string verb, string detail) =>

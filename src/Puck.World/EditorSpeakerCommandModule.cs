@@ -72,13 +72,13 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         );
     }
 
-    private CommandResult PlaceHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 2 or > 4)) {
+    private CommandResult PlaceHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 2 or > 4)) {
             return Error(text: "[editor.speaker.place: expected <name> <none|machine:<slot>|tune:<id>|synth:<patchId>> [radius] [seat]]");
         }
 
         // The optional third token is a radius when numeric; the seat then rides fourth.
-        var hasRadius = ((args.Length >= 3) && float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out _));
+        var hasRadius = ((args.Count >= 3) && float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out _));
         var (slot, slotError) = EditorCommandModule.ResolveSlot(context: context, args: args, at: (hasRadius ? 3 : 2), verb: "editor.speaker.place");
 
         if (slotError is { } resolveError) {
@@ -90,14 +90,14 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         }
 
         if (ParseSource(token: args[1]) is not { } source) {
-            return Error(text: $"[editor.speaker.place: unknown source '{args[1]}' — none|machine:<slot>|tune:<id>|synth:<patchId>]");
+            return Error(text: $"[editor.speaker.place: unknown source '{args[1].ToString()}' — none|machine:<slot>|tune:<id>|synth:<patchId>]");
         }
 
         WorldSpeakerAttenuation? attenuation = null;
 
         if (hasRadius) {
             if (!float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius) || !float.IsFinite(f: radius) || (radius <= 0f)) {
-                return Error(text: $"[editor.speaker.place: bad radius '{args[2]}']");
+                return Error(text: $"[editor.speaker.place: bad radius '{args[2].ToString()}']");
             }
 
             attenuation = new WorldSpeakerAttenuation(Radius: radius, Curve: null);
@@ -105,7 +105,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
 
         var focus = m_session.Focus(slot: slot);
         var speaker = new WorldSpeaker.Fixed(
-            Name: args[0],
+            Name: args[0].ToString(),
             Position: focus,
             Feed: new WorldSpeakerFeed(Source: source, Channel: WorldSpeakerFeed.ChannelMix, Gain: 1f),
             Attenuation: attenuation
@@ -119,7 +119,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         ));
     }
 
-    private CommandResult MoveHandler(CommandContext context, string[] args) {
+    private CommandResult MoveHandler(CommandContext context, WireArgs args) {
         var (name, slot, error) = ResolveNameAndSlot(context: context, args: args, extra: 3, verb: "editor.speaker.move", form: "<name> <x> <y> <z>");
 
         if (error is { } resolveError) {
@@ -150,7 +150,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         ));
     }
 
-    private CommandResult RadiusHandler(CommandContext context, string[] args) {
+    private CommandResult RadiusHandler(CommandContext context, WireArgs args) {
         var (name, slot, error) = ResolveNameAndSlot(context: context, args: args, extra: 1, verb: "editor.speaker.radius", form: "<name> <radius>");
 
         if (error is { } resolveError) {
@@ -158,7 +158,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         }
 
         if (!TryFloat(token: args[1], value: out var radius) || (radius <= 0f)) {
-            return Error(text: $"[editor.speaker.radius: bad radius '{args[1]}']");
+            return Error(text: $"[editor.speaker.radius: bad radius '{args[1].ToString()}']");
         }
 
         if (Find(name: name!) is not { } speaker) {
@@ -179,7 +179,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
     }
 
     // The shared feed-field act: resolve name+seat, apply the field transform, submit the whole row.
-    private CommandResult FeedHandler(CommandContext context, string[] args, string verb, string form, Func<WorldSpeaker, string, WorldSpeaker?> apply) {
+    private CommandResult FeedHandler(CommandContext context, WireArgs args, string verb, string form, Func<WorldSpeaker, string, WorldSpeaker?> apply) {
         var (name, slot, error) = ResolveNameAndSlot(context: context, args: args, extra: 1, verb: verb, form: form);
 
         if (error is { } resolveError) {
@@ -190,18 +190,20 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
             return Error(text: $"[{verb}: no speaker '{name}' in the live definition]");
         }
 
-        if (apply(arg1: speaker, arg2: args[1]) is not { } changed) {
-            return Error(text: $"[{verb}: bad value '{args[1]}']");
+        var token = args[1].ToString();
+
+        if (apply(arg1: speaker, arg2: token) is not { } changed) {
+            return Error(text: $"[{verb}: bad value '{token}']");
         }
 
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSpeaker(Principal: WorldPrincipal.Seat(slot: slot), Speaker: changed));
 
-        return Echo(slot: slot, verb: verb, detail: $"speaker '{name}' {args[1]} — one mutation submitted");
+        return Echo(slot: slot, verb: verb, detail: $"speaker '{name}' {token} — one mutation submitted");
     }
 
     // Resolve "<name> <extra args...> [seat]" with the editing guard applied; name is args[0].
-    private (string? Name, int Slot, CommandResult? Error) ResolveNameAndSlot(CommandContext context, string[] args, int extra, string verb, string form) {
-        if ((args.Length < (1 + extra)) || (args.Length > (2 + extra))) {
+    private (string? Name, int Slot, CommandResult? Error) ResolveNameAndSlot(CommandContext context, in WireArgs args, int extra, string verb, string form) {
+        if ((args.Count < (1 + extra)) || (args.Count > (2 + extra))) {
             return (Name: null, Slot: 0, Error: Error(text: $"[{verb}: expected {form} [seat]]"));
         }
 
@@ -215,7 +217,7 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
             return (Name: null, Slot: 0, Error: guard);
         }
 
-        return (Name: args[0], Slot: slot, Error: null);
+        return (Name: args[0].ToString(), Slot: slot, Error: null);
     }
 
     private WorldSpeaker? Find(string name) {
@@ -241,22 +243,22 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         _ => speaker,
     };
 
-    private static WorldSpeakerSource? ParseSource(string token) {
-        if (string.Equals(a: token, b: "none", comparisonType: StringComparison.Ordinal)) {
+    private static WorldSpeakerSource? ParseSource(ReadOnlySpan<char> token) {
+        if (token.Equals(other: "none", comparisonType: StringComparison.Ordinal)) {
             return new WorldSpeakerSource.None();
         }
 
         if (token.StartsWith(value: "machine:", comparisonType: StringComparison.Ordinal) &&
-            int.TryParse(s: token.AsSpan(start: "machine:".Length), provider: CultureInfo.InvariantCulture, result: out var screenIndex)) {
+            int.TryParse(s: token[("machine:".Length)..], provider: CultureInfo.InvariantCulture, result: out var screenIndex)) {
             return new WorldSpeakerSource.Machine(ScreenIndex: screenIndex);
         }
 
         if (token.StartsWith(value: "tune:", comparisonType: StringComparison.Ordinal) && (token.Length > "tune:".Length)) {
-            return new WorldSpeakerSource.Tune(TuneId: token["tune:".Length..]);
+            return new WorldSpeakerSource.Tune(TuneId: token[("tune:".Length)..].ToString());
         }
 
         if (token.StartsWith(value: "synth:", comparisonType: StringComparison.Ordinal) && (token.Length > "synth:".Length)) {
-            return new WorldSpeakerSource.Synth(PatchId: token["synth:".Length..]);
+            return new WorldSpeakerSource.Synth(PatchId: token[("synth:".Length)..].ToString());
         }
 
         return null;
@@ -270,11 +272,11 @@ internal sealed class EditorSpeakerCommandModule(WorldEditorSession session, Wor
         return Error(text: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} is not editing — editor.enter first]");
     }
 
-    private static bool TryFloat(string token, out float value) =>
+    private static bool TryFloat(ReadOnlySpan<char> token, out float value) =>
         (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
 
-    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, string[], CommandResult> handler) {
-        return CommandDefinition.WithTrailingArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
     }
 
     private static CommandResult Echo(int slot, string verb, string detail) =>

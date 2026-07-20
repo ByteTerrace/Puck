@@ -102,13 +102,31 @@ worlds.
 
 ## What remains
 
-Nothing here is fixed. Every item is a live finding, sized as the audit sized it.
+**C-F2 is FIXED.** Every argument-bearing verb now registers through
+`CommandDefinition.WithWireArgs`; `WithTrailingArgs`, the `TrailingArgsHandler`
+property, and the `CommandRegistry.Submit` dispatch fork are deleted, as are the two
+hand-rolled trailing wrappers in `Puck.Bench` and `Puck.Commands/FeatureSwitches`. The
+audit's premise that `WithWireArgs` was a "strict functional superset" was WRONG in two
+ways, both resolved rather than papered over:
+
+1. **Grammar.** `WireArgs` is a `ref struct` with no enumerator, so the token-bag verbs
+   written as `foreach (var token in args)` — `world.population`'s order-independent
+   `<count>` / `idle|wander`, `player.join`'s `[profile]` / `[slot]`, `bench.run`'s
+   `[suite] [samples]` — do not port by substitution. They port by INDEXING: `for` over
+   `args.Count` with `args.Is(index, …)`, preserving acceptance, ordering freedom, and
+   repeat rejection exactly. No verb's grammar had to change.
+2. **Acknowledgements.** Wire-nativeness doubled as the `wire.ack quiet` suppression
+   flag, so migrating a verb would silently have made its success output droppable.
+   That coupling is gone: suppression is the explicit, opt-in
+   `CommandDefinition.AcknowledgementOnly` (`ackOnly:`), set on exactly the verbs that
+   were suppressible before, so quiet mode behaves identically.
+
+Nothing else here is fixed. Every remaining item is a live finding, sized as the audit sized it.
 
 ### Deferred because it is an L-sized redesign
 
 | # | Size | Where | Why deferred |
 |---|---|---|---|
-| C-F2 | L | `Puck.Commands/CommandDefinition.cs:127` (`WithTrailingArgs`) vs `:171` (`WithWireArgs`); dispatch fork `CommandRegistry.cs:716-741` | A half-migrated mechanism: **152** trailing-args registrations across 24 World modules vs **32** wire-native (~17 % migrated). `WithWireArgs` is a strict functional superset that additionally avoids a `string[]` allocation per dispatch on the scripted stdin path. Converting 152 sites and deleting the fork is mechanical but L. Actionable now — touches nothing the port plan owns. |
 | V-1 | L | `Puck.World/WorldReplayCommandModule.cs:23,28,33,38,43,48`, wired `Program.cs:446` | All six `replay.*` verbs have **zero call sites** in `proof.cs`. The only evidence they work is hand-pasted transcripts in `docs/demo-to-world-port-plan.md:8479-8485`. Two of the three most recent pre-closeout commits are replay commits and determinism is a core product claim; a regression in tape capture, boot-image rehydration, or tail-hash comparison ships silently. Needs a new `replay` subcommand with a doctored-tape negative control. |
 | V-6 | L | `Puck.World/ScreenCommandModule.cs:51,56,61,66,76,81,86,91,96` | Nine `screen.*` verbs with zero call sites, including `screen.options` (the live dmg↔cgb↔agb device swap — a headline capability) and the whole `screen.link`/`unlink`/`links` cable group. `ScreensProof` covers only `insert`/`eject`/`peek`/`state`. |
 
@@ -155,10 +173,9 @@ divergence, not writer drift. Section (a) save-idempotence passes on all three w
 ## Verdict
 
 **The codebase does not yet meet the greenfield standard: document versioning and
-read-side tolerance are genuinely clean, but three structural items stand between it
+read-side tolerance are genuinely clean, but two structural items stand between it
 and the standard — the zero-consumer `src/Puck.Demo` fork and its `Puck.Scene` node
-(Arc 12's scheduled work, blocked behind Arcs 8–11), the 152-of-184 half-migrated
-`WithTrailingArgs`/`WithWireArgs` verb mechanism, and a verification surface where
+(Arc 12's scheduled work, blocked behind Arcs 8–11), and a verification surface where
 whole landed verb families (`replay.*`, `screen.*`, `world.view.*`, the sculpt style
 and rig modules) have zero scripted call sites and twelve of seventeen suites never
 settle `wire.errors`.**

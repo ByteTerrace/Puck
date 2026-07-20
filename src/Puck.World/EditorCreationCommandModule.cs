@@ -36,40 +36,40 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.import",
             description: "Imports a creation FILE (puck.creation.v1) as a world creation asset row: editor.import <path> [id]. The file crosses the strict canonicalize pipeline (validate + normalize + hash — an absent/foreign schema or structural violation rejects loudly, nothing is submitted); the row id defaults to the creation's sanitized name. One UpsertCreation mutation; stamp it with editor.place <id> or the place page's creation ghost.",
             handler: ImportHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.creations",
             description: "Lists the world's creation asset rows: editor.creations — id, shape/stamp cost, frame count (animated rows replay their timeline), and the hash pin's head. The place-by-name catalog the place page cycles.",
             handler: ListHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: NextCommand,
             description: "Arms the NEXT creation row for placement (wraps; the place page's D-pad Right): editor.creation.next [seat]. The armed creation is what editor.spawn.creation ghosts.",
             handler: (context, args) => CycleHandler(context: context, args: args, direction: 1, verb: NextCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: PrevCommand,
             description: "Arms the PREVIOUS creation row for placement (wraps; the place page's D-pad Left): editor.creation.prev [seat].",
             handler: (context, args) => CycleHandler(context: context, args: args, direction: -1, verb: PrevCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: SpawnCommand,
             description: "Begins a GHOST placement drag of the armed (or named) creation at the editor focus point (previewed client-side; enters the document only on release): editor.spawn.creation [creationId] [seat]. Commit with editor.grab, discard with editor.cancel. The chord twin is North on the place page.",
             handler: SpawnHandler
         );
     }
 
-    private CommandResult ImportHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 1 or > 2)) {
+    private CommandResult ImportHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return Error(text: "[editor.import: expected <path> [id]]");
         }
 
-        var path = args[0];
+        var path = args[0].ToString();
 
         if (!File.Exists(path: path)) {
             return Error(text: $"[editor.import: no file at {path}]");
@@ -86,7 +86,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
             return Error(text: $"[editor.import: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
 
-        var id = ((args.Length >= 2) ? args[1] : (canonical.Document.Name ?? "creation"));
+        var id = ((args.Count >= 2) ? args[1].ToString() : (canonical.Document.Name ?? "creation"));
         var slot = ((context.Parse is null) ? context.Slot : 0);
 
         // Doc + hash from the SAME canonical result — the hash-provenance contract, satisfied structurally.
@@ -98,7 +98,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         return new CommandResult(Output: $"[editor.import: '{id}' sha256 {canonical.Hash[..12]}… ({canonical.Document.StampShapeCount()} stamp shapes, {(canonical.Document.Frames?.Count ?? 0)} frames) — one mutation submitted]");
     }
 
-    private CommandResult ListHandler(CommandContext context, string[] args) {
+    private CommandResult ListHandler(CommandContext context, WireArgs args) {
         var creations = m_client.Definition.Creations;
 
         if (creations.Count == 0) {
@@ -119,7 +119,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         return new CommandResult(Output: lines.ToString());
     }
 
-    private CommandResult CycleHandler(CommandContext context, string[] args, int direction, string verb) {
+    private CommandResult CycleHandler(CommandContext context, WireArgs args, int direction, string verb) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: verb);
 
         if (error is { } resolveError) {
@@ -155,9 +155,9 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         return Echo(slot: slot, verb: verb, detail: $"armed '{picked.Id}' ({(position + 1)}/{creations.Count}) — {SpawnCommand} ghosts it");
     }
 
-    private CommandResult SpawnHandler(CommandContext context, string[] args) {
+    private CommandResult SpawnHandler(CommandContext context, WireArgs args) {
         // Shapes: none = the armed creation, acting seat; [creationId] and/or trailing [seat].
-        var explicitId = ((args.Length >= 1) && !int.TryParse(s: args[0], provider: CultureInfo.InvariantCulture, result: out _));
+        var explicitId = ((args.Count >= 1) && !int.TryParse(s: args[0], provider: CultureInfo.InvariantCulture, result: out _));
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: (explicitId ? 1 : 0), verb: SpawnCommand);
 
         if (error is { } resolveError) {
@@ -168,7 +168,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
             return guard;
         }
 
-        var creationId = (explicitId ? args[0] : m_armed[slot]);
+        var creationId = (explicitId ? args[0].ToString() : m_armed[slot]);
 
         if (creationId is not { Length: > 0 }) {
             return Error(text: $"[{SpawnCommand}: no creation armed — {NextCommand} or editor.spawn.creation <creationId>]");

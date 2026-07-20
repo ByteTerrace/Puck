@@ -24,16 +24,16 @@ namespace Puck.World;
 internal sealed class WorldHostCommandModule(WorldServer server, IServerLink link, WorldHostSettings hostSettings, PresentPacingControl pacing) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever values (world.target's present Hz + world.timing's armed state) — so an author sees which fields the CLI overrode and which levers have drifted.",
             handler: (_, _) => new CommandResult(Output: DescribeHost())
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.host.set",
             description: "Replaces the whole host-section defaults row from one inline-JSON WorldHostDefaults {backend, width, height, surfaceFormat, fullscreen, presentMode, targetHertz, exitAfterSeconds, rayQuery, timing, genlock}: world.host.set <json>. DOCUMENT-defaults class — the boot-only fields apply at the next boot; targetHertz/timing set the value the next boot wakes on (world.save folds the live levers back). A full-document revalidation rejects loudly.",
             handler: (context, args) => {
-                var raw = RawArgument(context: context, args: args);
+                var raw = RawArgument(context: context, args: in args);
 
                 if (string.IsNullOrWhiteSpace(value: raw)) {
                     return Usage(verb: "world.host.set", form: "<json>");
@@ -51,15 +51,15 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.host.tune",
             description: "Console sugar: read-modify-write ONE host field into a whole-row upsert: world.host.tune <field> <value>. Fields (camelCase JSON names): backend (auto|directx|vulkan), width/height (1..16384), surfaceFormat (r8g8b8a8|b8g8r8a8), fullscreen/rayQuery/timing (true|false), presentMode (vsync|mailbox|immediate|adaptive), targetHertz (non-negative double; 0 = automatic display pacing), exitAfterSeconds (non-negative integer; 0 = run until closed), genlock (a non-whitespace string, or - to clear it to null). Host is a single always-resolving row, so there is no insert path.",
             handler: (_, args) => {
-                if (args.Length != 2) {
+                if (args.Count != 2) {
                     return Usage(verb: "world.host.tune", form: "<field> <value>");
                 }
 
-                if (WithHostField(host: server.Definition.Host, field: args[0], value: args[1], error: out var error) is not { } tuned) {
+                if (WithHostField(host: server.Definition.Host, field: args[0].ToString(), value: args[1].ToString(), error: out var error) is not { } tuned) {
                     return new CommandResult(Output: $"[world.host.tune: {error}]") { IsError = true };
                 }
 
@@ -216,7 +216,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
 
     // The raw argument text after the verb token — reconstructed from the submitted line so inline-JSON quotes survive
     // the console tokenizer (the WorldMutationCommandModule.Row idiom).
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -224,6 +224,6 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
     }
 }

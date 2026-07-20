@@ -34,37 +34,37 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "player.bind",
             description: "Live-remaps one binding for a seat's SESSION layer (unsaved until profile.save): player.bind <seat> <source> <command> — <seat> 1..4, <command> the command it fires. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the command in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
             handler: BindHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "player.bindings",
             description: "Echoes a seat's composed ACTIVE mapping after the engine default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds merge: the default group's resting-page source→command entries, then every chord row with its meaning (chord <group>:[m1+m2]→<command> or →page <id>): player.bindings [seat] (optional seat 1..4, default 1).",
             handler: BindingsHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "player.signal",
             description: "Synthesizes one raw input signal into the router — the scripted twin of a physical control, so chords and bindings are drivable over the pipe: player.signal <source> <press|release|value> — <source> a provider-neutral input source id (e.g. gamepad.leftTrigger, gamepad.buttonSouth); press/release = a digital edge; a number = an analog Active sample (a trigger sweep — 0.9 latches a modifier, 0 releases it through hysteresis). The signal folds into the NEXT simulation tick's snapshot exactly like device input (it rides the seat the device-neutral lane resolves to — seat 1). Replay streams shift, like any live input.",
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.doc",
             description: "Echoes the whole server-owned player document (puck.world.player.v1) as JSON — the read-back an editor/agent pulls before editing a profile section (GetPlayerDocument): profile.doc. Immediate.",
-            handler: (_, args) => (args.Length > 0)
+            handler: (_, args) => (args.Count > 0)
                 ? Error(output: "[profile.doc: expected no arguments]")
                 : Answered(answer: m_link.Query(query: new WorldQuery.PlayerDocument()))
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.save",
             description: "Folds a seat's live SESSION rebinds into its selected profile's durable bindings section and persists (through the server-owned player document, gated on the Edit capability): profile.save [seat] (optional seat 1..4, default 1). The session layer then empties. A friendly no-op when the seat has no unsaved rebinds.",
             handler: SaveHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.section",
             description: "Durably edits ONE section of a profile through the player-document protocol — the raw SetPlayerSection reflection an editor/agent drives (the typed profile.set/profile.save are sugar over the same wire): profile.section <profile-id> <identity|motion|bindings|preferences> <compact-json>. identity = {\"name\":…,\"color\":\"#RRGGBB\"}; motion = {\"moveSpeed\":…,\"turnSpeed\":…,\"invertLookX\":…}; bindings = a BindingProfileDocument (or null to inherit the engine default); preferences = a JSON object (or null to clear the bag). The payload is one compact (whitespace-free) JSON token. The server validates the candidate document through the thick gate, updates the live handle, bumps the revision, and persists; a malformed payload or a validation failure rejects loudly. Gated on the Edit capability.",
             handler: SectionHandler,
@@ -72,8 +72,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         );
     }
 
-    private CommandResult BindHandler(CommandContext context, string[] args) {
-        if (args.Length != 3) {
+    private CommandResult BindHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 3) {
             return Error(output: "[player.bind: expected <seat> <source> <command> — seat 1..4; <source> may be chord:<m1>+<m2> or chord:<group>:<m1>+<m2>]");
         }
 
@@ -81,8 +81,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return Error(output: $"[player.bind: <seat> must be an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
-        var source = args[1];
-        var command = args[2];
+        var source = args[1].ToString();
+        var command = args[2].ToString();
 
         if (string.IsNullOrWhiteSpace(value: source) || string.IsNullOrWhiteSpace(value: command)) {
             return Error(output: "[player.bind: <source> and <command> must be non-empty]");
@@ -116,12 +116,12 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         return new CommandResult(Output: $"[player.bind: seat {seat} '{source}' → '{command}' (unsaved — profile.save to persist)]");
     }
 
-    private CommandResult SignalHandler(CommandContext context, string[] args) {
-        if (args.Length != 2) {
+    private CommandResult SignalHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 2) {
             return Error(output: "[player.signal: expected <source> <press|release|value>]");
         }
 
-        var source = args[0];
+        var source = args[0].ToString();
 
         if (string.IsNullOrWhiteSpace(value: source)) {
             return Error(output: "[player.signal: <source> must be non-empty]");
@@ -130,10 +130,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         CommandPhase phase;
         CommandValue value;
 
-        if (string.Equals(a: args[1], b: "press", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (args.Is(index: 1, value: "press")) {
             phase = CommandPhase.Started;
             value = CommandValue.Digital(active: true);
-        } else if (string.Equals(a: args[1], b: "release", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (args.Is(index: 1, value: "release")) {
             phase = CommandPhase.Completed;
             value = CommandValue.Digital(active: false);
         } else if (float.TryParse(s: args[1], style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var sample)) {
@@ -151,11 +151,11 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             Value: value
         ));
 
-        return new CommandResult(Output: $"[player.signal: {source} {args[1].ToLowerInvariant()}]");
+        return new CommandResult(Output: $"[player.signal: {source} {args[1].ToString().ToLowerInvariant()}]");
     }
 
-    private CommandResult BindingsHandler(CommandContext context, string[] args) {
-        if (args.Length > 1) {
+    private CommandResult BindingsHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
             return Error(output: "[player.bindings: expected at most 1 value — an optional seat index]");
         }
 
@@ -207,8 +207,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
 
-    private CommandResult SaveHandler(CommandContext context, string[] args) {
-        if (args.Length > 1) {
+    private CommandResult SaveHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
             return Error(output: "[profile.save: expected at most 1 value — an optional seat index]");
         }
 
@@ -249,14 +249,16 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         return new CommandResult(Output: $"[profile.save: seat {seat} → profile '{profile.Name}' bindings saved]");
     }
 
-    private CommandResult SectionHandler(CommandContext context, string[] args) {
-        if (args.Length < 3) {
+    private CommandResult SectionHandler(CommandContext context, WireArgs args) {
+        if (args.Count < 3) {
             return Error(output: "[profile.section: expected <profile-id> <section> <compact-json> — section is identity|motion|bindings|preferences]");
         }
 
-        if (!TryParseSection(token: args[1], section: out var section)) {
-            return Error(output: $"[profile.section: unknown section '{args[1]}' — identity|motion|bindings|preferences]");
+        if (!TryParseSection(args: args, index: 1, section: out var section)) {
+            return Error(output: $"[profile.section: unknown section '{args[1].ToString()}' — identity|motion|bindings|preferences]");
         }
+
+        var profileId = args[0].ToString();
 
         // The raw JSON after the id and section tokens — reconstructed from the submitted line so inline-JSON quotes
         // survive the console tokenizer (the same discipline the world.*.set mutation verbs use).
@@ -268,7 +270,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         var reply = m_link.SubmitSession(request: new SessionRequest.SetPlayerSection(
             Principal: WorldPrincipal.Console,
-            ProfileId: args[0],
+            ProfileId: profileId,
             Section: section,
             Payload: payload
         ));
@@ -281,10 +283,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         // re-derive the profile-bindings layer for every active seat on this profile. Identity/motion/preferences
         // carry no input mapping, so they need no seat recompose (color already refreshes server-side).
         if (section == WorldPlayerSection.Bindings) {
-            RefreshSeatsBoundTo(profileId: args[0]);
+            RefreshSeatsBoundTo(profileId: profileId);
         }
 
-        return new CommandResult(Output: $"[profile.section: {args[0]} {section.ToString().ToLowerInvariant()} applied]");
+        return new CommandResult(Output: $"[profile.section: {profileId} {section.ToString().ToLowerInvariant()} applied]");
     }
 
     // Re-derives the profile-bindings input layer for every ACTIVE seat whose selected profile is <paramref name="profileId"/>,
@@ -299,34 +301,39 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
     }
 
-    private static bool TryParseSection(string token, out WorldPlayerSection section) {
-        switch (token.ToLowerInvariant()) {
-            case "identity":
-                section = WorldPlayerSection.Identity;
+    private static bool TryParseSection(in WireArgs args, int index, out WorldPlayerSection section) {
+        if (args.Is(index: index, value: "identity")) {
+            section = WorldPlayerSection.Identity;
 
-                return true;
-            case "motion":
-                section = WorldPlayerSection.Motion;
-
-                return true;
-            case "bindings":
-                section = WorldPlayerSection.Bindings;
-
-                return true;
-            case "preferences":
-                section = WorldPlayerSection.Preferences;
-
-                return true;
-            default:
-                section = WorldPlayerSection.Identity;
-
-                return false;
+            return true;
         }
+
+        if (args.Is(index: index, value: "motion")) {
+            section = WorldPlayerSection.Motion;
+
+            return true;
+        }
+
+        if (args.Is(index: index, value: "bindings")) {
+            section = WorldPlayerSection.Bindings;
+
+            return true;
+        }
+
+        if (args.Is(index: index, value: "preferences")) {
+            section = WorldPlayerSection.Preferences;
+
+            return true;
+        }
+
+        section = WorldPlayerSection.Identity;
+
+        return false;
     }
 
     // The raw text after the verb token and the first argTokens argument tokens — the payload with quotes intact. The
     // split-args join is a defensive fallback for the (compact-JSON) case where no whitespace splits the token.
-    private static string RawPayloadAfter(CommandContext context, string[] args, int argTokens) {
+    private static string RawPayloadAfter(CommandContext context, in WireArgs args, int argTokens) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
 
@@ -343,7 +350,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return span.Trim().ToString();
         }
 
-        return ((args.Length > argTokens) ? string.Join(separator: ' ', values: args[argTokens..]) : string.Empty);
+        return ((args.Count > argTokens) ? args.Tail(argTokens) : string.Empty);
     }
 
     // Parse a chord token: chord:<m1>+<m2>[+...] (the default play group) or chord:<group>:<m1>+<m2>.

@@ -45,70 +45,77 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
         yield return CommandDefinition.WithWireArgs(
             name: "screen.insert",
             description: "Boots content onto a declared screen, live: screen.insert <index> <contentPath> [engine] [options…] — <index> the engine screen index, <contentPath> a content file (a cartridge ROM), the optional [engine] a registered screen-machine engine id (omit it when one is registered — the mechanical default), and the trailing tokens the engine's own options string (the gaming-brick engine reads dmg|cgb|agb plus dmgspeed). The runtime twin of the declared machine data (same boot code); an existing machine on the slot is live-swapped. Errors on an undeclared screen, an unresolved engine, an unreadable file, or rejected options.",
-            handler: InsertHandler
+            handler: InsertHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.camera",
             description: "Shows the live webcam on a declared screen: screen.camera <index>. Binds the ONE shared camera session (every camera screen samples one feed — two sessions on a device flicker), using the runtime feed profile and skipping unchanged camera frames. Any existing producer on the slot is cleared. Errors on an undeclared screen or when no camera device can be opened.",
-            handler: CameraHandler
+            handler: CameraHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.capture",
             description: "Captures a live desktop window onto a declared screen: screen.capture <index> <windowTitle...> — the title fragment (may contain spaces) is a case-insensitive substring match resolved when the command runs. Windows Graphics Capture publishes compositor frames at the runtime feed profile's fixed extent and cadence. Any existing producer on the slot is cleared. Errors on an undeclared screen, a missing target, or an unavailable capture service.",
-            handler: CaptureHandler
+            handler: CaptureHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.desktop",
             description: "Captures a whole monitor onto a declared screen: screen.desktop <index> [monitorIndex] — [monitorIndex] the 0-based monitor (default 0 = primary). Windows Graphics Capture publishes the monitor's compositor frames at the runtime feed profile's fixed extent and cadence, reacquiring if the monitor disconnects and returns. Any existing producer on the slot is cleared. Errors on an undeclared screen, a monitor index not present, or an unavailable capture service.",
-            handler: DesktopHandler
+            handler: DesktopHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.view",
             description: "Shows a placeable camera's view of this same world on a declared screen (the jumbotron recursion): screen.view <index> <cameraName>. Registers one offscreen camera render, budgeted round-robin; the screen's own face binds nothing inside that render (no feedback). Any existing producer on the slot is cleared. Errors on an undeclared screen or an unknown camera name.",
-            handler: ViewHandler
+            handler: ViewHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.eject",
             description: "Ejects a screen's live source, live: screen.eject <index> — clears any producer kind (a cartridge, the webcam, a window capture). The slot reverts to its declared test pattern or to the engine's procedural no-signal fallback. Errors on an undeclared screen or a slot with no live source.",
-            handler: EjectHandler
+            handler: EjectHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.select",
             description: "Advances a screen's source magazine, live: screen.select <index> [next|prev|<entry>]. No third token echoes the current selection. Applies the selected entry as the slot's live source (a cartridge, the webcam, a jumbotron view) where it has a live setter; the selector always moves. Errors on an undeclared screen, a screen with no magazine, or an out-of-range entry.",
-            handler: SelectHandler
+            handler: SelectHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.options",
             description: "Reconfigures a screen's live machine across the engine's options vocabulary, live: screen.options <index> [options…]. No options echoes the machine's current string. With options, retargets the running machine (the dmg|cgb|agb device swap — no reboot, no lost progress). Errors on an undeclared screen, a slot with no machine, a machine without the reconfigure capability, or rejected options.",
-            handler: OptionsHandler
+            handler: OptionsHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.link",
             description: "Cable-links two or more declared screens' machines into one deterministically stepped group: screen.link <name> <index> <index> [index…] — the runtime twin of a Links row. A group whose members cannot currently be linked (a member with no machine, mixed engines, an engine with no linking capability) is recorded DORMANT with a reason. Errors on an undeclared screen, a duplicate member, or a member already in another link.",
-            handler: LinkHandler
+            handler: LinkHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.unlink",
             description: "Severs a runtime cable link by name: screen.unlink <name>. Its members resume individual stepping. Errors when no link of that name is live.",
-            handler: UnlinkHandler
+            handler: UnlinkHandler,
+            ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.links",
             description: "Echoes every live cable link: screen.links — each link's name, member screens, and live (transfers=…) or dormant (with the reason) state. A query (always echoes, even under wire.ack quiet).",
-            handler: LinksHandler,
-            echoesData: true
+            handler: LinksHandler
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.state",
             description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, and the engaged players. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
-            handler: StateHandler,
-            echoesData: true
+            handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
             name: "screen.peek",
             description: "Reads one memory byte from a screen's machine: screen.peek <index> <addr> — <addr> a 0x-prefixed hex machine address (the gaming-brick's work RAM is [0xC000, 0xDFFF]). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
-            handler: PeekHandler,
-            echoesData: true
+            handler: PeekHandler
         );
     }
     private CommandResult InsertHandler(CommandContext context, WireArgs args) {

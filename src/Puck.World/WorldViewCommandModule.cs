@@ -52,22 +52,22 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
             name: "world.view.layout.remove",
             description: "Removes a named window layout: world.view.layout.remove <name>. Always allowed — the composer falls back to the authored/built-in selection.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "world.view.layout.remove", form: "<name>");
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveViewLayout(Principal: WorldPrincipal.Console, Name: args[0]));
+                return Submit(mutation: new WorldMutation.RemoveViewLayout(Principal: WorldPrincipal.Console, Name: args[0].ToString()));
             }
         );
         yield return Simulation(
             name: "view.layout",
             description: "LIVE composition override — forces the active window layout for every seat: view.layout <name|auto>. auto returns to the composer's own selection. Gated Control over composition; a denial prints loudly and changes nothing.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "view.layout", form: "<name|auto>");
                 }
 
-                link.SubmitComposition(composition: new WorldComposition.SetActiveLayout(Name: ClearOrName(token: args[0])), principal: WorldPrincipal.Console);
+                link.SubmitComposition(composition: new WorldComposition.SetActiveLayout(Name: ClearOrName(token: args[0].ToString())), principal: WorldPrincipal.Console);
 
                 return CommandResult.None;
             }
@@ -76,16 +76,16 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
             name: "view.camera",
             description: "LIVE composition override — resolves every camera-bearing slot to one camera for every seat: view.camera <name|auto>. auto clears the override. The twin of a layout slot's own camera and Arc 9's milestone camera cut. Gated Control over composition.",
             handler: (context, args) => {
-                if (args.Length != 1) {
+                if (args.Count != 1) {
                     return Usage(verb: "view.camera", form: "<name|auto>");
                 }
 
-                link.SubmitComposition(composition: new WorldComposition.SelectCamera(Name: ClearOrName(token: args[0])), principal: WorldPrincipal.Console);
+                link.SubmitComposition(composition: new WorldComposition.SelectCamera(Name: ClearOrName(token: args[0].ToString())), principal: WorldPrincipal.Console);
 
                 return CommandResult.None;
             }
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "world.view.state",
             description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name>). A query (always echoes) — the pipe-assertable composition read.",
             handler: (context, args) => new CommandResult(Output: DescribeState()),
@@ -113,8 +113,8 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
     private static string? ClearOrName(string token) =>
         (string.Equals(a: token, b: "auto", comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: token, b: "-", comparisonType: StringComparison.Ordinal)) ? null : token;
 
-    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, string[], CommandResult> handler) {
-        return CommandDefinition.WithTrailingArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
     }
 
     private CommandResult Submit(WorldMutation mutation) {
@@ -129,7 +129,7 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
 
     // The raw argument text after the verb token — reconstructed from the submitted line so inline-JSON quotes survive
     // the console tokenizer.
-    private static string RawArgument(CommandContext context, string[] args) {
+    private static string RawArgument(CommandContext context, in WireArgs args) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
             var separator = span.IndexOfAny(value0: ' ', value1: '\t');
@@ -137,7 +137,7 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
             return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
         }
 
-        return string.Join(separator: ' ', values: args);
+        return args.Tail(0);
     }
 
     private static bool TryParseJson<T>(string json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, out T value, out string error) {
