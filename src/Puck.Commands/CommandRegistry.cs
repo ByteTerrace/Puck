@@ -64,6 +64,16 @@ public sealed class CommandRegistry : ICommandSink {
         Description = "on | quiet",
     };
     private readonly Command m_wireAckCommand;
+    // The built-in `wire.errors [reset]` verb, registered beside `help`/`wire.ack`: it reports (or clears) the count of
+    // submitted lines this registry REFUSED. Every rejection — an unknown verb, a parse error, a handler's IsError
+    // result on either dispatch path, and a Simulation re-parse that failed to reach its handler — increments the same
+    // counter, so a scripted driver reads one number back instead of pattern-matching free-form error text.
+    private readonly Argument<string[]> m_wireErrorsArgument = new(name: "mode") {
+        Arity = ArgumentArity.ZeroOrMore,
+        Description = "reset",
+    };
+    private readonly Command m_wireErrorsCommand;
+    private int m_rejections;
     // The deterministic-input sink a Simulation-class submitted command is folded into instead of running inline;
     // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
     private ICommandInjectionSink? m_injectionSink;
@@ -119,6 +129,15 @@ public sealed class CommandRegistry : ICommandSink {
             m_wireAckArgument,
         };
         m_root.Subcommands.Add(item: m_wireAckCommand);
+
+        // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
+        m_wireErrorsCommand = new Command(
+            description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, or a handler's failure result): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
+            name: "wire.errors"
+        ) {
+            m_wireErrorsArgument,
+        };
+        m_root.Subcommands.Add(item: m_wireErrorsCommand);
 
         // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
         // identical across machines and builds (independent of module registration order); aliases resolve to
@@ -265,6 +284,34 @@ public sealed class CommandRegistry : ICommandSink {
                 };
         }
     }
+
+    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.</summary>
+    /// <param name="mode">The parsed trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
+    /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
+    private CommandResult ApplyWireErrors(string[] mode) {
+        if (mode.Length > 1) {
+            return Reject(text: "[wire.errors: expected no argument or `reset`]");
+        }
+
+        if ((mode.Length == 1) && !string.Equals(a: mode[0], b: "reset", comparisonType: StringComparison.Ordinal)) {
+            return Reject(text: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
+        }
+
+        // Read the count BEFORE `reset` zeroes it, and do not let this verb's own report count as a rejection.
+        var rejected = m_rejections;
+
+        if (mode.Length == 1) {
+            m_rejections = 0;
+        }
+
+        return new CommandResult(Output: $"[wire.errors: {rejected} rejected]");
+    }
+
+    // A refused submission. Counting happens once, in Submit, over every error result from either dispatch path, so
+    // this helper only shapes the result — nothing here double-counts.
+    private static CommandResult Reject(string text) => new(Output: text) {
+        IsError = true,
+    };
 
     /// <summary>Builds the help listing of every registered command and its description, ordered by name.</summary>
     /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
@@ -463,6 +510,11 @@ public sealed class CommandRegistry : ICommandSink {
                 !m_byTextCommand.TryGetValue(key: parseResult.CommandResult.Command, value: out var definition) ||
                 !TryGetId(name: definition.Name, id: out var actualCommandId) ||
                 (actualCommandId != expectedCommandId)) {
+                // A snapshot-routed line that no longer re-parses to the command it was injected as never reaches its
+                // handler. Submit already returned None for it, so this is the only place it can be counted — without
+                // it a Simulation-routed rejection stays invisible to wire.errors.
+                m_rejections++;
+
                 return;
             }
 
@@ -476,7 +528,11 @@ public sealed class CommandRegistry : ICommandSink {
                 Value: value
             );
 
-            _ = Dispatch(context: in context, definition: definition, suppressWireAck: true);
+            // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
+            // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
+            if (Dispatch(context: in context, definition: definition, suppressWireAck: true).IsError) {
+                m_rejections++;
+            }
         } finally {
             if (completesTextSubmission && (m_pendingSimulationSubmissions != 0)) {
                 m_pendingSimulationSubmissions--;
@@ -603,6 +659,19 @@ public sealed class CommandRegistry : ICommandSink {
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
 
+        var result = SubmitCore(line: line);
+
+        // The one place every text-path outcome is visible: count each failure so `wire.errors` can report it. This
+        // covers the registry's own refusals AND a module handler's IsError result on either dispatch path.
+        if (result.IsError) {
+            m_rejections++;
+        }
+
+        return result;
+    }
+
+    // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
+    private CommandResult SubmitCore(string line) {
         if (string.IsNullOrWhiteSpace(value: line)) {
             return CommandResult.None;
         }
@@ -663,10 +732,10 @@ public sealed class CommandRegistry : ICommandSink {
         var parseResult = m_root.Parse(commandLine: line);
 
         if (parseResult.Errors.Count > 0) {
-            return new CommandResult(string.Join(
-                separator: '\n',
+            return Reject(text: $"[wire.reject: {string.Join(
+                separator: " | ",
                 values: parseResult.Errors.Select(selector: error => error.Message)
-            ));
+            )}]");
         }
 
         var command = parseResult.CommandResult.Command;
@@ -677,6 +746,10 @@ public sealed class CommandRegistry : ICommandSink {
 
         if (command == m_wireAckCommand) {
             return ApplyWireAck(mode: (parseResult.GetValue(argument: m_wireAckArgument) ?? []));
+        }
+
+        if (command == m_wireErrorsCommand) {
+            return ApplyWireErrors(mode: (parseResult.GetValue(argument: m_wireErrorsArgument) ?? []));
         }
 
         if (m_byTextCommand.TryGetValue(
@@ -726,6 +799,6 @@ public sealed class CommandRegistry : ICommandSink {
                 : result);
         }
 
-        return new CommandResult($"Unknown command: {line}");
+        return Reject(text: $"[wire.reject: unknown command '{line}']");
     }
 }

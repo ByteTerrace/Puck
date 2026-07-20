@@ -28,7 +28,9 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldEngagem
         m_server.Grants.Allows(principal: WorldPrincipal.Console, capability: WorldCapability.Control, subject: GrantSubject.Screen(index: index));
 
     private static CommandResult Denied(string verb, int index) =>
-        new(Output: $"[{verb}: console lacks Control over screen {index} — grant it (world.grant console control screen {index})]") { IsError = true };
+        // The grant subject is ONE colon-joined token: `screen:{index}`, not `screen {index}` (which the parser refuses
+        // for both the split subject and the arity it pushes past).
+        new(Output: $"[{verb}: console lacks Control over screen {index} — grant it (world.grant console control screen:{index})]") { IsError = true };
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {

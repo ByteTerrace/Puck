@@ -30,7 +30,7 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldCo
                         _ = Directory.CreateDirectory(path: directory);
                     }
                 } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException) {
-                    return new CommandResult(Output: $"[world.screenshot: could not create the target directory ({exception.Message})]");
+                    return new CommandResult(Output: $"[world.screenshot: could not create the target directory ({exception.Message})]") { IsError = true };
                 }
 
                 render.RequestCapture(path: path);
@@ -53,7 +53,7 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldCo
                 };
 
                 if (on is not { } resolved) {
-                    return new CommandResult(Output: $"[world.console: unknown state '{args[0]}' — on|off]");
+                    return new CommandResult(Output: $"[world.console: unknown state '{args[0]}' — on|off]") { IsError = true };
                 }
 
                 consoleMirror.SetVisible(visible: resolved);

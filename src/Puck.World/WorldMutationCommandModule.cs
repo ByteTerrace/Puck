@@ -71,7 +71,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                         return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
                     default:
-                        return new CommandResult(Output: $"[world.kit.assign: unknown policy '{args[0]}' — hash | table]");
+                        return new CommandResult(Output: $"[world.kit.assign: unknown policy '{args[0]}' — hash | table]") { IsError = true };
                 }
             }
         );
@@ -84,15 +84,15 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 if (!float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) {
-                    return new CommandResult(Output: $"[world.kit.tune: bad value '{args[2]}' — a number]");
+                    return new CommandResult(Output: $"[world.kit.tune: bad value '{args[2]}' — a number]") { IsError = true };
                 }
 
                 if (FindKit(name: args[0]) is not { } kit) {
-                    return new CommandResult(Output: $"[world.kit.tune: no kit row named '{args[0]}']");
+                    return new CommandResult(Output: $"[world.kit.tune: no kit row named '{args[0]}']") { IsError = true };
                 }
 
                 if (WithTuningField(tuning: kit.Tuning, field: args[1], value: value) is not { } tuned) {
-                    return new CommandResult(Output: $"[world.kit.tune: unknown field '{args[1]}' — camelCase MotionTuning fields]");
+                    return new CommandResult(Output: $"[world.kit.tune: unknown field '{args[1]}' — camelCase MotionTuning fields]") { IsError = true };
                 }
 
                 return Submit(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: (kit with { Tuning = tuned })));
@@ -313,7 +313,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var count = 1;
 
                 if ((args.Length >= 1) && (!int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out count) || (count < 1))) {
-                    return new CommandResult(Output: $"[world.undo: bad count '{args[0]}' — a positive integer]");
+                    return new CommandResult(Output: $"[world.undo: bad count '{args[0]}' — a positive integer]") { IsError = true };
                 }
 
                 link.SubmitUndo(count: count, principal: WorldPrincipal.Console);

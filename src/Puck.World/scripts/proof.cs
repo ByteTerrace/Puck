@@ -4379,6 +4379,7 @@ static class GrantsProof {
     const int OrdinaryBodyIndex = 11;               // ordinary-then-exclusive order test body (an active network stand-in)
     const int ExclusiveBodyIndex = 12;              // exclusive-then-ordinary + sole-driver test body
     const int ExclusivePlayerIndex = (ExclusiveBodyIndex + 1); // player.run's 1-based index for the sole-driver test
+    const int CensusForBodies = (ExclusiveBodyIndex + 1); // the world.population raise that admits every body index above
     const double MovedEpsilon = 0.5;                // u — the addon's steady walk covers ~2.6 u over 1 s, far past ambient wander drift
     const double FrozenEpsilon = 0.02;               // u — a revoked, un-driven body must not move at all (2-decimal echo precision)
 
@@ -4550,6 +4551,17 @@ static class GrantsProof {
             if (!WaitForConsole(ctx: ctx)) {
                 return false;
             }
+
+            // The census stands at ZERO at boot — `population.networkPlayers` is the remote-admission CAP, not a
+            // reservation — so the stand-in bodies this suite drives and contends over must be admitted first.
+            // Without the raise, body:9/11/12 have no population entry and every pose readback below reads "(?)".
+            var censusMark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"world.population {CensusForBodies}");
+
+            var censusLine = Await(collector: ctx.Collector, mark: censusMark, predicate: l => l.Contains(value: "[world.population:"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "census-admits-stand-ins", ok: (censusLine is not null), detail: (censusLine?.Trim() ?? "(no '[world.population: ...]' echo)"));
 
             // (b) grant Drive over a network stand-in body: the addon starts driving through the SAME wire a seat
             // uses, and the driver flips the body's IntentSource to Live, so the movement below is unambiguously

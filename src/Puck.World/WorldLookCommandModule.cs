@@ -74,7 +74,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
 
                         return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
                     default:
-                        return new CommandResult(Output: $"[world.look.assign: unknown policy '{args[0]}' — hash | table]");
+                        return new CommandResult(Output: $"[world.look.assign: unknown policy '{args[0]}' — hash | table]") { IsError = true };
                 }
             },
             routing: CommandRouting.Simulation
@@ -88,7 +88,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
                 }
 
                 if (FindLook(name: args[0]) is not { } look) {
-                    return new CommandResult(Output: $"[world.look.tune: no look row named '{args[0]}']");
+                    return new CommandResult(Output: $"[world.look.tune: no look row named '{args[0]}']") { IsError = true };
                 }
 
                 if (WithLookField(look: look, field: args[1], value: args[2], error: out var error) is not { } tuned) {

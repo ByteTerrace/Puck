@@ -38,6 +38,15 @@ public sealed class BufferedConsoleOutput : IDisposable {
         m_writer.WriteLine(value: value);
     }
 
+    /// <summary>Writes one REFUSED line to standard error, so a rejection is distinguishable from ordinary transcript
+    /// output by stream and not only by wording. The buffered stdout is flushed first, so a reader merging the two
+    /// streams still sees strict submission order across them.</summary>
+    /// <param name="value">The line to write.</param>
+    public void WriteErrorLine(string value) {
+        m_writer.Flush();
+        Console.Error.WriteLine(value: value);
+    }
+
     /// <summary>Flushes the buffered lines to standard output in one write. Called once per frame after the command
     /// pump's <c>Collect</c> drain, and on shutdown, so a burst of echoes costs one syscall and no tail is ever lost.</summary>
     public void Flush() {

@@ -32,12 +32,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!TryParseShadowReach(text: args[0], reach: out var reach)) {
-                    return new CommandResult(Output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]");
+                    return new CommandResult(Output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]") { IsError = true };
                 }
 
                 if (args.Length >= 2) {
                     if (!float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || (radius < 0f) || (radius > 100f)) {
-                        return new CommandResult(Output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]");
+                        return new CommandResult(Output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]") { IsError = true };
                     }
 
                     settings.ShadowCrowdRadius = radius;
@@ -63,7 +63,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 };
 
                 if (on is not { } resolved) {
-                    return new CommandResult(Output: $"[world.ao: unknown state '{args[0]}' — on|off]");
+                    return new CommandResult(Output: $"[world.ao: unknown state '{args[0]}' — on|off]") { IsError = true };
                 }
 
                 settings.AmbientOcclusion = resolved;
@@ -271,7 +271,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var hz) || !double.IsFinite(hz) || (hz <= 0.0)) {
-                    return new CommandResult(Output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]");
+                    return new CommandResult(Output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]") { IsError = true };
                 }
 
                 pacing.SetTargetHertz(targetHertz: hz);
@@ -291,7 +291,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // preset table applies immediately: look the named tier up and write its three levers into the live
                 // settings.
                 if (server.Definition.Render.Preset(name: args[0]) is not { } preset) {
-                    return new CommandResult(Output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
+                    return new CommandResult(Output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]") { IsError = true };
                 }
 
                 settings.ShadowReach = ShadowTiers.Scale(tier: preset.Shadows);
@@ -316,7 +316,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 };
 
                 if (on is not { } resolved) {
-                    return new CommandResult(Output: $"[world.timing: unknown state '{args[0]}' — on|off]");
+                    return new CommandResult(Output: $"[world.timing: unknown state '{args[0]}' — on|off]") { IsError = true };
                 }
 
                 GpuTimingControl.Shared.SetArmed(armed: resolved);
@@ -363,7 +363,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                             break;
                         default:
                             if (!TryParseInt(text: token, value: out var parsed) || (parsed < 0) || (parsed > WorldPopulation.MaxPopulationSimulated)) {
-                                return new CommandResult(Output: $"[world.population: unknown token '{token}' — a count 0..{WorldPopulation.MaxPopulationSimulated} and/or idle|wander]");
+                                return new CommandResult(Output: $"[world.population: unknown token '{token}' — a count 0..{WorldPopulation.MaxPopulationSimulated} and/or idle|wander]") { IsError = true };
                             }
 
                             if (count is not null) {
@@ -418,7 +418,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var (averageFps, worstFps, frameCount) = frameRate.Summarize();
 
                 if (frameCount == 0) {
-                    return new CommandResult(Output: "[world.fps: no frames sampled yet]");
+                    return new CommandResult(Output: "[world.fps: no frames sampled yet]") { IsError = true };
                 }
 
                 var target = pacing.TargetHertz;

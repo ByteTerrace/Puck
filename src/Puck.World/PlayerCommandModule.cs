@@ -1054,7 +1054,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     private static string ModelWord(MotionModel model) => ((model == MotionModel.Free) ? "free" : "grounded");
     private CommandResult JoinHandler(CommandContext context, string[] args) {
         if (args.Length > 2) {
-            return new CommandResult(Output: "[player.join: expected at most 2 tokens — an optional profile name and/or a slot 2..4]");
+            return new CommandResult(Output: "[player.join: expected at most 2 tokens — an optional profile name and/or a slot 2..4]") { IsError = true };
         }
 
         // Split the (up to two) tokens into an optional slot (an int in 2..4) and an optional profile name (either
@@ -1080,7 +1080,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         // confirm). The profile must exist and not already be in use by another active player.
         if (profileName is not null) {
             if (m_roster.FindProfile(name: profileName) is not { } profile) {
-                return new CommandResult(Output: $"[player.join: no profile named '{profileName}' — see profile.list]");
+                return new CommandResult(Output: $"[player.join: no profile named '{profileName}' — see profile.list]") { IsError = true };
             }
 
             if (m_roster.ActiveSlotUsing(profile: profile) >= 0) {
@@ -1111,7 +1111,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     }
     private CommandResult ProfileHandler(CommandContext context, string[] args) {
         if (args.Length is not (1 or 2)) {
-            return new CommandResult(Output: "[player.profile: expected a profile name plus an optional player index — player.profile <name> [n]]");
+            return new CommandResult(Output: "[player.profile: expected a profile name plus an optional player index — player.profile <name> [n]]") { IsError = true };
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 1, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var index)) {
@@ -1119,7 +1119,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         if (m_roster.FindProfile(name: args[0]) is not { } profile) {
-            return new CommandResult(Output: $"[player.profile: no profile named '{args[0]}' — see profile.list]");
+            return new CommandResult(Output: $"[player.profile: no profile named '{args[0]}' — see profile.list]") { IsError = true };
         }
 
         return (m_roster.SetProfile(slot: PlayerRoster.SlotFromDisplay(number: index), profile: profile) switch {
@@ -1130,11 +1130,11 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     }
     private CommandResult AssignHandler(CommandContext context, string[] args) {
         if (args.Length != 2) {
-            return new CommandResult(Output: "[player.assign: expected a device token and a slot — player.assign <kbd|padN> <slot 1..4>]");
+            return new CommandResult(Output: "[player.assign: expected a device token and a slot — player.assign <kbd|padN> <slot 1..4>]") { IsError = true };
         }
 
         if (!m_roster.TryResolveDeviceToken(token: args[0], device: out var device)) {
-            return new CommandResult(Output: $"[player.assign: no device '{args[0]}' — see world.devices]");
+            return new CommandResult(Output: $"[player.assign: no device '{args[0]}' — see world.devices]") { IsError = true };
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 1, min: 1, max: PlayerRoster.MaxSlots, fallback: null, value: out var slot)) {
@@ -1209,7 +1209,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     }
     private CommandResult LeaveHandler(CommandContext context, string[] args) {
         if (args.Length != 1) {
-            return new CommandResult(Output: "[player.leave: expected a player index — player.leave <n>, n in 2..4]");
+            return new CommandResult(Output: "[player.leave: expected a player index — player.leave <n>, n in 2..4]") { IsError = true };
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 2, max: PlayerRoster.MaxSlots, fallback: null, value: out var n)) {

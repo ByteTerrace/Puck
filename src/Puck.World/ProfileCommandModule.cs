@@ -50,7 +50,7 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
 
     private CommandResult CreateHandler(CommandContext context, string[] args) {
         if (args.Length is not (1 or 2)) {
-            return new CommandResult(Output: "[profile.create: expected a name plus an optional #RRGGBB color — profile.create <name> [#hex]]");
+            return new CommandResult(Output: "[profile.create: expected a name plus an optional #RRGGBB color — profile.create <name> [#hex]]") { IsError = true };
         }
 
         var colorHex = ((args.Length == 2) ? args[1] : NextDistinctColor());
@@ -63,7 +63,7 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
     }
     private CommandResult ShowHandler(CommandContext context, string[] args) {
         if (args.Length > 1) {
-            return new CommandResult(Output: "[profile.show: expected at most 1 value — an optional player index]");
+            return new CommandResult(Output: "[profile.show: expected at most 1 value — an optional player index]") { IsError = true };
         }
 
         if (!TryResolveIndex(args: args, at: 0, index: out var index)) {
@@ -78,7 +78,7 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
     }
     private CommandResult SetHandler(CommandContext context, string[] args) {
         if (args.Length is not (2 or 3)) {
-            return new CommandResult(Output: "[profile.set: expected <key> <value> plus an optional player index — key is speed, turn-speed, or invert-look]");
+            return new CommandResult(Output: "[profile.set: expected <key> <value> plus an optional player index — key is speed, turn-speed, or invert-look]") { IsError = true };
         }
 
         if (!TryResolveIndex(args: args, at: 2, index: out var index)) {
@@ -97,12 +97,12 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
             "speed" => SetFloat(profile: profile, slot: slot, key: "speed", raw: value, min: 0.5f, max: 20f, read: static p => p.MoveSpeed, build: static (p, v) => MotionOf(profile: p) with { MoveSpeed = v }, index: index),
             "turn-speed" => SetFloat(profile: profile, slot: slot, key: "turn-speed", raw: value, min: 0.5f, max: 10f, read: static p => p.TurnSpeed, build: static (p, v) => MotionOf(profile: p) with { TurnSpeed = v }, index: index),
             "invert-look" => SetInvert(profile: profile, slot: slot, raw: value, index: index),
-            _ => new CommandResult(Output: $"[profile.set: unknown key '{key}' — expected speed, turn-speed, or invert-look]"),
+            _ => new CommandResult(Output: $"[profile.set: unknown key '{key}' — expected speed, turn-speed, or invert-look]") { IsError = true },
         });
     }
     private CommandResult SetFloat(WorldProfile profile, int slot, string key, string raw, float min, float max, Func<WorldProfile, float> read, Func<WorldProfile, float, WorldPlayerMotion> build, int index) {
         if (!TryParseFloat(text: raw, value: out var parsed)) {
-            return new CommandResult(Output: $"[profile.set: could not parse '{raw}' as a number]");
+            return new CommandResult(Output: $"[profile.set: could not parse '{raw}' as a number]") { IsError = true };
         }
 
         var clamped = Math.Clamp(value: parsed, min: min, max: max);

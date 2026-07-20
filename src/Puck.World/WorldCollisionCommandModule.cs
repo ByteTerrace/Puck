@@ -65,7 +65,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 }
 
                 if (!Enum.TryParse<WorldContactProvider>(value: args[0], ignoreCase: true, result: out var provider)) {
-                    return new CommandResult(Output: $"[world.collision.provider: unknown provider '{args[0]}' — analytic | field]");
+                    return new CommandResult(Output: $"[world.collision.provider: unknown provider '{args[0]}' — analytic | field]") { IsError = true };
                 }
 
                 return SubmitCollision(edit: collision => (collision with { Provider = provider }));
@@ -153,7 +153,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 }
 
                 if (!int.TryParse(s: args[0], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, out var index) || (index < 1) || (index > WorldPopulation.MaxPopulation)) {
-                    return new CommandResult(Output: $"[world.contacts: bad body index '{args[0]}' — 1..{WorldPopulation.MaxPopulation}]");
+                    return new CommandResult(Output: $"[world.contacts: bad body index '{args[0]}' — 1..{WorldPopulation.MaxPopulation}]") { IsError = true };
                 }
 
                 if (server.Population.EntryBody(index: (index - 1)) is not { } body) {
@@ -185,7 +185,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         }
 
         if (server.SolidField is not { } field) {
-            return new CommandResult(Output: "[world.collision.probe: no field — set collision on with provider 'field']");
+            return new CommandResult(Output: "[world.collision.probe: no field — set collision on with provider 'field']") { IsError = true };
         }
 
         var position = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
@@ -290,7 +290,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             }
         }
 
-        return new CommandResult(Output: $"[world.scene.solid: no scene row with id '{id}']");
+        return new CommandResult(Output: $"[world.scene.solid: no scene row with id '{id}']") { IsError = true };
     }
 
     private WorldKit? FindKit(string name) {
