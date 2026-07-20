@@ -351,18 +351,21 @@ static class ProofApp {
         }
     }
 
-    // Fails an otherwise-green run that piped a line Puck.World REFUSED. A rejected step does not fail on its own — it
-    // manifests as a timeout only if the suite happened to await something that step would have caused, so a rejected
-    // setup verb before an assertion satisfied by other means reads as a pass. This is the one place every suite's
-    // verdict funnels through, so the check lands on all of them at once.
+    // Fails an otherwise-green run in which a driven session never settled `wire.errors`. A refused step does not fail
+    // on its own — it manifests as a timeout only if the suite happened to await something that step would have caused,
+    // so a refused setup verb before an assertion satisfied by other means reads as a pass. The settle is what turns
+    // that silence into a verdict, and this is the one place every suite funnels through, so the obligation lands on
+    // all of them at once — including any session a future suite adds.
     static int Guarded(int code) {
-        var rejected = OutputCollector.RejectedTotal;
+        var unsettled = OutputCollector.Sessions.Where(predicate: session => (session.Driven && !session.Settled)).ToList();
 
-        if (rejected == 0) {
+        if (unsettled.Count == 0) {
             return code;
         }
 
-        Console.Error.WriteLine(value: $"[proof]   FAIL wire-rejections: {rejected} piped line(s) were REFUSED (search the transcript for '{OutputCollector.RejectSigil}') — an unknown verb or an unparsable line no-ops silently, so any pass above it is unproven.");
+        var labels = string.Join(separator: ", ", values: unsettled.Select(selector: session => session.Label).Order(comparer: StringComparer.Ordinal).Distinct(comparer: StringComparer.Ordinal));
+
+        Console.Error.WriteLine(value: $"[proof]   FAIL wire-settle: {unsettled.Count} driven session(s) ended without settling `wire.errors` ({labels}) — the wire's own refused-line count is the only place a handler's refusal, a denied grant, or a deferred rejection is visible, so every pass in those sessions is unproven.");
 
         return ((code == 0) ? 1 : code);
     }
@@ -1708,32 +1711,52 @@ static class ExpoBuilder {
 // ============================================================================================
 
 sealed class OutputCollector {
-    // The registry's rejection sigil. It is emitted ONLY when a submitted line named a verb no module registers or
-    // failed to parse — never by a verb that ran and refused its arguments (those name themselves, e.g.
-    // "[world.kit.tune: bad value …]", and several suites raise them on purpose to prove loud rejection). So a sigil in
-    // ANY suite's transcript is a bug in the SCRIPT: a step that silently no-opped while a later assertion, satisfied by
-    // other means, kept the run green. That is why the count is process-wide and asserted once, centrally — a per-suite
-    // guard would have been added to only some of the nineteen stdin sessions.
-    public const string RejectSigil = "[wire.reject:";
+    // One collector per driven session, and the session ledger every suite's verdict funnels through. THE HOUSE RULE:
+    // a session a suite pipes lines into must SETTLE the wire's own refused-line counter (`wire.errors`) against the
+    // refusals that session deliberately provoked. That counter is the only complete account of a refusal — it counts
+    // an unknown verb, a parse failure, a HANDLER's error result (a retired payload, a bad value, a denied grant) and
+    // a DEFERRED rejection raised a tick after the line was accepted. Reading the transcript for the registry's
+    // "[wire.reject:" sigil sees only the first two, so a refused setup verb whose assertion was satisfied by other
+    // means used to read green. A driven session that never settles is that same hole with no evidence at all, which
+    // is why the omission is a FAILURE here rather than a silence.
+    static readonly ConcurrentBag<OutputCollector> s_sessions = [];
 
-    static int s_rejected;
-
-    /// <summary>The number of REFUSED lines seen across every session this process has driven.</summary>
-    public static int RejectedTotal => Volatile.Read(location: ref s_rejected);
+    /// <summary>Every session collector this process has created, in no particular order.</summary>
+    public static IReadOnlyCollection<OutputCollector> Sessions => s_sessions;
 
     readonly ConcurrentQueue<string> m_lines = new();
 
+    int m_driven;
+    int m_settled;
+
+    public OutputCollector([CallerMemberName] string label = "") {
+        Label = label;
+
+        s_sessions.Add(item: this);
+    }
+
+    /// <summary>The launching method's name — how an unsettled session names itself in the central verdict.</summary>
+    public string Label { get; }
+
+    /// <summary>True once a line has been piped into this session (a settle is then owed).</summary>
+    public bool Driven => (Volatile.Read(location: ref m_driven) != 0);
+
+    /// <summary>True once <c>wire.errors</c> has been settled against this session's deliberate refusals.</summary>
+    public bool Settled => (Volatile.Read(location: ref m_settled) != 0);
+
     public int Count => m_lines.Count;
 
+    public void NoteDriven() {
+        Volatile.Write(location: ref m_driven, value: 1);
+    }
+    public void NoteSettled() {
+        Volatile.Write(location: ref m_settled, value: 1);
+    }
     public void Start(TextReader reader, Stopwatch stopwatch) {
         _ = Task.Run(action: () => {
             string? line;
 
             while ((line = reader.ReadLine()) is not null) {
-                if (line.Contains(value: RejectSigil, comparisonType: StringComparison.Ordinal)) {
-                    _ = Interlocked.Increment(location: ref s_rejected);
-                }
-
                 m_lines.Enqueue(item: string.Format(arg0: stopwatch.Elapsed.TotalSeconds, arg1: line, format: "[{0,7:0.00}s] {1}", provider: ProofApp.Inv));
             }
         });
@@ -1974,6 +1997,13 @@ static class Feeder {
             var (alive, passed) = RunCycle(ctx, corpus.Commands, corpus.Sweeps, offset: 0.0, passLabel: "pass 1");
             allPassed &= passed;
 
+            // The corpus is choreography, not a rejection table: every one of its lines is meant to apply. A refused
+            // line no-ops silently and the sweep that follows it can still land within tolerance on the crowd's other
+            // motion, so the count is the only witness.
+            if (alive) {
+                allPassed &= ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "corpus-refused-nothing", expected: 0);
+            }
+
             if (alive && loop && !headless) {
                 var inLoopCommands = corpus.Commands.Where(predicate: c => c.InLoop).ToList();
                 var inLoopSweeps = corpus.Sweeps.Where(predicate: s => (s.T >= corpus.LoopStartT)).ToList();
@@ -2179,6 +2209,8 @@ static class Feeder {
                 _ = builder.Append(value: batch[index].Command).Append(value: '\n');
                 index++;
             }
+
+            ctx.Collector.NoteDriven();
 
             try {
                 ctx.Stdin.Write(value: builder.ToString());
@@ -2685,8 +2717,9 @@ static class WorldDocProof {
             Send(ctx: ctx, line: $"world.save {savePath}");
 
             var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+            var saved = Check(name: "world.save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
 
-            return Check(name: "world.save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
+            return (saved & ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "save-round-refused-nothing", expected: 0));
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -2802,6 +2835,8 @@ static class WorldDocProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -3027,17 +3062,8 @@ static class ExpoProof {
 
             // Every line of the authoring script is meant to APPLY. Without this the script's failure mode is silent:
             // a retired payload shape or a misspelled verb is refused, the artifact is written anyway missing whatever
-            // that line authored, and the save echo above still reads green. The sleep lets a deferred refusal (counted
-            // a tick after the line is accepted) land before the read.
-            Thread.Sleep(millisecondsTimeout: 400);
-            mark = collector.Count;
-
-            Send(ctx: ctx, line: "wire.errors");
-
-            var errors = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 15.0);
-
-            return (saved & Check(name: "authoring-refused-nothing", ok: ((errors is not null) && errors.Contains(value: "[wire.errors: 0 rejected]")),
-                detail: (errors?.Trim() ?? "(no '[wire.errors: ...]' echo)")));
+            // that line authored, and the save echo above still reads green.
+            return (saved & ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "authoring-refused-nothing", expected: 0));
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -3135,6 +3161,8 @@ static class ExpoProof {
                 passed &= Check(name: "peer-source-folded-into-json", ok: string.Equals(a: savedSource, b: WriteBackPeerSourceJson, comparisonType: StringComparison.OrdinalIgnoreCase),
                     detail: $"saved defaultPeerSource = {savedSource ?? "?"} (want {WriteBackPeerSourceJson})");
             }
+
+            passed &= ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "write-back-round-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -3194,9 +3222,10 @@ static class ExpoProof {
             Send(ctx: ctx, line: "world.population");
 
             var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.population:"), deadlineSeconds: 15.0);
-
-            return Check(name: "peer-source-survived-relaunch", ok: ((line is not null) && line.Contains(value: $"behavior {WriteBackPeerSource}")),
+            var survived = Check(name: "peer-source-survived-relaunch", ok: ((line is not null) && line.Contains(value: $"behavior {WriteBackPeerSource}")),
                 detail: (line?.Trim() ?? "(no world.population echo)"));
+
+            return (survived & ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "survival-round-refused-nothing", expected: 0));
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -3297,6 +3326,8 @@ static class ExpoProof {
             else {
                 passed &= Check(name: "insert-folded-into-json", ok: false, detail: $"{tempSave} was never written");
             }
+
+            passed &= ComposedShotKit.SettleWireErrors(stdin: stdin, collector: collector, name: "insert-fold-round-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -3401,6 +3432,8 @@ static class ExpoProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -3601,6 +3634,9 @@ static class ScreensProof {
             passed &= ExpectEcho(ctx: ctx, name: "engage-out-of-range-errors", command: $"player.engage {machineScreen}",
                 predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "u to engage (player.warp closer)")));
 
+            // Rounds (1), (3) and (4) each refused ONE engage on purpose; nothing else above was meant to be refused.
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "engage-round-refused-only-its-three", expected: 3);
+
             // (5) ENGAGE — warp within the radius (screen 0 origin is x=-3 z=-3), then engage succeeds.
             Send(ctx: ctx, line: "player.warp -3 -1 1");
             passed &= ExpectEcho(ctx: ctx, name: "engage-ok", command: $"player.engage {machineScreen}",
@@ -3651,6 +3687,9 @@ static class ScreensProof {
             passed &= ExpectEcho(ctx: ctx, name: "peek-after-eject-errors", command: $"screen.peek {machineScreen} 0xC000",
                 predicate: line => (line.Contains(value: "screen.peek") && line.Contains(value: "no machine")));
 
+            // The peek at (11) is the round's ONE deliberate refusal (an ejected slot has no machine to read).
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "eject-round-refused-only-its-one", expected: 1);
+
             // (evidence) fps / gpu with a brick running earlier — re-boot briefly so the read reflects a stepped machine.
             Send(ctx: ctx, line: $"screen.insert {machineScreen} {romPath} gaming-brick");
             _ = PollState(ctx: ctx, name: "state-reboot", index: machineScreen, predicate: body => body.Contains(value: "bound"));
@@ -3661,11 +3700,15 @@ static class ScreensProof {
             // Removing the last screen wired to that camera must RELEASE its view, witnessed by the registered camera-view
             // count in world.view-refresh dropping by one (the co-existing 'overhead' view survives, so it drops 2 -> 1).
             passed &= RemoveViewScreenReleasesCameraView(ctx: ctx, viewScreen: 2);
+            // The removed view screen's absent-state read is that helper's ONE deliberate refusal.
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "view-removal-refused-only-its-one", expected: 1);
 
             // (13) REMOVE AN ENGAGED MACHINE SCREEN — engage p1 on the running brick, then world.screen.remove the
             // whole screen row: the binder must disengage the player (avatar resumes normal intent), dispose the slot, and
             // drop its provider entry, so every screen command reports the index absent.
             passed &= RemoveEngagedScreenDropsEverything(ctx: ctx, screenIndex: machineScreen);
+            // state/peek/insert against the removed index — the helper's three deliberate absent-reports.
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "screen-removal-refused-only-its-three", expected: 3);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -3751,6 +3794,8 @@ static class ScreensProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -4256,8 +4301,11 @@ static class MutateProof {
             passed &= Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
             passed &= ExpectStatus(ctx: ctx, name: "status-clean-after-save", dirty: 0);
 
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "mutate-round-refused-nothing", expected: 0);
+
             // (b) rejection honesty: removing the defaultSeatKit fails validation loudly, and the document is unchanged.
             rejectionPassed = ExpectRejectedKitRemoval(ctx: ctx);
+            rejectionPassed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "remove-round-refused-only-the-default-kit", expected: 1);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -4427,6 +4475,8 @@ static class MutateProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -4627,6 +4677,7 @@ static class GrantsProof {
             var saveLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
 
             passed &= Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+            passed &= SettleWireErrors(ctx: ctx, name: "addon-authoring-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5062,34 +5113,8 @@ static class GrantsProof {
         return Check(name: name, ok: (hit is not null), detail: (hit?.Trim() ?? $"(no line containing '{needle}')"));
     }
 
-    // Settle the wire's refused-line counter: poll `wire.errors` until it reads the number of refusals the round just
-    // ahead of the call DELIBERATELY provoked, then zero it. Polling (rather than one read) is required because a
-    // capability denial is DEFERRED — the line is accepted, and the refusal is counted a tick later through the
-    // edit-echo tap. Clearing the deliberate ones is what lets the final zero assertion mean "nothing ELSE was
-    // refused": a stale payload or a retired verb spelling anywhere between two settle points survives to the end.
     static bool SettleWireErrors(Ctx ctx, string name, int expected) {
-        string? last = null;
-
-        for (var attempt = 0; (attempt < 25); attempt++) {
-            var mark = ctx.Collector.Count;
-
-            Send(ctx: ctx, line: "wire.errors");
-
-            last = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-
-            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
-                mark = ctx.Collector.Count;
-
-                Send(ctx: ctx, line: "wire.errors reset");
-                _ = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-
-                return Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
-            }
-
-            Thread.Sleep(millisecondsTimeout: 100);
-        }
-
-        return Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+        return ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: name, expected: expected);
     }
 
     // Read a body's INTENT SOURCE back through player.control's echo form and assert it. Every displacement check in
@@ -5222,6 +5247,8 @@ static class GrantsProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -5440,6 +5467,7 @@ static class BindingsProof {
             passed &= Check(name: "revision-bumped-by-save", ok: ((revision0 is { } r0) && (revision1 is { } r1) && (r1 > r0)),
                 detail: $"{revision0?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revision1?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
 
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "rebind-round-refused-nothing", expected: 0);
             revisionAfterSave = (revision1 ?? -1L);
         }
         finally {
@@ -5495,6 +5523,7 @@ static class BindingsProof {
 
             passed &= Check(name: "revision-unchanged-by-plain-boot", ok: (revisionB == revisionAfterSave),
                 detail: $"{revisionB?.ToString(provider: ProofApp.Inv) ?? "?"} (want == {revisionAfterSave})");
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "relaunch-round-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5560,6 +5589,7 @@ static class BindingsProof {
             passed &= Check(name: "overlay-remove-applied", ok: (removedLine is not null), detail: (removedLine?.Trim() ?? "(no '[world.mutation: RemoveBindingOverlay ...]' echo)"));
             passed &= ExpectBindingsContains(ctx: ctx, name: "removal-recomposes-east-secondary", seat: 1, needle: "gamepad.buttonEast→player.secondary", wantPresent: true);
             passed &= ExpectBindingsContains(ctx: ctx, name: "removal-drops-east-primary", seat: 1, needle: "gamepad.buttonEast→player.primary", wantPresent: false);
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "overlay-round-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5637,6 +5667,8 @@ static class BindingsProof {
             // --- IDENTITY (validation: a cross-profile duplicate name) rejects through the WHOLE-document thick gate ---
             passed &= ExpectSection(ctx: ctx, name: "identity-duplicate-rejects", line: "profile.section cobalt identity {\"name\":\"amberedit\",\"color\":\"#334455\"}", needle: "duplicated");
 
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "identity-round-refused-only-its-two", expected: 2);
+
             // --- MOTION (positive) ---
             var revBeforeMotion = ReadRevision(ctx: ctx, name: "rev-before-motion");
 
@@ -5654,6 +5686,8 @@ static class BindingsProof {
 
             passed &= ExpectSection(ctx: ctx, name: "motion-malformed-rejects", line: "profile.section amber motion {\"moveSpeed\":-5,\"turnSpeed\":3,\"invertLookX\":false}", needle: "positive");
             passed &= ExpectRevisionUnchanged(ctx: ctx, name: "motion-malformed-no-bump", before: revBeforeBadMotion);
+
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "motion-round-refused-only-its-one", expected: 1);
 
             // --- PREFERENCES (positive) ---
             var revBeforePrefs = ReadRevision(ctx: ctx, name: "rev-before-prefs");
@@ -5688,7 +5722,9 @@ static class BindingsProof {
             passed &= Check(name: "bindings-bumps-revision", ok: ((revBeforeBindings is { } bb0) && (revAfterBindings is { } bb1) && (bb1 > bb0)),
                 detail: $"{revBeforeBindings?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterBindings?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
             // The seated player's composed mapping now carries the durable rebind, with no reseat.
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "preferences-round-refused-only-its-one", expected: 1);
             passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-live-no-reseat", seat: 1, needle: "keyboard.q→player.forward", wantPresent: true);
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "bindings-round-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5741,6 +5777,7 @@ static class BindingsProof {
             passed &= ExpectDocContains(ctx: ctx, name: "survives-identity-color", needle: "\"color\":\"#0A141E\"");
             passed &= ExpectDocContains(ctx: ctx, name: "survives-motion-speed", needle: "\"moveSpeed\":9");
             passed &= ExpectDocContains(ctx: ctx, name: "survives-preferences", needle: "\"theme\":\"dark\"");
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "section-survival-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -5874,6 +5911,8 @@ static class BindingsProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -6090,6 +6129,7 @@ static class StorageProof {
                 detail: $"{token0 ?? "?"} -> {token1 ?? "?"} (want different)");
             passed &= Check(name: "dirty-on-after-mutation", ok: afterSet.Contains(value: "dirty on"), detail: afterSet);
 
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "storage-round-refused-nothing", expected: 0);
             revisionAfterSet = (revision1 ?? -1L);
         }
         finally {
@@ -6147,6 +6187,7 @@ static class StorageProof {
 
             passed &= Check(name: "revision-persisted-across-relaunch", ok: (revision == expectedRevision),
                 detail: $"{revision?.ToString(provider: ProofApp.Inv) ?? "?"} (want == {expectedRevision.ToString(provider: ProofApp.Inv)})");
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "storage-relaunch-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -6216,6 +6257,7 @@ static class StorageProof {
 
             passed &= ok;
             passed &= Check(name: name, ok: status.Contains(value: needle, comparisonType: StringComparison.Ordinal), detail: status);
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "storage-identity-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -6268,6 +6310,8 @@ static class StorageProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -6489,6 +6533,7 @@ static class RecordProof {
             // (g) the produced container on disk.
             var fullPath = (Path.IsPathRooted(path: recordingPath) ? recordingPath : Path.Combine(path1: repoRoot, path2: recordingPath));
 
+            passed &= ComposedShotKit.SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: "capture-round-refused-nothing", expected: 0);
             passed &= AssertContainer(fullPath: fullPath, codec: codec, outPath: outPath);
         }
         finally {
@@ -6605,6 +6650,8 @@ static class RecordProof {
     }
 
     static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+
         try {
             ctx.Stdin.Write(value: line);
             ctx.Stdin.Write(value: '\n');
@@ -6858,7 +6905,7 @@ static class ComposedShotKit {
     }
 
     // The shared launch shape: piped stdio, repo-root working directory, the standard size/backend/exit options.
-    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch, string[]? extraArgs = null) {
+    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch, string[]? extraArgs = null, [CallerMemberName] string session = "") {
         var psi = new ProcessStartInfo {
             FileName = exe,
             RedirectStandardError = true,
@@ -6885,7 +6932,7 @@ static class ComposedShotKit {
         psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
 
         var process = new Process { StartInfo = psi };
-        var collector = new OutputCollector();
+        var collector = new OutputCollector(label: session);
 
         Console.WriteLine(value: $"[proof] launching: {exe} {(backend is null ? "" : $"--backend {backend} ")}--width {width} --height {height}");
         _ = process.Start();
@@ -6913,15 +6960,68 @@ static class ComposedShotKit {
     }
 
     public static void Send(Ctx ctx, string line) {
+        ctx.Collector.NoteDriven();
+        Write(stdin: ctx.Stdin, line: line);
+    }
+
+    // The raw pipe write. Settling uses it directly: reading the counter is not itself a driven line, so it never
+    // creates the obligation it discharges.
+    public static void Write(StreamWriter stdin, string line) {
         try {
-            ctx.Stdin.Write(value: line);
-            ctx.Stdin.Write(value: '\n');
+            stdin.Write(value: line);
+            stdin.Write(value: '\n');
         }
         catch (IOException) {
         }
         catch (ObjectDisposedException) {
         }
     }
+
+    // THE HOUSE RULE, one implementation. Settle the wire's own refused-line counter against the refusals the round
+    // just ahead DELIBERATELY provoked, then zero it so the next round's expectation stands alone. A round that meant
+    // to refuse nothing passes `expected: 0`; the terminal settle of every session is that zero, and it MEANS
+    // something only because each deliberate round cleared its own count first.
+    //
+    // The count is read from the app (`wire.errors`), never re-derived from the transcript: the wire counts an unknown
+    // verb, a parse failure, a handler's error result AND a deferred rejection raised a tick after the line was
+    // accepted, and only the first of those four leaves the registry's "[wire.reject:" sigil behind.
+    public static bool SettleWireErrors(Ctx ctx, string name, int expected) {
+        return SettleWireErrors(stdin: ctx.Stdin, collector: ctx.Collector, name: name, expected: expected);
+    }
+    public static bool SettleWireErrors(StreamWriter stdin, OutputCollector collector, string name, int expected) {
+        string? last = null;
+
+        // A deferred refusal lands a tick after its line was accepted, so the count RISES into the expectation; it
+        // never falls. An overshoot is therefore final and fails immediately rather than burning the retry budget.
+        for (var attempt = 0; (attempt < 20); attempt++) {
+            var mark = collector.Count;
+
+            Write(stdin: stdin, line: "wire.errors");
+            last = Await(collector: collector, mark: mark, predicate: l => WireErrorsEcho.IsMatch(input: l), deadlineSeconds: 5.0);
+
+            var seen = ((last is null) ? -1 : int.Parse(s: WireErrorsEcho.Match(input: last).Groups[1].ValueSpan, provider: ProofApp.Inv));
+
+            if (seen == expected) {
+                mark = collector.Count;
+
+                Write(stdin: stdin, line: "wire.errors reset");
+                _ = Await(collector: collector, mark: mark, predicate: l => WireErrorsEcho.IsMatch(input: l), deadlineSeconds: 5.0);
+                collector.NoteSettled();
+
+                return Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
+            }
+
+            if (seen > expected) {
+                break;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 200);
+        }
+
+        return Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+    }
+
+    static readonly Regex WireErrorsEcho = new(pattern: @"\[wire\.errors: (\d+) rejected\]", options: RegexOptions.Compiled);
 
     public static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
         var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
@@ -7180,6 +7280,8 @@ static class UiFloorProof {
                 detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
             );
 
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "toast-round-refused-only-the-default-kit", expected: 1);
+
             // (4c) THE SPEAKER GIZMO: a bed speaker dead ahead of the seat camera, SELECTED in editor mode —
             // its accent-tier chip (accent bloom ring + halo) and accent radius ring put an accent-orange population
             // in the central stage that leaving editor mode removes (gizmos are editor-mode-only). Screenshots ride
@@ -7209,6 +7311,8 @@ static class UiFloorProof {
                 ok: ((gizmoAccent > (controlAccent + 25)) && (gizmoAccent > 40)),
                 detail: $"accent-orange pixels in the stage: editor {gizmoAccent} vs exited {controlAccent}"
             );
+
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "gizmo-round-refused-nothing", expected: 0);
 
             // (5) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
@@ -7504,6 +7608,8 @@ static class EditorModeProof {
                 expect: "does not compile",
                 name: "undeclared-modifier-chord-rejects-loudly"
             );
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "uniqueness-round-refused-only-its-two", expected: 2);
+
             // The positive twin: a session-rebind chord row declares a meaning through the same grammar and echoes.
             passed &= ComposedShotKit.SendAwait(
                 ctx: ctx,
@@ -7555,6 +7661,8 @@ static class EditorModeProof {
                 detail: DeltaDetail(before: tapeBefore, after: tapeAfter)
             );
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "re-exit-echo");
+
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "editor-mode-refused-nothing-else", expected: 0);
 
             // (9) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
@@ -7760,6 +7868,7 @@ static class EditorEditProof {
                 ok: (hudLeft > 2.0),
                 detail: $"left-of-seam band diff {hudLeft.ToString(format: "F2", provider: ProofApp.Inv)} (want > 2 — the seat-1 HUD panel is visible)"
             );
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "hud-clip-round-refused-nothing", expected: 0);
             passed &= ComposedShotKit.Check(
                 name: "hud-clips-at-seat-seam",
                 ok: (hudRight <= ((noiseRight * 4.0) + 0.5)),
@@ -7870,11 +7979,15 @@ static class EditorEditProof {
                 detail: $"selected-vs-control band diff {highlightDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs static noise {noiseDiff.ToString(format: "F2", provider: ProofApp.Inv)}"
             );
 
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "edit-rounds-refused-nothing", expected: 0);
+
             // (f) Capacity honesty: flood placements past the authoring headroom. The envelope must reject loudly,
             // a further placement must leave dirty unchanged, and the rejection must surface as the danger toast.
+            const int floodPlacements = 40;
+            var dirtyBeforeFlood = ReadDirty(ctx: ctx, name: "dirty-before-flood");
             var floodMark = ctx.Collector.Count;
 
-            for (var index = 0; (index < 40); index++) {
+            for (var index = 0; (index < floodPlacements); index++) {
                 ComposedShotKit.Send(ctx: ctx, line: "editor.place slab");
             }
 
@@ -7913,6 +8026,11 @@ static class EditorEditProof {
                 detail: $"danger-red pixels in the toast strip: reject {rejectRed} vs control {controlRed}"
             );
 
+            // Every slab the envelope turned away is one refusal, and the journal counts the ones that landed: the
+            // flood plus the one over-ceiling place, less whatever the envelope had room for.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "flood-refused-only-the-over-ceiling-rows",
+                expected: ((floodPlacements + 1) - (dirtyAtCeiling - dirtyBeforeFlood)));
+
             // (g) every editor-local typed float surface rejects non-finite values loudly, before any local
             // state can be poisoned (NaN slides past ordinary range guards; a non-finite center would rebuild the SDF).
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.speed NaN", expect: "as a finite number", name: "finite-cam-speed");
@@ -7922,6 +8040,8 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.move NaN 0 0", expect: "as finite numbers", name: "finite-move");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.nudge -Infinity 0 0", expect: "as finite numbers", name: "finite-nudge");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder NaN", expect: "bad radius", name: "finite-place");
+
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "non-finite-round-refused-only-its-seven", expected: 7);
 
             // (h) editor deactivation owns the COMPLETE teardown: an exit mid-drag drops the pending row and
             // the selection, so re-entry starts clean and the abandoned drag can never be committed.
@@ -7972,6 +8092,9 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 2", expect: "[editor.exit: seat 2", name: "depart-cleanup-exit");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-cleanup-leave");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "departed-drag-no-wire");
+
+            // Both abandoned-drag releases are deliberate refusals; nothing else in the teardown round is.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "teardown-round-refused-only-its-two", expected: 2);
 
             // (i) a frozen released preview resolves independently on ITS OWN result, with the honest reason narrated.
             // Apply: the release's delivery carries exactly the expected row.
@@ -8031,6 +8154,9 @@ static class EditorEditProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "retire-reject-undo-kit");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant seat1 mutate section:scene", expect: "[world.grant: seat1 mutate section:scene]", name: "retire-reject-regrant");
 
+            // The revoked release is the round's ONE deliberate refusal.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "retire-round-refused-only-the-denied-release", expected: 1);
+
             // (j) the candidate ring is explicit and bounded: near the flooded scene the ring caps at 16;
             // far from everything it is honestly empty; editor.status narrates the policy.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-near");
@@ -8082,6 +8208,8 @@ static class EditorEditProof {
 
             // Restore the byte-identical default row so the session's authoring policy ends where it started.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.authoring.set {authoringDefault}", expect: "candidate/layout/preview levers live now", name: "authoring-live-set-final-restore");
+
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "authoring-round-refused-only-the-inverted-scale", expected: 1);
 
             // (k) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
@@ -8361,7 +8489,7 @@ static class EditorCamerasProof {
 
             // Every line above was meant to SUCCEED: a stale payload the validator refuses would leave a nonzero count
             // here even when the awaits above time out into vacuous passes.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "wire.errors", expect: "[wire.errors: 0 rejected]", name: "no-silent-rejections");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
 
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
@@ -8413,10 +8541,11 @@ static class EditorCamerasProof {
             var declared = ((status is null) ? -1 : (StatusCameras.Match(input: status) is { Success: true } m ? int.Parse(s: m.Groups[1].Value, provider: ProofApp.Inv) : -1));
             var table = ReadCameraTable(ctx: ctx);
             var names = TableNames(table: table);
-
-            return ComposedShotKit.Check(name: $"{worldName}-camera-table",
+            var wellFormed = ComposedShotKit.Check(name: $"{worldName}-camera-table",
                 ok: (WellFormedCameraTable(table: table) && (declared >= 0) && (names.Count == declared)),
                 detail: $"world.status declares {declared} camera(s), world.cameras lists {names.Count}: {table?.Trim() ?? "(no echo)"}");
+
+            return (wellFormed & ComposedShotKit.SettleWireErrors(ctx: ctx, name: $"{worldName}-reads-refused-nothing", expected: 0));
         }
         finally {
             ComposedShotKit.KillQuietly(process: process);
@@ -8637,6 +8766,9 @@ static class PlacementsProof {
                 expect: "does not match the canonical sha256", name: "corrupt-hash-rejects-loudly");
             passed &= ComposedShotKit.Check(name: "corrupt-hash-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-bad-hash") == dirtyBeforeBad), detail: "journal unchanged");
 
+            // The zeroed hash is the round's ONE deliberate refusal.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "hash-pin-round-refused-only-its-one", expected: 1);
+
             // (d) THE DRAG CHANNEL on a placement: grab + multi-step motion crosses NO wire (dirty frozen), release
             // commits EXACTLY one whole-row mutation and the frozen preview retires on its own apply.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select placements place-1", expect: "[editor.select: seat 1 placements 'place-1'", name: "select-placement");
@@ -8670,6 +8802,9 @@ static class PlacementsProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.creation.remove probe-stamp",
                 expect: "has 1 live placement(s)", name: "remove-referenced-creation-rejects");
 
+            // The no-cascade guard is the round's ONE deliberate refusal.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-cascade-round-refused-only-its-one", expected: 1);
+
             // (g) THE ANIMATED PROBE walks its timeline: stamp the 4-frame critter over its own patch of grass
             // and demand pixel motion between two shots while a critter-free corner band stays at the noise floor.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {critterFixture}",
@@ -8698,9 +8833,11 @@ static class PlacementsProof {
 
             // (h) CAPACITY HONESTY: flood placements past the reserved headroom — the ceiling line is word-exact,
             // and a further placement leaves the journal unchanged.
+            const int floodPlacements = 9;
+            var dirtyBeforeFlood = ReadDirty(ctx: ctx, name: "dirty-before-flood");
             var floodMark = ctx.Collector.Count;
 
-            for (var extra = 0; (extra < 9); extra++) {
+            for (var extra = 0; (extra < floodPlacements); extra++) {
                 ComposedShotKit.Send(ctx: ctx, line: "editor.place probe-stamp");
                 Thread.Sleep(millisecondsTimeout: 250);
             }
@@ -8714,6 +8851,10 @@ static class PlacementsProof {
 
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-stamp", expect: "exceed the probed render envelope", name: "past-ceiling-rejects-again");
             passed &= ComposedShotKit.Check(name: "past-ceiling-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-past-ceiling") == dirtyAtCeiling), detail: "journal unchanged past the ceiling");
+
+            // Every placement the envelope turned away is one refusal; the journal counts the ones that landed.
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "flood-refused-only-the-over-ceiling-rows",
+                expected: ((floodPlacements + 1) - (dirtyAtCeiling - dirtyBeforeFlood)));
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
         catch (InvalidDataException exception) {
@@ -8754,6 +8895,7 @@ static class PlacementsProof {
 
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 2 placements 2", name: "reload-carries-creations");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-furnished-world");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "reload-refused-nothing", expected: 0);
         }
         finally {
             ComposedShotKit.KillQuietly(process: process);
@@ -8964,7 +9106,7 @@ static class PopulationProof {
 
             // Every deliberate refusal above was settled and cleared by its own round. A nonzero count here is a line
             // this suite MEANT to succeed and the wire refused — the failure mode that reads as green everywhere else.
-            passed &= SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
         catch (InvalidDataException exception) {
@@ -9062,7 +9204,7 @@ static class PopulationProof {
         passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.look.remove stocky",
             expect: "lookAssignment.table[0] 'stocky' names no look row", name: "look-remove-referenced-rejects");
         passed &= ComposedShotKit.Check(name: "look-remove-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-look-remove") == dirtyBeforeRemove), detail: "journal unchanged");
-        passed &= SettleWireErrors(ctx: ctx, name: "look-round-refused-only-its-one", expected: 1);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "look-round-refused-only-its-one", expected: 1);
 
         return passed;
     }
@@ -9154,7 +9296,7 @@ static class PopulationProof {
         passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.face {InhabitedPlacement} no-such-face test",
             expect: $"'no-such-face' names no declared face on creation '{ProbeCreation}'", name: "face-override-unknown-face-rejects");
         passed &= ComposedShotKit.Check(name: "bad-face-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-bad-face") == (dirtyBeforeFace + 1)), detail: "journal unchanged");
-        passed &= SettleWireErrors(ctx: ctx, name: "face-round-refused-only-its-one", expected: 1);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "face-round-refused-only-its-one", expected: 1);
 
         // THE CLAIM: the facet admits one body at the highest free slot (127 -> player index 128).
         passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} runner attend 1 0",
@@ -9198,7 +9340,7 @@ static class PopulationProof {
             expect: "inhabit names no kit; the world declares: flyer, swimmer, jumper, runner, kart", name: "inhabit-unresolved-kit-rejects");
 
         passed &= ComposedShotKit.Check(name: "unresolved-kit-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-unresolved-kit") == dirtyBefore), detail: "journal unchanged");
-        passed &= SettleWireErrors(ctx: ctx, name: "unresolved-kit-refused-only-its-one", expected: 1);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "unresolved-kit-refused-only-its-one", expected: 1);
 
         // THE FULL TABLE: retire the inhabitant, fill every peer slot with census stand-ins, and claim again — 124
         // peers plus the local seat leave no free slot for an inhabited body.
@@ -9248,35 +9390,6 @@ static class PopulationProof {
           "behavior": { "locomotion": "runner", "faces": [ { "name": "visor", "shapeId": 1, "defaultSource": "none" } ] }
         }
         """;
-
-    // Settle the wire's refused-line counter: poll `wire.errors` until it reads the number of refusals the round just
-    // ahead of the call DELIBERATELY provoked, then zero it. Polling (rather than one read) is required because a
-    // validator denial is DEFERRED — the line is accepted, and the refusal is counted a tick later through the
-    // edit-echo tap. Clearing the deliberate ones is what lets the final zero assertion mean "nothing ELSE was refused".
-    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
-        string? last = null;
-
-        for (var attempt = 0; (attempt < 25); attempt++) {
-            var mark = ctx.Collector.Count;
-
-            ComposedShotKit.Send(ctx: ctx, line: "wire.errors");
-
-            last = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-
-            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
-                mark = ctx.Collector.Count;
-
-                ComposedShotKit.Send(ctx: ctx, line: "wire.errors reset");
-                _ = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-
-                return ComposedShotKit.Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
-            }
-
-            Thread.Sleep(millisecondsTimeout: 100);
-        }
-
-        return ComposedShotKit.Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
-    }
 
     static Pose? ReadWhere(ComposedShotKit.Ctx ctx, int index) {
         var mark = ctx.Collector.Count;
@@ -9681,6 +9794,7 @@ static class SculptProof {
             passed &= ComposedShotKit.Check(name: "carried-cameras-persist", ok: savedJson.Contains(value: "\"cameras\""), detail: "saved world carries the creation's cameras member");
             passed &= ComposedShotKit.Check(name: "carried-behavior-persists", ok: savedJson.Contains(value: "\"swim\""), detail: "saved world carries the swim locomotion");
             passed &= ComposedShotKit.Check(name: "carried-extension-persists", ok: savedJson.Contains(value: "proofExtension"), detail: "saved world carries the unknown extension member");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "sculpt-session-refused-nothing", expected: 0);
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
         catch (InvalidDataException exception) {
@@ -9725,6 +9839,7 @@ static class SculptProof {
 
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 3 placements 2", name: "reload-carries-sculpted-rows");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-sculpted-world");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "sculpt-reload-refused-nothing", expected: 0);
         }
         finally {
             ComposedShotKit.KillQuietly(process: process);
@@ -9899,6 +10014,7 @@ static class AudioProof {
 
             passed &= ((chirpHash is not null) && (droneHash is not null) && (jingleHash is not null) && (statueHash is not null));
             passed &= ExpectDirty(ctx: ctx, name: "pins-changed-nothing", dirty: 0);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "pin-round-refused-only-its-four", expected: 4);
 
             if (!passed) {
                 return false;
@@ -9929,6 +10045,8 @@ static class AudioProof {
                 && emitters.Contains(value: "placement:statue-1 point synth:drone mix")
                 && emitters.Contains(value: "sound:statue-1:hum point synth:sound:statue-1:hum mix")), detail: (emitters?.Trim() ?? "(no audio.emitters echo)"));
 
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "authoring-round-refused-nothing", expected: 0);
+
             Console.WriteLine(value: "[proof] === audio (c): the validator rejection table — each loud, the document unchanged ===");
             passed &= Reject(ctx: ctx, name: "unknown-patch", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"nope"},"channel":"mix","gain":1}}""", needle: "names no patch row");
             passed &= Reject(ctx: ctx, name: "unknown-tune", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"tune","tuneId":"nope"},"channel":"mix","gain":1}}""", needle: "names no tune row");
@@ -9941,12 +10059,14 @@ static class AudioProof {
             passed &= Reject(ctx: ctx, name: "bogus-listener", line: """world.audio.set {"masterGain":1,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"moon"}""", needle: "is not 'focus', 'seat:<n>', or a declared camera name");
             passed &= Reject(ctx: ctx, name: "facet-unknown-patch", line: """world.scene.row.set {"$type":"boulder","id":"boulder-2","center":[0.6,0.88,0.5],"emission":{"patchId":"nope","level":1},"radius":1.1,"smooth":0.5}""", needle: "names no patch row");
             passed &= ExpectDirty(ctx: ctx, name: "rejections-changed-nothing", dirty: 12);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "validator-round-refused-only-its-ten", expected: 10);
 
             Console.WriteLine(value: "[proof] === audio (d): the no-cascade guards name their dependents ===");
             passed &= Reject(ctx: ctx, name: "tune-remove-guard", line: "world.tune.remove jingle", needle: "feeds speaker(s) 'left', 'right'");
             passed &= Reject(ctx: ctx, name: "patch-remove-guard", line: "world.patch.remove drone", needle: "referenced by speaker(s) 'wind', placement 'statue-1'");
             passed &= Reject(ctx: ctx, name: "placement-remove-guard", line: "world.placement.remove statue-1", needle: "anchors speaker(s) 'statue-voice'");
             passed &= ExpectDirty(ctx: ctx, name: "guards-changed-nothing", dirty: 12);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "guard-round-refused-only-its-three", expected: 3);
 
             Console.WriteLine(value: "[proof] === audio (e): undo + grants rounds ===");
             passed &= Mutate(ctx: ctx, name: "undo-drops-speaker", line: "world.undo", needle: "[world.undo: dropped 1, 11 remaining]", dirty: 11);
@@ -9958,6 +10078,7 @@ static class AudioProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-speakers-section");
             passed &= Reject(ctx: ctx, name: "denied-without-grant", line: "world.speaker.remove wind", needle: "cannot mutate section:speakers", rejectPrefix: "[world.grant denied:");
             passed &= ExpectDirty(ctx: ctx, name: "denial-changed-nothing", dirty: 12);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "denial-round-refused-only-its-one", expected: 1);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant console mutate section:speakers", expect: "[world.grant: console mutate section:speakers]", name: "regrant-speakers-section");
             passed &= Mutate(ctx: ctx, name: "applies-after-regrant", line: "world.speaker.remove wind", needle: "[world.mutation: RemoveSpeaker 'wind' applied]", dirty: 13);
             passed &= Mutate(ctx: ctx, name: "undo-restores-wind", line: "world.undo", needle: "[world.undo: dropped 1, 12 remaining]", dirty: 12);
@@ -9970,6 +10091,7 @@ static class AudioProof {
             passed &= ComposedShotKit.Check(name: "cues-idle-before-any-event", ok: ((idleState is not null) && idleState.Contains(value: "cues 0")), detail: (idleState?.Trim() ?? "(no speaker.state echo)"));
             passed &= Mutate(ctx: ctx, name: "mutation-fires-cue", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 14);
             passed &= AwaitSpeakerCue(ctx: ctx, name: "mutation-applied-cue-lands", needle: "cue:mutation.applied=drone");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "cue-table-round-refused-nothing", expected: 0);
 
             Console.WriteLine(value: "[proof] === audio (g): the cue validator table — each loud, the document unchanged ===");
             passed &= Reject(ctx: ctx, name: "cue-bad-token", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"volcano.erupts","patchId":"drone","placement":"listener"}]}""", needle: "is not a published cue event token");
@@ -9978,6 +10100,7 @@ static class AudioProof {
             passed &= Reject(ctx: ctx, name: "cue-bad-placement", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","placement":"sideways"}]}""", needle: "must be 'at-site', 'listener', or 'emitter:");
             passed &= Reject(ctx: ctx, name: "cue-gain-ceiling", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","gainThousandths":9001,"placement":"listener"}]}""", needle: "must be within [0, 8000]");
             passed &= ExpectDirty(ctx: ctx, name: "cue-rejections-changed-nothing", dirty: 14);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "cue-validator-round-refused-only-its-five", expected: 5);
 
             Console.WriteLine(value: "[proof] === audio (h): the cue producers — denial, footsteps, the binder fault lane ===");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-for-denied-cue");
@@ -9990,6 +10113,7 @@ static class AudioProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.insert 0 {Path.Combine(path1: Path.GetTempPath(), path2: "puck-audio-missing.gb")}", expect: "[screen.insert:", name: "insert-missing-content");
             passed &= AwaitSpeakerCue(ctx: ctx, name: "screen-fault-cue-lands", needle: "cue:screen.fault=drone");
             passed &= ExpectDirty(ctx: ctx, name: "producers-changed-nothing", dirty: 14);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "producer-round-refused-only-its-two", expected: 2);
 
             Console.WriteLine(value: "[proof] === audio (i): speakers through the editor — select, drag, undo, the numeric twins ===");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "editor-enters");
@@ -10040,6 +10164,7 @@ static class AudioProof {
 
             passed &= ComposedShotKit.Check(name: "save-folds-volume-lever", ok: savedJson.Contains(value: "\"masterGain\": 0.5"), detail: (savedJson.Contains(value: "\"masterGain\": 0.5") ? "audio.masterGain carries the 0.5 lever" : "saved masterGain is not the lever value"));
             passed &= ComposedShotKit.Check(name: "save-carries-cues", ok: (savedJson.Contains(value: "\"cues\":") && savedJson.Contains(value: "mutation.applied")), detail: "the cue table persisted in the audio section");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "editor-and-save-rounds-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -10105,6 +10230,7 @@ static class AudioProof {
             passed &= ComposedShotKit.Check(name: "reboot-wakes-on-folded-volume", ok: ((volumeRead is not null) && volumeRead.Contains(value: "0.5 (document audio.masterGain)")), detail: (volumeRead?.Trim() ?? "(no world.volume echo)"));
             passed &= Mutate(ctx: ctx, name: "reboot-mutation-applies", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 1);
             passed &= AwaitSpeakerCue(ctx: ctx, name: "reboot-cue-table-still-fires", needle: "cue:mutation.applied=drone");
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "reboot-session-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -10328,7 +10454,7 @@ static class CollisionProof {
 
             // Every deliberate refusal above was settled and cleared by its own round. A nonzero count here is a line
             // this scenario MEANT to succeed and the wire refused — the silent no-op that reads green everywhere else.
-            passed &= SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -10369,7 +10495,7 @@ static class CollisionProof {
 
         // Restore the facet for the collider round, which re-uses the same wall.
         passed &= ExpectMutation(ctx: ctx, name: "wall-facet-restored", line: $"world.scene.solid {WallId} 0", needle: $"[world.mutation: UpsertSceneRow '{WallId}' applied]");
-        passed &= SettleWireErrors(ctx: ctx, name: "solidity-round-refused-nothing", expected: 0);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "solidity-round-refused-nothing", expected: 0);
 
         return passed;
     }
@@ -10393,7 +10519,7 @@ static class CollisionProof {
 
         // Back to the snap table so the later lanes travel at full speed.
         passed &= ExpectMutation(ctx: ctx, name: "response-restored", line: "world.kit.response runner none", needle: "[world.mutation: UpsertKit 'runner' applied]");
-        passed &= SettleWireErrors(ctx: ctx, name: "response-round-refused-nothing", expected: 0);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "response-round-refused-nothing", expected: 0);
 
         return passed;
     }
@@ -10452,7 +10578,7 @@ static class CollisionProof {
 
         passed &= Check(name: "collision-on-stops-again", ok: ((resolved is { } re) && (re.Z < BlockedCeilingZ)),
             detail: $"p1 z {Fmt(value: resolved?.Z)} (want < {ProofApp.F(value: BlockedCeilingZ)})");
-        passed &= SettleWireErrors(ctx: ctx, name: "collider-round-refused-nothing", expected: 0);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "collider-round-refused-nothing", expected: 0);
 
         return passed;
     }
@@ -10493,7 +10619,7 @@ static class CollisionProof {
 
         passed &= Check(name: "analytic-walk-leaves-the-surface", ok: ((analyticWalk.RadialDelta is { } ar) && (ar > RadialDivergeFloor)),
             detail: $"radius from the planetoid center moved {Fmt(value: analyticWalk.RadialDelta)} u ({Fmt(value: analyticWalk.RadiusBefore)} -> {Fmt(value: analyticWalk.RadiusAfter)}, want > {ProofApp.F(value: RadialDivergeFloor)}) — the constant-+Y provider walked the body off the top");
-        passed &= SettleWireErrors(ctx: ctx, name: "field-round-refused-nothing", expected: 0);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "field-round-refused-nothing", expected: 0);
 
         return passed;
     }
@@ -10519,7 +10645,7 @@ static class CollisionProof {
         passed &= ExpectEcho(ctx: ctx, name: "rejected-collider-left-the-kit-alone", line: "world.collision.status", needle: "runner(r=0.35 h=1.7)");
         // Six deliberate refusals: the two collision-tuning rejects, the fieldless probe, the short capsule, and the two
         // host tunes.
-        passed &= SettleWireErrors(ctx: ctx, name: "rejection-round-refused-only-its-six", expected: 6);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "rejection-round-refused-only-its-six", expected: 6);
 
         return passed;
     }
@@ -10558,7 +10684,7 @@ static class CollisionProof {
             needle: "[world.grant denied: console cannot mutate section:host", deadlineSeconds: 20.0);
         passed &= ExpectStatusDrift(ctx: ctx, name: "denied-host-tune-changed-nothing", drift: "none");
         // One deliberate refusal: the denied tune.
-        passed &= SettleWireErrors(ctx: ctx, name: "host-round-refused-only-the-denied-tune", expected: 1);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "host-round-refused-only-the-denied-tune", expected: 1);
         passed &= ExpectEcho(ctx: ctx, name: "console-regains-host-mutate", line: "world.grant console mutate section:host", needle: "[world.grant: console mutate section:host]");
         passed &= ExpectMutation(ctx: ctx, name: "host-tune-applies-after-regrant", line: "world.host.tune presentMode mailbox", needle: "[world.mutation: SetHostDefaults applied");
         passed &= ExpectEcho(ctx: ctx, name: "present-mode-reads-back-lowercase", line: "world.host", needle: "presentMode=mailbox targetHertz=0");
@@ -10608,7 +10734,7 @@ static class CollisionProof {
             passed &= ExpectEcho(ctx: ctx, name: "reloaded-present-mode-survives", line: "world.host", needle: "presentMode=mailbox");
             passed &= ExpectEcho(ctx: ctx, name: "reloaded-collision-section-survives", line: "world.collision.status", needle: "on provider=analytic");
             passed &= ExpectEcho(ctx: ctx, name: "reloaded-solid-rows-survive", line: "world.contacts", needle: "[world.contacts: collision on — 12 solid rows (6 spheres, 6 boxes)]");
-            passed &= SettleWireErrors(ctx: ctx, name: "reload-refused-nothing", expected: 0);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "reload-refused-nothing", expected: 0);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -10755,26 +10881,6 @@ static class CollisionProof {
 
         return Check(name: name, ok: string.Equals(a: actual, b: drift, comparisonType: StringComparison.Ordinal),
             detail: $"session-drift {actual ?? "(no world.status echo)"} (want {drift})");
-    }
-
-    // Settle the wire's refused-line counter against the refusals the round just ahead DELIBERATELY provoked, then zero
-    // it. Polling is required because a capability denial is counted a tick later through the edit-echo tap.
-    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
-        string? last = null;
-
-        for (var attempt = 0; (attempt < 15); attempt++) {
-            last = ReadLine(ctx: ctx, command: "wire.errors", needle: "[wire.errors:", deadlineSeconds: 4.0);
-
-            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
-                _ = ReadLine(ctx: ctx, command: "wire.errors reset", needle: "[wire.errors:", deadlineSeconds: 5.0);
-
-                return Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
-            }
-
-            Thread.Sleep(millisecondsTimeout: 100);
-        }
-
-        return Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
     }
 
     static bool Check(string name, bool ok, string detail) {
@@ -10926,7 +11032,7 @@ static class WireProof {
             detail: $"unheld burst travelled {Fmt(value: control)} u against the held {Fmt(value: waited1)} u (want under a quarter — the gate is what makes the span)");
 
         // Nothing above was a refusal.
-        passed &= SettleWireErrors(ctx: ctx, name: "wait-rounds-clean", expected: 0);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "wait-rounds-clean", expected: 0);
 
         return passed;
     }
@@ -11005,7 +11111,7 @@ static class WireProof {
         passed &= ComposedShotKit.Check(name: "host-process-alive", ok: !ctx.Process.HasExited, detail: $"{refusals} malformed payload(s) refused, process still running");
         passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "[world.status:", name: "host-still-answering");
         passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.cameras", expect: "[world.cameras:", name: "host-document-intact");
-        passed &= SettleWireErrors(ctx: ctx, name: "payload-refusals-counted", expected: refusals);
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "payload-refusals-counted", expected: refusals);
 
         return passed;
     }
@@ -11116,32 +11222,6 @@ static class WireProof {
 
         return ComposedShotKit.Check(name: name, ok: ((code == wantExitCode) && lineSeen),
             detail: $"exit {code} (want {wantExitCode}), naming line {(lineSeen ? "present" : "ABSENT")}: {wantLine}");
-    }
-
-    // Settle the wire's refused-line counter against the refusals just provoked, then zero it.
-    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
-        string? last = null;
-
-        for (var attempt = 0; (attempt < 20); attempt++) {
-            var mark = ctx.Collector.Count;
-
-            ComposedShotKit.Send(ctx: ctx, line: "wire.errors");
-            last = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-
-            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
-                if (expected > 0) {
-                    mark = ctx.Collector.Count;
-                    ComposedShotKit.Send(ctx: ctx, line: "wire.errors reset");
-                    _ = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
-                }
-
-                return ComposedShotKit.Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
-            }
-
-            Thread.Sleep(millisecondsTimeout: 200);
-        }
-
-        return ComposedShotKit.Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
     }
 
     static string Fmt(double? value) {

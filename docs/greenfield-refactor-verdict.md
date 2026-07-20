@@ -9,13 +9,13 @@ Two structural items stand between the codebase and the standard:
 
 1. **The `src/Puck.Demo` fork and its `Puck.Scene` node** (C-F1, C-F3). Arc 12's scheduled
    work, blocked behind Arcs 8–11. Not residue — do not delete ahead of those arcs.
-2. **A verification surface that mostly does not discriminate.** Twelve of eighteen proof
-   suites never settle `wire.errors`; whole landed verb families (`replay.*`, `screen.*`,
-   `world.view.*`, the whole-row `.set` upserts, 36 of 55 `editor.sculpt.*`) still have zero
-   scripted call sites.
+2. **A verification surface that mostly does not discriminate.** Every driven proof session
+   now settles `wire.errors` against its own deliberate refusals, but whole landed verb
+   families (`replay.*`, `screen.*`, `world.view.*`, the whole-row `.set` upserts, 36 of 55
+   `editor.sculpt.*`) still have zero scripted call sites.
 
-**Do first:** V-4 (the twelve suites that never settle `wire.errors`), then V-1 and V-6 (the
-`replay.*` and `screen.*` families) — the largest remaining blind spots.
+**Do first:** V-1 and V-6 (the `replay.*` and `screen.*` families) — the largest remaining
+blind spots.
 
 This document is a live register of what is **owed**. Closed work does not belong in it —
 closure lives in `git log`. Every entry is anchored to `file:line` and is re-checkable by
@@ -90,11 +90,13 @@ counter, per-round `SettleWireErrors` with exact expected counts, terminal `expe
 `GrantsProof` (pose deltas against `MovedEpsilon`/`FrozenEpsilon` with an ambient-drift null
 control first).
 
-**Two refusal mechanisms exist and must not be conflated.** `ProofApp.Guarded`
-(`proof.cs:319-329`) counts `[wire.reject:` process-wide — **unknown verbs and parse errors
-only**. A handler that parses fine and returns `IsError` (bad value, denied grant, validator
-refusal) is caught **only** by the `wire.errors` verb. A suite that relies on `Guarded` alone
-is blind to every refusal the product actually issues.
+**One refusal mechanism: the `wire.errors` verb.** It is the only complete account of a
+refusal — unknown verb, parse error, a handler's `IsError` (bad value, denied grant, validator
+refusal), and a deferred rejection raised a tick after the line was accepted. Reading the
+transcript for the registry's `[wire.reject:` sigil sees only the first two, so no check may
+derive the count that way. Every driven session settles it per round against an exact expected
+count and ends at `expected: 0`; `ProofApp.Guarded` now fails any driven session that ended
+without settling, so a new suite cannot quietly skip the obligation.
 
 ---
 
@@ -117,7 +119,6 @@ Nothing. All nineteen driving subcommands pass on a confirmed Release build.
 |---|---|---|---|
 | V-1 | L | `WorldReplayCommandModule.cs:23,28,33,38,43,48`, wired `Program.cs:446` | All six `replay.*` verbs have **zero** call sites. The only evidence they work is four hand-run results recorded under **"Deterministic replay — ruling R-A"** in `docs/demo-to-world-port-plan.md` — no scripted check re-runs them. Determinism is a core product claim; a regression in tape capture, boot-image rehydration, or tail-hash comparison ships silently. **Close:** a new `replay` subcommand with a doctored-tape negative control. |
 | V-6 | L | `ScreenCommandModule.cs:51,56,61,66,76,81,86,91,96` | Nine `screen.*` verbs with zero call sites, including `screen.options` (the live dmg↔cgb↔agb device swap — a headline capability) and the whole `screen.link`/`unlink`/`links` cable group. `ScreensProof` covers only `insert`/`eject`/`peek`/`state`. |
-| V-4 | M | `proof.cs` — twelve of eighteen driving suites | Only `Expo`/`Grants`/`EditorCameras`/`Population`/`Collision`/`Wire` settle `wire.errors` — 6 of 18. The house rule is stated verbatim inside the file and applied to 6 of 18. `ProofApp.Guarded` does not cover this class. Worst exposure: `ScreensProof`, 29 fire-and-forget `Send` calls, no settle. Mechanical but 12 sites; the suites with deliberate refusals (`Placements`, `Audio`) need the per-round settle-and-clear discipline `CollisionProof` models, not a bare terminal zero. |
 | V-5 | M | `proof.cs` (`EditorCamerasProof`) | The DOCUMENT side is read off the `world.cameras` table, so an add/undo is measured on state rather than narration. The RENDER side is not: the reconcile claims (`"pose updated live"`, `"showing camera 'birdseye'"`, `"recreated live (WxH)"`) and `world.view-refresh`'s count are still narration strings, and nothing measures a pixel or a produced-frame counter — in the one suite whose subject is *only* observable in pixels. |
 | V-7 | M | `proof.cs:7368` (`flyDiff > 8.0`), `proof.cs:7489` (`seamDiff > 8.0`) | `EditorModeProof` uses two absolute pixel floors with **no control pair** and never zeroes the census, over a band the autonomous crowd occupies and moves through between shots. Its two relative checks are anchored to `flyDiff`, so noise inflating it loosens them too. Every other pixel suite bounds a control pair and requires `> 4×` noise. |
 | V-8 | M | `EditorSculptStyleCommandModule.cs:64,84,89,94,99,104,109`, `EditorSculptShapeCommandModule.cs:96,116`, `EditorSculptRigCommandModule.cs:65,105`, `EditorSculptCommandModule.cs:91,106` | **55** `editor.sculpt.*` verbs are registered and **19** are driven; two whole modules are unexercised — even though `SculptProof` is otherwise the strongest suite in the file. |
