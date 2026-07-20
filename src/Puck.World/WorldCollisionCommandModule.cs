@@ -157,7 +157,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 }
 
                 if (server.Population.EntryBody(index: (index - 1)) is not { } body) {
-                    return new CommandResult(Output: $"[world.contacts: body {index} is inactive]");
+                    return new CommandResult(Output: $"[world.contacts: body {index} is inactive — see world.population]") { IsError = true };
                 }
 
                 return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount}]"));
@@ -191,7 +191,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         var position = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
 
         if (!field.Probe(position: in position, distance: out var distance, material: out var material, gradient: out var gradient)) {
-            return new CommandResult(Output: "[world.collision.probe: the field has no geometry to answer against]");
+            return new CommandResult(Output: "[world.collision.probe: the field has no geometry to answer against]") { IsError = true };
         }
 
         return new CommandResult(Output: string.Create(

@@ -483,8 +483,13 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         // A query verb (EchoesData): the pose read-back IS the answer, so it always echoes — even under wire.ack quiet.
-        // Every pose is the server's to report; the answer prints verbatim.
-        return new CommandResult(Output: m_link.Query(query: new WorldQuery.PlayerWhere(Index: index)).Text);
+        // Every pose is the server's to report; the answer prints verbatim, and its verdict rides through as IsError so a
+        // miss the client-side guard did not catch still reaches wire.errors.
+        var answer = m_link.Query(query: new WorldQuery.PlayerWhere(Index: index));
+
+        return new CommandResult(Output: answer.Text) {
+            IsError = answer.Refused,
+        };
     }
     private CommandResult StopHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
@@ -1115,7 +1120,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 1, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var index)) {
-            return new CommandResult(Output: $"[player.profile: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+            return new CommandResult(Output: $"[player.profile: player index must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         if (m_roster.FindProfile(name: args[0]) is not { } profile) {
@@ -1123,8 +1128,8 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         return (m_roster.SetProfile(slot: PlayerRoster.SlotFromDisplay(number: index), profile: profile) switch {
-            SetProfileOutcome.NotJoined => new CommandResult(Output: $"[player.profile: player {index} is not joined — see world.players]"),
-            SetProfileOutcome.InUse => new CommandResult(Output: $"[player.profile: profile '{profile.Name}' is already in use — see world.players]"),
+            SetProfileOutcome.NotJoined => new CommandResult(Output: $"[player.profile: player {index} is not joined — see world.players]") { IsError = true },
+            SetProfileOutcome.InUse => new CommandResult(Output: $"[player.profile: profile '{profile.Name}' is already in use — see world.players]") { IsError = true },
             _ => new CommandResult(Output: $"[player.profile: player {index} is now {profile.Name}] {m_roster.Describe()}"),
         });
     }
@@ -1138,7 +1143,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 1, min: 1, max: PlayerRoster.MaxSlots, fallback: null, value: out var slot)) {
-            return new CommandResult(Output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]");
+            return new CommandResult(Output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         return DescribeAssign(verb: "player.assign", outcome: m_roster.AssignDevice(device: device, targetSlot: PlayerRoster.SlotFromDisplay(number: slot)), slot: PlayerRoster.SlotFromDisplay(number: slot));
@@ -1213,19 +1218,20 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 2, max: PlayerRoster.MaxSlots, fallback: null, value: out var n)) {
-            return new CommandResult(Output: $"[player.leave: <n> must be an integer 2..{PlayerRoster.MaxSlots}]");
+            return new CommandResult(Output: $"[player.leave: <n> must be an integer 2..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         return (m_roster.Leave(slot: PlayerRoster.SlotFromDisplay(number: n))
             ? new CommandResult(Output: $"[player.leave: player {n} left] {m_roster.Describe()}")
-            : new CommandResult(Output: $"[player.leave: player {n} is not joined]"));
+            : new CommandResult(Output: $"[player.leave: player {n} is not joined]") { IsError = true });
     }
 
     // Resolve the target body from an optional trailing index at args[requiredCount] (default player 1), reaching the
     // whole entity table: 1..4 are the local roster seats (gated on roster membership), 5..128 the simulated entries
     // (each owning its own body). Returns an error (naming world.players for a seat, world.population for an entry)
-    // when the index is malformed or names an inactive one. LOOPBACK-ONLY: the m_server/m_population liveness reads
-    // are in-process; a socket transport validates server-side and the handler echoes the NAK.
+    // when the index is malformed or names an inactive one. The m_server/m_population liveness reads are in-process, so
+    // this is the loopback's fast path with the sharper wording (seat vs population entry); off the loopback the server's
+    // own QueryAnswer.Refused verdict carries the same miss, and the handler renders it as IsError either way.
     private (WorldBody? Player, int Index, string? Error) ResolveTarget(in WireArgs args, int requiredCount, string verb) {
         if (!WorldArgs.TryParseIndex(args: in args, at: requiredCount, min: 1, max: WorldPopulation.MaxPopulation, fallback: 1, value: out var index)) {
             return (Player: null, Index: 0, Error: $"[{verb}: player index must be an integer 1..{WorldPopulation.MaxPopulation}]");

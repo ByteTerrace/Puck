@@ -67,11 +67,11 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
         }
 
         if (!TryResolveIndex(args: args, at: 0, index: out var index)) {
-            return new CommandResult(Output: $"[profile.show: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+            return new CommandResult(Output: $"[profile.show: player index must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         if (m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: index)) is not { } profile) {
-            return new CommandResult(Output: $"[profile.show: player {index} is not joined — see world.players]");
+            return new CommandResult(Output: $"[profile.show: player {index} is not joined — see world.players]") { IsError = true };
         }
 
         return new CommandResult(Output: $"[profile.show: player {index} — {DescribeProfile(profile: profile)}]");
@@ -82,11 +82,11 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
         }
 
         if (!TryResolveIndex(args: args, at: 2, index: out var index)) {
-            return new CommandResult(Output: $"[profile.set: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+            return new CommandResult(Output: $"[profile.set: player index must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         if (m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: index)) is not { } profile) {
-            return new CommandResult(Output: $"[profile.set: player {index} is not joined — see world.players]");
+            return new CommandResult(Output: $"[profile.set: player {index} is not joined — see world.players]") { IsError = true };
         }
 
         var key = args[0];

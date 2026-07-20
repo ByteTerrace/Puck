@@ -56,7 +56,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             description: "Echoes the whole server-owned player document (puck.world.player.v1) as JSON — the read-back an editor/agent pulls before editing a profile section (GetPlayerDocument): profile.doc. Immediate.",
             handler: (_, args) => (args.Length > 0)
                 ? Error(output: "[profile.doc: expected no arguments]")
-                : new CommandResult(Output: m_link.Query(query: new WorldQuery.PlayerDocument()).Text)
+                : Answered(answer: m_link.Query(query: new WorldQuery.PlayerDocument()))
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "profile.save",
@@ -446,5 +446,11 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
     private static CommandResult Error(string output) => new(Output: output) {
         IsError = true,
+    };
+
+    // A server read-back rendered with its verdict: a refusal (a missing/inactive subject) fails, so it reaches
+    // wire.errors rather than scrolling past as data.
+    private static CommandResult Answered(in QueryAnswer answer) => new(Output: answer.Text) {
+        IsError = answer.Refused,
     };
 }

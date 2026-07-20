@@ -379,7 +379,7 @@ internal sealed class WorldServer {
 
         return query switch {
             WorldQuery.PlayerWhere where when (Body(index: (where.Index - 1)) is { } body) => new QueryAnswer(Text: body.DescribeWhere(index: where.Index)),
-            WorldQuery.PlayerWhere where => new QueryAnswer(Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]"),
+            WorldQuery.PlayerWhere where => new QueryAnswer(Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]", Refused: true),
             WorldQuery.PlayerDocument => new QueryAnswer(Text: WorldPlayerJson.Serialize(document: m_profiles.ToDocument())),
             _ => new QueryAnswer(Text: string.Empty),
         };

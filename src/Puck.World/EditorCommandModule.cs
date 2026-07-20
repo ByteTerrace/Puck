@@ -203,7 +203,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         return (m_session.Exit(slot: slot) switch {
             EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} — chase camera restored, avatar drives again]"),
-            _ => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]"),
+            _ => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]") { IsError = true },
         });
     }
 
