@@ -1807,6 +1807,133 @@ if ((Math.Abs((atZero.X.Value - expectedZero.X.Value)) > 32L) || (Math.Abs((atOn
     throw new InvalidOperationException("SCLERP ENDPOINTS FAILED");
 }
 Console.WriteLine("complex/rigid: gates + sclerp endpoints OK");
+
+// ---- CyclicRotation (deterministic order-30 looping rotation) ----
+// The clock must close its cycle bit-exactly (indexed, not accumulated), advance each plane at the speeds {1,7,11,13}
+// steps/tick, and hold the thirty baked rotations to the 30th roots of unity. Oracles are the residue arithmetic and an
+// independent double cos/sin, never the implementation's own table.
+int[] cyclicSpeeds = [1, 7, 11, 13];
+var cyclicMaxRotorUlp = 0L;
+var cyclicProbe = new FixedVector2(X: FixedQ4816.FromInteger(value: 1L), Y: FixedQ4816.FromInteger(value: 3L));
+for (var plane = 0; (plane < Puck.Maths.CyclicRotation.PlaneCount); ++plane) {
+    if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: 1L) != cyclicSpeeds[plane]) {
+        throw new InvalidOperationException("CYCLIC ROTATION PLANE SPEED IS WRONG");
+    }
+
+    for (var tick = -240L; (tick < 480L); ++tick) {
+        var phase = ((int)(((tick % 30L) + 30L) % 30L));
+        var expectedStep = ((cyclicSpeeds[plane] * phase) % 30);
+
+        if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: tick) != expectedStep) {
+            throw new InvalidOperationException("CYCLIC ROTATION STEP DISAGREES WITH RESIDUE ORACLE");
+        }
+        if (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != Puck.Maths.CyclicRotation.At(plane: plane, tick: (tick + 30L))) {
+            throw new InvalidOperationException("CYCLIC ROTATION CYCLE DID NOT CLOSE EXACTLY AT PERIOD");
+        }
+        if ((phase == 0) && (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != FixedComplex.MultiplicativeIdentity)) {
+            throw new InvalidOperationException("CYCLIC ROTATION DID NOT RETURN TO IDENTITY AT A MULTIPLE OF PERIOD");
+        }
+        if (Puck.Maths.CyclicRotation.Rotate(plane: plane, tick: tick, vector: cyclicProbe) != Puck.Maths.CyclicRotation.At(plane: plane, tick: tick).Rotate(vector: cyclicProbe)) {
+            throw new InvalidOperationException("CYCLIC ROTATION ROTATE DISAGREES WITH ITS ROTATION");
+        }
+    }
+}
+for (var step = 0; (step < 30); ++step) {
+    var rotation = Puck.Maths.CyclicRotation.At(plane: 0, tick: step);   // plane 0 turns one step per tick
+    var expectedCos = ((long)Math.Round((Math.Cos(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
+    var expectedSin = ((long)Math.Round((Math.Sin(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
+
+    cyclicMaxRotorUlp = Math.Max(cyclicMaxRotorUlp, Math.Max(Math.Abs((rotation.Real.Value - expectedCos)), Math.Abs((rotation.Imaginary.Value - expectedSin))));
+}
+if (cyclicMaxRotorUlp > 2L) {
+    throw new InvalidOperationException("CYCLIC ROTATION ROTORS DRIFTED FROM THE 30TH ROOTS OF UNITY");
+}
+Console.WriteLine($"cyclic rotation: exact 30-tick loop + identity resync, {{1,7,11,13}} plane speeds, rotors {cyclicMaxRotorUlp} raw ULP from unity OK");
+
+// ---- SymmetryLattice (the exact E8 root system CyclicRotation is the heartbeat of) ----
+// The 240 nodes must close under reflection (each an involution), those reflections must act transitively on all of them
+// (so composing them realizes the whole symmetry group W(E8)), the cycle must be an order-30 permutation cutting eight
+// rings of thirty (== CyclicRotation's period), and the projection must resolve those rings with radii in four
+// golden-ratio pairs, one cycle step turning a node a twelfth of a turn. Oracles: exact index arithmetic and
+// independent double geometry, never the implementation's own tables.
+if (SymmetryLattice.RingSize != Puck.Maths.CyclicRotation.Period) {
+    throw new InvalidOperationException("SYMMETRY LATTICE RING SIZE IS NOT THE CYCLIC ROTATION PERIOD");
+}
+var latticeRingSizes = new int[SymmetryLattice.RingCount];
+var latticeReached = new bool[SymmetryLattice.NodeCount];
+var latticeWorklist = new int[SymmetryLattice.NodeCount];
+for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+    if (SymmetryLattice.Ring(node: SymmetryLattice.Cycle(node: node)) != SymmetryLattice.Ring(node: node)) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP LEFT THE RING");
+    }
+
+    latticeRingSizes[SymmetryLattice.Ring(node: node)]++;
+
+    for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
+        if (SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: node, mirror: mirror), mirror: mirror) != node) {
+            throw new InvalidOperationException("SYMMETRY LATTICE REFLECTION IS NOT AN INVOLUTION");
+        }
+    }
+}
+for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
+    if (latticeRingSizes[ring] != SymmetryLattice.RingSize) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE ORBIT IS NOT A RING OF THIRTY");
+    }
+}
+var latticeCycleOrbit = 0;
+for (var cursor = SymmetryLattice.Cycle(node: 0); (cursor != 0); cursor = SymmetryLattice.Cycle(node: cursor)) {
+    if ((++latticeCycleOrbit) > SymmetryLattice.RingSize) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE IS NOT ORDER THIRTY");
+    }
+}
+// Reflections act transitively on all 240 nodes: the reflection group is the full symmetry group, not the order-30 cycle.
+latticeReached[0] = true;
+latticeWorklist[0] = 0;
+var latticePending = 1;
+var latticeReachedCount = 1;
+while (latticePending > 0) {
+    var node = latticeWorklist[--latticePending];
+
+    for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
+        var image = SymmetryLattice.Reflect(node: node, mirror: mirror);
+
+        if (!latticeReached[image]) {
+            latticeReached[image] = true;
+            latticeWorklist[latticePending++] = image;
+            ++latticeReachedCount;
+        }
+    }
+}
+if (latticeReachedCount != SymmetryLattice.NodeCount) {
+    throw new InvalidOperationException("SYMMETRY LATTICE REFLECTIONS ARE NOT TRANSITIVE ON THE NODES");
+}
+// Projection geometry: eight rings whose radii pair off by the golden ratio, one cycle step of a twelfth of a turn.
+var latticeGolden = ((1.0 + Math.Sqrt(5.0)) / 2.0);
+var latticeRingRadius = new double[SymmetryLattice.RingCount];
+for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+    var point = SymmetryLattice.Project(node: node);
+
+    latticeRingRadius[SymmetryLattice.Ring(node: node)] = Math.Sqrt((((double)point.X * (double)point.X) + ((double)point.Y * (double)point.Y)));
+}
+Array.Sort(latticeRingRadius);
+var latticeGoldenPairs = 0;
+for (var inner = 0; (inner < SymmetryLattice.RingCount); ++inner) {
+    for (var outer = (inner + 1); (outer < SymmetryLattice.RingCount); ++outer) {
+        if (Math.Abs(((latticeRingRadius[outer] / latticeRingRadius[inner]) - latticeGolden)) < 0.002) { ++latticeGoldenPairs; }
+    }
+}
+if (latticeGoldenPairs != (SymmetryLattice.RingCount / 2)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE PROJECTION RINGS ARE NOT IN GOLDEN-RATIO PAIRS");
+}
+var latticeBefore = SymmetryLattice.Project(node: 0);
+var latticeAfter = SymmetryLattice.Project(node: SymmetryLattice.Cycle(node: 0));
+var latticeTurn = (((Math.Atan2((double)latticeAfter.Y, (double)latticeAfter.X) - Math.Atan2((double)latticeBefore.Y, (double)latticeBefore.X)) * 180.0) / Math.PI);
+latticeTurn = (((latticeTurn % 360.0) + 360.0) % 360.0);
+if ((Math.Abs((latticeTurn - 12.0)) > 0.1) && (Math.Abs((latticeTurn - 348.0)) > 0.1)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP DID NOT TURN A TWELFTH OF A TURN");
+}
+Console.WriteLine($"symmetry lattice: 240 nodes, reflections transitive (full group), order-30 cycle into 8 rings of 30, projection {latticeGoldenPairs} golden pairs OK");
+
 static long VectorNormLocal(long x, long y, long z) {
     // Mirror of the internal FixedQuaternion.VectorNorm: nearest integer sqrt of the exact raw Q32 product sum
     // (no rounded Q16 intermediate).
@@ -2251,6 +2378,31 @@ quatTimer.Restart();
 for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (benchDualA * benchDualB).Dual.Value; }
 quatTimer.Stop();
 Console.WriteLine($"dual multiply        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+var benchCyclicV2 = new FixedVector2(X: FixedQ4816.One, Y: FixedQ4816.FromInteger(value: 3L));
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Step(plane: (n & 3), tick: n); }
+quatTimer.Stop();
+Console.WriteLine($"cyclic step          : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.At(plane: (n & 3), tick: n).Real.Value; }
+quatTimer.Stop();
+Console.WriteLine($"cyclic at            : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 20_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Rotate(plane: (n & 3), tick: n, vector: benchCyclicV2).X.Value; }
+quatTimer.Stop();
+Console.WriteLine($"cyclic rotate        : {(quatTimer.Elapsed.TotalNanoseconds / 20_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Reflect(node: (n % 240), mirror: ((n * 7) % 240)); }
+quatTimer.Stop();
+Console.WriteLine($"lattice reflect      : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Cycle(node: (n % 240)); }
+quatTimer.Stop();
+Console.WriteLine($"lattice cycle        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Project(node: (n % 240)).X.Value; }
+quatTimer.Stop();
+Console.WriteLine($"lattice project      : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 sink ^= quatSink;
 Console.WriteLine($"(sink {sink})");
 Console.WriteLine();
