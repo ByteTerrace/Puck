@@ -87,7 +87,7 @@ For an area's settled contract facts, load its skill: `sdf-world`,
 > twelve arcs (seven landed). Read it as the product's intent — verified by
 > running `Puck.World`, not as current `Puck.Demo` behavior. The plan of record
 > is [docs/demo-to-world-port-plan.md](docs/demo-to-world-port-plan.md); start at
-> its **State of execution** block.
+> its **State** block.
 
 `Puck.Demo`'s default run IS the demo: a controller-driven player in a room of
 bootable console cabinets — the dmg/cgb/agb costumes of one GamingBrick machine.

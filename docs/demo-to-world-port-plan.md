@@ -1345,6 +1345,13 @@ honestly reports MISMATCH; and a tape doctored by one flipped byte in the stored
 reference hash is caught and returns `IsError`. A replay check that cannot fail is
 not a check.
 
+The four results that establish it:
+
+- `replay.verify` on DirectX 12, boot-anchored tape: **MATCH**, tail hash `0xF7515600E0247C65`.
+- `replay.verify` on Vulkan, same tape: **MATCH**, same tail hash `0xF7515600E0247C65`.
+- `replay.verify` on a mid-session tape (capture started after the live drive began): **MISMATCH**, reported honestly rather than suppressed.
+- `replay.verify` on a tape with one flipped byte in the stored reference hash: **MISMATCH** + `IsError`, beside an undoctored control run of the same tape: **MATCH**.
+
 **Determinism discipline.** The hashed pose state is fixed-point or an exact
 integer tick — no wall-clock, no float in the hashed pose. The serialized command
 stream carries recorded commands' authored float fields verbatim; floats

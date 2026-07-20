@@ -48,7 +48,7 @@ Git history holds the rest.
 
 | Document | Purpose |
 |---|---|
-| [Demo to World port](demo-to-world-port-plan.md) | **The plan of record.** The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project — start at its **State of execution** block (7 arcs landed, unmerged; 8–12 remain). Carries the deletion ledger, open questions, and the parallel carried tracks. |
+| [Demo to World port](demo-to-world-port-plan.md) | **The plan of record.** The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project — start at its **State** block (7 arcs landed, unmerged; 8–12 remain). Carries the deletion ledger, open questions, and the parallel carried tracks. |
 | [Game studio](game-studio-plan.md) | Creator workflow and remaining product roadmap; port-reference for arcs 7/8 (banner-dated — destination is World, the Demo is a library that no longer runs). |
 | [Tessellation world](tessellation-world-plan.md) | Creative-work handoff for the World terrain, day cycle, settlements, and weather — verified by running the world. |
 | [Machine fleet](machine-fleet-plan.md) | Emulator-fleet performance model and optimization priorities. |

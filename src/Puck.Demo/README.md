@@ -13,7 +13,7 @@
 > libraries across twelve arcs (seven landed). The **plan of record is the single
 > source of truth** for what is ported, what remains, and what is held:
 > [docs/demo-to-world-port-plan.md](../../docs/demo-to-world-port-plan.md) — start
-> at its **State of execution** block. The set of files still standing (pinned by
+> at its **State** block. The set of files still standing (pinned by
 > the OQ-14 survivors and the held `Museum/MuseumRenderer.cs`) is the plan's
 > **deletion ledger** and each arc's "Demo deletion — (c)-disposition" note; Arc 12
 > deletes the project outright.
@@ -57,7 +57,7 @@ decision at Arc 8's exit (`Forge/{Volley,Chroma,Solitaire,Poker,CritterSwap,Orac
 ## Orientation for deeper work
 
 - [docs/demo-to-world-port-plan.md](../../docs/demo-to-world-port-plan.md) — the
-  plan of record: State of execution, the twelve arcs, the deletion ledger, the
+  plan of record: State, the twelve arcs, the deletion ledger, the
   open questions, and the carried tracks.
 - Skills to load before touching an area: `rom-forge` (the ROM forge — Arc 8),
   `sdf-world` (the world renderer + SDF VM), `run-document` (the document + graph),
