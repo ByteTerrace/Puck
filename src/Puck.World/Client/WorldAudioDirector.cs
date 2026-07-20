@@ -494,7 +494,7 @@ internal sealed class WorldAudioDirector {
                         Key = key,
                         Kind = WorldAudioEmitterKind.Bed,
                         Anchor = EmitterAnchor.FixedPoint(position: bed.Center),
-                        MinRadius = FixedQ4816.FromDouble(value: (bed.InnerRadius ?? 0f)),
+                        MinRadius = FixedQ4816.FromDouble(value: bed.InnerRadius),
                         MaxRadius = FixedQ4816.FromDouble(value: bed.Radius),
                         FadeFrames = FadeFrames(seconds: (bed.FadeSeconds ?? audio.DefaultBedFadeSeconds)),
                         GainQ16 = gain,

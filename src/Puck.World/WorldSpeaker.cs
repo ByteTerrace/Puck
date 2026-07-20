@@ -114,7 +114,7 @@ internal abstract record WorldSpeaker(
     /// <param name="Name">The speaker's stable name.</param>
     /// <param name="Center">The region's extent center, world space.</param>
     /// <param name="Radius">The region's outer radius — the envelope's zero and the cull edge.</param>
-    /// <param name="InnerRadius">The full-presence inner radius (null = 0 — the envelope shoulders from the center).</param>
+    /// <param name="InnerRadius">The full-presence inner radius; <c>0</c> shoulders the envelope from the center.</param>
     /// <param name="FadeSeconds">The presence slew bound in seconds (null = the audio defaults'
     /// <c>DefaultBedFadeSeconds</c>).</param>
     /// <param name="Feed">The feed it plays.</param>
@@ -122,7 +122,7 @@ internal abstract record WorldSpeaker(
         string Name,
         Vector3 Center,
         float Radius,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? InnerRadius,
+        float InnerRadius,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds,
         WorldSpeakerFeed Feed
     ) : WorldSpeaker(Name: Name, Feed: Feed, Attenuation: null);

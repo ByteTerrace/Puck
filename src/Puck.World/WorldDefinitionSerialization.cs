@@ -173,7 +173,7 @@ internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat> 
 /// order, string enums, and the LOAD-BEARING <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
-/// writer, which is deterministic — the ouroboros gate covers the composition.
+/// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
 internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Authoring.CreationDocument> {
     /// <inheritdoc/>
@@ -216,7 +216,9 @@ internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Autho
 }
 
 /// <summary>
-/// The canonical serializer for the world document — the ouroboros gate. <see cref="Save"/> emits a stable canonical
+/// The canonical serializer for the world document — the ouroboros round-trip.
+/// The round-trip is an observed property, not an acceptance criterion.
+/// <see cref="Save"/> emits a stable canonical
 /// form (member order = record declaration order, invariant number formatting, no incidental whitespace drift): UTF-8
 /// with no BOM, LF newlines, two-space indentation, and exactly one trailing newline at EOF, so a load→save reproduces
 /// the file byte-for-byte and world files stay diffable and git-friendly.

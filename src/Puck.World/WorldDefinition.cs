@@ -126,7 +126,7 @@ internal sealed record MotionResponse(
 );
 
 /// <summary>A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is
-/// the whole switch; <see langword="null"/> means decoration, which is every existing row in every existing world.</summary>
+/// the whole switch; <see langword="null"/> means decoration — the row is drawn but bodies pass through it.</summary>
 /// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
 /// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
 internal sealed record WorldSolid(float Margin);
@@ -656,11 +656,10 @@ internal readonly record struct FixedWorldKit(
 /// <param name="Center">The shape's world-space center (its translate offset from the origin) — the position every
 /// manipulation edits.</param>
 /// <param name="Emission">The row's emission facet (a synth voice the shape itself makes — see
-/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null, so
-/// emission-free rows stay byte-identical.</param>
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null.</param>
 /// <param name="Solid">The row's solidity facet (see <see cref="WorldSolid"/>) — SIM-AFFECTING: when present the analytic
 /// contact field derives a convex collider from the row's shape and bodies bump into and stand on it. <see langword="null"/>
-/// means decoration (every existing row in every existing world). Omitted from the wire when null.</param>
+/// means decoration — bodies pass through it. Omitted from the wire when null.</param>
 [JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
 [JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
@@ -925,7 +924,7 @@ internal readonly record struct WorldFeedProfile(int Width, int Height, uint Ref
 
 /// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen, the activation
 /// radius, whether engaging auto-boots the selected magazine entry, and the world-event channels a gesture drives it
-/// through. Every default preserves the pre-arc behavior exactly, so <c>default.world.json</c> deserializes identically.</summary>
+/// through. The optional members each default to the inert choice: no auto-boot and no gesture channel.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
 /// <paramref name="Engageable"/>). Validated finite and non-negative.</param>
@@ -965,7 +964,7 @@ internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRa
 /// <c>Margin</c> by <see cref="WorldColliderSet"/>), or <see langword="null"/> for a decorative screen. Omitted from the
 /// wire when null.</param>
 /// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
-/// with no magazine (every existing screen). Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
+/// with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
 /// carries it for free, so no new mutation kind is needed.</param>
 internal sealed record WorldScreen(
     int Index,

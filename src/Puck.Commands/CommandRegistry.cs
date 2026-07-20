@@ -701,8 +701,8 @@ public sealed class CommandRegistry : ICommandSink {
         // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
         // the frozen alternate lookup (so the verb token never materializes), and the reused m_fastContext is handed to
         // the handler. A WIRE-NATIVE verb (WithWireArgs) receives a zero-copy WireArgs over the trailing token ranges —
-        // no substrings, no argument array; a trailing-args verb (Demo) gets a materialized string[], built
-        // only now, at dispatch. The context's Parse is null: no fast-path handler reads context.Parse/Value/Phase/
+        // no substrings, no argument array; a trailing-args verb (WithTrailingArgs, still the majority of the live
+        // World verbs) gets a materialized string[], built only now, at dispatch. The context's Parse is null: no fast-path handler reads context.Parse/Value/Phase/
         // DeviceId (they read only their args) — a Verb like the movement keys does, but a Verb never enters this path.
         if ((line.IndexOf(value: '"') < 0) && (line.IndexOf(value: '@') < 0)) {
             Span<Range> tokenRanges = stackalloc Range[MaxFastPathTokens];
@@ -727,7 +727,7 @@ public sealed class CommandRegistry : ICommandSink {
                         : result);
                 }
 
-                // Legacy trailing-args verb: materialize the argument strings now (only the trailing tokens, and only on
+                // Trailing-args verb (not yet wire-native): materialize the argument strings now (only the trailing tokens, and only on
                 // an actual dispatch — the verb token is never substringed).
                 var args = new string[argRanges.Length];
 

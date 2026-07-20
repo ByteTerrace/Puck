@@ -19,7 +19,7 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>SAVED-BYTES-ONLY (the default policy): capture composes the snapshot the writer serializes; it never mutates
 /// the in-memory definition or the journal (a save is a snapshot, not a mutation). The fold is exactly IDEMPOTENT on a
-/// freshly booted world — live session state equals the document defaults at boot — so the ouroboros gate (load→save→load
+/// freshly booted world — live session state equals the document defaults at boot — so the ouroboros round-trip (load→save→load
 /// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
 /// whether the live session has since diverged from the loaded document, reported by <c>world.status</c> at verb time.</remarks>
 internal static class WorldSessionCapture {
