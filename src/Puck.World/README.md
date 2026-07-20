@@ -185,8 +185,11 @@ polymorphic screen sources / cameras / action predicates / effects. Boot loads
 `--world <path>` (or `Assets/worlds/default.world.json` beside the executable)
 through `WorldDefinitionLoader`: file → parse → schema check →
 `WorldDefinitionValidator` (the one thick gate, now covering tunings, ids,
-actions, the assignment policy, and addons), with a LOUD baked-default fallback
-on any failure and one `[world] definition:` boot line. `world.save [path]`
+actions, the assignment policy, and addons). One `[world] definition:` boot line
+names the origin it took, one of three: an explicit `--world` file (a file that
+will not load ends the boot with a named reason and exit 1), the shipped default
+file, or the in-code baked definition — which is requested outright with
+`--world baked`, and is otherwise reached only when no default asset ships. `world.save [path]`
 writes the active definition back canonically (stable member order, invariant
 numbers, LF, one trailing newline), so a load→save reproduces the file
 byte-for-byte — the ouroboros round-trip (a property worth knowing, **not a
@@ -1766,11 +1769,13 @@ contract. Nineteen subcommands:
   gate): (a) the **ouroboros round-trip** — `world.save` on EVERY checked-in world (`default`, `kart-remap`,
   `expo`, `kiosk`, `planetoid`) reproduces it byte-for-byte, and saving THAT copy again reproduces it a
   second time (so a save that folds session state stays idempotent on a
-  fresh boot, for each); (b) **baked-default parity** — a `--kind hop` feeder run
-  against the checked-in file and one against a nonexistent `--world` path
-  (forcing the loud fallback) compare byte-identical on their final sweeps, with
-  the `[world] definition: baked default (...)` line present only in the fallback
-  run's transcript.
+  fresh boot, for each); (b) **the baked default boots, runs, and is
+  deterministic** — one `--kind hop` feeder run against the checked-in file plus
+  TWO against `--world baked` (the in-code definition, requested by name): all
+  three capture full pose coverage, the two baked runs compare byte-identical on
+  their final sweeps, and the `[world] definition: baked default (...)` line is
+  present only in the baked runs' transcripts. The checked-in-vs-baked pose delta
+  is reported, never asserted — they are different documents.
 - **`mutate`** `[--no-build] [--width W] [--height H] [--exit-after-seconds N]`
   — the mutation-vocabulary round-trip proof: (a) a scripted
   `world.kit.tune` → `world.status` (dirty 1) → `world.undo` → `world.status`

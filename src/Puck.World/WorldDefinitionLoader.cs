@@ -14,26 +14,45 @@ internal sealed record WorldDefinitionSource(WorldDefinition Definition, string?
 /// schema-checked, and passed through <see cref="WorldDefinitionValidator"/>.
 /// </summary>
 /// <remarks>An EXPLICIT <c>--world</c> path is an assertion: absent, unreadable, or invalid, it fails the boot with a
-/// named reason and a non-zero exit — a typo must never quietly run some other world. Only the implicit default path
-/// falls back to the baked <see cref="WorldDefinition.Default"/> (the no-asset-shipped case), and it says so. Boot
-/// prints exactly one <c>[world] definition:</c> line naming the resolved path or the baked-default reason.</remarks>
+/// named reason and a non-zero exit — a typo must never quietly run some other world. The in-code baked definition is a
+/// legitimate boot mode (it is what runs when no world asset is present) and so has its own EXPLICIT request, the
+/// <see cref="BakedSentinel"/> value; it is never reachable by accident. Boot prints exactly one
+/// <c>[world] definition:</c> line naming the resolved path AND which of the three origins it took.</remarks>
 internal static class WorldDefinitionLoader {
+    /// <summary>The <c>--world</c> value that requests the in-code <see cref="WorldDefinition.Default"/> outright,
+    /// rather than any file. A world document is always a <c>.json</c> path, so the bare word cannot collide with one.</summary>
+    public const string BakedSentinel = "baked";
+
     /// <summary>The default world file, resolved against <see cref="AppContext.BaseDirectory"/> when no
     /// <c>--world</c> path is supplied.</summary>
     public static readonly string DefaultRelativePath = Path.Combine(path1: "Assets", path2: "worlds", path3: "default.world.json");
 
-    /// <summary>Resolves the active world definition. An explicit path that will not load is a boot failure; the
-    /// implicit default path falls back loudly to the baked definition.</summary>
-    /// <param name="explicitPath">The <c>--world</c> path, or <see langword="null"/>/empty for the default file.</param>
+    /// <summary>Resolves the active world definition from one of three origins: the <see cref="BakedSentinel"/>, an
+    /// explicit file (a boot failure when it will not load), or the shipped default file (falling back loudly to the
+    /// baked definition when no asset is present).</summary>
+    /// <param name="explicitPath">The <c>--world</c> value — a path, <see cref="BakedSentinel"/>, or
+    /// <see langword="null"/>/empty for the shipped default file.</param>
     /// <param name="source">The resolved definition and its origin, when this returns <see langword="true"/>.</param>
     /// <param name="failure">The one-line boot-failure message, or empty on success.</param>
     /// <returns><see langword="true"/> when the boot may proceed.</returns>
     public static bool TryResolve(string? explicitPath, out WorldDefinitionSource source, out string failure) {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
+
+        // The in-code document, asked for by name. It is the same definition the no-asset fallback lands on, but it is
+        // REQUESTED here rather than inferred from a failure, so the boot line reads as a choice and not an accident.
+        if (explicitly && string.Equals(a: explicitPath!.Trim(), b: BakedSentinel, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            Console.Error.WriteLine(value: $"[world] definition: baked default (in-code; requested by --world {BakedSentinel})");
+
+            source = new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
+            failure = string.Empty;
+
+            return true;
+        }
+
         var path = (explicitly ? Path.GetFullPath(path: explicitPath!) : Path.Combine(path1: AppContext.BaseDirectory, path2: DefaultRelativePath));
 
         if (TryLoadFile(path: path, definition: out var loaded, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"[world] definition: {path}");
+            Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly ? "--world" : "shipped default")})");
 
             source = new WorldDefinitionSource(Definition: loaded, SourcePath: path);
             failure = string.Empty;
@@ -48,7 +67,7 @@ internal static class WorldDefinitionLoader {
             return false;
         }
 
-        Console.Error.WriteLine(value: $"[world] definition: baked default ({reason})");
+        Console.Error.WriteLine(value: $"[world] definition: baked default (in-code; no shipped default — {reason})");
 
         source = new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
         failure = string.Empty;
