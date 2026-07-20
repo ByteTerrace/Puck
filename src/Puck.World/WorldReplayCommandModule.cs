@@ -84,7 +84,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             return match
                 ? new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | MATCH live tail=0x{recorded:X16} — faithful, boot-anchored capture]")
                 : new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | MISMATCH live tail=0x{recorded:X16} replayed=0x{replayed:X16} — mid-session capture; the fresh re-drive starts from the definition boot image]");
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
             return Error(text: $"[replay.stop: could not persist — {exception.Message}]");
         }
     }
