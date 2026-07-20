@@ -226,6 +226,7 @@ internal sealed class WorldOverlayFeed {
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
                 Hints: HintLinesFor(slot: slot, view: view),
+                Label: (view.Label ?? view.PageId),
                 Modifiers: m_modifiers[viewIndex].AsMemory(start: 0, length: modifierCount),
                 PageId: view.PageId,
                 Slots: m_slots[viewIndex],

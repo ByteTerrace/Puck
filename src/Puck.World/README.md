@@ -541,19 +541,29 @@ back to the engine default. There is no CLI override for the store path, so the
 proof backs up and restores the REAL `world/` subtree whole (byte-for-byte)
 around every session — the real catalog is never destroyed.
 
+**Chord pages** are the shape of every group: five pages per group, one per
+ordered trigger chord — nothing held = page 0, `LT` = 1, `RT` = 2,
+`LT`-then-`RT` = 3, `RT`-then-`LT` = 4 (press order is load-bearing;
+`HeldOrderTracker` keeps the held set ordered, so 3 and 4 are genuinely
+different pages). Holding the triggers IS the page turn: the binding bar
+re-renders the selected page's twelve chips and draws the page's **name** by
+the modifier pips, so the chord vocabulary is discovered by squeezing rather
+than memorized. The play group's pages 1..4 are deliberately **sparse** — they
+carry only the stick routers (a held analog re-dispatches against the active
+page each tick) and wait to be authored through the binding document.
+
 **Editor mode** is the editor
-GROUP's tenancy: a per-seat client mode entered with the ordered **LT-then-RT
-trigger chord** (a command-meaning chord row in the play group — pure binding
-data, the reference chord-command), **Gamepad Back / Keyboard Tab** (the
-assist twins), or `editor.enter [seat]`; exited with East / Back / Tab or
+GROUP's tenancy: a per-seat client mode entered with **Gamepad Back / Keyboard
+Tab** or `editor.enter [seat]` — no trigger combination enters a mode — and
+exited with East / Back / Tab or
 `editor.exit [seat]`. Entering flips the seat's active group to `editor`
 (`WorldSeatBindings.SetActiveGroup` — a pointer switch, no recompose): the
 **editor resting page** (sticks fly, shoulders rise/sink, South toggles
 fly⇄orbit, D-pad steps speed, West echoes status) plus the **LT camera page**
 (explicit fly/orbit + speed; North picks the row under the crosshair so orbit
-has a pivot), the **RT select page**, and the **LT+RT place page** — the
-binding bar renders whatever page the group's chords select, with the play
-group's `LT+RT Editor` chord hint drawn above the modifier pips. The seat's
+has a pivot), the **RT select page**, the **LT+RT place page**, and the sparse
+**RT+LT reverse page** — the
+binding bar renders whatever page the group's chords select. The seat's
 intent diverts through the existing `player.control idle` contract on both
 halves (live devices mask; tapes and `player.press` still drive — script
 outranks idle), its camera swaps from the chase rig to the session's
@@ -565,8 +575,8 @@ nothing crosses the wire beyond the existing `SetControl`. The console twins
 (`editor.status` — which echoes `group=` + `page=`, the flip's assertable
 truth — `editor.fly`/`editor.orbit`, `editor.cam.speed <v>`,
 `editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>]`) script every chord act.
-Proven on both backends by `proof.cs editor-mode` (group round trip, the
-chord-command fired from data over `player.signal`, camera in pixels,
+Proven on both backends by `proof.cs editor-mode` (group round trip, the five
+ordered chord pages walked from data over `player.signal`, camera in pixels,
 diversion honesty, the layout seam, the loud wire-level rule rejections).
 
 **Selection and manipulation** builds the targeting and drag layers over

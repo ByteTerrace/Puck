@@ -58,7 +58,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: EnterCommand,
-            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound LT-then-RT chord or Gamepad Back / Keyboard Tab). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; LT holds the camera page, RT the select page). Exit with East / Back / Tab or editor.exit.",
+            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound Gamepad Back / Keyboard Tab — the triggers turn pages, they never enter a mode). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; the group's five ordered trigger chords select them: nothing held = resting, LT = camera, RT = select, LT-then-RT = place, RT-then-LT = the reverse page). Exit with East / Back / Tab or editor.exit.",
             handler: EnterHandler,
             routing: CommandRouting.Simulation
         );
@@ -217,8 +217,11 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         var seat = PlayerRoster.DisplayNumber(slot: slot);
 
         if (!m_session.IsEditing(slot: slot)) {
-            // The active group rides the not-editing echo too — the scripted assertion point for the exit flip.
-            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={m_seatBindings.PageView(slot: slot).Group}]");
+            // The active group AND page ride the not-editing echo too — the scripted assertion point for the exit
+            // flip and for the play group's held-chord page turns.
+            var resting = m_seatBindings.PageView(slot: slot);
+
+            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={resting.Group} page={resting.PageId} '{resting.Label ?? resting.PageId}']");
         }
 
         var view = m_seatBindings.PageView(slot: slot);
