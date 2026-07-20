@@ -74,7 +74,12 @@ public sealed class CapturingRenderNode : IRenderNode {
                 m_sink.Consume(frame: new CaptureFrame(
                     FrameIndex: m_capturedFrameCount,
                     Surface: captured,
-                    TimestampTicks: context.RenderTicks
+                    // The fixed-step simulation clock (whole update steps), NOT RenderTicks: RenderTicks folds in
+                    // AccumulatorTicks — engine ticks elapsed but not yet consumed, a wall-clock-paced residue — which
+                    // would make the sim-clock recording's timestamps vary run to run. ElapsedTicks is the deterministic
+                    // engine tick base the CaptureFrame contract promises; the wall clock is measured separately (QPC)
+                    // by the session for RecordingClock.Wall.
+                    TimestampTicks: context.ElapsedTicks
                 ));
                 m_capturedFrameCount++;
                 m_lastCapturedSourceFrame = m_sourceFrameCount;
