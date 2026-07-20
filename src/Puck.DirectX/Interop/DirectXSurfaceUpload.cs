@@ -272,6 +272,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             return;
         }
 
+        // A resize or format change releases resources the GPU may still be reading: the upload path submits and
+        // returns without draining, so in-flight work can outlive the old texture. Drain first, exactly as Dispose
+        // does. Skipped on the first allocation, where nothing has been submitted against these resources yet.
+        if (0 != m_texture) {
+            WaitForGpu();
+        }
+
         DisposeImageResources();
 
         var device = (ID3D12Device*)m_deviceContext.Device.Handle;

@@ -9,6 +9,8 @@ sources remain useful to engineering decisions.
 
 | Document | Purpose |
 |---|---|
+| [Vision](vision.md) | What Puck is and where it is going, end to end. Read this first. |
+| [Capability register](capability-register.md) | The settled answers — what Puck can and cannot do, with ceilings and evidence. Read before asking whether a capability exists. |
 | [Capability catalog](capability-catalog.md) | Supported capabilities, verification status, and entry points. |
 | [Project map](project-map.md) | Project ownership, dependencies, and layering rules. |
 | [Agent guide](agent-guide.md) | Development workflow, verification, environments, and documentation policy. |

@@ -1,6 +1,6 @@
 ---
 name: verifying-puck-changes
-description: How to prove a Puck ENGINE change actually works — which POST battery tier or gate to run for what you touched. Use whenever you have modified engine code (GPU, shaders, backends, sim, input, documents) or emulator code (GamingBricks), or are about to claim a change is done/verified; also when asked to "run the tests" (this repo has no unit tests — the POST batteries are the verification story). NOTE: Puck.Demo is GREENFIELD — verify demo-only changes by RUNNING the demo, never by gating them or adding Post stages.
+description: How to prove a Puck ENGINE change actually works — which POST battery tier or gate to run for what you touched. Use whenever you have modified engine code (GPU, shaders, backends, sim, input, documents) or emulator code (GamingBricks), or are about to claim a change is done/verified; also when asked to "run the tests" (this repo has no unit tests — the POST batteries are the verification story). NOTE: Puck.World is GREENFIELD — verify game/overworld changes by RUNNING Puck.World, never by gating them or adding Post stages. Puck.Demo is a library that no longer runs; nothing under it is verifiable today.
 ---
 
 # Verifying Puck changes
@@ -9,24 +9,35 @@ Procedural only — how to check a change, never what the code should look like.
 The user's current instruction outranks this skill; if it ever argues against a
 change they want, it is stale — fix it in the same change and say so.
 
-**The Demo is greenfield.** A change under `src/Puck.Demo/` (overworld,
-cabinets, forge ROMs, creator mode, presentation) is verified by RUNNING it —
-`dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 2` (the
+**Puck.World is greenfield.** A change under `src/Puck.World/` (overworld,
+cabinets, creator/sculpt mode, audio, presentation) is verified by RUNNING it —
+`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2` (the
 headless smoke; `0` or less DISABLES auto-exit and runs until closed) — not by
-a gate. Never add a `--validate-*` flag or a Post stage for a demo feature,
+a gate. Never add a `--validate-*` flag or a Post stage for a game feature,
 and never promote one into Post, unless the user explicitly asks.
 
-The demo-side canon beyond the smoke:
+`src/Puck.Demo/` is a LIBRARY with no composition root (its `Program.cs` was
+deleted at Beat B of [the port plan](../../../docs/demo-to-world-port-plan.md)).
+Nothing under it can be run or verified; it is port-reference material only.
 
-- **Document sanity**: `-- --validate-overworld`.
-- **Deterministic screenshot** (console-driven now — the demo's `PUCK_OVERWORLD_*`
-  capture env vars were removed; captures drive over stdin): pipe verbs in —
-  `printf 'step 100\ncapture shot.png\nstep 3\n' | dotnet run --project
-  src/Puck.Demo -c Release -- --exit-after-seconds 12` grabs the frame after the
-  machines have booted and drawn (use `settle` instead of `step N` to wait for
-  transitions to quiesce). For creator-mode scenes prepend `creator` (empty
-  creator scene) or `creator.load <name-or-path>` (loads a saved creation, then
-  `creator` enters the mode). Runnable examples: docs/examples/scripts/.
+The World-side canon beyond the smoke:
+
+- **Document sanity**: `dotnet run src/Puck.World/scripts/proof.cs -- worlddoc`
+  (the ouroboros load→save→load byte-identity + baked-default parity proof).
+  Puck.World has no `--validate-*` flag; its whole CLI surface is `--backend
+  --width --height --exit-after-seconds --present-mode --world --recording
+  --storage-uri --user-id`.
+- **Screenshot / capture**: `world.screenshot <path.png>` writes the next
+  composed frame (overlay included); `capture.start` / `capture.stop` /
+  `capture.status` drive the A/V recording graph. Both are console verbs, so
+  they pipe over stdin like everything else:
+  `printf 'world.screenshot shot.png\n' | dotnet run --project src/Puck.World
+  -c Release -- --exit-after-seconds 12`.
+- **Scripted proofs**: `dotnet run src/Puck.World/scripts/proof.cs -- <sub>` is
+  the World verification suite (19 subcommands — `screens`, `worlddoc`,
+  `mutate`, `grants`, `bindings`, `storage`, `sculpt`, `placements`, `audio`,
+  `editor-*`, `record`, `ui-floor`, …). Creation authoring is the
+  `editor.sculpt.*` verb family.
 - **Forge self-verify**: every forge tool boots its output on a real Humble
   machine and asserts observable behavior before writing bytes — run the ones
   your change touches: `--forge-brickfall` (the full BrickfallVerify battery),

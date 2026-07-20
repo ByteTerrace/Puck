@@ -1,8 +1,11 @@
 # AGENTS.md
 
-Puck is an **everything-as-data** engine: one versioned JSON document
-(`puck.run.v1`) describes a run, and the engine renders, composites, validates,
-and replays it deterministically on either GPU backend — Vulkan or Direct3D 12.
+Puck is an **everything-as-data** engine: versioned JSON documents describe what
+runs, and the engine renders, composites, validates, and replays them
+deterministically on either GPU backend — Vulkan or Direct3D 12. The live game
+is `Puck.World`, whose document is `puck.world.def.v1`; `puck.run.v1`
+(`Puck.Scene`) is the engine-tier run/scene document, gated by Post's
+`run-document` stage. Both carry the same `Extensions` round-trip convention.
 It is a deliberately dumb terminal *beneath* engines; where it ends up is left
 open on purpose.
 

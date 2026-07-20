@@ -9,7 +9,7 @@
 //   post-report.txt), and exits 0 pass / 1 gate-fail / 2 infra-fail. -NoBuild skips the build.
 //
 // schema [<out=schema/run.schema.json>] [-NoBuild]
-//   Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema. The schema is
+//   Emits the data-driven run-document JSON Schema by calling Puck.Scene.RunDocumentSchema.Export() directly. The schema is
 //   exported from the live System.Text.Json source-gen model, so it cannot drift from the document types. -NoBuild
 //   skips the build.
 //
