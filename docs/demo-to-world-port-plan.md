@@ -3358,6 +3358,32 @@ dependencies. Each names a forcing point. Numbers are stable; the resolved ones
 (OQ-1, 2, 5, 10, 11, 12, 13, 14, 15, 16, 17) became rulings and landed behavior
 and are not restated here.
 
+**OQ-18 — the binding matcher should be a union, so a world can define input models
+that are not pages.** Owner-recorded for a later arc; not scheduled, not a gate.
+
+Today `BindingChordDefinition(Group, Chord, Page?, Command?)` is `matcher → outcome`
+where the OUTCOME is already a union (a page or a command) but the MATCHER is fixed
+to one kind: a set of *simultaneously latched holds*, order-sensitive by press order.
+That is enough for an author to abandon pages entirely — bind chords straight to
+commands and declare no page — but it cannot express a **combo**: an ordered sequence
+of *transient presses*, each within a window of the last, cancelled by timeout or a
+wrong input. Nothing in `HeldOrderTracker`/`BindingChordTracker` measures the gap
+between two presses, expires a partial match, or decides whether a matched prefix
+consumes its inputs.
+
+The symmetric move is to make the matcher a union too — `Chord` (today's) `| Sequence`
+(ordered transient presses, per-step window, cancel-on-timeout) — leaving the outcome
+alone. That keeps the door open for matchers nobody has asked for yet (a charge, a
+double-tap, a hold-duration threshold) without another special case, and it is one
+vocabulary extension rather than a "combo feature".
+
+**Semantics that must be settled before it is built** — these are the design, not
+details: does a matched sequence **consume** its inputs, so `↓→P` does not also fire
+whatever `P` alone is bound to? Do partial matches suppress or pass through? Are
+windows counted in **ticks** (deterministic, the house posture) or wall-clock? Can a
+sequence step itself be a chord, giving `↓→` then `[lt, rt]`? **Forcing point: none —
+whenever an input model beyond pages is actually wanted.**
+
 **OQ-3 — who owns and surveys the Demo overlay/UI tier?** `Ui/` + `BindingBar/` +
 `DevConsole/` = 15 files, 4 210 lines, plus `Text/`, `Audio/`, `Camera/`. World
 already ships `Puck.Overlays` and its own overlay UI, so the likely answer is
