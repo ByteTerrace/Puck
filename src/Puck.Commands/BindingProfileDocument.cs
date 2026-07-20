@@ -15,8 +15,7 @@ public sealed record BindingProfileDocument(
     IReadOnlyList<BindingModifierDefinition> Modifiers,
     IReadOnlyList<BindingChordDefinition> Chords
 ) {
-    /// <summary>The schema version this engine build authors and accepts. A stored profile whose version differs must
-    /// reseed — v8 reshaped pages into chord rows (<c>(group, chord) → meaning</c>), so an older document's flat page
-    /// list no longer describes the resolution model.</summary>
-    public const string CurrentVersion = "puck.bindings.v8";
+    /// <summary>The schema version this engine build authors and accepts. A stored profile whose version differs is
+    /// rejected by <see cref="BindingProfile.Compile"/> and reseeded from defaults.</summary>
+    public const string CurrentVersion = "puck.bindings.v1";
 }

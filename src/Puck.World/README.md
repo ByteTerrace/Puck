@@ -460,7 +460,7 @@ profile player 1 wakes on, `LastSyncedRevision`) live ONLY in `world/local.json`
 — they must never roam to the cloud.
 
 **Bindings: layered authoring, grouped resolution.** The binding document
-(`puck.bindings.v8`) is a list of CHORD ROWS — `(group, ordered chord) →
+(`puck.bindings.v1`) is a list of CHORD ROWS — `(group, ordered chord) →
 meaning`, where the meaning is a discriminated union: a **page** (an entry
 table, `BindingPageDefinition`) or a **command** (a direct chord-to-command
 binding with full entry semantics — HoldRelease shape, constant value,

@@ -783,7 +783,7 @@
     {
       "id": "kart-remap",
       "document": {
-        "version": "puck.bindings.v8",
+        "version": "puck.bindings.v1",
         "modifiers": [],
         "chords": [
           {

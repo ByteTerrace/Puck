@@ -5582,7 +5582,7 @@ static class BindingsProof {
             var revBeforeBindings = ReadRevision(ctx: ctx, name: "rev-before-bindings");
 
             passed &= ExpectSection(ctx: ctx, name: "bindings-section-applies",
-                line: "profile.section amber bindings {\"version\":\"puck.bindings.v8\",\"modifiers\":[],\"chords\":[{\"group\":\"play\",\"chord\":[],\"page\":{\"id\":\"base\",\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}}]}",
+                line: "profile.section amber bindings {\"version\":\"puck.bindings.v1\",\"modifiers\":[],\"chords\":[{\"group\":\"play\",\"chord\":[],\"page\":{\"id\":\"base\",\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}}]}",
                 needle: "amber bindings applied");
 
             var revAfterBindings = ReadRevision(ctx: ctx, name: "rev-after-bindings");
@@ -7392,7 +7392,7 @@ static class EditorModeProof {
             // rejection is engine-gated in Puck.Post's binding-page stage.)
             passed &= ComposedShotKit.SendAwait(
                 ctx: ctx,
-                line: "world.bindings.set {\"id\":\"orphan\",\"document\":{\"version\":\"puck.bindings.v8\",\"modifiers\":[],\"chords\":[{\"group\":\"solo\",\"chord\":[\"lt\"],\"command\":{\"command\":\"editor.enter\"}}]}}",
+                line: "world.bindings.set {\"id\":\"orphan\",\"document\":{\"version\":\"puck.bindings.v1\",\"modifiers\":[],\"chords\":[{\"group\":\"solo\",\"chord\":[\"lt\"],\"command\":{\"command\":\"editor.enter\"}}]}}",
                 expect: "no resting (empty-chord) page",
                 name: "resting-page-rule-rejects-loudly"
             );
