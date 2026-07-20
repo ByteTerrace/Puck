@@ -247,6 +247,23 @@ internal static class WorldDefinitionSerialization {
         return stream.ToArray();
     }
 
+    /// <summary>Deserializes a definition from its canonical UTF-8 JSON bytes, coalescing absent optional sections the
+    /// same way the boot loader does — the inverse of <see cref="Serialize"/> for an in-memory round-trip (the replay
+    /// recording's rehydration path). The bytes come from this engine's own <see cref="Serialize"/>, so this is the
+    /// trusted-input twin of the file loader's defensive parse.</summary>
+    /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
+    /// <returns>The deserialized, normalized definition.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The bytes do not deserialize to a definition.</exception>
+    public static WorldDefinition Deserialize(byte[] utf8Json) {
+        ArgumentNullException.ThrowIfNull(argument: utf8Json);
+
+        var definition = (JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
+            ?? throw new InvalidDataException(message: "replay definition deserialized to null."));
+
+        return WorldDefinitionLoader.Normalize(definition: definition);
+    }
+
     /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path).</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path.</param>

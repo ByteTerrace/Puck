@@ -20,6 +20,15 @@ internal sealed class LoopbackTransport : IServerLink {
         m_server = server;
     }
 
+    /// <summary>An optional record tap invoked with every submitted intent before it reaches the server — the seam the
+    /// replay tape captures the live per-tick intent stream through. <see langword="null"/> (the default) is a free
+    /// pass-through; set only while a recording is armed.</summary>
+    public Action<IntentSubmission>? IntentTap { get; set; }
+
+    /// <summary>An optional record tap invoked with every authority command before it applies — the command half of the
+    /// captured per-tick server-input stream. <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldCommand>? CommandTap { get; set; }
+
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
     /// <param name="sink">The client sink.</param>
     public void Bind(IClientSink sink) {
@@ -28,11 +37,13 @@ internal sealed class LoopbackTransport : IServerLink {
 
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
+        IntentTap?.Invoke(obj: submission);
         m_server.EnqueueIntent(submission: in submission);
     }
 
     /// <inheritdoc/>
     public void SubmitCommand(WorldCommand command) {
+        CommandTap?.Invoke(obj: command);
         m_server.ApplyCommand(command: command);
     }
 

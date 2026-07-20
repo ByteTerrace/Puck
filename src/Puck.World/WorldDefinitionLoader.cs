@@ -88,7 +88,7 @@ internal static class WorldDefinitionLoader {
     // never dereference null. Required sections stay null → the validator reports them → loud fallback. A fully-authored
     // document (every section present, as the canonical writer always emits) is unchanged by this pass, so load→save
     // byte-identity holds.
-    private static WorldDefinition Normalize(WorldDefinition definition) {
+    internal static WorldDefinition Normalize(WorldDefinition definition) {
         var assignment = (definition.Assignment is { } authored
             ? new WorldRowAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
             : WorldRowAssignment.Hash);

@@ -1,87 +1,79 @@
-using Puck.Commands;
-using Puck.Maths;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The tape's live state — what <see cref="WorldReplayTape"/> is doing with the running session's per-tick
-/// <see cref="CommandSnapshot"/> stream.</summary>
+/// <summary>The tape's live state — what <see cref="WorldReplayTape"/> is doing with the running session.</summary>
 internal enum WorldReplayMode {
-    /// <summary>Neither recording nor replaying; the live snapshot passes through untouched.</summary>
+    /// <summary>Neither recording; the loopback taps are detached and the session runs untouched.</summary>
     Idle,
 
-    /// <summary>Every live tick's snapshot is appended to the in-flight recording.</summary>
+    /// <summary>The live session's per-tick server-input stream is being captured into the in-flight recording.</summary>
     Recording,
-
-    /// <summary>The saved recording's snapshots re-drive the session, one per tick, until the tape runs out.</summary>
-    Replaying,
 }
 
 /// <summary>
-/// The live record/replay tape wired into Puck.World — the engine snapshot recorder
-/// (<see cref="InputRecorder"/>/<see cref="SnapshotRecording"/>/<see cref="ReplaySnapshotSource"/>) connected to the
-/// world's real per-tick <see cref="CommandSnapshot"/> stream. World's shared launcher loop produces one genuine snapshot
-/// per fixed tick and hands it to <see cref="WorldSimulation"/>, so <see cref="Intercept"/> records the actual
-/// interactive session and, on replay, re-injects the saved snapshots through the same command-apply path to re-drive the
-/// seats.
+/// The record side of Puck.World's true deterministic replay. While armed it captures the live session's authoritative
+/// SERVER-input stream — the intent submissions and authority commands that reach the <see cref="LoopbackTransport"/>
+/// each tick — plus the record-start world definition and active seats, into a self-contained
+/// <see cref="WorldReplaySnapshot"/>. A saved recording rehydrates a FRESH world from that starting state and re-drives
+/// the captured stream through it (<see cref="WorldReplaySnapshot.Drive"/>), so the recorded and replayed per-tick pose
+/// hashes are compared for a bit-identical match.
 /// </summary>
 /// <remarks>
-/// <para>This is a live INPUT re-injection lever, not a deterministic replay of a saved moment. On replay the saved input
-/// snapshots are fed into the LIVE world at whatever state it currently holds — the tape captures no starting world state
-/// and rehydrates none, so the replayed trajectory does NOT reproduce the recorded one bit-for-bit. The demo's retired
-/// <c>OverworldDeterminism</c> harness had that fidelity (it replayed a seeded input tape through a FRESH world); that
-/// deterministic-reproduction capability is an explicit loss here (OQ-14/OQ-17, 2026-07-19), not ported. World is not
-/// determinism-gated (constraint 8); the bit-for-bit guarantee lives on the underlying <see cref="SnapshotRecording"/>
-/// machinery, gated by Post (self-referential), not on this lever.</para>
-/// <para>The per-tick <see cref="HashState"/> over the population's fixed-point poses is INFORMATIONAL only — echoed by
-/// <c>replay.stop</c>/<c>replay.status</c>. Nothing compares a recorded run's hash against a replayed one, and because a
-/// replay advances one saved snapshot per sim tick (never synchronously within one stdin drain) there is no wait/sync
-/// verb to read a replay's tail hash back over the pipe.</para>
-/// <para>A replay is faithful only while the operator stays HANDS-OFF: <see cref="Intercept"/> substitutes the saved
-/// snapshot, but the launcher already applied this tick's live snapshot before <see cref="WorldSimulation.Step"/> ran
-/// (held-key unions, world edits), and there is no input lockout — driving keys during playback double-drives the seat.</para>
+/// <para>This REPLACES the earlier live input re-injection lever. There is no live-playback mode: a replay is an OFFLINE
+/// recomputation over an isolated shadow world (<see cref="WorldReplaySnapshot.Drive"/>) that never touches the running
+/// session, so live seat input is structurally excluded from a playback rather than merely advised against, and the
+/// verdict is readable synchronously over the pipe the instant it completes (no per-tick drain to wait out).</para>
+/// <para>HONEST SCOPE. The captured starting state is the SERVER simulation only — definition + active seats + the
+/// per-tick intent/command stream. The population's body state at record-start is the deterministic boot image of the
+/// captured definition, which the fresh world reconstructs exactly, so no per-body pose is serialized. Screen machines,
+/// their pixels, cameras, overlays, and audio are PRESENTATION and are excluded (see <see cref="WorldReplaySnapshot"/>).</para>
 /// <para>Single-threaded on the launcher's window-pump thread: the <c>replay.*</c> verbs are Immediate (they run inline
-/// during the command pump's drain) and <see cref="Intercept"/> runs inside the fixed-step
-/// <see cref="WorldSimulation.Step"/> — both on that one thread, so no locking is needed. Immediate stdin verbs are NOT
-/// folded into the snapshot, so the <c>replay.*</c> verbs never record or replay themselves; physical device input and
-/// Simulation-routed world verbs are, so a replay re-injects the operator's driving and any world edits they made.</para>
+/// during the command pump's drain) and the taps + <see cref="NoteTick"/> run inside the fixed-step
+/// <see cref="WorldSimulation.Step"/> — both on that one thread, so no locking is needed. The <c>replay.*</c> verbs are
+/// NOT folded into the captured stream (they never reach the loopback), so a recording never records the recording
+/// verbs themselves; physical device input and Simulation-routed world verbs DO reach the loopback and are captured.</para>
 /// </remarks>
 internal sealed class WorldReplayTape {
     private const string Extension = ".puckreplay";
-    // World is unseeded (its determinism pins the mapping, not a seed), so recordings carry a fixed seed field — it is
-    // informational only; ReplaySnapshotSource never derives state from it here.
-    private const uint TapeSeed = 0u;
 
-    private readonly Func<CommandRegistry> m_registry;
-    private InputRecorder? m_recorder;
-    private ReplaySnapshotSource? m_replay;
+    private readonly WorldServer m_liveServer;
+    private readonly WorldProfiles m_profiles;
+    private readonly LoopbackTransport m_transport;
     private WorldReplayMode m_mode;
     private string? m_recordName;
-    private int m_localTick;
-    private ulong m_lastHash;
+    private byte[]? m_definitionJson;
+    private List<WorldReplaySeat>? m_seats;
+    private List<WorldReplayTickInput>? m_ticks;
+    // The current tick's accumulating input, rotated into m_ticks at each NoteTick.
+    private List<WorldCommand> m_currentCommands = new();
+    private List<IntentSubmission> m_currentIntents = new();
 
-    /// <summary>Initializes the tape over the registry whose interned ids a saved recording remaps against.</summary>
-    /// <param name="registry">A lazy accessor for the live command registry (used for the recording's id↔name table on
-    /// write/read). It is resolved LAZILY because the registry aggregates every <see cref="ICommandModule"/> — including
-    /// the replay verbs that depend on this tape — so a direct dependency would cycle the container.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="registry"/> is <see langword="null"/>.</exception>
-    public WorldReplayTape(Func<CommandRegistry> registry) {
-        ArgumentNullException.ThrowIfNull(argument: registry);
+    /// <summary>Initializes the tape over the live server it snapshots the starting state from, the profile catalog a
+    /// replay's seats re-resolve against, and the loopback whose per-tick submissions it taps.</summary>
+    /// <param name="liveServer">The authoritative live server (read at record-start for the definition and active seats).</param>
+    /// <param name="profiles">The profile catalog (handed to a replay's fresh world for seat re-resolution).</param>
+    /// <param name="transport">The client→server loopback whose intent/command submissions the tape captures.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldReplayTape(WorldServer liveServer, WorldProfiles profiles, LoopbackTransport transport) {
+        ArgumentNullException.ThrowIfNull(argument: liveServer);
+        ArgumentNullException.ThrowIfNull(argument: profiles);
+        ArgumentNullException.ThrowIfNull(argument: transport);
 
-        m_registry = registry;
+        m_liveServer = liveServer;
+        m_profiles = profiles;
+        m_transport = transport;
     }
 
     /// <summary>The tape's current mode.</summary>
     public WorldReplayMode Mode => m_mode;
 
-    /// <summary>The ticks recorded or replayed so far in the active run.</summary>
-    public int TickCount => m_localTick;
+    /// <summary>The ticks captured so far in the active recording.</summary>
+    public int TickCount => (m_ticks?.Count ?? 0);
 
-    /// <summary>The name the active recording will persist under (or the replay currently playing).</summary>
+    /// <summary>The name the active recording will persist under.</summary>
     public string? Name => m_recordName;
-
-    /// <summary>The most recent per-tick state hash the simulation reported.</summary>
-    public ulong LastHash => m_lastHash;
 
     /// <summary>The <c>Replays/</c> directory (created on first use), beside World's other local data.</summary>
     public static string Directory() {
@@ -126,134 +118,133 @@ internal sealed class WorldReplayTape {
         return names;
     }
 
-    /// <summary>Arms recording: the next live tick begins appending snapshots.</summary>
+    /// <summary>Arms recording: snapshots the record-start starting state (the live definition and active seats) and
+    /// attaches the loopback taps so the next ticks' server-input stream is captured.</summary>
     /// <param name="name">The name the recording will persist under at <see cref="StopRecording"/>.</param>
     public void BeginRecording(string name) {
-        m_recorder = new InputRecorder(seed: TapeSeed);
-        m_replay = null;
         m_recordName = name;
-        m_localTick = 0;
+        m_definitionJson = WorldDefinitionSerialization.Serialize(definition: m_liveServer.Definition);
+        m_seats = CaptureActiveSeats();
+        m_ticks = new List<WorldReplayTickInput>();
+        m_currentCommands = new List<WorldCommand>();
+        m_currentIntents = new List<IntentSubmission>();
+        m_transport.IntentTap = submission => m_currentIntents.Add(item: submission);
+        m_transport.CommandTap = command => m_currentCommands.Add(item: command);
         m_mode = WorldReplayMode.Recording;
     }
 
-    /// <summary>Finalizes and persists the active recording.</summary>
-    /// <returns>The path written, the tick count, and the final state hash.</returns>
+    /// <summary>Closes the current tick while recording: the submissions captured since the last call become one tick's
+    /// input group, and the accumulators reset for the next tick. Called once per fixed tick from
+    /// <see cref="WorldSimulation.Step"/> AFTER the server step, when the tick's whole stream has been submitted. A
+    /// no-op while idle.</summary>
+    public void NoteTick() {
+        if ((m_mode != WorldReplayMode.Recording) || (m_ticks is not { } ticks)) {
+            return;
+        }
+
+        ticks.Add(item: new WorldReplayTickInput(Commands: m_currentCommands, Intents: m_currentIntents));
+        m_currentCommands = new List<WorldCommand>();
+        m_currentIntents = new List<IntentSubmission>();
+    }
+
+    /// <summary>Finalizes the active recording: detaches the taps, computes the recorded tail hash by driving a fresh
+    /// world through the captured stream (the record-side of the record-vs-replay comparison), and persists the
+    /// self-contained recording.</summary>
+    /// <returns>The path written, the tick count, and the recorded tail hash.</returns>
     /// <exception cref="InvalidOperationException">No recording is active.</exception>
     public (string Path, int Ticks, ulong Hash) StopRecording() {
-        if ((m_mode != WorldReplayMode.Recording) || (m_recorder is not { } recorder) || (m_recordName is not { } name)) {
+        if ((m_mode != WorldReplayMode.Recording) || (m_definitionJson is not { } definitionJson) || (m_seats is not { } seats) || (m_ticks is not { } ticks) || (m_recordName is not { } name)) {
             throw new InvalidOperationException(message: "No recording is active.");
         }
 
-        var recording = recorder.ToRecording();
+        DetachTaps();
+
+        // Compute the recorded tail hash from a FRESH world driven through the just-captured stream — the same Drive a
+        // replay runs, so the persisted hash is a genuine fresh-world result, not a reading off the live session.
+        var recording = new WorldReplaySnapshot {
+            DefinitionJson = definitionJson,
+            RecordedTailHash = 0UL,
+            Seats = seats,
+            Ticks = ticks,
+        };
+        var trace = recording.Drive(profiles: m_profiles);
+        var hash = ((trace.Length > 0) ? trace[^1] : 0UL);
+        var finalized = new WorldReplaySnapshot {
+            DefinitionJson = definitionJson,
+            RecordedTailHash = hash,
+            Seats = seats,
+            Ticks = ticks,
+        };
         var path = PathFor(name: name);
 
         using (var stream = File.Create(path: path)) {
-            SnapshotRecording.Write(stream: stream, recording: recording, registry: m_registry());
+            WorldReplaySnapshot.Write(stream: stream, recording: finalized);
         }
 
-        var ticks = m_localTick;
-        var hash = m_lastHash;
-
-        m_recorder = null;
         m_mode = WorldReplayMode.Idle;
+        m_recordName = null;
+        m_definitionJson = null;
+        m_seats = null;
+        m_ticks = null;
 
-        return (Path: path, Ticks: ticks, Hash: hash);
+        return (Path: path, Ticks: ticks.Count, Hash: hash);
     }
 
-    /// <summary>Loads a saved replay and arms playback: the next ticks re-drive the session from the tape.</summary>
-    /// <param name="name">The saved replay's name.</param>
-    /// <returns>The number of ticks the loaded tape will replay.</returns>
-    /// <exception cref="FileNotFoundException">No replay of that name exists.</exception>
-    /// <exception cref="InvalidDataException">The file is not a snapshot recording or is an unsupported version.</exception>
-    public int BeginReplay(string name) {
+    /// <summary>Aborts the active recording WITHOUT persisting it: detaches the taps and drops the captured stream.</summary>
+    /// <returns>The dropped recording's name.</returns>
+    /// <exception cref="InvalidOperationException">No recording is active.</exception>
+    public string CancelRecording() {
+        if ((m_mode != WorldReplayMode.Recording) || (m_recordName is not { } name)) {
+            throw new InvalidOperationException(message: "No recording is active.");
+        }
+
+        DetachTaps();
+        m_mode = WorldReplayMode.Idle;
+        m_recordName = null;
+        m_definitionJson = null;
+        m_seats = null;
+        m_ticks = null;
+
+        return name;
+    }
+
+    /// <summary>Loads a saved recording, rehydrates a FRESH world from it, re-drives the recorded server-input stream,
+    /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
+    /// verdict is readable the instant it returns. Never touches the live session.</summary>
+    /// <param name="name">The saved recording's name.</param>
+    /// <returns>The recorded and replayed tail hashes, the tick count, and whether they matched.</returns>
+    /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
+    /// <exception cref="InvalidDataException">The file is not a <c>.puckreplay</c> recording or is an unsupported version.</exception>
+    public (ulong Recorded, ulong Replayed, int Ticks, bool Match) Verify(string name) {
         var path = PathFor(name: name);
+        WorldReplaySnapshot recording;
 
-        using var stream = File.OpenRead(path: path);
-        var recording = SnapshotRecording.Read(stream: stream, registry: m_registry());
-        var replay = new ReplaySnapshotSource(recording: recording);
-
-        m_recorder = null;
-        m_replay = replay;
-        m_recordName = name;
-        m_localTick = 0;
-        m_mode = WorldReplayMode.Replaying;
-
-        return replay.TickCount;
-    }
-
-    /// <summary>Interposes the tape between the launcher-produced live snapshot and the simulation: records it while
-    /// recording, or substitutes the saved snapshot for this tick while replaying.</summary>
-    /// <param name="live">The launcher's live snapshot for this tick.</param>
-    /// <param name="replaying">Set to <see langword="true"/> when the returned snapshot is a REPLAYED one the caller must
-    /// re-apply through the registry to drive the seats (the launcher already applied <paramref name="live"/>).</param>
-    /// <returns>The snapshot the simulation should act on this tick.</returns>
-    public CommandSnapshot Intercept(in CommandSnapshot live, out bool replaying) {
-        switch (m_mode) {
-            case WorldReplayMode.Recording when (m_recorder is { } recorder): {
-                recorder.Record(snapshot: in live);
-                m_localTick++;
-                replaying = false;
-
-                return live;
-            }
-            case WorldReplayMode.Replaying when (m_replay is { } replay): {
-                if (m_localTick >= replay.TickCount) {
-                    // The tape ran out — auto-stop and let the live session resume.
-                    m_replay = null;
-                    m_mode = WorldReplayMode.Idle;
-
-                    replaying = false;
-
-                    return live;
-                }
-
-                var snapshot = replay.SnapshotForTick(tick: (ulong)m_localTick, windowEndTick: ulong.MaxValue);
-
-                m_localTick++;
-                replaying = true;
-
-                return snapshot;
-            }
-            default: {
-                replaying = false;
-
-                return live;
-            }
-        }
-    }
-
-    /// <summary>Records the simulation's post-step state hash for this tick (the recording's tail hash, echoed
-    /// informationally by <c>replay.stop</c>/<c>replay.status</c> — nothing compares it against a replay).</summary>
-    /// <param name="hash">The tick's state hash.</param>
-    public void NoteState(ulong hash) {
-        if (m_mode != WorldReplayMode.Idle) {
-            m_lastHash = hash;
-        }
-    }
-
-    /// <summary>The deterministic per-tick state hash: every active body's fixed-point pose folded in index order, so two
-    /// runs with identical input produce identical traces regardless of wall-clock or backend.</summary>
-    /// <param name="population">The entity table to hash.</param>
-    /// <returns>The state hash.</returns>
-    public static ulong HashState(WorldPopulation population) {
-        ArgumentNullException.ThrowIfNull(argument: population);
-
-        var hash = Fnv1aHash.Create();
-
-        for (var index = 0; (index < WorldPopulation.MaxPopulation); index++) {
-            if (!population.IsActive(index: index) || (population.EntryBody(index: index) is not { } body)) {
-                continue;
-            }
-
-            var position = body.FixedPosition;
-
-            hash.Add(value: (uint)index);
-            hash.Add(value: position.X.Value);
-            hash.Add(value: position.Y.Value);
-            hash.Add(value: position.Z.Value);
-            hash.Add(value: body.FixedYaw.Value);
+        using (var stream = File.OpenRead(path: path)) {
+            recording = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        return hash.Value;
+        var trace = recording.Drive(profiles: m_profiles);
+        var replayed = ((trace.Length > 0) ? trace[^1] : 0UL);
+
+        return (Recorded: recording.RecordedTailHash, Replayed: replayed, Ticks: recording.TickCount, Match: (replayed == recording.RecordedTailHash));
+    }
+
+    // Snapshot the seats active at record-start: their slot and the profile name (re-resolved by name in a replay's
+    // fresh world). Only the four local seats can be active; a peer/inhabitant is boot-derived from the definition.
+    private List<WorldReplaySeat> CaptureActiveSeats() {
+        var seats = new List<WorldReplaySeat>();
+
+        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
+            if (m_liveServer.Population.IsActive(index: slot)) {
+                seats.Add(item: new WorldReplaySeat(Slot: slot, ProfileName: m_liveServer.Body(index: slot)?.Profile?.Name));
+            }
+        }
+
+        return seats;
+    }
+
+    private void DetachTaps() {
+        m_transport.IntentTap = null;
+        m_transport.CommandTap = null;
     }
 }

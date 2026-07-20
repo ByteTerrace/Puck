@@ -3,13 +3,15 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>
-/// The replay-tape console surface — <c>replay.record</c> / <c>replay.stop</c> / <c>replay.play</c> / <c>replay.list</c>
-/// / <c>replay.status</c>, the live record/replay control plane over the pipe (the seed of a future <c>Puck.Replay</c>).
-/// It arms the <see cref="WorldReplayTape"/> that taps World's real per-tick <see cref="CommandSnapshot"/> stream:
-/// <c>replay.record</c> captures the running session, <c>replay.stop</c> persists it as a real
-/// <see cref="SnapshotRecording"/> binary, and <c>replay.play</c> re-drives the session from a saved tape. Every verb is
-/// Immediate (a client-local lever, no direct simulation effect) and echoes honestly — the persisted path, tick count,
-/// and state hash — with loud declines. A SEPARATE module to keep each class under its analyzer ceilings.
+/// The replay console surface — <c>replay.record</c> / <c>replay.stop</c> / <c>replay.cancel</c> / <c>replay.verify</c>
+/// / <c>replay.list</c> / <c>replay.status</c>, the true-deterministic-replay control plane over the pipe (the seed of a
+/// future <c>Puck.Replay</c>). It arms the <see cref="WorldReplayTape"/> that captures the running session's per-tick
+/// server-input stream and starting state: <c>replay.record</c> begins capture, <c>replay.stop</c> rehydrates a fresh
+/// world from the capture to compute the recorded tail hash and persists the self-contained <see cref="WorldReplaySnapshot"/>,
+/// and <c>replay.verify</c> re-drives a saved recording through another fresh world and reports whether the replayed
+/// tail hash MATCHES the recorded one. Every verb is Immediate (a client-local control, no direct simulation effect):
+/// verification runs offline over an isolated shadow world, so it never re-injects into the live session and its verdict
+/// is readable the instant the verb returns. A SEPARATE module to keep each class under its analyzer ceilings.
 /// </summary>
 internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandModule {
     private readonly WorldReplayTape m_tape = tape;
@@ -18,18 +20,23 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.record",
-            description: "Arms live recording (Immediate): replay.record <name> begins appending the running session's per-tick command snapshots; replay.stop persists them.",
+            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state; replay.stop persists it.",
             handler: (_, args) => Record(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.stop",
-            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay and echoes the path, tick count, and final state hash.",
+            description: "Stops and persists the active recording (Immediate): rehydrates a fresh world to compute the recorded tail hash, writes <name>.puckreplay, and echoes the path, tick count, and hash.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
-            name: "replay.play",
-            description: "Loads a saved replay and re-drives the running session from it (Immediate): replay.play <name> feeds the saved snapshots back one per tick until the tape runs out.",
-            handler: (_, args) => Play(args: args)
+            name: "replay.cancel",
+            description: "Aborts the active recording WITHOUT persisting it (Immediate): drops the captured stream and detaches the taps.",
+            handler: (_, args) => Cancel(args: args)
+        );
+        yield return CommandDefinition.WithTrailingArgs(
+            name: "replay.verify",
+            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded one.",
+            handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.list",
@@ -38,7 +45,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.status",
-            description: "Reports the tape state (Immediate): idle/recording/replaying, the active name, ticks so far, and the latest state hash.",
+            description: "Reports the tape state (Immediate): idle or recording, the active name, and ticks captured so far.",
             handler: (_, args) => Status(args: args)
         );
     }
@@ -53,12 +60,12 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         }
 
         if (m_tape.Mode != WorldReplayMode.Idle) {
-            return Busy(verb: "replay.record");
+            return Error(text: $"[replay.record: busy — already recording '{m_tape.Name}'; replay.stop persists it or replay.cancel drops it first]");
         }
 
         m_tape.BeginRecording(name: args[0]);
 
-        return new CommandResult(Output: $"[replay.record: recording '{args[0]}' — replay.stop persists it]");
+        return new CommandResult(Output: $"[replay.record: recording '{args[0]}' — replay.stop persists it, replay.cancel drops it]");
     }
 
     private CommandResult Stop(string[] args) {
@@ -73,33 +80,45 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         try {
             var (path, ticks, hash) = m_tape.StopRecording();
 
-            return new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | final hash=0x{hash:X16}]");
+            return new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | recorded hash=0x{hash:X16}]");
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
             return Error(text: $"[replay.stop: could not persist — {exception.Message}]");
         }
     }
 
-    private CommandResult Play(string[] args) {
+    private CommandResult Cancel(string[] args) {
+        if (args.Length > 0) {
+            return Error(text: "[replay.cancel: expected no arguments]");
+        }
+
+        if (m_tape.Mode != WorldReplayMode.Recording) {
+            return Error(text: "[replay.cancel: not recording]");
+        }
+
+        var name = m_tape.CancelRecording();
+
+        return new CommandResult(Output: $"[replay.cancel: dropped '{name}' — nothing written]");
+    }
+
+    private CommandResult Verify(string[] args) {
         if (args.Length != 1) {
-            return Error(text: "[replay.play: usage — replay.play <name>]");
+            return Error(text: "[replay.verify: usage — replay.verify <name>]");
         }
 
         if (!WorldReplayTape.IsValidName(name: args[0])) {
-            return Error(text: "[replay.play: name must be non-empty, with no '.', '/', '\\', or other filename-invalid characters]");
-        }
-
-        if (m_tape.Mode != WorldReplayMode.Idle) {
-            return Busy(verb: "replay.play");
+            return Error(text: "[replay.verify: name must be non-empty, with no '.', '/', '\\', or other filename-invalid characters]");
         }
 
         try {
-            var ticks = m_tape.BeginReplay(name: args[0]);
+            var (recorded, replayed, ticks, match) = m_tape.Verify(name: args[0]);
 
-            return new CommandResult(Output: $"[replay.play: replaying '{args[0]}' — {ticks} ticks]");
+            return match
+                ? new CommandResult(Output: $"[replay.verify: MATCH '{args[0]}' | {ticks} ticks | hash=0x{recorded:X16}]")
+                : new CommandResult(Output: $"[replay.verify: MISMATCH '{args[0]}' | {ticks} ticks | recorded=0x{recorded:X16} replayed=0x{replayed:X16}]") { IsError = true };
         } catch (FileNotFoundException) {
-            return Error(text: $"[replay.play: no replay named '{args[0]}' — replay.list shows what's saved]");
+            return Error(text: $"[replay.verify: no replay named '{args[0]}' — replay.list shows what's saved]");
         } catch (Exception exception) when (exception is InvalidDataException or IOException) {
-            return Error(text: $"[replay.play: '{args[0]}' is unreadable/corrupt — {exception.Message}]");
+            return Error(text: $"[replay.verify: '{args[0]}' is unreadable/corrupt — {exception.Message}]");
         }
     }
 
@@ -120,21 +139,9 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             return Error(text: "[replay.status: expected no arguments]");
         }
 
-        var mode = m_tape.Mode.ToString().ToLowerInvariant();
-
         return new CommandResult(Output: (m_tape.Mode == WorldReplayMode.Idle)
             ? "[replay.status: idle]"
-            : $"[replay.status: {mode} '{m_tape.Name}' | {m_tape.TickCount} ticks | last hash=0x{m_tape.LastHash:X16}]");
-    }
-
-    private CommandResult Busy(string verb) {
-        // The remedy is mode-accurate: replay.stop ends a recording, but nothing stops an in-progress replay — it runs
-        // to the end of its saved ticks and auto-idles — so a busy-because-replaying decline must not advise stopping it.
-        var remedy = (m_tape.Mode == WorldReplayMode.Recording)
-            ? "replay.stop persists it first"
-            : "let it run out first (a replay has no stop — it auto-ends when the tape runs out)";
-
-        return Error(text: $"[{verb}: busy — tape is {m_tape.Mode.ToString().ToLowerInvariant()} '{m_tape.Name}'; {remedy}]");
+            : $"[replay.status: recording '{m_tape.Name}' | {m_tape.TickCount} ticks captured]");
     }
 
     private static CommandResult Error(string text) => new(Output: text) { IsError = true };

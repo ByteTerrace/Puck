@@ -12,7 +12,7 @@ namespace Puck.World;
 /// authoritative <see cref="WorldServer"/> steps (buffered protocol traffic → every body → the tick's snapshot,
 /// delivered to the client synchronously), then the client-side post-step (the screen machines, the per-tick analog
 /// clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings, WorldEditorSession editor, WorldReplayTape replayTape, CommandRegistry registry) : IFixedStepSimulation {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings, WorldEditorSession editor, WorldReplayTape replayTape) : IFixedStepSimulation {
     private const ulong TimingReportInterval = 60UL;
 
     private readonly WorldServer m_server = server;
@@ -22,7 +22,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly WorldEditorSession m_editor = editor;
     private readonly WorldReplayTape m_replayTape = replayTape;
-    private readonly CommandRegistry m_registry = registry;
     private SimulationTiming m_timingWorst;
     private ulong m_timingSamples;
 
@@ -36,15 +35,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
         var timingEnabled = GpuTimingControl.Shared.Armed;
         var phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
-
-        // The record/replay tape taps the real per-tick snapshot the launcher already applied: recording appends it,
-        // replaying substitutes a saved snapshot and re-applies it through the registry so the tape drives the seats
-        // (the launcher applied the live/empty one before this Step). Idle is a pass-through.
-        var effective = m_replayTape.Intercept(live: in commands, replaying: out var replaying);
-
-        if (replaying) {
-            m_registry.ApplySnapshot(snapshot: in effective);
-        }
 
         m_client.SubmitSeatIntents(tick: (context.Tick + 1UL));
         // The addon principals submit their intents into the same pre-step window as the seats (drained at Step, where
@@ -78,10 +68,10 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         ElapsedTicks = context.ElapsedTicks;
         Tick = (context.Tick + 1UL);
 
-        // The tape's per-tick tail hash — only computed while recording/replaying (the mode gate is inside NoteState,
-        // but the pose walk is skipped entirely when idle so an ordinary tick pays nothing).
+        // Close this tick's captured server-input group while a recording is armed (a no-op otherwise) — the whole
+        // tick's intent/command stream has reached the loopback taps by now, so the group is complete.
         if (m_replayTape.Mode != WorldReplayMode.Idle) {
-            m_replayTape.NoteState(hash: WorldReplayTape.HashState(population: m_server.Population));
+            m_replayTape.NoteTick();
         }
 
         if (timingEnabled) {
