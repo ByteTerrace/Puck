@@ -1,23 +1,25 @@
 # Greenfield standard — the open register
 
 **The codebase does not meet the greenfield standard: version drift and read-side tolerance
-are clean, but a zero-consumer 71 704-LOC `src/Puck.Demo` fork still ships and the
-verification surface does not yet fail when the product breaks.**
+are clean, every subcommand passes, and the newest features now have checks that were PROVED
+to fail when broken — but a zero-consumer 71 704-LOC `src/Puck.Demo` fork still ships and
+most of the verification surface still cannot fail when the product breaks.**
 
 Two structural items stand between the codebase and the standard:
 
 1. **The `src/Puck.Demo` fork and its `Puck.Scene` node** (C-F1, C-F3). Arc 12's scheduled
    work, blocked behind Arcs 8–11. Not residue — do not delete ahead of those arcs.
-2. **A verification surface that does not discriminate.** Twelve of seventeen proof suites
-   never settle `wire.errors`; whole landed verb families (`replay.*`, `screen.*`,
-   `world.view.*`, 36 of 55 `editor.sculpt.*`, four features landed after the verb-mechanism
-   collapse) have zero scripted call sites.
+2. **A verification surface that mostly does not discriminate.** Twelve of eighteen proof
+   suites never settle `wire.errors`; whole landed verb families (`replay.*`, `screen.*`,
+   `world.view.*`, the whole-row `.set` upserts, 36 of 55 `editor.sculpt.*`) still have zero
+   scripted call sites.
 
-**Do first:** the one failing subcommand (V-20), then the four zero-coverage features
-(V-16..V-19) — they are S/M and they guard live seams.
+**Do first:** V-4 (the twelve suites that never settle `wire.errors`), then V-1 and V-6 (the
+`replay.*` and `screen.*` families) — the largest remaining blind spots.
 
-This document lists only what is open. Closed items are removed; git holds the history.
-Every entry is anchored to `file:line` and is re-checkable by running, not by reading.
+This document lists what is open, plus a short closed-this-session ledger carrying the
+falsification numbers. Every entry is anchored to `file:line` and is re-checkable by running,
+not by reading.
 
 ---
 
@@ -56,19 +58,23 @@ Every entry is anchored to `file:line` and is re-checkable by running, not by re
     returns the last pose on timeout and never null, so a null-check over it always passes.
   - Before blaming product code for a suite failure, build a control from the accused
     commit's **parent** and run the same suite. The dominant failure mode in this repo is a
-    verification script asserting against a world that no longer boots that way (V-20 is a
-    live instance).
+    verification script asserting against a world that no longer boots that way (V-20, now
+    closed, was a textbook instance).
 - **Worktrees spawn from a stale base.** Verify the checked-out commit and reset before
   working; on a shared tree always `git commit -- <explicit pathspecs>`.
 
 ## The falsification standard
 
-Three checks were proved to discriminate by breaking their feature in source, rebuilding to a
+Five checks were proved to discriminate by breaking their feature in source, rebuilding to a
 confirmed `Build succeeded`, re-running, and restoring: the engage proximity gate widened, the
-`SetEngaged(false)` call dropped from `WorldEngagement.Disengage`, and `m_drag.Move` handed a
-zeroed delta. Each break produced **exactly one** failure, in its own check, and nothing else
-— while the surrounding echo and journal-counter checks all still PASSED. That last part is
-the point: the surrounding checks were the ones that looked like coverage.
+`SetEngaged(false)` call dropped from `WorldEngagement.Disengage`, `m_drag.Move` handed a
+zeroed delta, `WorldConsoleWaitGate.IsHolding` forced to `false`, and
+`WorldJsonPayload.IsParseFailure` narrowed back to `JsonException`. The first three each
+produced **exactly one** failure, in its own check, and nothing else — while the surrounding
+echo and journal-counter checks all still PASSED. That last part is the point: the surrounding
+checks were the ones that looked like coverage. The two `wire` breaks are recorded with their
+numbers in the closed ledger below; the wait-gate break is the sharpest statement of the rule,
+because the `world.wait` **echo** check passed under it while the behavioural walk went red.
 
 The reference implementations for new checks are `CollisionProof` (every claim on a pose or a
 counter, per-round `SettleWireErrors` with exact expected counts, terminal `expected: 0`) and
@@ -87,18 +93,17 @@ is blind to every refusal the product actually issues.
 
 ## Failing now
 
-| # | Size | Where | What is wrong / what closes it |
-|---|---|---|---|
-| V-20 | S | `proof.cs` `RunBakedDefaultParity` | The only failing subcommand. `worlddoc` section (b) forces the baked-default fallback by launching the child with `--world <nonexistent path>`; that is now a boot failure with exit 1, so run B captures 0/8 poses and the `[world] definition: baked default` line never appears. **Fix:** force the fallback by omitting `--world` entirely — the only path that still falls back — and delete `--world-arg`'s "e.g. to force the baked-default fallback with a nonexistent path" wording. Section (a) save-idempotence passes on all five checked-in worlds. |
+Nothing. All nineteen driving subcommands pass on a confirmed Release build.
 
-## Landed features with zero regression coverage
+## Closed this session
 
-| # | Size | Where | What is wrong / what closes it |
-|---|---|---|---|
-| V-16 | S | `WorldWaitCommandModule.cs`, `WorldConsoleWaitGate.cs` | `world.wait <ticks>` has **0** call sites in `proof.cs`. It is the sequencing primitive every scripted read-back depends on; if the gate stopped holding, no suite would notice, and suites that need it are instead racing `PollWhereUntil` deadlines. Close by driving it and asserting the gate holds. |
-| V-17 | S | `WorldCommandModule.cs` | `world.cameras` has **0** call sites. `EditorCamerasProof` — the one suite about cameras — reads narration strings (V-5) instead of this table. |
-| V-18 | M | `WorldJsonPayload` | **0** call sites for the one inline-JSON parse seam. It closed a one-line host kill (`world.look.set {"name":"x","source":{}}` threw `NotSupportedException` past every `catch (JsonException)` and took the process down). Nothing sends a payload with an absent, unknown, duplicate, or misplaced `$type`, so the defect can return unobserved. **Cheap:** one `Reject` line per union-taking verb. |
-| V-19 | S | boot path | The loud missing-`--world`/`--recording` boot failure has **0** call sites — and it is what broke V-20. |
+| # | Commit | What closed it, and the number that makes it discriminating |
+|---|---|---|
+| V-20 | `d634eec8` | `worlddoc` section (b) forced the in-code baked definition with `--world <nonexistent path>` and rode the silent fallback; the loud boot failure correctly ended that, so run B captured 0/8. The baked definition is a legitimate boot mode and now has an EXPLICIT request — the `--world baked` sentinel — instead of being reachable only by accident, and all three origins name themselves in the one boot line (`(shipped default)` / `(--world)` / `baked default (in-code; requested by --world baked)`). Reaching its comparison then exposed the *other* wrong thing: it demanded byte-identity between two DIFFERENT documents (the shipped world declares solidity facets and a collision response table the baked one does not, so 4 of 8 entities legitimately land up to 0.26 u apart). It now runs the baked document twice and asserts THOSE compare byte-identical — determinism is per-document — and reports the cross-document delta. **`worlddoc` PASS: (a) 5/5 worlds fixed points; (b) coverage 8/8 · 8/8 · 8/8, baked rerun byte-identical, loud line in the baked runs only.** |
+| V-16 | `77ea9e76` | `world.wait` is covered behaviourally in the new `wire` suite, not by its echo: the same drive-then-read burst twice with a wait must land bit-for-bit on the same pose a real distance out, then a third time without it. **Held 9.150 u and 9.150 u; unheld 0.000 u.** *Falsified:* `WorldConsoleWaitGate.IsHolding` → `false` collapsed the held burst to **0.190 u**, and it stopped repeating (**0.190 vs 0.150**) — `waited-read-is-repeatable` and `the-wait-buys-a-real-span` went red while the release-tick **echo** check still PASSED. |
+| V-17 | `77ea9e76` | `EditorCamerasProof` reads the `world.cameras` table instead of narration: the boot rows must parse (anchor keyword, a rig token from the closed `chase\|firstPerson\|orbit\|lookAt\|dolly` vocabulary, dimensions), a live add must APPEAR in the table, and `world.undo` must take it back out — asserted on both backends. A third section boots **all five** shipped worlds and reads each table against `world.status`'s declared count: **2 declared / 2 listed on every one, every row parsing** — the instrument OQ-12 never had. |
+| V-18 | `77ea9e76` | Four union-taking verb families (`world.look.set`, `world.screen.set`, `world.camera.set`, `world.scene.row.set`) × four discriminator malformations (absent, unknown, duplicate, misplaced), at both nesting depths since a scene row's union IS its payload. **16 lines, each named and refused, `wire.errors` settling at exactly 16, then cleared**, with host liveness asserted at the wire afterwards. *Falsified:* narrowing `IsParseFailure` back to `JsonException` **killed the host on the first payload** (`Unhandled exception. System.NotSupportedException … must specify a type discriminator`), taking **12** checks red including `host-process-alive` and the fault sweep. |
+| V-19 | `77ea9e76` | `wire` section (c) boots four times and asserts the exit code AND the naming line each time — either alone passes on the wrong thing. A bogus `--world` and a bogus `--recording` each **exit 1** naming themselves; a real `--world` path and `--world baked` each **exit 0** with their origin line. |
 
 ## Structural — Arc 12's scheduled work, blocked behind Arcs 8–11
 
@@ -113,8 +118,8 @@ is blind to every refusal the product actually issues.
 |---|---|---|---|
 | V-1 | L | `WorldReplayCommandModule.cs:23,28,33,38,43,48`, wired `Program.cs:446` | All six `replay.*` verbs have **zero** call sites. The only evidence they work is hand-pasted transcripts in `docs/demo-to-world-port-plan.md:8479-8485`. Determinism is a core product claim; a regression in tape capture, boot-image rehydration, or tail-hash comparison ships silently. **Close:** a new `replay` subcommand with a doctored-tape negative control. |
 | V-6 | L | `ScreenCommandModule.cs:51,56,61,66,76,81,86,91,96` | Nine `screen.*` verbs with zero call sites, including `screen.options` (the live dmg↔cgb↔agb device swap — a headline capability) and the whole `screen.link`/`unlink`/`links` cable group. `ScreensProof` covers only `insert`/`eject`/`peek`/`state`. |
-| V-4 | M | `proof.cs` — twelve of seventeen driving suites | Only `Expo`/`Grants`/`EditorCameras`/`Population`/`Collision` settle `wire.errors` — 5 of 17. The house rule is stated verbatim inside the file and applied to 5 of 17. `ProofApp.Guarded` does not cover this class. Worst exposure: `ScreensProof`, 29 fire-and-forget `Send` calls, no settle. Mechanical but 12 sites; the suites with deliberate refusals (`Placements`, `Audio`) need the per-round settle-and-clear discipline `CollisionProof` models, not a bare terminal zero. |
-| V-5 | M | `proof.cs:8152-8277` (`EditorCamerasProof`) | 100 % echo-only: every `Check` is `(line is not null)` over a narration string (`"pose updated live"`, `"showing camera 'birdseye'"`, `"2 camera view(s) registered"`). Nothing measures a pixel or a produced-frame counter — in the one suite whose subject is *only* observable in pixels. |
+| V-4 | M | `proof.cs` — twelve of eighteen driving suites | Only `Expo`/`Grants`/`EditorCameras`/`Population`/`Collision`/`Wire` settle `wire.errors` — 6 of 18. The house rule is stated verbatim inside the file and applied to 6 of 18. `ProofApp.Guarded` does not cover this class. Worst exposure: `ScreensProof`, 29 fire-and-forget `Send` calls, no settle. Mechanical but 12 sites; the suites with deliberate refusals (`Placements`, `Audio`) need the per-round settle-and-clear discipline `CollisionProof` models, not a bare terminal zero. |
+| V-5 | M | `proof.cs` (`EditorCamerasProof`) | **Partly closed by V-17.** The DOCUMENT side is now read off the `world.cameras` table, so an add/undo is measured on state rather than narration. What remains is the RENDER side: the reconcile claims (`"pose updated live"`, `"showing camera 'birdseye'"`, `"recreated live (WxH)"`) and `world.view-refresh`'s count are still narration strings, and nothing measures a pixel or a produced-frame counter — in the one suite whose subject is *only* observable in pixels. |
 | V-7 | M | `proof.cs:7368` (`flyDiff > 8.0`), `proof.cs:7489` (`seamDiff > 8.0`) | `EditorModeProof` uses two absolute pixel floors with **no control pair** and never zeroes the census, over a band the autonomous crowd occupies and moves through between shots. Its two relative checks are anchored to `flyDiff`, so noise inflating it loosens them too. Every other pixel suite bounds a control pair and requires `> 4×` noise. |
 | V-8 | M | `EditorSculptStyleCommandModule.cs:64,84,89,94,99,104,109`, `EditorSculptShapeCommandModule.cs:96,116`, `EditorSculptRigCommandModule.cs:65,105`, `EditorSculptCommandModule.cs:91,106` | **55** `editor.sculpt.*` verbs are registered and **19** are driven; two whole modules are unexercised — even though `SculptProof` is otherwise the strongest suite in the file. |
 | V-9 | M | `WorldViewCommandModule.cs:24,39,52,63,76,89` | The entire `world.view.*` family (six verbs) is unexercised; `proof.cs` touches only `world.view-refresh`. |
