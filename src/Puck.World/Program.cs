@@ -552,6 +552,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var toasts = sp.GetRequiredService<OverlayToastStore>();
     var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
     var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
+    var editorWorkbench = sp.GetRequiredService<WorldWorkbench>();
     var audioDirector = sp.GetRequiredService<WorldAudioDirector>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
@@ -566,6 +567,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the deadline.
         if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
             editorDrag.NoteRejected(mutation: rejectedMutation);
+            // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
+            // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
+            editorWorkbench.NoteCommitRejected(mutation: rejectedMutation);
         }
 
         // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token —

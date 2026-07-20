@@ -259,11 +259,13 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
             Principal: WorldPrincipal.Seat(slot: slot),
             Creation: new WorldCreation(Id: rowId, Document: canonical.Document, Hash: canonical.Hash)
         ));
-        m_workbench.NoteCommitted(slot: slot);
+        // Clean tracking follows the SERVER, not the enqueue: the bench flips clean only when the accepted row is
+        // delivered (WorldWorkbench.Tick), so a rejected apply keeps the work counted as uncommitted.
+        m_workbench.NoteCommitSubmitted(slot: slot, hash: canonical.Hash);
 
         return Echo(slot: slot, verb: CommitCommand, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"'{rowId}' sha256 {canonical.Hash[..12]}… ({canonical.Document.StampShapeCount()} stamp shapes, {(canonical.Document.Frames?.Count ?? 0)} frames) — one UpsertCreation submitted; world.undo reverts it, editor.sculpt.undo stays local"
+            handler: $"'{rowId}' sha256 {canonical.Hash[..12]}… ({canonical.Document.StampShapeCount()} stamp shapes, {(canonical.Document.Frames?.Count ?? 0)} frames) — one UpsertCreation submitted (clean on server accept); world.undo reverts it, editor.sculpt.undo stays local"
         ));
     }
 
@@ -362,7 +364,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.sculpt.status: seat {seat} sculpting '{m_workbench.RowId(slot: slot)}' shapes {model.StampShapeCount}/{model.ShapeCapacity} {target} frame {model.CurrentFrame}/{model.FrameCount}{(model.Playing ? " playing" : string.Empty)} chains {model.Chains.Count} ring {model.HistoryCount}/{SculptModel.HistoryCapacity} uncommitted {m_workbench.UncommittedEdits(slot: slot)} origin=({origin.X:0.00}, {origin.Y:0.00}, {origin.Z:0.00})]"
+            handler: $"[editor.sculpt.status: seat {seat} sculpting '{m_workbench.RowId(slot: slot)}' shapes {model.StampShapeCount}/{model.ShapeCapacity} {target} frame {model.CurrentFrame}/{model.FrameCount}{(model.Playing ? " playing" : string.Empty)} chains {model.Chains.Count} ring {model.HistoryCount}/{SculptModel.HistoryCapacity} uncommitted {m_workbench.UncommittedEdits(slot: slot)}{(m_workbench.IsCommitPending(slot: slot) ? " commit=pending" : string.Empty)} origin=({origin.X:0.00}, {origin.Y:0.00}, {origin.Z:0.00})]"
         ));
     }
 

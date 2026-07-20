@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Authoring;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -32,6 +33,11 @@ internal sealed class WorldWorkbench {
         public string RowId = string.Empty;
         // The model revision at the last commit/load — edits past it are "uncommitted" (the two-domain narration).
         public int CommittedRevision;
+        // A commit is submitted and awaiting the server's verdict: the clean flip lands only when the delivered
+        // definition carries the row at PendingCommitHash (the accept), so a rejected apply leaves the work dirty.
+        public bool CommitPending;
+        public int PendingCommitRevision;
+        public string PendingCommitHash = string.Empty;
         public CreationDocument? PreviewDocument;
         public int PreviewRevision = -1;
     }
@@ -91,12 +97,21 @@ internal sealed class WorldWorkbench {
     /// <param name="slot">The 0-based seat slot.</param>
     public Vector3? Pivot(int slot) => (IsActive(slot: slot) ? (m_benches[slot].Origin + s_pivotLift) : null);
 
-    /// <summary>How many edits sit past the last commit/load (the HUD's "uncommitted" narration; 0 = clean).</summary>
+    /// <summary>How many edits sit past the last ACCEPTED commit/load (the HUD's "uncommitted" narration; 0 = clean).
+    /// A submitted-but-unaccepted commit still counts here — the work is not clean until the server applies it.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public int UncommittedEdits(int slot) {
         var bench = m_benches[SlotOrFirst(slot: slot)];
 
         return ((bench.Active && (bench.Model is { } model)) ? Math.Max(val1: (model.Revision - bench.CommittedRevision), val2: 0) : 0);
+    }
+
+    /// <summary>Whether the seat's bench has a commit submitted and still awaiting the server's accept/reject.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public bool IsCommitPending(int slot) {
+        var bench = m_benches[SlotOrFirst(slot: slot)];
+
+        return (bench.Active && bench.CommitPending);
     }
 
     /// <summary>Opens a seat's bench on a model (blank for a new creation, loaded for an existing row), pre-verifying
@@ -163,6 +178,8 @@ internal sealed class WorldWorkbench {
         bench.Origin = origin;
         bench.RowId = rowId;
         bench.CommittedRevision = model.Revision;
+        bench.CommitPending = false;
+        bench.PendingCommitHash = string.Empty;
         bench.PreviewDocument = null;
         bench.PreviewRevision = -1;
         m_seenModelRevisions[slot] = model.Revision;
@@ -171,14 +188,44 @@ internal sealed class WorldWorkbench {
         return true;
     }
 
-    /// <summary>Marks the bench clean at the model's current revision (a commit landed — later edits count as
-    /// uncommitted again).</summary>
+    /// <summary>Records that a commit was SUBMITTED for the seat's bench. The clean flip is deferred to the server's
+    /// accept — a delivered creation row carrying <paramref name="hash"/> (see <see cref="Tick"/>) — so a rejected
+    /// apply leaves the work counted as uncommitted rather than falsely clean.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    public void NoteCommitted(int slot) {
+    /// <param name="hash">The canonical hash of the submitted creation document — the accept correlator.</param>
+    public void NoteCommitSubmitted(int slot, string hash) {
         var bench = m_benches[SlotOrFirst(slot: slot)];
 
         if (bench.Active && (bench.Model is { } model)) {
-            bench.CommittedRevision = model.Revision;
+            bench.CommitPending = true;
+            bench.PendingCommitRevision = model.Revision;
+            bench.PendingCommitHash = hash;
+        }
+    }
+
+    /// <summary>Correlates a server-rejected <see cref="WorldMutation.UpsertCreation"/> back to the bench that
+    /// submitted it (the echo tap calls this): the pending-commit flag clears so the bench stops awaiting an accept,
+    /// while the committed revision stays put — the discarded work is honestly still uncommitted. Anything else is
+    /// ignored.</summary>
+    /// <param name="mutation">The rejected mutation.</param>
+    public void NoteCommitRejected(WorldMutation mutation) {
+        if (mutation is not WorldMutation.UpsertCreation { Principal.Kind: PrincipalKind.Seat } upsert) {
+            return;
+        }
+
+        var slot = mutation.Principal.Index;
+
+        if ((uint)slot >= (uint)m_benches.Length) {
+            return;
+        }
+
+        var bench = m_benches[slot];
+
+        if (bench.Active && bench.CommitPending &&
+            string.Equals(a: bench.RowId, b: upsert.Creation.Id, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(a: bench.PendingCommitHash, b: upsert.Creation.Hash, comparisonType: StringComparison.Ordinal)) {
+            bench.CommitPending = false;
+            bench.PendingCommitHash = string.Empty;
         }
     }
 
@@ -199,6 +246,8 @@ internal sealed class WorldWorkbench {
         bench.Active = false;
         bench.Model = null;
         bench.RowId = string.Empty;
+        bench.CommitPending = false;
+        bench.PendingCommitHash = string.Empty;
         bench.PreviewDocument = null;
         bench.PreviewRevision = -1;
         m_revision++;
@@ -247,11 +296,34 @@ internal sealed class WorldWorkbench {
             model.TickPlayback(deltaSeconds: deltaSeconds);
             model.EndInputFrame();
 
+            // The commit ACCEPT edge: a submitted commit flips the bench clean only once the delivered definition
+            // carries the row at the submitted hash. Clean lands at the SUBMIT revision, so edits made after submit
+            // stay uncommitted; a rejected (never-delivered) commit never reaches here and stays dirty.
+            if (bench.CommitPending && CommitDelivered(bench: bench)) {
+                bench.CommittedRevision = bench.PendingCommitRevision;
+                bench.CommitPending = false;
+                bench.PendingCommitHash = string.Empty;
+            }
+
             if (m_seenModelRevisions[slot] != model.Revision) {
                 m_seenModelRevisions[slot] = model.Revision;
                 m_revision++;
             }
         }
+    }
+
+    // The commit apply witness: the delivered definition carries the bench's row at the submitted canonical hash
+    // (mirrors WorldEditorDrag.DeliveredExpected). Until it does — a rejected or not-yet-applied commit — the bench
+    // stays dirty.
+    private bool CommitDelivered(Bench bench) {
+        foreach (var creation in m_client.Definition.Creations) {
+            if (string.Equals(a: creation.Id, b: bench.RowId, comparisonType: StringComparison.Ordinal) &&
+                string.Equals(a: creation.Hash, b: bench.PendingCommitHash, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Overlays the active benches' preview creation rows onto the delivered rows (reference-equal

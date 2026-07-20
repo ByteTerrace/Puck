@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <remarks><c>editor.enter</c>/<c>exit</c> route Simulation (they divert intent through the same tick-applied
 /// <c>SetControl</c> wire as <c>player.control</c>, and the stdin barrier then serializes a following read); the
 /// camera verbs are presentation-only and stay Immediate.</remarks>
-internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag) : ICommandModule {
+internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench) : ICommandModule {
     /// <summary>The Axis2D command the editor pages bind the LEFT stick to (+Y flies forward, +X strafes right) —
     /// routed into the editing seat's camera; not meant to be typed.</summary>
     public const string MoveCommand = "editor.stick.move";
@@ -52,6 +52,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly WorldEditorTargeting m_targeting = targeting;
     private readonly WorldEditorDrag m_drag = drag;
+    private readonly WorldWorkbench m_workbench = workbench;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -63,7 +64,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: ExitCommand,
-            description: "Leaves editor mode for a seat: editor.exit [seat] (1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing.",
+            description: "Leaves editor mode for a seat: editor.exit [force] [seat] (seat 1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing. REFUSES when the seat has an open sculpt with uncommitted edits (leaving would silently discard them) — commit with editor.sculpt.commit, discard explicitly with editor.sculpt.exit, or force through with 'editor.exit force'.",
             handler: ExitHandler,
             routing: CommandRouting.Simulation
         );
@@ -181,10 +182,23 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     }
 
     private CommandResult ExitHandler(CommandContext context, string[] args) {
-        var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: ExitCommand);
+        // A leading 'force' literal overrides the dirty-sculpt refusal; the seat token (if any) follows it.
+        var forced = ((args.Length > 0) && string.Equals(a: args[0], b: "force", comparisonType: StringComparison.OrdinalIgnoreCase));
+        var seatArgs = (forced ? args[1..] : args);
+
+        var (slot, error) = ResolveSlot(context: context, args: seatArgs, at: 0, verb: ExitCommand);
 
         if (error is { } resolveError) {
             return resolveError;
+        }
+
+        // Leaving editor mode drops the seat's open sculpt bench (WorldEditorSession.Deactivate). Refuse loudly rather
+        // than discard uncommitted sculpt work by side effect — the codebase's verification culture exists to prevent
+        // exactly this silent-discard shape.
+        if (!forced && m_session.IsEditing(slot: slot) && (m_workbench.UncommittedEdits(slot: slot) > 0)) {
+            return new CommandResult(Output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has {m_workbench.UncommittedEdits(slot: slot)} uncommitted sculpt edit(s) — editor.sculpt.commit to keep, editor.sculpt.exit to discard the bench, or 'editor.exit force' to leave anyway]") {
+                IsError = true,
+            };
         }
 
         return (m_session.Exit(slot: slot) switch {
