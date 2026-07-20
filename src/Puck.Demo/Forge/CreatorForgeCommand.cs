@@ -329,9 +329,8 @@ internal static class ForgeCommands {
     // shared working document.
     private static TrackerModeState? s_trackerMode;
 
-    /// <summary>The tracker's mode-state singleton, building it on first touch. Internal (not <c>private</c>) so
-    /// <see cref="TrackerCommandModule"/> can reach the SAME instance the forwarders below drive — it lives in a
-    /// different project-relative folder but the same coupling-exempt path (it already depends on this class).</summary>
+    /// <summary>The tracker's mode-state singleton, building it on first touch. Internal (not <c>private</c>) so the
+    /// forwarders below reach the SAME instance the pad drives.</summary>
     /// <param name="services">The application services (resolves the on-screen console when registered).</param>
     /// <returns>The shared tracker mode state.</returns>
     internal static TrackerModeState TrackerModeInstance(IServiceProvider services) =>

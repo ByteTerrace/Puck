@@ -461,8 +461,8 @@ public sealed class CompanionState {
 /// <summary>
 /// The room's small roster of live companions — owns the <see cref="CompanionState.MaxCompanions"/> cap, add/remove,
 /// and the per-frame tick pass (timeline + wander + face) every companion shares. The render node's frame source
-/// composes ONE instance of this (mirroring how it composes <see cref="CreatorScene"/>), so
-/// <see cref="CompanionRenderer"/> and <see cref="CompanionCommandModule"/> both drive the SAME roster.
+/// composes ONE instance of this (mirroring how it composes <see cref="CreatorScene"/>), which
+/// <see cref="CompanionRenderer"/> draws from.
 /// </summary>
 public sealed class CompanionRoster {
     private readonly List<CompanionState> m_companions = [];

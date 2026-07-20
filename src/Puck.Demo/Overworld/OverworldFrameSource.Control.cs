@@ -79,7 +79,7 @@ internal interface IOverworldControlHost {
     string RequestCaptureTo(string path);
 
     /// <summary>Drives a scripted joypad tape onto console <paramref name="index"/>: compiles <paramref name="script"/>
-    /// (see <see cref="OverworldPressDriver"/> for the grammar) and, applied by the node next frame, feeds the cabinet
+    /// and, applied by the node next frame, feeds the cabinet
     /// one frame-budget-sized segment per produced frame until the tape runs out — the deterministic equivalent of a
     /// player holding the pad. A linked cabinet drives its pair (its segment ticks set the shared budget); the node
     /// refuses an OWNED or unbooted cabinet and seats the cabinet back at the shared timeline head on completion. The

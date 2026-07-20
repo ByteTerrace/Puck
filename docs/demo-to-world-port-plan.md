@@ -48,6 +48,22 @@ it compiles so the surviving pinned files build, and Arc 12 deletes it.
   `RouterIntentSource` still consume them), so they stay until the Demo-retirement
   trajectory removes those consumers. The (c)-carcasses die when THAT lands, not on
   an OQ-14 pin.
+- **Island sweep — 10 (c)-carcasses were NOT actually pinned; DELETED (owner-approved
+  2026-07-19).** A `roslyn-first-analysis` pass (`SymbolFinder.FindReferencesAsync`
+  over `Puck.slnx`) proved that ten of the (c)-dispositioned files — every one a
+  console-verb `ICommandModule` (or a private helper reachable only from one) whose
+  sole registration site was the Arc 3 Beat B `DemoRunRegistrar.cs` — have **zero
+  real incoming reference**: the "pin" was a closed loop of `<see cref>` doc-comment
+  mentions, never a code edge. `CreatorCommandModule.cs`, `Overworld/OverworldPressDriver.cs`,
+  `CompanionCommandModule.cs`, `RtsCommandModule.cs`, `GravityCommandModule.cs`,
+  `Tracker/TrackerCommandModule.cs`, `Creator/CreatorRigCommands.cs`, `GardenCommandModule.cs`,
+  `TimeTravelCommandModule.cs`, `HgbDebugCommandModule.cs` — **1,984 lines across 10
+  files, deleted.** Their per-arc (c) rows below are marked DELETED. The *data/render*
+  half of each subsystem (state, renderer, emitter classes) stays genuinely pinned by
+  the survivors and is untouched. Three dangling `<see cref>` doc comments in surviving
+  files (`CompanionState.cs`, `Forge/CreatorForgeCommand.cs`,
+  `Overworld/OverworldFrameSource.Control.cs`) were reworded. Evidence: scratchpad
+  `freed-islands.md` + `multi-refs.cs`.
 - **Arc 5 deferrals:** the **P7 world-event channel** seam + `ScreenEngageDirector`
   (Arc 9 inherits the decision); **console-feed live rendering** (OQ-13's
   `ConsoleFeed`/`ProceduralFeed` port — the `console` source renders the no-signal
@@ -1898,6 +1914,10 @@ verb script against an authored planetoid world.
    `Gravity/WalkerInstanceEmitter.cs`, `Gravity/PlanetoidEmitter.cs`,
    `GravityCommandModule.cs` — all pinned (directly or transitively) by the held
    `OverworldWorld` / `OverworldFrameSource`. The Demo library keeps compiling.
+   **UPDATE 2026-07-19 (island sweep): `GravityCommandModule.cs` (203) was NOT
+   actually pinned — the API direction is `GravityCommandModule → OverworldWorld`,
+   the reverse never held — DELETED, owner-approved (evidence: `freed-islands.md`
+   #5). The other six data/emitter files stay pinned.**
 4. **`WorldSolidField.Revision` lives on the server, not the field.** The immutable,
    shared field carries no revision; `WorldServer.SolidRevision` is the lifecycle
    counter `world.collision.status` reads. The plan's 3-line `Install` swap also
@@ -4066,7 +4086,13 @@ is proven-built, not proven-live, pending a ROM.
   `GamingBrickChildNode` prose references are left intact (S6 would dangle
   against a live type). Same precedent as OverworldWorld/OverworldFrameSource:
   excise when proportionate, else (c)-disposition with the pinning consumer
-  named. The Demo library still compiles (verified). **The time-travel/rewind
+  named. The Demo library still compiles (verified). **UPDATE 2026-07-19 (island
+  sweep): three of these were NOT actually pinned — `OverworldPressDriver.cs` (248),
+  `TimeTravelCommandModule.cs` (85), `HgbDebugCommandModule.cs` (75) — all
+  verb-module/helper islands whose only inbound mentions were doc comments; DELETED,
+  owner-approved (evidence: `freed-islands.md` #2, #9, #10). `GamingBrickChildNode.cs`
+  / `GamingBrickModeTables.cs` / `GamingBrickPadService.cs` / `World/ScreenSource.cs`
+  / `AgbDebug/` stay pinned.** **The time-travel/rewind
   deck (hole H9)** does not vanish unnamed — it still lives on the standing
   `GamingBrickChildNode`; the `machine.rewind/snapshot/restore` verb port is
   deferred with the deletion.
@@ -4682,6 +4708,13 @@ of scope. Recorded per Arc 1's precedent: the World-side capability these
 carcasses represent (population + looks + spawn policy) is fully landed in
 `Puck.World` this arc; the Demo shells stay pinned until the survivors are
 removed wholesale on the Demo-retirement trajectory.
+
+**UPDATE 2026-07-19 (island sweep): three command modules here were NOT actually
+pinned — `CompanionCommandModule.cs` (208), `RtsCommandModule.cs` (203),
+`GardenCommandModule.cs` (145) — verb wrappers whose only inbound mentions were a
+closed loop of doc comments; DELETED, owner-approved (evidence: `freed-islands.md`
+#3, #4, #8). The data/render substrate (`CompanionState`, `CompanionEmitter`,
+`Garden/`, `Rts/`) stays genuinely pinned.**
 
 **Session capture.** No fold needed: looks are journaled document rows (already
 in `server.Definition`), not live session levers, and `SpawnPolicy` rides the
@@ -5388,6 +5421,14 @@ would break the Demo library build (the ground rules forbid it). The World-side
 capability they represent (a driven creature; a creation's eyes/faces as feeds) is
 fully landed in `Puck.World` this arc. Recorded; the shells die with the survivors
 on the Demo-retirement trajectory.
+
+**UPDATE 2026-07-19 (island sweep): three of these were NOT actually pinned —
+`Creator/CreatorCommandModule.cs` (524), `Creator/CreatorRigCommands.cs` (97, a
+private helper reachable only from the dead `CreatorCommandModule`), and
+`Tracker/TrackerCommandModule.cs` (197) — DELETED, owner-approved (evidence:
+`freed-islands.md` #1, #6, #7). The Creator/Tracker authoring cluster
+(`CreatorScene`, `TrackerModeState`, `Editing/`, `EditHistory.cs`, etc.) stays
+genuinely pinned by `OverworldFrameSource` / `CreatorForgeCommand` / `WorldScene`.**
 
 **Session capture.** No fold needed: inhabit/faceSources are journaled document
 rows (in `server.Definition`); attend flavors ride `UpsertKit`; the derived
