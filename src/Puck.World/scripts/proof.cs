@@ -108,9 +108,9 @@
 //       The editor-mode proof, run on BOTH backends like ui-floor. Each session boots, asserts the mode
 //       round trip over stdin (editor.enter/status/exit echoes; the seat's active binding GROUP flips play→editor
 //       and back — a pointer-level switch, editor.status echoes group= + page=; player.control reads idle while
-//       editing and the prior source after), asserts THE REFERENCE CHORD-COMMAND end to end from data
-//       (player.signal synthesizes the LT-then-RT trigger sweep; the ordered [lt, rt] chord row fires editor.enter;
-//       held/released chords walk the editor pages; a session-rebind chord row binds via player.bind chord:m+m and
+//       editing and the prior source after), asserts THE FIVE CHORD PAGES end to end from data
+//       (player.signal synthesizes the trigger sweeps; the held chord turns the seat's active page — resting, LT,
+//       RT, LT-then-RT, and the reverse RT-then-LT all resolving DISTINCTLY; a session-rebind chord row binds via player.bind chord:m+m and
 //       echoes in player.bindings; the resting-page and undeclared-modifier rules reject loudly at the wire — the
 //       one-meaning rule and the press latch across group flips are engine-gated in Puck.Post's binding-page
 //       stage), asserts the CAMERA in pixels
@@ -7249,9 +7249,9 @@ static class UiFloorProof {
 // ============================================================================================
 // EDITOR-MODE — a seat enters editor mode mid-session over stdin, its ACTIVE
 // binding GROUP flips play→editor (asserted through editor.status, which reads the SAME
-// PageView the bar renders — group= + page=), the reference [lt, rt] chord-command fires
-// editor.enter from pure binding data over synthesized pad signals (player.signal), the chord
-// walks the editor pages while held, the wire-reachable uniqueness rules reject loudly, a
+// PageView the bar renders — group= + page=), the group's FIVE ordered trigger chords each
+// turn to a distinct page over synthesized pad signals (player.signal) — including the two
+// two-trigger orders landing apart — the wire-reachable uniqueness rules reject loudly, a
 // session-rebind chord row binds and echoes, the seat's intent diverts to the honest idle
 // (player.control reads
 // idle while editing, the prior source after), the editor camera seeds at the chase framing and
@@ -7330,7 +7330,7 @@ static class EditorModeProof {
             // GROUP flips to editor and its resting page answers (editor.status reads the same PageView the bar
             // renders — the bar flip's assertable truth) → the seat's intent source reads idle (the diversion) —
             // then the camera work — then exit → restored (group=play again).
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play]", name: "status-before-enter");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play page=base", name: "status-before-enter");
             passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "pre-shot", path: prePath);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-echo");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor 'Editor'", name: "bar-flips-to-editor-group");
@@ -7344,7 +7344,7 @@ static class EditorModeProof {
 
             // (3) Exit restores: the prior source returns, the group flips back, the chase rig re-anchors (pixels below).
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-echo");
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play]", name: "status-after-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing group=play page=base", name: "status-after-exit");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control 1", expect: "[player.control: p1 is live]", name: "intent-restores-to-live");
             passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "post-shot", path: postPath);
 
@@ -7410,20 +7410,28 @@ static class EditorModeProof {
                 detail: DeltaDetail(before: restA, after: restB)
             );
 
-            // (6b) THE REFERENCE CHORD-COMMAND, end to end from DATA: player.signal synthesizes the LT-then-RT
-            // trigger sweep on seat 1's lane; completing the ordered [lt, rt] chord fires editor.enter (a command
-            // chord row in the play group — pure binding data, no verb typed). While both triggers stay held the
-            // editor group's [lt, rt] PAGE row answers (the pass-through: the armed command chord rides above the
-            // deepest page prefix), and the releases walk select→resting. Signals fold on the next 32 Hz tick, so
-            // each status read follows a short settle. (The press-latch-across-the-flip mechanism itself is
-            // engine-gated in Puck.Post's binding-page stage; here the flip's PRODUCT truth is asserted.)
+            // (6b) THE FIVE CHORD PAGES, end to end from DATA: player.signal synthesizes the trigger sweeps on
+            // seat 1's lane and the seat's ACTIVE page turns with the held chord — nothing held = the resting
+            // page, LT = page 1, RT = page 2, LT-then-RT = page 3, RT-then-LT = page 4 (press order is
+            // load-bearing, so the two two-trigger orders land on DIFFERENT pages). Asserted in the editor group,
+            // whose five pages are all populated. Signals fold on the next 32 Hz tick, so each status read follows
+            // a short settle.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "chord-block-enter");
+            Thread.Sleep(millisecondsTimeout: 400);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0.9", expect: "[player.signal: gamepad.leftTrigger 0.9]", name: "chord-lt-signal");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-camera", name: "held-lt-selects-camera-page");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.rightTrigger 0.9", expect: "[player.signal: gamepad.rightTrigger 0.9]", name: "chord-rt-signal");
             Thread.Sleep(millisecondsTimeout: 400);
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-place", name: "chord-fires-editor-enter-from-data");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-place", name: "lt-then-rt-selects-place-page");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0", expect: "[player.signal: gamepad.leftTrigger 0]", name: "chord-lt-release");
             Thread.Sleep(millisecondsTimeout: 400);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-select", name: "held-rt-selects-select-page");
+            // The REVERSE squeeze: RT is still held, so pressing LT now completes [rt, lt] — page 4, not page 3.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0.9", expect: "[player.signal: gamepad.leftTrigger 0.9]", name: "chord-lt-resqueeze");
+            Thread.Sleep(millisecondsTimeout: 400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor-reverse", name: "rt-then-lt-selects-reverse-page");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.leftTrigger 0", expect: "[player.signal: gamepad.leftTrigger 0]", name: "chord-lt-release-2");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.signal gamepad.rightTrigger 0", expect: "[player.signal: gamepad.rightTrigger 0]", name: "chord-rt-release");
             Thread.Sleep(millisecondsTimeout: 400);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "group=editor page=editor 'Editor'", name: "releases-walk-to-editor-resting");

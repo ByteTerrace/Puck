@@ -31,6 +31,9 @@ internal static class WorldEditorBindings {
     public const string SelectPageId = "editor-select";
     /// <summary>The placement page id (chord: LT then RT held): the grab/drag verb set, spawn ghosts, snap.</summary>
     public const string PlacePageId = "editor-place";
+    /// <summary>The editor's fifth page id (chord: RT then LT held — the reverse squeeze). Sparse: the page exists
+    /// so the group's five ordered chords all resolve; its content is authored through the binding document.</summary>
+    public const string ReversePageId = "editor-reverse";
 
     /// <summary>The sculpt resting page id (empty chord: build acts — add/primitive/undo/redo, target cycling,
     /// duplicate/delete, the shape verticals).</summary>
@@ -133,6 +136,17 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.DpadLeft, command: EditorCreationCommandModule.PrevCommand, label: "Creation-", icon: "edit.prev"),
                     ],
                     Label: "Place"
+                )
+            ),
+            // The RT+LT reverse page: sparse — the fifth of the group's five ordered trigger chords. Sticks only,
+            // so flight continues while the reverse squeeze is held.
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [WorldDefaultBindings.RightTriggerModifierId, WorldDefaultBindings.LeftTriggerModifierId],
+                Page: new BindingPageDefinition(
+                    Id: ReversePageId,
+                    Entries: [.. StickEntries()],
+                    Label: "RT+LT"
                 )
             ),
             // ---- the sculpt group: the workbench mode's page family. Sticks stay bound on EVERY page (the
