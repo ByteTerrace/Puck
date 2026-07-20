@@ -23,23 +23,31 @@ internal readonly record struct WorldReplaySeat(int Slot, string? ProfileName);
 internal readonly record struct WorldReplayTickInput(IReadOnlyList<WorldCommand> Commands, IReadOnlyList<IntentSubmission> Intents);
 
 /// <summary>
-/// A deterministic world-state recording: the SERVER simulation state captured at record-start plus the per-tick
-/// server-input stream that drove the recorded span, so the recording rehydrates its own starting world and replays
-/// through a fresh one. The starting state is the record-start <see cref="WorldDefinition"/> (embedded as its canonical
-/// JSON) and the active seats — the population's body state at that instant is the deterministic boot image of that
-/// definition (a fresh <see cref="WorldServer"/> reconstructs it exactly), so no per-body pose serialization is needed.
+/// A deterministic world-state recording: the SERVER starting state captured at record-start plus the per-tick
+/// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
+/// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; the fresh
+/// world's starting body state is that definition's deterministic BOOT IMAGE (a fresh <see cref="WorldServer"/>
+/// reconstructs it exactly), not a per-body pose snapshot. The recording also carries the LIVE session's tail pose hash
+/// (<see cref="RecordedTailHash"/>) so a replay's fresh re-drive is verified against the actual running session.
 /// </summary>
 /// <remarks>
 /// <para>HONEST SCOPE. The captured state is the authoritative SERVER simulation only — the world definition, the active
 /// seats, and the per-tick intent/command stream. Screen machines and their pixels, camera rigs, overlays, and audio are
 /// PRESENTATION and are excluded: they are re-derived from the definition by the live client each frame and never feed
 /// back into simulation, so a replay reproduces the authoritative population trajectory (the hashed poses) but does not
-/// re-run the emulated cabinets or redraw the HUD.</para>
-/// <para>DETERMINISM. Everything here is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
-/// state. A fresh world built from this recording and driven by the recorded stream produces a bit-identical per-tick
-/// pose hash on every run, machine, and backend at a fixed code version. <see cref="Drive"/> is the one path both the
-/// record side (to compute the recorded tail hash) and the replay side (to recompute it) run, so a match proves the
-/// on-disk recording faithfully round-trips and the simulation is deterministic across fresh constructions.</para>
+/// re-run the emulated cabinets or redraw the HUD. Because the fresh world starts from the definition boot image, a
+/// replayed tail MATCHES the live tail precisely when the live session was still at that boot image at record-start (a
+/// boot-anchored capture); a mid-session capture — the session already moved from boot — faithfully re-drives its stream
+/// but from the boot image, so the verify honestly reports MISMATCH. Full per-body record-start rehydration (so a
+/// mid-session capture also MATCHes) is the identified next lever.</para>
+/// <para>DETERMINISM. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
+/// pose. (The serialized command stream carries the authored float fields of the recorded <see cref="WorldCommand"/>s
+/// verbatim; floats round-trip bit-exactly and convert to fixed-point deterministically, so they never break the
+/// guarantee — but they are NOT absent from the on-disk form.) A fresh world built from this recording and driven by the
+/// recorded stream produces a bit-identical per-tick pose hash on every run, machine, and backend at a fixed code
+/// version. <see cref="Drive"/> is the offline re-drive the replay/verify side runs; the record side samples the LIVE
+/// population instead, so a match proves the fresh re-drive reproduces the running session, not merely another re-drive
+/// of itself.</para>
 /// </remarks>
 internal sealed class WorldReplaySnapshot {
     private const uint Magic = 0x504B_5250u; // "PKRP" — puck replay, distinct from SnapshotRecording's "PKRS".
@@ -54,8 +62,10 @@ internal sealed class WorldReplaySnapshot {
     /// <summary>The per-tick server-input stream, in tick order from the recording's first tick.</summary>
     public required IReadOnlyList<WorldReplayTickInput> Ticks { get; init; }
 
-    /// <summary>The tail state hash the record side computed by driving a fresh world through this exact stream — the
-    /// value a replay recomputes and compares against.</summary>
+    /// <summary>The LIVE session's tail pose hash — the state the running world actually reached at the last recorded
+    /// tick, sampled off the live population. A replay recomputes the tail by re-driving this recording through a fresh
+    /// world (<see cref="Drive"/>) and compares against this value, so a match is a genuine live-vs-replay fidelity
+    /// proof rather than a fresh re-drive compared against another fresh re-drive of the same stream.</summary>
     public required ulong RecordedTailHash { get; init; }
 
     /// <summary>The number of recorded ticks.</summary>
@@ -89,10 +99,11 @@ internal sealed class WorldReplaySnapshot {
     }
 
     /// <summary>Rehydrates a FRESH authoritative world from this recording and re-drives the recorded server-input stream
-    /// through it, returning the per-tick pose-hash trace. The one deterministic core both record and replay run: a fresh
-    /// <see cref="WorldServer"/>/<see cref="WorldPopulation"/> is built from the embedded definition (its boot image is
-    /// the starting body state), the recorded seats re-join, then each tick's commands apply (before the step, as the
-    /// live command-apply window does) and its intents buffer and drain at the step — exactly the live per-tick order.</summary>
+    /// through it, returning the per-tick pose-hash trace — the offline re-drive the replay/verify side runs (the record
+    /// side samples the live population instead). A fresh <see cref="WorldServer"/>/<see cref="WorldPopulation"/> is built
+    /// from the embedded definition (its boot image is the starting body state), the recorded seats re-join, then each
+    /// tick's commands apply (before the step, as the live command-apply window does) and its intents buffer and drain at
+    /// the step — exactly the live per-tick order.</summary>
     /// <param name="profiles">The profile catalog seats re-resolve their name against (read-only here).</param>
     /// <returns>The per-tick state-hash trace, one entry per recorded tick.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/> is <see langword="null"/>.</exception>

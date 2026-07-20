@@ -126,10 +126,12 @@ items:
   structurally excluded, the strongest lockout), and compares the replayed tail pose
   hash against the recorded one, echoing MATCH/MISMATCH synchronously over the pipe (the
   drain problem is gone). `replay.record`/`stop`/`cancel`/`verify`/`list`/`status`; the
-  `replay.play` live-playback mode and its unactionable busy message are deleted. TWO
-  recorded losses from the first pass — deterministic replay-fidelity is now RESTORED
-  (this ruling); introspection (`tick.explain`/`tick.watch`) remains an explicit loss
-  (OQ-17). See [OQ-14](#open-questions) and the [Arc 3 replay execution
+  `replay.play` live-playback mode and its unactionable busy message are deleted. The
+  verify compares the fresh re-drive against the LIVE session's tail hash (a genuine
+  live-vs-replay check), holding for BOOT-ANCHORED captures; a mid-session capture honestly
+  reports MISMATCH until full per-body record-start rehydration lands (the identified next
+  lever). Introspection (`tick.explain`/`tick.watch`) remains an explicit loss (OQ-17).
+  See [OQ-14](#open-questions) and the [Arc 3 replay execution
   record](#arc-3-replay-execution-record--ruling-r-a-executed).
 
 **THE NEXT ACTION.** **Arc 8 Phase P1 (fork collapse)** is the plan's named
@@ -8066,20 +8068,27 @@ accidents:**
    it follows later or is dropped separately. World does NOT gain the interactive
    divergence-debugging tool.
 2. **Deterministic replay-fidelity.** ~~World's tape is a live INPUT re-injection lever,
-   NOT a superset of the demo's capture.~~ **RESTORED 2026-07-19 by ruling R-A** — this
-   loss is REVERSED. The first-pass lever (`WorldReplayTape.Intercept`, which fed saved
-   input into the LIVE world at its current state, rehydrated no starting state, and left
-   the tail hash informational and unreadable) is REPLACED by a true deterministic
-   replay: `WorldReplaySnapshot` captures the record-start server state + per-tick
-   input stream, and `replay.verify` rehydrates a FRESH `WorldServer` from it, re-drives
-   the stream offline, and compares the replayed tail pose hash against the recorded one,
-   echoing MATCH/MISMATCH synchronously over the pipe. This is exactly the demo's
-   fresh-world bit-for-bit reproduction, restored on World's real input stream. See the
+   NOT a superset of the demo's capture.~~ **Rebuilt 2026-07-19 by ruling R-A** — the
+   first-pass lever (`WorldReplayTape.Intercept`, which fed saved input into the LIVE world
+   at its current state, rehydrated no starting state, and left the tail hash informational
+   and unreadable) is REPLACED by a true deterministic replay: `WorldReplaySnapshot`
+   captures the record-start definition + active seats + per-tick input stream **and the
+   LIVE session's tail pose hash**, and `replay.verify` rehydrates a FRESH `WorldServer`
+   from the definition boot image, re-drives the stream offline, and compares the replayed
+   tail against the **live** tail — a genuine live-vs-replay fidelity check, echoed
+   MATCH/MISMATCH synchronously over the pipe. It holds for **boot-anchored** captures
+   (the fresh world starts from the boot image); a **mid-session** capture faithfully
+   re-drives its stream but from the boot image, so verify honestly reports MISMATCH. This
+   is stronger than the demo's fresh-vs-fresh comparison on the boot-anchored case, but not
+   yet a superset across mid-session start points — full per-body record-start rehydration
+   is the identified next lever, with the live-tail reference hash as the honesty backstop
+   in the meantime. See the
    [Arc 3 replay execution record](#arc-3-replay-execution-record--ruling-r-a-executed).
 
 **STATUS: RESOLVED 2026-07-19.** Arc 3 Beat B executed (`686d009`); this owner
-sitting closed the one remaining pin. **The replay-fidelity loss recorded here was
-then RESTORED by ruling R-A** (true deterministic replay) — see the execution record. The `OQ-14 survivors` (`OverworldWorld.cs`,
+sitting closed the one remaining pin. **The replay-fidelity loss recorded here was then
+rebuilt by ruling R-A** (true deterministic replay, honest boot-anchored scope) — see the
+execution record. The `OQ-14 survivors` (`OverworldWorld.cs`,
 `OverworldFrameSource*.cs`, `OverworldRoom.cs`, `TownWorld.cs`) stay pinned by their
 OTHER consumers (the Arc 8/9/10 hub, `RouterIntentSource`) — the OQ-14 hold is gone,
 but they are not islands, so they are NOT deleted here. See the [State of
@@ -8216,17 +8225,21 @@ surface, no two overlapping stories.**
 
 - **`src/Puck.World/WorldReplaySnapshot.cs`** — the deterministic snapshot format +
   shadow driver. A recording embeds the record-start `WorldDefinition` (its canonical
-  JSON), the active seats, the recorded tail hash, and the per-tick server-input stream
-  (intent submissions + authority commands). `Drive` rehydrates a FRESH
-  `WorldServer`/`WorldPopulation` from it and re-drives the stream, returning the
-  per-tick pose-hash trace. The one path both record (to compute the recorded hash) and
-  verify (to recompute it) run.
+  JSON), the active seats, the **live** tail pose hash (sampled off the running session,
+  NOT a fresh re-drive), and the per-tick server-input stream (intent submissions +
+  authority commands). `Drive` rehydrates a FRESH `WorldServer`/`WorldPopulation` from the
+  definition **boot image** and re-drives the stream, returning the per-tick pose-hash
+  trace — the offline re-drive the verify side runs. The starting body state is the boot
+  image, not a per-body snapshot, so a MATCH is a fidelity proof for a boot-anchored
+  capture; a mid-session capture honestly reports MISMATCH.
 - **`src/Puck.World/WorldReplayTape.cs`** — rewritten as the record side. `BeginRecording`
   snapshots the starting state and attaches the loopback taps; `NoteTick` (called from
-  `WorldSimulation.Step`) closes each captured tick; `StopRecording` drives a fresh world
-  to compute the recorded tail hash and persists the self-contained recording; `Verify`
-  runs the offline replay and returns the MATCH/MISMATCH verdict. The `Intercept`
-  live-re-injection and per-tick live-hash paths are gone.
+  `WorldSimulation.Step`) closes each captured tick and samples the live population's tail
+  pose hash; `StopRecording` persists the self-contained recording under that live tail
+  hash and re-drives it once to report the verdict; `Verify` runs the offline replay and
+  compares the replayed tail against the recorded live tail. The `Intercept`
+  live-re-injection path is gone; the per-tick live-hash SAMPLE is retained as the verify
+  reference (that is what de-tautologizes the comparison).
 - **`src/Puck.World/WorldReplayCommandModule.cs`** — `replay.record` / `replay.stop` /
   `replay.cancel` / `replay.verify` / `replay.list` / `replay.status`. `replay.play` and
   its unactionable busy message are deleted.
@@ -8245,30 +8258,39 @@ never fed back into simulation. A replay therefore reproduces the authoritative
 population trajectory (the hashed poses) bit-for-bit, not the emulated cabinets or the
 redrawn HUD.
 
-**The review defects, each fixed.** (1) Starting-state rehydration — a recording now
-carries its own record-start definition and boots a fresh world from it. (2) Tail hash
-readable over the pipe — `replay.verify` runs the whole replay SYNCHRONOUSLY and echoes
-the verdict the instant it returns (the per-tick-drain problem is gone). (3) Input
-lockout — the replay is an OFFLINE recomputation over an isolated shadow world that
-never touches the running session, so live seat input is structurally excluded (the
-strongest form of lockout, not an advisory). (4) The unactionable busy message — the
-in-progress-live-replay state that produced it no longer exists; a recording is stopped
-by `replay.stop` or dropped by `replay.cancel`.
+**The review defects, each fixed.** (1) Starting-state rehydration — a recording carries
+its own record-start definition and boots a fresh world from that definition's BOOT IMAGE
+(not a per-body snapshot). (2) Tail hash readable over the pipe — `replay.verify` runs the
+whole replay SYNCHRONOUSLY and echoes the verdict the instant it returns (the
+per-tick-drain problem is gone). (3) Input lockout — the replay is an OFFLINE recomputation
+over an isolated shadow world that never touches the running session, so live seat input is
+structurally excluded (the strongest form of lockout, not an advisory). (4) The unactionable
+busy message — the in-progress-live-replay state that produced it no longer exists; a
+recording is stopped by `replay.stop` or dropped by `replay.cancel`. (5) **Non-tautological
+verdict (2026-07-20 review-pass correction)** — the reference hash is the LIVE session's
+tail (sampled off the running population), not a second fresh re-drive, so a MATCH proves the
+re-drive reproduces the actual live session. A boot-anchored capture MATCHes; a mid-session
+capture — the live world already moved from its boot image before record-start — honestly
+reports MISMATCH (full per-body record-start rehydration is the identified next lever).
 
-**Determinism discipline.** Everything hashed or serialized is fixed-point or an exact
-integer tick — no wall-clock, no float in the snapshot. The step duration
-(`EngineTicks.PerRate(240)`) is identical on the record and replay sides.
+**Determinism discipline.** The hashed pose state is fixed-point or an exact integer tick —
+no wall-clock, no float in the hashed pose. (The serialized command stream carries the
+recorded commands' authored float fields verbatim; floats round-trip bit-exactly and convert
+to fixed-point deterministically, so they never break the guarantee, but the on-disk form is
+not float-free — corrected 2026-07-20; the earlier "no float in the snapshot" overstated.)
+The step duration (`EngineTicks.PerRate(240)`) is identical on the record and replay sides.
 
-**Verified by RUNNING World over stdin, BOTH backends** (record a driven span
-mid-session — including scripted `player.run` commands captured off the loopback — then
-`replay.verify`):
+**Verified by RUNNING World over stdin, BOTH backends** (arm the recording at boot — the
+seats sit at their spawn boot image — then a `player.run` drives a seat, `replay.stop`
+echoes the verdict, and `replay.verify` re-checks; 2026-07-20 review pass):
 
-- **DirectX:** `[replay.verify: MATCH 'detreplay' | 755 ticks | hash=0xF141021EAC1026CD]`
-- **Vulkan:** `[replay.verify: MATCH 'detreplayvk' | 752 ticks | hash=0xFC2C371182AF2AC5]`
-- **Deliberate divergence (doctored tape** — one tampered input byte, so the re-driven
-  world diverges from the recording's stored hash): `[replay.verify: MISMATCH 'doctored'
-  | 755 ticks | recorded=0xF141021EAC1026CD replayed=0x525E181C6361DF73]`, beside the
-  untampered control's MATCH in the same session.
+- **DirectX (boot-anchored):** `[replay.stop: … | 1209 ticks | MATCH live tail=0xF7515600E0247C65 — faithful, boot-anchored capture]` then `[replay.verify: MATCH 'detdx' | 1209 ticks | hash=0xF7515600E0247C65]`.
+- **Vulkan (boot-anchored):** `[replay.verify: MATCH 'detvk' | 1213 ticks | hash=0xF7515600E0247C65]` — the IDENTICAL tail hash to DirectX (the offline drive is CPU-only/backend-independent; the differing tick count settles to the same resting pose).
+- **Mid-session capture (honest MISMATCH** — armed AFTER a `player.run` had already moved the
+  seat off its boot image, so the fresh re-drive starts from the boot image and cannot
+  reproduce the live tail): `[replay.stop: … | 968 ticks | MISMATCH live tail=0x6E8F78119D16396D replayed=0x2C8D1F60D43398D3 — mid-session capture; the fresh re-drive starts from the definition boot image]`.
+- **Deliberate divergence (doctored tape** — one flipped byte in the stored reference hash):
+  `[replay.verify: MISMATCH 'doctored' | 1209 ticks | recorded=0xF7515600E0247C9A replayed=0xF7515600E0247C65]` (returns `IsError`), beside the untampered control's `[replay.verify: MATCH 'detdx' | … | hash=0xF7515600E0247C65]` in the same session.
 
 Full Release build clean (0 warnings, 0 errors; Demo library included).
 

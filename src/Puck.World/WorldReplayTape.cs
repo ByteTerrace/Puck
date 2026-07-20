@@ -16,9 +16,11 @@ internal enum WorldReplayMode {
 /// The record side of Puck.World's true deterministic replay. While armed it captures the live session's authoritative
 /// SERVER-input stream — the intent submissions and authority commands that reach the <see cref="LoopbackTransport"/>
 /// each tick — plus the record-start world definition and active seats, into a self-contained
-/// <see cref="WorldReplaySnapshot"/>. A saved recording rehydrates a FRESH world from that starting state and re-drives
-/// the captured stream through it (<see cref="WorldReplaySnapshot.Drive"/>), so the recorded and replayed per-tick pose
-/// hashes are compared for a bit-identical match.
+/// <see cref="WorldReplaySnapshot"/>. It also samples the LIVE population's tail pose hash (the state the running world
+/// actually reached at the last recorded tick) and persists it as the recording's reference hash. A saved recording
+/// rehydrates a FRESH world from its captured starting state and re-drives the captured stream through it
+/// (<see cref="WorldReplaySnapshot.Drive"/>); the replayed tail is compared against the LIVE reference, so a MATCH is a
+/// genuine live-vs-replay fidelity proof rather than a re-drive compared against another re-drive of the same stream.
 /// </summary>
 /// <remarks>
 /// <para>This REPLACES the earlier live input re-injection lever. There is no live-playback mode: a replay is an OFFLINE
@@ -26,9 +28,14 @@ internal enum WorldReplayMode {
 /// session, so live seat input is structurally excluded from a playback rather than merely advised against, and the
 /// verdict is readable synchronously over the pipe the instant it completes (no per-tick drain to wait out).</para>
 /// <para>HONEST SCOPE. The captured starting state is the SERVER simulation only — definition + active seats + the
-/// per-tick intent/command stream. The population's body state at record-start is the deterministic boot image of the
-/// captured definition, which the fresh world reconstructs exactly, so no per-body pose is serialized. Screen machines,
-/// their pixels, cameras, overlays, and audio are PRESENTATION and are excluded (see <see cref="WorldReplaySnapshot"/>).</para>
+/// per-tick intent/command stream. The rehydrated starting body state is the deterministic BOOT IMAGE of the captured
+/// definition (a fresh world reconstructs it exactly), not a per-body pose snapshot. A MATCH is therefore a fidelity
+/// proof precisely when the live session was still AT that boot image at record-start (a boot-anchored capture); a
+/// capture armed after the session has already diverged from boot (a mid-session capture) faithfully re-drives its
+/// stream but from a boot-image start, so <see cref="Verify"/> honestly reports MISMATCH rather than a false MATCH.
+/// Full per-body record-start rehydration (so a mid-session capture also MATCHes) is the identified next lever; the
+/// live-tail reference hash is the backstop that keeps the verdict honest until it lands. Screen machines, their pixels,
+/// cameras, overlays, and audio are PRESENTATION and are excluded (see <see cref="WorldReplaySnapshot"/>).</para>
 /// <para>Single-threaded on the launcher's window-pump thread: the <c>replay.*</c> verbs are Immediate (they run inline
 /// during the command pump's drain) and the taps + <see cref="NoteTick"/> run inside the fixed-step
 /// <see cref="WorldSimulation.Step"/> — both on that one thread, so no locking is needed. The <c>replay.*</c> verbs are
@@ -46,6 +53,11 @@ internal sealed class WorldReplayTape {
     private byte[]? m_definitionJson;
     private List<WorldReplaySeat>? m_seats;
     private List<WorldReplayTickInput>? m_ticks;
+    // The LIVE session's tail pose hash — the state the running population actually reached at the last recorded tick,
+    // refreshed each NoteTick (after that tick's server step) so the final value is the true live tail. Persisted as the
+    // recording's RecordedTailHash, so a replay's fresh re-drive is compared against the ACTUAL live session, not against
+    // another re-drive of itself.
+    private ulong m_liveTailHash;
     // The current tick's accumulating input, rotated into m_ticks at each NoteTick.
     private List<WorldCommand> m_currentCommands = new();
     private List<IntentSubmission> m_currentIntents = new();
@@ -126,6 +138,7 @@ internal sealed class WorldReplayTape {
         m_definitionJson = WorldDefinitionSerialization.Serialize(definition: m_liveServer.Definition);
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();
+        m_liveTailHash = 0UL;
         m_currentCommands = new List<WorldCommand>();
         m_currentIntents = new List<IntentSubmission>();
         m_transport.IntentTap = submission => m_currentIntents.Add(item: submission);
@@ -145,40 +158,44 @@ internal sealed class WorldReplayTape {
         ticks.Add(item: new WorldReplayTickInput(Commands: m_currentCommands, Intents: m_currentIntents));
         m_currentCommands = new List<WorldCommand>();
         m_currentIntents = new List<IntentSubmission>();
+        // Sample the LIVE population's pose hash AFTER this tick's server step — the last sample is the true live tail
+        // the replay's fresh re-drive is verified against.
+        m_liveTailHash = WorldReplaySnapshot.HashState(population: m_liveServer.Population);
     }
 
-    /// <summary>Finalizes the active recording: detaches the taps, computes the recorded tail hash by driving a fresh
-    /// world through the captured stream (the record-side of the record-vs-replay comparison), and persists the
-    /// self-contained recording.</summary>
-    /// <returns>The path written, the tick count, and the recorded tail hash.</returns>
+    /// <summary>Finalizes the active recording: detaches the taps, persists the self-contained recording under the LIVE
+    /// session's tail pose hash (the state the running world actually reached), then re-drives it once through a fresh
+    /// world and reports the replayed tail beside the recorded one. A MATCH means the recording faithfully rehydrates —
+    /// its captured starting state (the definition boot image + seats) reproduces the live session under the recorded
+    /// input stream; a MISMATCH means the live session had already diverged from that boot image before record-start (a
+    /// mid-session capture), which the fresh re-drive cannot reproduce. Reporting the verdict at stop time makes that
+    /// boundary loud rather than hidden.</summary>
+    /// <returns>The path written, the tick count, the recorded (live) tail hash, the replayed tail hash, and whether
+    /// they matched.</returns>
     /// <exception cref="InvalidOperationException">No recording is active.</exception>
-    public (string Path, int Ticks, ulong Hash) StopRecording() {
+    public (string Path, int Ticks, ulong Recorded, ulong Replayed, bool Match) StopRecording() {
         if ((m_mode != WorldReplayMode.Recording) || (m_definitionJson is not { } definitionJson) || (m_seats is not { } seats) || (m_ticks is not { } ticks) || (m_recordName is not { } name)) {
             throw new InvalidOperationException(message: "No recording is active.");
         }
 
         DetachTaps();
 
-        // Compute the recorded tail hash from a FRESH world driven through the just-captured stream — the same Drive a
-        // replay runs, so the persisted hash is a genuine fresh-world result, not a reading off the live session.
+        // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.
+        // The verify side re-drives a fresh world and compares against THIS, so a MATCH is a genuine live-vs-replay
+        // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
+        var recorded = m_liveTailHash;
         var recording = new WorldReplaySnapshot {
             DefinitionJson = definitionJson,
-            RecordedTailHash = 0UL,
+            RecordedTailHash = recorded,
             Seats = seats,
             Ticks = ticks,
         };
         var trace = recording.Drive(profiles: m_profiles);
-        var hash = ((trace.Length > 0) ? trace[^1] : 0UL);
-        var finalized = new WorldReplaySnapshot {
-            DefinitionJson = definitionJson,
-            RecordedTailHash = hash,
-            Seats = seats,
-            Ticks = ticks,
-        };
+        var replayed = ((trace.Length > 0) ? trace[^1] : 0UL);
         var path = PathFor(name: name);
 
         using (var stream = File.Create(path: path)) {
-            WorldReplaySnapshot.Write(stream: stream, recording: finalized);
+            WorldReplaySnapshot.Write(stream: stream, recording: recording);
         }
 
         m_mode = WorldReplayMode.Idle;
@@ -186,8 +203,9 @@ internal sealed class WorldReplayTape {
         m_definitionJson = null;
         m_seats = null;
         m_ticks = null;
+        m_liveTailHash = 0UL;
 
-        return (Path: path, Ticks: ticks.Count, Hash: hash);
+        return (Path: path, Ticks: ticks.Count, Recorded: recorded, Replayed: replayed, Match: (replayed == recorded));
     }
 
     /// <summary>Aborts the active recording WITHOUT persisting it: detaches the taps and drops the captured stream.</summary>
@@ -204,6 +222,7 @@ internal sealed class WorldReplayTape {
         m_definitionJson = null;
         m_seats = null;
         m_ticks = null;
+        m_liveTailHash = 0UL;
 
         return name;
     }

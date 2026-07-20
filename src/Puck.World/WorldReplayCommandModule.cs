@@ -6,10 +6,11 @@ namespace Puck.World;
 /// The replay console surface — <c>replay.record</c> / <c>replay.stop</c> / <c>replay.cancel</c> / <c>replay.verify</c>
 /// / <c>replay.list</c> / <c>replay.status</c>, the true-deterministic-replay control plane over the pipe (the seed of a
 /// future <c>Puck.Replay</c>). It arms the <see cref="WorldReplayTape"/> that captures the running session's per-tick
-/// server-input stream and starting state: <c>replay.record</c> begins capture, <c>replay.stop</c> rehydrates a fresh
-/// world from the capture to compute the recorded tail hash and persists the self-contained <see cref="WorldReplaySnapshot"/>,
-/// and <c>replay.verify</c> re-drives a saved recording through another fresh world and reports whether the replayed
-/// tail hash MATCHES the recorded one. Every verb is Immediate (a client-local control, no direct simulation effect):
+/// server-input stream and starting state: <c>replay.record</c> begins capture, <c>replay.stop</c> persists the
+/// self-contained <see cref="WorldReplaySnapshot"/> under the LIVE session's tail pose hash and re-drives it once to
+/// report the verdict, and <c>replay.verify</c> re-drives a saved recording through a fresh world and reports whether the
+/// replayed tail hash MATCHES the recorded LIVE tail — a genuine live-vs-replay fidelity proof, not a re-drive compared
+/// against another re-drive of the same stream. Every verb is Immediate (a client-local control, no direct simulation effect):
 /// verification runs offline over an isolated shadow world, so it never re-injects into the live session and its verdict
 /// is readable the instant the verb returns. A SEPARATE module to keep each class under its analyzer ceilings.
 /// </summary>
@@ -25,7 +26,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.stop",
-            description: "Stops and persists the active recording (Immediate): rehydrates a fresh world to compute the recorded tail hash, writes <name>.puckreplay, and echoes the path, tick count, and hash.",
+            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail pose hash, re-drives it once through a fresh world, and echoes the path, tick count, and MATCH/MISMATCH verdict (MISMATCH = a mid-session capture whose fresh re-drive starts from the definition boot image).",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -35,7 +36,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "replay.verify",
-            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded one.",
+            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check).",
             handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -78,9 +79,11 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         }
 
         try {
-            var (path, ticks, hash) = m_tape.StopRecording();
+            var (path, ticks, recorded, replayed, match) = m_tape.StopRecording();
 
-            return new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | recorded hash=0x{hash:X16}]");
+            return match
+                ? new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | MATCH live tail=0x{recorded:X16} — faithful, boot-anchored capture]")
+                : new CommandResult(Output: $"[replay.stop: wrote {path} | {ticks} ticks | MISMATCH live tail=0x{recorded:X16} replayed=0x{replayed:X16} — mid-session capture; the fresh re-drive starts from the definition boot image]");
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
             return Error(text: $"[replay.stop: could not persist — {exception.Message}]");
         }

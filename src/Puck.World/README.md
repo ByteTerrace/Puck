@@ -905,25 +905,33 @@ are PRESENTATION and are excluded** — re-derived from the definition each fram
 fed back into simulation — so a replay reproduces the authoritative population
 trajectory (the hashed poses) bit-for-bit, not the emulated cabinets or the HUD.
 
-**The replay is a fresh, offline recomputation.** `WorldReplaySnapshot.Drive` builds a
-brand-new `WorldServer`/`WorldPopulation` from the recording, re-joins the seats, and
-re-drives the captured stream tick-by-tick (commands before the step, intents drained at
-it — the exact live order), computing the same per-tick FNV pose hash. It is the ONE
-path both the record side (to compute the recorded tail hash at `replay.stop`) and the
-verify side (to recompute it) run, so a **MATCH proves the on-disk recording faithfully
-round-trips and the simulation is deterministic across fresh constructions**. Because
-the replay runs over an isolated shadow world that never touches the live session, live
-seat input is **structurally excluded** from a playback (the strongest lockout), and the
-verdict is readable **synchronously** the instant `replay.verify` returns — no per-tick
-drain to wait out. Everything hashed or serialized is fixed-point or an exact integer
-tick; there is no wall-clock or float in the snapshot.
+**The replay is a fresh, offline recomputation, verified against the LIVE session.**
+`WorldReplaySnapshot.Drive` builds a brand-new `WorldServer`/`WorldPopulation` from the
+recording, re-joins the seats, and re-drives the captured stream tick-by-tick (commands
+before the step, intents drained at it — the exact live order), computing the same
+per-tick FNV pose hash. The record side does NOT re-drive to produce its reference hash —
+it samples the **live** population's tail pose hash off the running session, so a **MATCH
+proves the fresh re-drive reproduces the actual live session**, not merely that one
+re-drive equals another. Because the fresh world starts from the definition **boot
+image**, a MATCH is a fidelity proof precisely when the live session was still at that
+boot image at record-start (a boot-anchored capture); a **mid-session capture** — the
+session already moved from boot — faithfully re-drives its stream but from the boot image,
+so `replay.verify` honestly reports **MISMATCH** (full per-body record-start rehydration,
+so a mid-session capture also MATCHes, is the identified next lever). Because the replay
+runs over an isolated shadow world that never touches the live session, live seat input is
+**structurally excluded** from a playback (the strongest lockout), and the verdict is
+readable **synchronously** the instant `replay.verify` returns — no per-tick drain to wait
+out. The hashed pose state is fixed-point or an exact integer tick — no wall-clock, no
+float. (The serialized command stream carries the recorded commands' authored float fields
+verbatim; floats round-trip bit-exactly and convert to fixed-point deterministically, so
+they never break the guarantee — but the on-disk form is not float-free.)
 
 | Verb (all Immediate) | Effect |
 |---|---|
-| `replay.record <name>` | Arms recording; captures the starting state and the per-tick server-input stream. |
-| `replay.stop` | Rehydrates a fresh world to compute the recorded tail hash, persists `<name>.puckreplay` (under `%LOCALAPPDATA%\Puck\World\Replays`), and echoes the path, tick count, and hash. |
+| `replay.record <name>` | Arms recording; captures the starting state and the per-tick server-input stream, and begins sampling the live tail hash. |
+| `replay.stop` | Persists `<name>.puckreplay` (under `%LOCALAPPDATA%\Puck\World\Replays`) under the live tail hash, re-drives it once, and echoes the path, tick count, and **MATCH/MISMATCH** verdict. |
 | `replay.cancel` | Aborts the active recording without persisting it. |
-| `replay.verify <name>` | Rehydrates a fresh world from the recording, re-drives it offline, and echoes **MATCH** or **MISMATCH** with the recorded and replayed tail hashes. |
+| `replay.verify <name>` | Rehydrates a fresh boot-image world from the recording, re-drives it offline, and echoes **MATCH** or **MISMATCH** with the recorded (live) and replayed tail hashes. |
 | `replay.list` / `replay.status` | Lists saved recordings / reports mode, active name, and ticks captured. |
 
 Immediate stdin verbs never reach the loopback, so the `replay.*` verbs never record
@@ -933,9 +941,14 @@ determinism-gated (constraint 8) — the bit-for-bit guarantee on the underlying
 `Puck.Commands` snapshot machinery is Post's, self-referential; this is the live
 record/replay surface, the seed of a future `Puck.Replay`. **One capability loss vs. the
 demo remains, deliberate and recorded (OQ-17, 2026-07-19):** the demo's
-`tick.explain`/`tick.watch`/`hash.mark` divergence-introspection is not ported. The
-demo's `OverworldDeterminism` fresh-world **replay-fidelity** — replaying through a
-FRESH world and comparing hashes — is **RESTORED here** by ruling R-A (2026-07-19).
+`tick.explain`/`tick.watch`/`hash.mark` divergence-introspection is not ported. Ruling
+R-A (2026-07-19) brought World a fresh-world replay that re-drives through a FRESH world
+and compares against the **live** session's tail hash — a genuine live-vs-replay fidelity
+check. It holds for **boot-anchored** captures (the fresh world starts from the definition
+boot image); a mid-session capture honestly reports MISMATCH until full per-body
+record-start rehydration lands (the identified next lever). The demo's
+`OverworldDeterminism` compared two fresh re-drives of the same stream; World's verdict is
+strictly stronger (live-vs-replay) but not yet a superset across mid-session start points.
 
 ## The command wire (stdin format)
 

@@ -196,9 +196,10 @@
 //       The second world + session write-back proof: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
 //       from the default's (kits 6 screens 3 vs kits 5 screens 5), a visibly different game with zero code; (c) the
-//       write-back SLICE not covered by the mutate proof — a live SESSION lever (world.population count) is changed, the
-//       world is saved to a temp copy, and a relaunch --world <that copy> boots a census whose networkPlayers survived
-//       the fold (the saved JSON carries it, world.population echoes it); (d) the third fold dimension positively — a
+//       write-back SLICE not covered by the mutate proof — a live SESSION lever (the world.population peer-source
+//       default) is flipped to idle, the world is saved to a temp copy, and a relaunch --world <that copy> boots with
+//       that folded behavior (the saved JSON carries defaultPeerSource, world.population echoes it) while the
+//       networkPlayers admission cap stays durable (R-C: a census raise is transient, never folded); (d) the third fold dimension positively — a
 //       runtime screen.insert of a real ROM makes world.status name the 'screens' drift and world.save fold the live
 //       machine into that screen row's Machine source. Expo's own ouroboros is covered by worlddoc.
 //
@@ -2743,17 +2744,25 @@ static class WorldDocProof {
 //     world.save folds the render levers + census into the saved document).
 //   expodoc proves the artifact: (a) --world expo boots the loud definition line; (b) a
 //     distinguishing world.status fact (expo's kit/screen counts differ from the default's,
-//     zero code); (c) the write-back slice not covered by MutateProof — a live SESSION lever
-//     (world.population) survives world.save + a relaunch. Expo's own ouroboros is in worlddoc.
+//     zero code); (c) the write-back slice not covered by MutateProof — the peer-source-default
+//     session lever (world.population idle) survives world.save + a relaunch, while the
+//     networkPlayers admission cap stays durable (R-C). Expo's own ouroboros is in worlddoc.
 // ============================================================================================
 static class ExpoProof {
     // The distinguishing world.status counts the authoring session produces (5 default kits + "glider" = 6; 5 default
     // screens minus indices 4 and 3 = 3) — a visibly different world with zero code.
     const string ExpoStatusNeedle = "kits 6 screens 3";
-    // The census the authoring session bakes in (world.population 32), and the distinct value the write-back slice sets
-    // to prove a live session lever survives world.save + a relaunch (48 != 32 != the default's 124).
+    // The authored remote-admission CAP the authoring session bakes in (world.population.defaults network 32). Under R-C
+    // networkPlayers is a durable cap, NOT the live census count — a census raise never folds into it, so the write-back
+    // slice proves it stays put.
     const int ExpoAuthoredNetworkPlayers = 32;
-    const int WriteBackNetworkPlayers = 48;
+    // The census raise the write-back requests PAST the cap — proves both the clamp and that the transient running count
+    // is never persisted (R-C: the live census is session-only).
+    const int WriteBackCensusRequest = 48;
+    // The peer-source default the write-back flips (from the authored 'wander') — the session lever world.save DOES fold,
+    // so it survives save + relaunch. Its verb token and its serialized JSON enum name.
+    const string WriteBackPeerSource = "idle";
+    const string WriteBackPeerSourceJson = "Idle";
 
     public static int RunExpoAuthor(ArgMap opts) {
         var noBuild = opts.Flag(name: "--no-build");
@@ -2906,7 +2915,8 @@ static class ExpoProof {
     }
 
     // Session 1: boot --world expo, assert the loud definition line, assert the distinguishing world.status counts, then
-    // exercise the write-back — change the live census (world.population), world.save to a temp copy.
+    // exercise the write-back — raise the live census past the authored cap and flip the peer-source default
+    // (world.population), world.save to a temp copy, and assert the cap stays durable while the peer-source folds.
     static bool RunBootAndWriteBack(string exe, string repoRoot, string expoPath, string tempSave, int width, int height, int exitAfterSeconds) {
         var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
 
@@ -2964,9 +2974,11 @@ static class ExpoProof {
             passed &= Check(name: "fresh-boot-no-drift", ok: ((statusLine is not null) && statusLine.Contains(value: "session-drift none")),
                 detail: (statusLine?.Trim() ?? "(no world.status echo)"));
 
-            // (c-i) change the live census (a session lever), then world.save to a temp copy — the write-back the mutate
-            // proof does not cover (it changes a JOURNALED kit; this changes SESSION state folded only at save).
-            Send(ctx: ctx, line: $"world.population {WriteBackNetworkPlayers} wander");
+            // (c-i) exercise the R-C write-back contract with two session levers, then world.save to a temp copy — the
+            // write-back the mutate proof does not cover (it changes a JOURNALED kit; this changes SESSION state folded
+            // only at save). Raise the live census PAST the authored cap (proves the clamp + that the transient count is
+            // never persisted) and flip the peer-source default to idle (the lever world.save DOES fold).
+            Send(ctx: ctx, line: $"world.population {WriteBackCensusRequest} {WriteBackPeerSource}");
 
             var saveMark = collector.Count;
 
@@ -2976,11 +2988,17 @@ static class ExpoProof {
 
             passed &= Check(name: "write-back-save", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
 
-            // The saved copy's networkPlayers must be the changed census (folded), NOT the authored 32.
+            // The saved copy's networkPlayers must stay the authored ADMISSION CAP (R-C: a census raise is transient and
+            // never folds), and the peer-source default must have folded to idle (the surviving session lever).
             if (File.Exists(path: tempSave)) {
-                var saved = ExtractNetworkPlayers(json: File.ReadAllText(path: tempSave));
+                var savedJson = File.ReadAllText(path: tempSave);
+                var savedNetwork = ExtractNetworkPlayers(json: savedJson);
+                var savedSource = ExtractDefaultPeerSource(json: savedJson);
 
-                passed &= Check(name: "write-back-folded-into-json", ok: (saved == WriteBackNetworkPlayers), detail: $"saved networkPlayers = {(saved?.ToString(provider: ProofApp.Inv) ?? "?")} (want {WriteBackNetworkPlayers})");
+                passed &= Check(name: "admission-cap-stays-durable", ok: (savedNetwork == ExpoAuthoredNetworkPlayers),
+                    detail: $"saved networkPlayers = {(savedNetwork?.ToString(provider: ProofApp.Inv) ?? "?")} (want the authored cap {ExpoAuthoredNetworkPlayers}, NOT the transient census {WriteBackCensusRequest})");
+                passed &= Check(name: "peer-source-folded-into-json", ok: string.Equals(a: savedSource, b: WriteBackPeerSourceJson, comparisonType: StringComparison.OrdinalIgnoreCase),
+                    detail: $"saved defaultPeerSource = {savedSource ?? "?"} (want {WriteBackPeerSourceJson})");
             }
         }
         finally {
@@ -2995,8 +3013,9 @@ static class ExpoProof {
         return passed;
     }
 
-    // Session 2: relaunch --world <the write-back copy> and assert the changed census survived the fold + relaunch — the
-    // live world.population verb echoes it, no code edit, no restart of the change.
+    // Session 2: relaunch --world <the write-back copy> and assert the flipped peer-source default survived the fold +
+    // relaunch — the live world.population verb echoes its behavior, no code edit, no restart of the change. (R-C: the
+    // census COUNT is transient and not persisted; the peer-source default is the session lever that folds and survives.)
     static bool RunWriteBackSurvival(string exe, string repoRoot, string savedPath, int width, int height, int exitAfterSeconds) {
         var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
 
@@ -3041,7 +3060,7 @@ static class ExpoProof {
 
             var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.population:"), deadlineSeconds: 15.0);
 
-            return Check(name: "census-survived-relaunch", ok: ((line is not null) && line.Contains(value: $"{WriteBackNetworkPlayers} network-human stand-ins")),
+            return Check(name: "peer-source-survived-relaunch", ok: ((line is not null) && line.Contains(value: $"behavior {WriteBackPeerSource}")),
                 detail: (line?.Trim() ?? "(no world.population echo)"));
         }
         finally {
@@ -3171,6 +3190,14 @@ static class ExpoProof {
         var match = Regex.Match(input: json, pattern: @"""networkPlayers""\s*:\s*(\d+)");
 
         return (match.Success ? int.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    // The population block's defaultPeerSource enum name (the writer serializes the IntentSource as its member name, e.g.
+    // "Idle"/"Wander") — the peer-source session lever the write-back folds. Null when the key is absent.
+    static string? ExtractDefaultPeerSource(string json) {
+        var match = Regex.Match(input: json, pattern: @"""defaultPeerSource""\s*:\s*""([^""]+)""");
+
+        return (match.Success ? match.Groups[1].Value : null);
     }
 
     static bool EnsureBuilt(bool noBuild, string projectPath, out string exe) {

@@ -9,9 +9,11 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live SESSION state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// live census the population verb moves (<see cref="WorldPopulation.SimulatedCount"/> /
-/// <see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a runtime <c>screen.insert</c> booted onto declared
-/// screens (<see cref="WorldScreenBinder"/>). <see cref="Capture"/> composes a snapshot definition — the live definition
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a
+/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census COUNT
+/// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately NOT folded — R-C made <c>networkPlayers</c> a durable
+/// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
+/// session-only. <see cref="Capture"/> composes a snapshot definition — the live definition
 /// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
@@ -21,10 +23,10 @@ namespace Puck.World;
 /// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
 /// whether the live session has since diverged from the loaded document, reported by <c>world.status</c> at verb time.</remarks>
 internal static class WorldSessionCapture {
-    /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, live
-    /// census, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
+    /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
+    /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
-    /// and <see cref="WorldDefinition.Audio"/>'s master gain.</summary>
+    /// and <see cref="WorldDefinition.Audio"/>'s master gain. The transient census COUNT is not folded (R-C).</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table (census + peer-source default).</param>
