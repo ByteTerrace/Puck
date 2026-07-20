@@ -123,8 +123,13 @@ if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
 // executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
 // WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those now read their
 // values from the resolved host section. Read by DI from the roster, population, frame source, render settings, and the
-// world.quality verb; the resolved source is registered so world.save knows its default target (null when baked/fallback).
-var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(option: worldOption));
+// world.quality verb; the resolved source is registered so world.save knows its default target (null when baked).
+// An explicit --world path that will not load ends the boot here — a typo must never quietly run a different world.
+if (!WorldDefinitionLoader.TryResolve(explicitPath: parseResult.GetValue(option: worldOption), source: out var worldSource, failure: out var worldFailure)) {
+    Console.Error.WriteLine(value: worldFailure);
+
+    return 1;
+}
 
 // Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
 // which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
@@ -429,7 +434,14 @@ services.AddSingleton<ICommandModule, WorldStorageCommandModule>();
 // factories off Windows) and the shared session clock. The RecordingTap is the swappable sink the capture render node is
 // wired to for its whole lifetime; capture.start/stop arm and finalize a RecordingSession through it.
 services.AddRecordingPlatform();
-services.AddSingleton(implementationInstance: RecordingDocumentLoader.Load(explicitPath: parseResult.GetValue(option: recordingOption)));
+
+if (!RecordingDocumentLoader.TryResolve(explicitPath: parseResult.GetValue(option: recordingOption), source: out var recordingSource, failure: out var recordingFailure)) {
+    Console.Error.WriteLine(value: recordingFailure);
+
+    return 1;
+}
+
+services.AddSingleton(implementationInstance: recordingSource);
 services.AddSingleton<RecordingTap>();
 services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
 

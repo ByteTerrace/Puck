@@ -2806,6 +2806,11 @@ Look for a borderless-fullscreen 1920×1080 window, the boot line
 `[world] definition: …/kiosk.world.json`, and no `[world.host]` downgrade line on
 a Windows box.
 
+`kiosk.world.json` is NOT shipped — it is the file the `world.save` step above
+writes. Run that step first: an explicit `--world` path that does not load now
+ends the boot with `[world] --world no file at …` and exit 1 rather than quietly
+booting the baked default, which is what silently hollowed this block out before.
+
 ```
 world.host                                    # DOCUMENT / RESOLVED / LIVE columns
 world.host.tune targetHertz 120
@@ -4040,6 +4045,10 @@ unnamed:**
 ### Verification
 
 A scripted stdin corpus plus a human pass with a pad.
+
+`arcade.world.json` is NOT shipped either — author it with the `world.save` step
+at the end of this block before replaying the corpus, or `world.load` refuses
+loudly with `[world.load: no file at …]` and swaps nothing.
 
 ```
 world.load Assets/worlds/arcade.world.json
