@@ -82,7 +82,6 @@ Common command families:
 | SM83 debug (index-first cabinets) | `hgb.*` — `peek`, `poke`, `regs`, `status`, `pause`, `resume`, `step`, `frame`, `until`, `snap`, `restore`, `watch`, `watch.clear`, `watch.list`, `dis`, `tilt` |
 | ARM debug (AGB debug scene) | `agb.*` — `peek`, `poke`, `dis`, `light`, plus `regs`/`status`/`pause`/`resume`/`step`/`frame`/`until`/`trace`/`io`/`snap`/`restore`/`debug`/`bios` |
 
-Self-documenting examples live under [examples/scripts/](examples/scripts/).
 `capture` records the outer presentation, including overlays. Startup
 `--capture` targets the renderer before the outer overlay decorator.
 
