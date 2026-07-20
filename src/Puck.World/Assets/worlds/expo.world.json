@@ -158,6 +158,9 @@
         "engageable": true,
         "engageRadius": 2.5,
         "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -221,6 +224,9 @@
         "engageable": false,
         "engageRadius": 0,
         "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     }
   ],
@@ -392,7 +398,29 @@
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
         "jumpBufferTime": 0.1,
-        "response": []
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -480,6 +508,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -496,7 +528,29 @@
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
         "jumpBufferTime": 0.1,
-        "response": []
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -584,6 +638,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -600,7 +658,29 @@
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
         "jumpBufferTime": 0.1,
-        "response": []
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0.88,
@@ -688,6 +768,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -751,7 +835,7 @@
     "candidateCap": 16,
     "workbenchFraction": 0.7,
     "previewDeadlineFrames": 12,
-    "derivedFaceScreens": 0
+    "derivedFaceScreens": 4
   },
   "speakers": [],
   "tunes": [],
@@ -765,7 +849,7 @@
     "cues": []
   },
   "collision": {
-    "enabled": false,
+    "enabled": true,
     "provider": "Analytic",
     "contactSkin": 0.02,
     "maxIterations": 4,

@@ -460,9 +460,9 @@ internal static class WorldDefinitionValidator {
 
                     // The inner radius must leave a live envelope band: the mixer's finite-support law needs
                     // inner < outer (inner == outer would divide the smoothstep by zero support).
-                    if ((bed.InnerRadius is { } innerRadius) &&
-                        (!float.IsFinite(f: innerRadius) || (innerRadius < 0f) || (float.IsFinite(f: bed.Radius) && (innerRadius >= bed.Radius)))) {
-                        errors.Add(item: $"{path}.innerRadius {innerRadius} must be finite, non-negative, and less than radius {bed.Radius}.");
+                    if (!float.IsFinite(f: bed.InnerRadius) || (bed.InnerRadius < 0f) ||
+                        (float.IsFinite(f: bed.Radius) && (bed.InnerRadius >= bed.Radius))) {
+                        errors.Add(item: $"{path}.innerRadius {bed.InnerRadius} must be finite, non-negative, and less than radius {bed.Radius}.");
                     }
 
                     if (bed.FadeSeconds is { } fadeSeconds) {

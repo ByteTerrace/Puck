@@ -18,6 +18,13 @@
 //       baked-default fallback with a nonexistent path). DEFAULT kind when nothing is specified: expo.
 //   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
 //       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
+//   screens [--width W] [--height H] [--no-build] [--rom PATH]
+//       The diegetic-screen + engagement proof: a joypad-echo ROM boots onto a screen slab and the world's own
+//       intent wire drives it. The route table is asserted through its REFUSALS (a non-machine slot, a passive
+//       jumbotron, an out-of-range engage each name their own reason), then a within-radius engage lands, a run +
+//       press reaches 0xC000 as the Up|A image the ROM echoes back, the ROM's 0xC001 counter advances (liveness),
+//       and disengage clears the held buttons AND hands the avatar back its drive (a measured z displacement, not
+//       an echo). A population reactivation must not inherit the stale route; eject reveals the declared view.
 //   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The world-document proofs (puck.world.def.v1): (a) the save-idempotence
 //       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) boots, saves,
@@ -187,6 +194,13 @@
 //       DOCUMENT refusal (loud, journal unchanged) while a claim against a table filled by a 124-peer census is a RUNTIME
 //       admission refusal (the document applies; the server says loudly that no slot was free and nobody is admitted).
 //       Every round settles wire.errors against its own deliberate refusals and the session ends asserting zero.
+//   sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The creation sub-editor proof, on BOTH backends: sculpt a creation from nothing over stdin
+//       (editor.sculpt.* primitives, palette, a chain/IK pose), commit it as ONE canonicalized UpsertCreation,
+//       stamp it at the bench origin, and demand PIXEL IDENTITY between the workbench preview and the committed
+//       stamp. Then the two undo domains assert as distinct, a 2-frame timeline's stamp ANIMATES, re-sculpting
+//       live-refreshes the placement, an imported carrier's cameras/behavior/extensions survive a model
+//       round-trip, the easel verb wires a bench camera onto a screen row, and the furnished save reloads stably.
 //   audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
 //       patches/tune through the HASH-PIN handshake (a bogus hash rejects loudly NAMING the canonical sha256, which
@@ -3541,7 +3555,7 @@ static class ScreensProof {
             // (4) OUT-OF-RANGE ENGAGE — screen 0 has a machine but demands proximity (radius 2.5): far away errors.
             Send(ctx: ctx, line: "player.warp 20 20 1");
             passed &= ExpectEcho(ctx: ctx, name: "engage-out-of-range-errors", command: $"player.engage {machineScreen}",
-                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "engage")));
+                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "u to engage (player.warp closer)")));
 
             // (5) ENGAGE — warp within the radius (screen 0 origin is x=-3 z=-3), then engage succeeds.
             Send(ctx: ctx, line: "player.warp -3 -1 1");
@@ -3577,7 +3591,9 @@ static class ScreensProof {
             Send(ctx: ctx, line: "player.run 1 0 0 1 1");
             var poseAfter = PollWhereUntil(ctx: ctx, index: 1, until: p => ((poseBefore is { } b) && (Math.Abs(value: (p.Z - b.Z)) > 0.3)));
 
-            passed &= Check(name: "avatar-moves-after-disengage", ok: ((poseBefore is not null) && (poseAfter is not null)),
+            // PollWhereUntil returns the LAST pose on timeout, never null, so the displacement must be asserted here.
+            passed &= Check(name: "avatar-moves-after-disengage",
+                ok: ((poseBefore is { } restPose) && (poseAfter is { } movedPose) && (Math.Abs(value: (movedPose.Z - restPose.Z)) > 0.3)),
                 detail: $"z {(poseBefore?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")} -> {(poseAfter?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")}");
 
             // (10) POPULATION LIFETIME — an engagement route belongs to one WorldBody lifetime, not merely its
@@ -9773,10 +9789,20 @@ static class AudioProof {
 
             Console.WriteLine(value: "[proof] === audio (i): speakers through the editor — select, drag, undo, the numeric twins ===");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "editor-enters");
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers left", expect: "speakers 'left'", name: "speaker-selects");
+            var speakerXBefore = ReadSelectedSpeakerX(ctx: ctx, name: "speaker-selects");
+
+            passed &= (speakerXBefore is not null);
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab 1", expect: "dragging speakers 'left'", name: "speaker-grabs");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1 speaker 'left'", name: "speaker-drags");
             passed &= Mutate(ctx: ctx, name: "speaker-release-commits", line: "editor.release 1", needle: "[world.mutation: UpsertSpeaker 'left' applied]", dirty: 15);
+
+            // THE BEHAVIORAL HALF: editor.release commits the pending row whether or not the delta landed, so read the
+            // committed center back. A no-op DragHandler passes every echo above and fails exactly here.
+            var speakerXAfter = ReadSelectedSpeakerX(ctx: ctx, name: "speaker-reselects");
+
+            passed &= ComposedShotKit.Check(name: "speaker-drag-moves-the-row",
+                ok: ((speakerXBefore is { } beforeX) && (speakerXAfter is { } afterX) && (Math.Abs(value: ((afterX - beforeX) - 1.0)) < 0.25)),
+                detail: $"x {(speakerXBefore?.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")} -> {(speakerXAfter?.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")} (drag dx 1)");
             passed &= Mutate(ctx: ctx, name: "speaker-drag-undoes", line: "world.undo", needle: "[world.undo: dropped 1, 14 remaining]", dirty: 14);
             passed &= Mutate(ctx: ctx, name: "speaker-place-verb", line: "editor.speaker.place probe synth:chirp 4", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 15);
             passed &= Mutate(ctx: ctx, name: "speaker-gain-verb", line: "editor.speaker.gain probe 0.5", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 16);
@@ -9927,6 +9953,24 @@ static class AudioProof {
         var rejected = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: rejectPrefix) && l.Contains(value: needle)), deadlineSeconds: 20.0);
 
         return ComposedShotKit.Check(name: name, ok: (rejected is not null), detail: (rejected?.Trim() ?? $"(no '{rejectPrefix} ...{needle}' echo)"));
+    }
+
+    static readonly Regex SpeakerSelectEcho = new(options: RegexOptions.Compiled,
+        pattern: @"\[editor\.select: seat \d+ speakers '[^']+' at \((-?[0-9.]+), (-?[0-9.]+), (-?[0-9.]+)\)\]");
+
+    // Re-selects the 'left' bed and parses the X of the echoed document position — the committed-pose witness the
+    // drag round compares before/after. Selection is read-only, so this never perturbs the journal.
+    static double? ReadSelectedSpeakerX(ComposedShotKit.Ctx ctx, string name) {
+        var line = AwaitEcho(ctx: ctx, line: "editor.select speakers left", needle: "speakers 'left'");
+        var match = ((line is not null) ? SpeakerSelectEcho.Match(input: line) : null);
+        var value = (((match is { Success: true }) &&
+            double.TryParse(s: match.Groups[1].Value, style: NumberStyles.Float, provider: ProofApp.Inv, result: out var parsed))
+            ? parsed
+            : (double?)null);
+
+        _ = ComposedShotKit.Check(name: name, ok: (value is not null), detail: (line ?? "(no editor.select echo)"));
+
+        return value;
     }
 
     static string? AwaitEcho(ComposedShotKit.Ctx ctx, string line, string needle) {

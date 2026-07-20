@@ -20,7 +20,8 @@ namespace Puck.Commands;
 /// <param name="Text">An optional text payload, such as typed characters.</param>
 /// <param name="CaptureTick">
 /// The monotonic capture time, in engine ticks (<see cref="IInputClock"/>), stamped at the earliest accurate
-/// point in the producing backend. <c>0</c> means unstamped (legacy). This is the authority for attributing
+/// point in the producing backend. <c>0</c> means unstamped — the router attributes the signal to the current tick.
+/// This is the authority for attributing
 /// the input to a fixed-step simulation tick and for rhythm-grade edge timing.
 /// </param>
 public readonly record struct InputSignal(

@@ -23,7 +23,8 @@ Nothing under it can be run or verified; it is port-reference material only.
 The World-side canon beyond the smoke:
 
 - **Document sanity**: `dotnet run src/Puck.World/scripts/proof.cs -- worlddoc`
-  (the ouroboros load→save→load byte-identity + baked-default parity proof).
+  (the ouroboros load→save→load byte-identity + baked-default parity readout —
+  an observation, not an acceptance criterion: a shipped world gaining keys is fine).
   Puck.World has no `--validate-*` flag; its whole CLI surface is `--backend
   --width --height --exit-after-seconds --present-mode --world --recording
   --storage-uri --user-id`.
