@@ -5,7 +5,7 @@ namespace Puck.Maths;
 /// theorem the expansion of every quadratic irrational is eventually periodic, and that period is the symbolic coding of a
 /// closed geodesic on the modular surface: the golden ratio <c>(1 + √5) / 2</c> codes to the all-ones period <c>[1; 1, 1, …]</c>
 /// and the silver ratio <c>1 + √2</c> to the all-twos period <c>[2; 2, 2, …]</c> — the two shortest closed geodesics, the same
-/// two units that drive <see cref="Quasicrystal"/> and its eight-fold sibling.
+/// two units that drive <see cref="GoldenQuasicrystal"/> and its eight-fold sibling <see cref="SilverQuasicrystal"/>.
 /// </summary>
 /// <remarks>
 /// The input is the quadratic irrational <c>(p + q·√d) / r</c>. The expansion is produced by the classical surd recurrence on a

@@ -2090,11 +2090,11 @@ for (var stepQ = -80; (stepQ <= 80); ++stepQ) {
 }
 Console.WriteLine("hexcoord: 6 unit neighbours, order-6 exact 60° rotation, associative ring w^2+w+1=0, Length = graph distance, Round to nearest cell OK");
 
-// ---- Quasicrystal (exact cut-and-project Fibonacci quasicrystal) ----
+// ---- GoldenQuasicrystal (exact cut-and-project Fibonacci quasicrystal) ----
 // From the origin, the chain walk must stay in the quasicrystal, invert under Previous, step by exactly φ or φ² in the
 // ring ((0,1) or (1,1)), advance monotonically, avoid the forbidden factors SS and LLL, and approach density φ.
 // Oracles: the membership test, the golden ratio, and the Fibonacci-word balance property — never the code's tables.
-if (!Quasicrystal.Contains(a: 0, b: 0)) {
+if (!GoldenQuasicrystal.Contains(a: 0, b: 0)) {
     throw new InvalidOperationException("QUASICRYSTAL ORIGIN IS NOT A MEMBER");
 }
 var qcPoint = (A: 0, B: 0);
@@ -2103,21 +2103,21 @@ var qcShort = 0L;
 var qcRun = 0;
 var qcPrevLong = false;
 for (var step = 0; (step < 100_000); ++step) {
-    var isLong = Quasicrystal.StartsLongTile(a: qcPoint.A, b: qcPoint.B);
-    var next = Quasicrystal.Next(a: qcPoint.A, b: qcPoint.B);
+    var isLong = GoldenQuasicrystal.StartsLongTile(a: qcPoint.A, b: qcPoint.B);
+    var next = GoldenQuasicrystal.Next(a: qcPoint.A, b: qcPoint.B);
     var deltaA = (next.A - qcPoint.A);
     var deltaB = (next.B - qcPoint.B);
 
-    if (!Quasicrystal.Contains(a: next.A, b: next.B)) {
+    if (!GoldenQuasicrystal.Contains(a: next.A, b: next.B)) {
         throw new InvalidOperationException("QUASICRYSTAL WALK LEFT THE SET");
     }
-    if (Quasicrystal.Previous(a: next.A, b: next.B) != qcPoint) {
+    if (GoldenQuasicrystal.Previous(a: next.A, b: next.B) != qcPoint) {
         throw new InvalidOperationException("QUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT");
     }
     if (isLong ? ((deltaA != 1) || (deltaB != 1)) : ((deltaA != 0) || (deltaB != 1))) {
         throw new InvalidOperationException("QUASICRYSTAL STEP IS NOT PHI OR PHI-SQUARED");
     }
-    if (Quasicrystal.Position(a: next.A, b: next.B) <= Quasicrystal.Position(a: qcPoint.A, b: qcPoint.B)) {
+    if (GoldenQuasicrystal.Position(a: next.A, b: next.B) <= GoldenQuasicrystal.Position(a: qcPoint.A, b: qcPoint.B)) {
         throw new InvalidOperationException("QUASICRYSTAL POSITIONS ARE NOT INCREASING");
     }
 
@@ -2142,6 +2142,75 @@ if (Math.Abs((qcDensity - ((1.0 + Math.Sqrt(5.0)) / 2.0))) > 0.01) {
     throw new InvalidOperationException("QUASICRYSTAL TILE DENSITY IS NOT THE GOLDEN RATIO");
 }
 Console.WriteLine($"quasicrystal: exact Z[phi] chain, Next/Previous inverse, phi/phi-squared steps, no SS/LLL, density {qcDensity:F4} -> phi OK");
+
+// ---- SilverQuasicrystal (exact cut-and-project silver-mean quasicrystal) ----
+// The eight-fold sibling of the Fibonacci chain: points of Z[sqrt2] whose conjugate a - b*sqrt2 lands in the window
+// [0, 2), spacing the line into two tiles sqrt2 and 2 + sqrt2 in the silver ratio 1 + sqrt2, arranged as the silver-mean
+// (Pell) word. First an INDEPENDENT membership oracle -- the conjugate-in-window definition computed in floating point,
+// never SilverQuasicrystal's own integer branches -- must agree with Contains across a whole integer box. Then the chain
+// walk from the origin must stay in the set, invert under Previous, step by exactly sqrt2 or 2 + sqrt2 in the ring ((0,1)
+// or (2,1)), advance monotonically, avoid the forbidden factors SS and LLLL, and approach density 1 + sqrt2.
+if (!SilverQuasicrystal.Contains(a: 0, b: 0)) {
+    throw new InvalidOperationException("SILVERQUASICRYSTAL ORIGIN IS NOT A MEMBER");
+}
+// Independent oracle: a + b*sqrt2 is a point exactly when its conjugate a - b*sqrt2 lies in [0, 2). Over |a|,|b| <= 400
+// the conjugate is never within 1e-3 of a window edge except the exact integer points (0,0) [included] and (2,0)
+// [excluded], both of which the 2.0 boundary handles, so the double computation is a faithful, code-independent oracle.
+for (var oracleB = -400; (oracleB <= 400); ++oracleB) {
+    for (var oracleA = -400; (oracleA <= 400); ++oracleA) {
+        var conjugate = (oracleA - (oracleB * 1.4142135623730951));
+        var expected = ((conjugate >= 0.0) && (conjugate < 2.0));
+
+        if (SilverQuasicrystal.Contains(a: oracleA, b: oracleB) != expected) {
+            throw new InvalidOperationException("SILVERQUASICRYSTAL MEMBERSHIP DISAGREES WITH THE CUT-AND-PROJECT ORACLE");
+        }
+    }
+}
+var silverPoint = (A: 0, B: 0);
+var silverLong = 0L;
+var silverShort = 0L;
+var silverRun = 0;
+var silverPrevLong = false;
+for (var step = 0; (step < 100_000); ++step) {
+    var isLong = SilverQuasicrystal.StartsLongTile(a: silverPoint.A, b: silverPoint.B);
+    var next = SilverQuasicrystal.Next(a: silverPoint.A, b: silverPoint.B);
+    var deltaA = (next.A - silverPoint.A);
+    var deltaB = (next.B - silverPoint.B);
+
+    if (!SilverQuasicrystal.Contains(a: next.A, b: next.B)) {
+        throw new InvalidOperationException("SILVERQUASICRYSTAL WALK LEFT THE SET");
+    }
+    if (SilverQuasicrystal.Previous(a: next.A, b: next.B) != silverPoint) {
+        throw new InvalidOperationException("SILVERQUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT");
+    }
+    if (isLong ? ((deltaA != 2) || (deltaB != 1)) : ((deltaA != 0) || (deltaB != 1))) {
+        throw new InvalidOperationException("SILVERQUASICRYSTAL STEP IS NOT SQRT2 OR TWO-PLUS-SQRT2");
+    }
+    if (SilverQuasicrystal.Position(a: next.A, b: next.B) <= SilverQuasicrystal.Position(a: silverPoint.A, b: silverPoint.B)) {
+        throw new InvalidOperationException("SILVERQUASICRYSTAL POSITIONS ARE NOT INCREASING");
+    }
+
+    if (isLong) {
+        silverLong++;
+        silverRun = (((step > 0) && silverPrevLong) ? (silverRun + 1) : 1);
+
+        if (silverRun >= 4) { throw new InvalidOperationException("SILVERQUASICRYSTAL HAS THE FORBIDDEN FACTOR LLLL"); }
+    } else {
+        silverShort++;
+
+        if ((step > 0) && !silverPrevLong) { throw new InvalidOperationException("SILVERQUASICRYSTAL HAS THE FORBIDDEN FACTOR SS"); }
+
+        silverRun = 0;
+    }
+
+    silverPrevLong = isLong;
+    silverPoint = next;
+}
+var silverDensity = ((double)silverLong / silverShort);
+if (Math.Abs((silverDensity - (1.0 + Math.Sqrt(2.0)))) > 0.01) {
+    throw new InvalidOperationException("SILVERQUASICRYSTAL TILE DENSITY IS NOT THE SILVER RATIO");
+}
+Console.WriteLine($"silverquasicrystal: exact Z[sqrt2] chain, membership vs oracle, Next/Previous inverse, sqrt2/2+sqrt2 steps, no SS/LLLL, density {silverDensity:F4} -> 1+sqrt2 OK");
 
 // ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
 // The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
@@ -2871,11 +2940,11 @@ for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.HexCoord.Direct
 quatTimer.Stop();
 Console.WriteLine($"hex direction        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.Quasicrystal.Contains(a: n, b: (n / 2)) ? 1 : 0); }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.GoldenQuasicrystal.Contains(a: n, b: (n / 2)) ? 1 : 0); }
 quatTimer.Stop();
 Console.WriteLine($"quasicrystal contains: {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.Quasicrystal.Next(a: n, b: (n / 2)).A; }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.GoldenQuasicrystal.Next(a: n, b: (n / 2)).A; }
 quatTimer.Stop();
 Console.WriteLine($"quasicrystal next    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 var benchModularA = ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L);
