@@ -1934,6 +1934,212 @@ if ((Math.Abs((latticeTurn - 12.0)) > 0.1) && (Math.Abs((latticeTurn - 348.0)) >
 }
 Console.WriteLine($"symmetry lattice: 240 nodes, reflections transitive (full group), order-30 cycle into 8 rings of 30, projection {latticeGoldenPairs} golden pairs OK");
 
+// ---- HilbertCurve (locality-preserving space-filling curve) ----
+// Encode/Decode must be inverse, a bijection onto [0, 4^order), and map consecutive distances to grid neighbours (the
+// defining locality property). Oracles: the bijection/inverse definitions and Manhattan distance, never the code.
+for (var order = 1; (order <= 9); ++order) {
+    var side = (1U << order);
+    var cells = ((ulong)side * side);
+    var hilbertSeen = new bool[cells];
+    var previous = (X: 0U, Y: 0U);
+
+    for (var distance = 0UL; (distance < cells); ++distance) {
+        var point = HilbertCurve.Decode(order: order, distance: distance);
+
+        if (hilbertSeen[distance]) { throw new InvalidOperationException("HILBERT CURVE IS NOT A BIJECTION"); }
+        hilbertSeen[distance] = true;
+
+        if (HilbertCurve.Encode(order: order, x: point.X, y: point.Y) != distance) {
+            throw new InvalidOperationException("HILBERT ENCODE IS NOT THE INVERSE OF DECODE");
+        }
+        if ((distance > 0UL) && ((Math.Abs(((int)point.X - (int)previous.X)) + Math.Abs(((int)point.Y - (int)previous.Y))) != 1)) {
+            throw new InvalidOperationException("HILBERT CONSECUTIVE POINTS ARE NOT GRID NEIGHBOURS");
+        }
+
+        previous = point;
+    }
+}
+var hilbertProbe = 0x9E3779B97F4A7C15UL;
+for (var order = 1; (order <= 31); ++order) {
+    var mask = ((1U << order) - 1U);
+
+    for (var sample = 0; (sample < 4096); ++sample) {
+        hilbertProbe = unchecked(((hilbertProbe * 6364136223846793005UL) + 1442695040888963407UL));
+
+        var x = (((uint)(hilbertProbe >> 33)) & mask);
+        var y = (((uint)hilbertProbe) & mask);
+
+        if (HilbertCurve.Decode(order: order, distance: HilbertCurve.Encode(order: order, x: x, y: y)) != (x, y)) {
+            throw new InvalidOperationException("HILBERT ROUND TRIP FAILED AT HIGH ORDER");
+        }
+    }
+}
+Console.WriteLine("hilbert curve: bijection + inverse + neighbour adjacency (order 1-9), 31-bit round-trips OK");
+
+// ---- HexCoord (exact Eisenstein-integer hex grid) ----
+// Six distinct unit neighbours at distance one; 60° rotation (a unit multiply) has order six and preserves both Length
+// and Norm, with RotatedLeft/RotatedRight inverse; the Eisenstein product is an associative ring with ω²+ω+1=0; Length
+// is the true graph distance; Round snaps to the nearest cell. Oracles: BFS distance, the ring laws, Euclidean search.
+for (var direction = 0; (direction < HexCoord.NeighborCount); ++direction) {
+    if (HexCoord.Direction(direction: direction).Length != 1) {
+        throw new InvalidOperationException("HEXCOORD UNIT IS NOT AT DISTANCE ONE");
+    }
+
+    for (var other = (direction + 1); (other < HexCoord.NeighborCount); ++other) {
+        if (HexCoord.Direction(direction: direction) == HexCoord.Direction(direction: other)) {
+            throw new InvalidOperationException("HEXCOORD UNITS ARE NOT DISTINCT");
+        }
+    }
+}
+var hexOmega = new HexCoord(Q: 0, R: 1);
+if ((((hexOmega * hexOmega) + hexOmega) + HexCoord.MultiplicativeIdentity) != HexCoord.AdditiveIdentity) {
+    throw new InvalidOperationException("HEXCOORD RING RELATION w^2+w+1=0 FAILED");
+}
+for (var q = -24; (q <= 24); ++q) {
+    for (var r = -24; (r <= 24); ++r) {
+        var hex = new HexCoord(Q: q, R: r);
+
+        if ((hex.RotatedLeft().Length != hex.Length) || (hex.RotatedLeft().Norm != hex.Norm)) {
+            throw new InvalidOperationException("HEXCOORD ROTATION CHANGED LENGTH OR NORM");
+        }
+        if (hex.RotatedLeft().RotatedRight() != hex) {
+            throw new InvalidOperationException("HEXCOORD ROTATIONS ARE NOT INVERSE");
+        }
+
+        var spun = hex;
+        for (var i = 0; (i < 6); ++i) { spun = spun.RotatedLeft(); }
+        if (spun != hex) { throw new InvalidOperationException("HEXCOORD ROTATION IS NOT ORDER SIX"); }
+
+        var scaled = new HexCoord(Q: (q % 6), R: (r % 6));
+        if (((hex * hexOmega) * scaled) != (hex * (hexOmega * scaled))) {
+            throw new InvalidOperationException("HEXCOORD RING PRODUCT IS NOT ASSOCIATIVE");
+        }
+    }
+}
+// Length equals the breadth-first graph distance out to radius 12 (array BFS, no generic collections).
+const int hexRadius = 12;
+const int hexOffset = (hexRadius + 1);
+const int hexSpan = ((2 * hexOffset) + 1);
+var hexDistance = new int[hexSpan * hexSpan];
+var hexFrontier = new int[hexSpan * hexSpan];
+Array.Fill(array: hexDistance, value: -1);
+int[] hexDirQ = [1, 1, 0, -1, -1, 0];
+int[] hexDirR = [0, 1, 1, 0, -1, -1];
+var hexOrigin = ((hexOffset * hexSpan) + hexOffset);
+hexDistance[hexOrigin] = 0;
+var hexHead = 0;
+var hexTail = 0;
+hexFrontier[hexTail++] = hexOrigin;
+while (hexHead < hexTail) {
+    var packed = hexFrontier[hexHead++];
+    var cellQ = ((packed / hexSpan) - hexOffset);
+    var cellR = ((packed % hexSpan) - hexOffset);
+    var cellDistance = hexDistance[packed];
+
+    if (cellDistance >= hexRadius) { continue; }
+
+    for (var k = 0; (k < 6); ++k) {
+        var stepQ = (cellQ + hexDirQ[k]);
+        var stepR = (cellR + hexDirR[k]);
+
+        if ((stepQ < -hexOffset) || (stepQ > hexOffset) || (stepR < -hexOffset) || (stepR > hexOffset)) { continue; }
+
+        var stepPacked = (((stepQ + hexOffset) * hexSpan) + (stepR + hexOffset));
+
+        if (hexDistance[stepPacked] < 0) {
+            hexDistance[stepPacked] = (cellDistance + 1);
+            hexFrontier[hexTail++] = stepPacked;
+        }
+    }
+}
+for (var q = -hexRadius; (q <= hexRadius); ++q) {
+    for (var r = -hexRadius; (r <= hexRadius); ++r) {
+        var packed = (((q + hexOffset) * hexSpan) + (r + hexOffset));
+
+        if ((hexDistance[packed] >= 0) && (new HexCoord(Q: q, R: r).Length != hexDistance[packed])) {
+            throw new InvalidOperationException("HEXCOORD LENGTH DISAGREES WITH GRAPH DISTANCE");
+        }
+    }
+}
+// Round lands on the nearest cell, checked against an independent Euclidean search.
+for (var stepQ = -80; (stepQ <= 80); ++stepQ) {
+    for (var stepR = -80; (stepR <= 80); ++stepR) {
+        var fractionalQ = (stepQ * 0.15);
+        var fractionalR = (stepR * 0.15);
+        var rounded = HexCoord.Round(q: FixedQ4816.FromDouble(value: fractionalQ), r: FixedQ4816.FromDouble(value: fractionalR));
+        var best = double.MaxValue;
+
+        for (var a = -14; (a <= 14); ++a) {
+            for (var b = -14; (b <= 14); ++b) {
+                var dx = ((a - fractionalQ) - ((b - fractionalR) * 0.5));
+                var dy = ((b - fractionalR) * 0.8660254037844386);
+                best = Math.Min(best, ((dx * dx) + (dy * dy)));
+            }
+        }
+
+        var gx = ((rounded.Q - fractionalQ) - ((rounded.R - fractionalR) * 0.5));
+        var gy = ((rounded.R - fractionalR) * 0.8660254037844386);
+
+        if (((gx * gx) + (gy * gy)) > (best + 0.001)) {
+            throw new InvalidOperationException("HEXCOORD ROUND IS NOT THE NEAREST CELL");
+        }
+    }
+}
+Console.WriteLine("hexcoord: 6 unit neighbours, order-6 exact 60° rotation, associative ring w^2+w+1=0, Length = graph distance, Round to nearest cell OK");
+
+// ---- Quasicrystal (exact cut-and-project Fibonacci quasicrystal) ----
+// From the origin, the chain walk must stay in the quasicrystal, invert under Previous, step by exactly φ or φ² in the
+// ring ((0,1) or (1,1)), advance monotonically, avoid the forbidden factors SS and LLL, and approach density φ.
+// Oracles: the membership test, the golden ratio, and the Fibonacci-word balance property — never the code's tables.
+if (!Quasicrystal.Contains(a: 0, b: 0)) {
+    throw new InvalidOperationException("QUASICRYSTAL ORIGIN IS NOT A MEMBER");
+}
+var qcPoint = (A: 0, B: 0);
+var qcLong = 0L;
+var qcShort = 0L;
+var qcRun = 0;
+var qcPrevLong = false;
+for (var step = 0; (step < 100_000); ++step) {
+    var isLong = Quasicrystal.StartsLongTile(a: qcPoint.A, b: qcPoint.B);
+    var next = Quasicrystal.Next(a: qcPoint.A, b: qcPoint.B);
+    var deltaA = (next.A - qcPoint.A);
+    var deltaB = (next.B - qcPoint.B);
+
+    if (!Quasicrystal.Contains(a: next.A, b: next.B)) {
+        throw new InvalidOperationException("QUASICRYSTAL WALK LEFT THE SET");
+    }
+    if (Quasicrystal.Previous(a: next.A, b: next.B) != qcPoint) {
+        throw new InvalidOperationException("QUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT");
+    }
+    if (isLong ? ((deltaA != 1) || (deltaB != 1)) : ((deltaA != 0) || (deltaB != 1))) {
+        throw new InvalidOperationException("QUASICRYSTAL STEP IS NOT PHI OR PHI-SQUARED");
+    }
+    if (Quasicrystal.Position(a: next.A, b: next.B) <= Quasicrystal.Position(a: qcPoint.A, b: qcPoint.B)) {
+        throw new InvalidOperationException("QUASICRYSTAL POSITIONS ARE NOT INCREASING");
+    }
+
+    if (isLong) {
+        qcLong++;
+        qcRun = (((step > 0) && qcPrevLong) ? (qcRun + 1) : 1);
+
+        if (qcRun >= 3) { throw new InvalidOperationException("QUASICRYSTAL HAS THE FORBIDDEN FACTOR LLL"); }
+    } else {
+        qcShort++;
+
+        if ((step > 0) && !qcPrevLong) { throw new InvalidOperationException("QUASICRYSTAL HAS THE FORBIDDEN FACTOR SS"); }
+
+        qcRun = 1;
+    }
+
+    qcPrevLong = isLong;
+    qcPoint = next;
+}
+var qcDensity = ((double)qcLong / qcShort);
+if (Math.Abs((qcDensity - ((1.0 + Math.Sqrt(5.0)) / 2.0))) > 0.01) {
+    throw new InvalidOperationException("QUASICRYSTAL TILE DENSITY IS NOT THE GOLDEN RATIO");
+}
+Console.WriteLine($"quasicrystal: exact Z[phi] chain, Next/Previous inverse, phi/phi-squared steps, no SS/LLL, density {qcDensity:F4} -> phi OK");
+
 static long VectorNormLocal(long x, long y, long z) {
     // Mirror of the internal FixedQuaternion.VectorNorm: nearest integer sqrt of the exact raw Q32 product sum
     // (no rounded Q16 intermediate).
@@ -2403,6 +2609,36 @@ quatTimer.Restart();
 for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Project(node: (n % 240)).X.Value; }
 quatTimer.Stop();
 Console.WriteLine($"lattice project      : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (long)Puck.Maths.HilbertCurve.Encode(order: 20, x: ((uint)n & 0xFFFFFU), y: (((uint)n * 2654435761U) & 0xFFFFFU)); }
+quatTimer.Stop();
+Console.WriteLine($"hilbert encode       : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (long)Puck.Maths.HilbertCurve.Decode(order: 20, distance: ((ulong)n & 0x3FFFFFFFFUL)).X; }
+quatTimer.Stop();
+Console.WriteLine($"hilbert decode       : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+var benchHexA = new Puck.Maths.HexCoord(Q: 5, R: -3);
+var benchHexB = new Puck.Maths.HexCoord(Q: 2, R: 4);
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (benchHexA * benchHexB).Q + n; }
+quatTimer.Stop();
+Console.WriteLine($"hex product          : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= new Puck.Maths.HexCoord(Q: n, R: (n * 3)).Length; }
+quatTimer.Stop();
+Console.WriteLine($"hex length           : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.HexCoord.Direction(direction: n).Q; }
+quatTimer.Stop();
+Console.WriteLine($"hex direction        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.Quasicrystal.Contains(a: n, b: (n / 2)) ? 1 : 0); }
+quatTimer.Stop();
+Console.WriteLine($"quasicrystal contains: {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.Quasicrystal.Next(a: n, b: (n / 2)).A; }
+quatTimer.Stop();
+Console.WriteLine($"quasicrystal next    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 sink ^= quatSink;
 Console.WriteLine($"(sink {sink})");
 Console.WriteLine();
