@@ -72,6 +72,12 @@ internal sealed class WorldPopulation {
     /// inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
     public int MaxSimulated => (m_inhabitantFloor - LocalSeatCount);
 
+    /// <summary>The largest census <see cref="SetSimulatedCount"/> will actually grant right now — the tighter of the
+    /// remote admission cap (<c>networkPlayers</c>) and the live inhabitant floor (<see cref="MaxSimulated"/>). A request
+    /// above it is clamped to it, so the <c>world.population</c> echo names both the granted count and this ceiling
+    /// rather than letting a script read a success for a crowd it never got.</summary>
+    public int SimulatedCeiling => Math.Min(val1: m_remoteCap, val2: MaxSimulated);
+
     private readonly Entry[] m_entries = new Entry[MaxPopulation];
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
@@ -808,7 +814,7 @@ internal sealed class WorldPopulation {
         // Clamp against the remote admission cap (networkPlayers) AND the live inhabitant floor: inhabited peers at the
         // top of the table lower the census ceiling by their physical occupancy, so a request past either is clamped
         // rather than allowed to collide with an inhabitant or breach the cap.
-        var clamped = Math.Clamp(value: count, min: 0, max: Math.Min(val1: m_remoteCap, val2: MaxSimulated));
+        var clamped = Math.Clamp(value: count, min: 0, max: SimulatedCeiling);
         var changed = false;
 
         for (var offset = 0; (offset < MaxPopulationSimulated); offset++) {

@@ -4718,8 +4718,11 @@ What to look for, in order:
    `--world ./scratch/looks.world.json` boots **visually identical**.
 
 The creation-look pass (needs a creation in the document): assign a `creation`
-look and push `world.population 124` — confirm the **loud capacity rejection**
-naming the ceiling, firing at apply time rather than at a GPU allocation later.
+look and push `world.population 124` — the census **clamps** to the live ceiling
+(the authored `networkPlayers` cap, narrowed further by any inhabitant occupying
+the top of the peer slice) rather than being refused, so confirm the echo's
+`requested 124, GRANTED <n>` line and **assert the granted number**, never merely
+that the verb succeeded.
 
 **The R13 regression:** re-run `world.population` per-kit counts before and after
 the `WorldRowAssignment` rename with `stream: 0`. They must be identical — a

@@ -332,7 +332,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.population",
-            description: "Sets how many SIMULATED network stand-ins the world renders behind the four local seats, and how they behave between scripted tapes — the network-population simulator: world.population [count] [idle|wander] (tokens are order-independent; no argument echoes both). A bare integer 0..124 sets the active stand-in COUNT; a bare 'idle'/'wander' sets the BEHAVIOR. It answers 'what do N real people cost to render' by drawing that many avatars TODAY, before any wire exists — the up-to-128-player scale (16/64/128 tiers) proven as a render cost. Behavior 'wander' (default) has the stand-ins gently drift as a living crowd; 'idle' makes them hold still between player.run tape segments so a SCRIPTED CORPUS is the sole driver of entries 5..128 — the remote-server stand-in posture the 128-player stdin proof pipes. Arm world.timing on and read world.gpu to measure.",
+            description: "Sets how many SIMULATED network stand-ins the world renders behind the four local seats, and how they behave between scripted tapes — the network-population simulator: world.population [count] [idle|wander] (tokens are order-independent; no argument echoes both). A bare integer 0..124 sets the active stand-in COUNT; a bare 'idle'/'wander' sets the BEHAVIOR. It answers 'what do N real people cost to render' by drawing that many avatars TODAY, before any wire exists — the up-to-128-player scale (16/64/128 tiers) proven as a render cost. Behavior 'wander' (default) has the stand-ins gently drift as a living crowd; 'idle' makes them hold still between player.run tape segments so a SCRIPTED CORPUS is the sole driver of entries 5..128 — the remote-server stand-in posture the 128-player stdin proof pipes. A count past the LIVE ceiling (the authored networkPlayers admission cap, further narrowed by any inhabitant physically occupying the top of the peer slice) is CLAMPED to it, not refused — and the echo then leads with a 'requested N, GRANTED M' line, so a script reads the count it actually got. Arm world.timing on and read world.gpu to measure.",
             handler: (context, args) => {
                 if (args.Length == 0) {
                     return new CommandResult(Output: DescribePopulation());
@@ -380,15 +380,25 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // request/reply), so the echo below reads the applied state. An explicit idle/wander token sets the
                 // peer-source DEFAULT and sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity
                 // player.control does not survive the global flip; a count alone leaves existing peers' sources be.
+                // A census beyond the live ceiling is CLAMPED, not refused — the ceiling is the tighter of the authored
+                // networkPlayers admission cap and the inhabitant floor, and shrinking to fit is the right behavior. But
+                // the clamp used to be silent behind a success echo, so a script could believe it summoned a crowd it
+                // never got: the echo now leads with requested-vs-granted whenever the two differ.
+                string? clamp = null;
+
                 if (count is { } resolvedCount) {
-                    _ = link.SubmitSession(request: new SessionRequest.SetPopulation(Principal: WorldPrincipal.Console, Count: resolvedCount));
+                    var granted = link.SubmitSession(request: new SessionRequest.SetPopulation(Principal: WorldPrincipal.Console, Count: resolvedCount)).AssignedIndex;
+
+                    if (granted != resolvedCount) {
+                        clamp = $"[world.population: requested {resolvedCount}, GRANTED {granted} — clamped to the live ceiling ({population.SimulatedCeiling}: the networkPlayers admission cap under {population.MaxSimulated} free peer slots)]\n";
+                    }
                 }
 
                 if (behavior is { } resolvedBehavior) {
                     _ = link.SubmitSession(request: new SessionRequest.SetPeerSource(Principal: WorldPrincipal.Console, Source: resolvedBehavior));
                 }
 
-                return new CommandResult(Output: DescribePopulation());
+                return new CommandResult(Output: (clamp + DescribePopulation()));
             },
             routing: CommandRouting.Simulation
         );
