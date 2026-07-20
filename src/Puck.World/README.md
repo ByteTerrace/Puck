@@ -885,34 +885,48 @@ fixed-step loop from a tick counter instead of the presentation clock and blocks
 on the encode queue instead of dropping when it backs up (offline inverts the
 drop policy: correctness over liveness).
 
-## Deterministic replay (the input tape)
+## Live record/replay (the input tape)
 
 Distinct from the video recording graph above: this is the **engine snapshot
 recorder** — `SnapshotRecording`/`InputRecorder`/`ReplaySnapshotSource` (in
 `Puck.Commands`, below both composition roots, bit-for-bit gated by Post) — wired
-into World's live loop through `WorldReplayTape`. Unlike the demo's scripted-only
-capture, World's shared launcher produces one real `CommandSnapshot` per fixed tick
-and hands it to `WorldSimulation.Step`, so the tape records the **actual interactive
-session**. `WorldReplayTape.Intercept` appends each tick's snapshot while recording;
-on replay it substitutes the saved snapshot and re-applies it through the registry to
-re-drive the seats (the launcher already applied the live/empty one). A per-tick FNV
-hash over the population's fixed-point poses is the recording's tail hash.
+into World's live loop through `WorldReplayTape`. World's shared launcher produces
+one real `CommandSnapshot` per fixed tick and hands it to `WorldSimulation.Step`, so
+the tape records the **actual interactive session**. `WorldReplayTape.Intercept`
+appends each tick's snapshot while recording; on replay it substitutes the saved
+snapshot and re-applies it through the registry to re-drive the seats (the launcher
+already applied the live/empty one).
+
+**This is a live INPUT re-injection lever, not a deterministic replay of a saved
+moment.** On replay the saved input snapshots are fed into the LIVE world at whatever
+state it currently holds — the tape captures no starting world state and rehydrates
+none, so the replayed trajectory does **not** reproduce the recorded one bit-for-bit.
+A per-tick FNV hash over the population's fixed-point poses is echoed as the
+recording's tail hash, but it is **informational**: nothing compares a recorded run's
+hash against a replayed one, and because a replay advances one saved snapshot per sim
+tick (never synchronously inside one stdin drain, and with no wait/sync verb) a
+replay's tail hash is not readable back over the pipe. A replay is faithful only while
+the operator stays **hands-off** — there is no input lockout, so driving keys during
+playback double-drives the seat.
 
 | Verb (all Immediate) | Effect |
 |---|---|
 | `replay.record <name>` | Arms live recording; the next ticks append to the tape. |
-| `replay.stop` | Persists `<name>.puckreplay` (under `%LOCALAPPDATA%\Puck\World\Replays`) and echoes the path, tick count, and final state hash. |
+| `replay.stop` | Persists `<name>.puckreplay` (under `%LOCALAPPDATA%\Puck\World\Replays`) and echoes the path, tick count, and final state hash. Ends a recording only — a replay has no stop, it auto-ends when the tape runs out. |
 | `replay.play <name>` | Loads a saved tape and re-drives the running session from it, one snapshot per tick, until it runs out. |
 | `replay.list` / `replay.status` | Lists saved tapes / reports mode, active name, ticks, and last hash. |
 
 Immediate stdin verbs are not folded into the snapshot, so the `replay.*` verbs never
 record or replay themselves; physical device input and Simulation-routed world verbs
-are, so a replay reproduces the operator's driving and any world edits they made.
+are, so a replay re-injects the operator's driving and any world edits they made.
 World is not determinism-gated (constraint 8) — the bit-for-bit guarantee on the
 underlying snapshot machinery is Post's, self-referential; this tape is the live
-record/replay lever, the seed of a future `Puck.Replay`. **Not ported: the demo's
-`tick.explain`/`tick.watch`/`hash.mark` divergence-introspection** — a deliberate,
-recorded capability loss (OQ-14/OQ-17, 2026-07-19).
+record/replay lever, the seed of a future `Puck.Replay`. **Two capability losses vs.
+the demo, both deliberate and recorded (OQ-14/OQ-17, 2026-07-19):** the demo's
+`tick.explain`/`tick.watch`/`hash.mark` divergence-introspection, and the demo's
+`OverworldDeterminism` **deterministic replay-fidelity** (it replayed a seeded tape
+through a FRESH world, reproducing the trajectory bit-for-bit) — this lever trades
+that fidelity for live in-session input re-injection.
 
 ## The command wire (stdin format)
 

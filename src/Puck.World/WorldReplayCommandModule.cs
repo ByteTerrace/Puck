@@ -53,7 +53,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         }
 
         if (m_tape.Mode != WorldReplayMode.Idle) {
-            return Error(text: $"[replay.record: busy — tape is {m_tape.Mode.ToString().ToLowerInvariant()} '{m_tape.Name}'; stop it first]");
+            return Busy(verb: "replay.record");
         }
 
         m_tape.BeginRecording(name: args[0]);
@@ -89,7 +89,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         }
 
         if (m_tape.Mode != WorldReplayMode.Idle) {
-            return Error(text: $"[replay.play: busy — tape is {m_tape.Mode.ToString().ToLowerInvariant()} '{m_tape.Name}'; stop it first]");
+            return Busy(verb: "replay.play");
         }
 
         try {
@@ -125,6 +125,16 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         return new CommandResult(Output: (m_tape.Mode == WorldReplayMode.Idle)
             ? "[replay.status: idle]"
             : $"[replay.status: {mode} '{m_tape.Name}' | {m_tape.TickCount} ticks | last hash=0x{m_tape.LastHash:X16}]");
+    }
+
+    private CommandResult Busy(string verb) {
+        // The remedy is mode-accurate: replay.stop ends a recording, but nothing stops an in-progress replay — it runs
+        // to the end of its saved ticks and auto-idles — so a busy-because-replaying decline must not advise stopping it.
+        var remedy = (m_tape.Mode == WorldReplayMode.Recording)
+            ? "replay.stop persists it first"
+            : "let it run out first (a replay has no stop — it auto-ends when the tape runs out)";
+
+        return Error(text: $"[{verb}: busy — tape is {m_tape.Mode.ToString().ToLowerInvariant()} '{m_tape.Name}'; {remedy}]");
     }
 
     private static CommandResult Error(string text) => new(Output: text) { IsError = true };

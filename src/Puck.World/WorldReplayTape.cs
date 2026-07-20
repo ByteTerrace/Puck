@@ -20,17 +20,32 @@ internal enum WorldReplayMode {
 /// <summary>
 /// The live record/replay tape wired into Puck.World — the engine snapshot recorder
 /// (<see cref="InputRecorder"/>/<see cref="SnapshotRecording"/>/<see cref="ReplaySnapshotSource"/>) connected to the
-/// world's real per-tick <see cref="CommandSnapshot"/> stream. Unlike the demo's scripted-only capture, World's shared
-/// launcher loop produces one genuine snapshot per fixed tick and hands it to <see cref="WorldSimulation"/>, so
-/// <see cref="Intercept"/> records the actual interactive session and, on replay, feeds the saved snapshots back through
-/// the same command-apply path. A per-tick state hash over the population's fixed-point poses lets a scripted run compare
-/// a recorded run's tail hash against its replay's — "a saved moment re-happens" over the pipe.
+/// world's real per-tick <see cref="CommandSnapshot"/> stream. World's shared launcher loop produces one genuine snapshot
+/// per fixed tick and hands it to <see cref="WorldSimulation"/>, so <see cref="Intercept"/> records the actual
+/// interactive session and, on replay, re-injects the saved snapshots through the same command-apply path to re-drive the
+/// seats.
 /// </summary>
-/// <remarks>Single-threaded on the launcher's window-pump thread: the <c>replay.*</c> verbs are Immediate (they run
-/// inline during the command pump's drain) and <see cref="Intercept"/> runs inside the fixed-step
+/// <remarks>
+/// <para>This is a live INPUT re-injection lever, not a deterministic replay of a saved moment. On replay the saved input
+/// snapshots are fed into the LIVE world at whatever state it currently holds — the tape captures no starting world state
+/// and rehydrates none, so the replayed trajectory does NOT reproduce the recorded one bit-for-bit. The demo's retired
+/// <c>OverworldDeterminism</c> harness had that fidelity (it replayed a seeded input tape through a FRESH world); that
+/// deterministic-reproduction capability is an explicit loss here (OQ-14/OQ-17, 2026-07-19), not ported. World is not
+/// determinism-gated (constraint 8); the bit-for-bit guarantee lives on the underlying <see cref="SnapshotRecording"/>
+/// machinery, gated by Post (self-referential), not on this lever.</para>
+/// <para>The per-tick <see cref="HashState"/> over the population's fixed-point poses is INFORMATIONAL only — echoed by
+/// <c>replay.stop</c>/<c>replay.status</c>. Nothing compares a recorded run's hash against a replayed one, and because a
+/// replay advances one saved snapshot per sim tick (never synchronously within one stdin drain) there is no wait/sync
+/// verb to read a replay's tail hash back over the pipe.</para>
+/// <para>A replay is faithful only while the operator stays HANDS-OFF: <see cref="Intercept"/> substitutes the saved
+/// snapshot, but the launcher already applied this tick's live snapshot before <see cref="WorldSimulation.Step"/> ran
+/// (held-key unions, world edits), and there is no input lockout — driving keys during playback double-drives the seat.</para>
+/// <para>Single-threaded on the launcher's window-pump thread: the <c>replay.*</c> verbs are Immediate (they run inline
+/// during the command pump's drain) and <see cref="Intercept"/> runs inside the fixed-step
 /// <see cref="WorldSimulation.Step"/> — both on that one thread, so no locking is needed. Immediate stdin verbs are NOT
 /// folded into the snapshot, so the <c>replay.*</c> verbs never record or replay themselves; physical device input and
-/// Simulation-routed world verbs are, so a replay reproduces the operator's driving and any world edits they made.</remarks>
+/// Simulation-routed world verbs are, so a replay re-injects the operator's driving and any world edits they made.</para>
+/// </remarks>
 internal sealed class WorldReplayTape {
     private const string Extension = ".puckreplay";
     // World is unseeded (its determinism pins the mapping, not a seed), so recordings carry a fixed seed field — it is
@@ -207,8 +222,8 @@ internal sealed class WorldReplayTape {
         }
     }
 
-    /// <summary>Records the simulation's post-step state hash for this tick (the recording's tail hash, and the replay's
-    /// comparison value).</summary>
+    /// <summary>Records the simulation's post-step state hash for this tick (the recording's tail hash, echoed
+    /// informationally by <c>replay.stop</c>/<c>replay.status</c> — nothing compares it against a replay).</summary>
     /// <param name="hash">The tick's state hash.</param>
     public void NoteState(ulong hash) {
         if (m_mode != WorldReplayMode.Idle) {

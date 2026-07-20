@@ -78,14 +78,8 @@ Two more verbs drive the reveal ladder and its recursion end to end:
 | [`notch-repro.console`](notch-repro.console) | Reproduces the SDF ground-notch defect with grazing debug scenes and the overworld far-ground case where 16 px tile quantization exposes it. Uses the `sdf.cam` pose verb and captures depth and termination views. | *(the default run)* |
 | [`world-camera.console`](world-camera.console) | Exercises `world.camera add`/`list`/`del` and `world.wire` with the `guest:N`/`camera:N` wiring grammar. | *(the default run)* |
 | [`museum-tour.console`](museum-tour.console) | The Replay Museum + the Droste door: wires two exhibits' real `NestedWorldView` content, walks the player up to each with `player.move` for a real establishing/close shot, and captures both (`museum-tour-hall.png`/`-door.png`). | *(the default run)* |
-| [`replay-roundtrip.console`](replay-roundtrip.console) | The persisted-replay verbs (the `Puck.Replay` seed): `replay.capture` a deterministic scripted walk, `replay.list` it, `replay.verify` it TWICE and assert the SAME hash both times — a saved moment re-happening bit-for-bit. | *(the default run)* |
-| [**`planetoid-proof.console`**](planetoid-proof.console) | `planet.spawn` seats a walker on a small planetoid (down = `-grad(SDF)` from the live `SdfFieldEvaluator`); `planet.walk` circumnavigates it in quarter-turn stages, `planet.list` reports Up through all four quadrants, and the script captures each stage before a persisted-replay round trip. | *(the default run)* |
+| [**`planetoid-proof.console`**](planetoid-proof.console) | `planet.spawn` seats a walker on a small planetoid (down = `-grad(SDF)` from the live `SdfFieldEvaluator`); `planet.walk` circumnavigates it in quarter-turn stages, `planet.list` reports Up through all four quadrants, and the script captures each stage. | *(the default run)* |
 | [`carve-bake-proof.console`](carve-bake-proof.console) | The carve-bake pipeline (`docs/carve-bake-plan.md`): spawns a settled 20-carve cluster, flips `sdf.carve-bake on`, forces an immediate settle with `sdf.bake now`, verifies the bin swaps to a baked `SampledRegion` brick with `sdf.bake status`, then proves the invalidation (an edit falls back to analytic) and the disable round-trip (back to the identical analytic field). The throughput gate itself (`sdf.carves` >= 60 fps) is `bench.sweep sdf.carve-bake=off,on`, a separate headless proof. | *(the default run)* |
-
-[`../museum-walk.puckreplay`](../museum-walk.puckreplay) is an `OverworldRecording` of a ~3-second
-captured tape (720 ticks), the same bytes `replay-roundtrip.console`'s `replay.capture museum-walk` regenerates. It
-persists under the demo's local-data home when captured live (`%LOCALAPPDATA%\Puck\Demo\Replays\`, see
-`OverworldReplayStore`); the repo copy is a reference artifact, not something a verb loads directly by path.
 
 ## Smoke scripts
 
@@ -97,7 +91,6 @@ expected stdout responses, with no captures required.
 | [`smoke-sdf-debug.console`](smoke-sdf-debug.console) | Enters the SDF debugger, exercises `sdf.shape`/`sdf.op`/`sdf.shape2`/`sdf.blend`, tours the gallery (list + a jump straight to `drift-monolith`, exhibit 8), touches `sdf.bench`, then exits the mode cleanly. | *(the default run)* |
 | [`smoke-overworld-control.console`](smoke-overworld-control.console) | The scripted-control basics: `state`, `terminal`/`ui.diegetic` toggles, `cart`, `boot`, `step`/`settle`, and a `press` tape — on console 1, since a connected pad auto-takes-over console 0 on boot and `press` refuses an owned cabinet. | *(the default run)* |
 | [`smoke-help-surface.console`](smoke-help-surface.console) | Proves the verb-registry surface itself: the built-in `help` listing, plus one demonstration that `help <verb>` is NOT supported (a clean parse error, not a crash). | *(the default run)* |
-| [`introspection-tour.console`](introspection-tour.console) | The engine narrating itself: `tick.watch on`, drive real state-mutating activity (`boot`/`press`), `tick.explain` reads back the tick history (commands dispatched + hash before→after, short and full), `hash.mark`/`hash.marks` bisect a change over the pipe. | *(the default run)* |
 
 **Run and check**: pipe a script into the demo exactly like any other script here (see [Running one](#running-one)
 above), give `--exit-after-seconds` enough headroom for its `step`/`settle` waits, and watch stdout for the bracketed

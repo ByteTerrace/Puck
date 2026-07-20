@@ -49,12 +49,4 @@ step 200
 planet.list
 capture artifacts/console/planetoid-proof-360.png
 
-# THE PERSISTENCE PROOF (mirrors replay-roundtrip.console): capture this session's OWN scripted-walk determinism
-# machinery (a SEPARATE fresh OverworldWorld under the hood — see OverworldReplayCapture's scoping remarks; this
-# proves the general record/replay seam still holds bit-for-bit, not the planetoid content specifically), then verify
-# it TWICE and assert the SAME hash both times.
-replay.capture planetoid-lap
-replay.verify planetoid-lap
-replay.verify planetoid-lap
-
 state

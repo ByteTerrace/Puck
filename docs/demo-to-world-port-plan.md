@@ -100,8 +100,10 @@ items:
   `WorldReplayCommandModule` (`replay.*` verbs) now record/replay World's real
   per-tick `CommandSnapshot` stream; the nine + `TickNarration` + orphaned connectors
   are deleted (`OverworldSnapshotProjection.cs` kept — live-pinned by
-  `RouterIntentSource`). Introspection (`tick.explain`/`tick.watch`) is a recorded
-  capability loss. See [OQ-14](#open-questions).
+  `RouterIntentSource`). TWO recorded capability losses: introspection
+  (`tick.explain`/`tick.watch`) AND deterministic replay-fidelity — World's tape is a
+  live input re-injection lever (it re-drives the running session), not the demo's
+  fresh-seeded bit-for-bit reproduction. See [OQ-14](#open-questions).
 
 **THE NEXT ACTION.** **Arc 8 Phase P1 (fork collapse)** is the plan's named
 pull-forward and the natural resumption point (it depends only on the landed
@@ -7917,12 +7919,24 @@ It is not purely a replay file — its `FromLane` is a LIVE dependency of
 so deleting it breaks the Demo library build. Per the deletion-discipline escape
 hatch it stays, pinned by `RouterIntentSource ← BindingBarAdapter`.
 
-**Capability loss recorded (OQ-17's introspection half, decided the same sitting):**
-`tick.explain` / `tick.watch` / `hash.mark` / divergence-bisection introspection is
-**explicitly NOT ported** — it follows later or is dropped separately. World gains
-live record/replay (a superset of the demo's scripted-only capture); it does NOT
-gain the interactive divergence-debugging tool. That is a deliberate, recorded loss,
-not an accident.
+**TWO capability losses recorded (decided the same sitting), both deliberate, not
+accidents:**
+
+1. **Divergence introspection (OQ-17's introspection half).** `tick.explain` /
+   `tick.watch` / `hash.mark` / divergence-bisection is **explicitly NOT ported** —
+   it follows later or is dropped separately. World does NOT gain the interactive
+   divergence-debugging tool.
+2. **Deterministic replay-fidelity.** World's tape is a live INPUT re-injection lever,
+   NOT a superset of the demo's capture. `WorldReplayTape.Intercept` feeds saved input
+   into the LIVE world at its current state; it captures/rehydrates no starting world
+   state, so a replay does **not** reproduce the recorded trajectory or its tail hash
+   bit-for-bit in-session. The demo's `OverworldDeterminism`/`replay.verify` replayed a
+   seeded tape through a FRESH world — a real bit-for-bit reproduction — and that
+   fidelity is a loss here. World trades it for the thing the demo lacked: re-injecting
+   a recording into a running interactive session. The recorded tail hash is
+   informational (echoed by `replay.stop`/`replay.status`); nothing compares recorded
+   vs. replayed, and a replay's tail hash is not synchronously readable over the pipe
+   (one saved snapshot advances per sim tick, no wait/sync verb).
 
 **STATUS: RESOLVED 2026-07-19.** Arc 3 Beat B executed (`686d009`); this owner
 sitting closed the one remaining pin. The `OQ-14 survivors` (`OverworldWorld.cs`,
