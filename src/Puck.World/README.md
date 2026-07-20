@@ -188,7 +188,8 @@ actions, the assignment policy, and addons), with a LOUD baked-default fallback
 on any failure and one `[world] definition:` boot line. `world.save [path]`
 writes the active definition back canonically (stable member order, invariant
 numbers, LF, one trailing newline), so a load→save reproduces the file
-byte-for-byte — the ouroboros gate.
+byte-for-byte — the ouroboros round-trip (a property worth knowing, **not a
+landing gate**; see the proof-suite note below).
 
 This matches the **player-document stack** exactly (`WorldProfile` /
 `WorldPlayerDocument` / `BuildDefault`): a serialization-friendly record shape
@@ -270,7 +271,7 @@ separate flag. `world.undo [n]` restores the loaded base definition and
 deterministically replays the journal minus its tail through the SAME apply
 path — no per-mutation inverse is ever written, because replay IS the undo.
 `world.save [path]` writes a **session snapshot** back canonically (the
-ouroboros gate) and then compacts: the saved definition becomes the new base and
+ouroboros round-trip) and then compacts: the saved definition becomes the new base and
 the journal clears, so `dirty` drops to 0. `world.load <path>` swaps the whole
 document and also resets the journal (a freshly loaded file starts clean).
 
@@ -290,8 +291,8 @@ file reproduces it. The fold is **saved-bytes-only**: it composes the snapshot
 the writer serializes and never mutates the in-memory definition or the journal
 (a save is a snapshot, not a mutation). It is exactly IDEMPOTENT on a freshly
 booted world — live session state equals the document defaults at boot — so the
-ouroboros gate still holds after a save learns to fold, for every checked-in
-world (proven over all three by `proof.cs worlddoc`). Because the fold is
+ouroboros round-trip still holds after a save learns to fold, for every
+checked-in world (observed over all three by `proof.cs worlddoc`). Because the fold is
 saved-bytes-only, `world.status`'s `session-drift` hint honestly persists past a
 save: it names which live dimensions (`render`/`population`/`screens`) differ
 from the in-memory document (`none` when a save would reproduce the file) — a
@@ -1429,10 +1430,11 @@ are two drivers of the same code — the proof drives tune audio through a
 SYNCHRONOUS headless Humble core (never `QueuedMachineWorker`), steps the
 scripted pose table at the sim cadence, and SHA-256-hashes the raw s16 PCM.
 
-**The golden-hash doctrine.** The proof's printed PCM hashes are
-self-referential: they prove the whole path is deterministic (two full fresh
-runs must agree bit for bit), never that history is preserved — a deliberate
+**The PCM-hash doctrine.** The proof's printed PCM hashes are
+self-referential: they show the whole path is deterministic (two full fresh
+runs agree bit for bit), never that history is preserved — a deliberate
 mix-law correction is EXPECTED to change them; re-run and take the new values.
+They are a harness observation, **not a landing gate** (see the proof-suite note).
 Verify with `dotnet run src/Puck.World/scripts/audio-mix.cs` (the two hash
 proofs plus structural batteries: pan geometry, the cull contract, single-pull,
 soft-clip exactness, ramp bounds, seeded-synth reproducibility, voice steal,
@@ -1707,6 +1709,17 @@ the Post battery as usual.
 
 ## The proof suite (`scripts/proof.cs`)
 
+> **Goldens are not a gate (owner ruling, 2026-07-20).** World has no golden
+> corpus and does not depend on one yet. Byte-identity checks — the ouroboros
+> load→save round-trip, `git diff --exit-code` on the shipped worlds, "re-golden
+> the baseline" — are **observations, never acceptance criteria** for World
+> feature work; verification is by RUNNING the game and driving stdin verbs. If a
+> shipped world's JSON moves as a side effect of a landing, note it and move on.
+> The idea is kept: when the data settles, golden replays and baselines become
+> worth building. `Puck.Post`'s engine-tier batteries are a separate thing and are
+> untouched. Full ruling: **R18** in
+> [docs/demo-to-world-port-plan.md](../../docs/demo-to-world-port-plan.md).
+
 The proof tooling is ONE .NET 10 **file-based app** — no project, no NuGet, run
 straight off the source (as the rest of the codebase prefers over PowerShell):
 
@@ -1750,8 +1763,8 @@ contract. Nineteen subcommands:
   diegetic machine-screen route proof; it also checks that passive screen 0's
   overhead view rejects engagement.
 - **`worlddoc`** `[--no-build] [--width W] [--height H] [--exit-after-seconds
-  N]` — the world-document proof for `puck.world.def.v1`: (a) the **ouroboros
-  gate** — `world.save` on EVERY checked-in world (`default`, `kart-remap`, and
+  N]` — the world-document proof for `puck.world.def.v1` (informational, not a
+  gate): (a) the **ouroboros round-trip** — `world.save` on EVERY checked-in world (`default`, `kart-remap`, and
   `expo`) reproduces it byte-for-byte, and saving THAT copy again reproduces it a
   second time (so a save that folds session state stays idempotent on a
   fresh boot, for each); (b) **baked-default parity** — a `--kind hop` feeder run
@@ -1875,11 +1888,11 @@ contract. Nineteen subcommands:
   emission facets, cues, and the device's honest-silence posture.
 
 Three standalone harnesses sit beside `proof.cs` in `scripts/`, run the same way
-and gating the same surface:
+and covering the same surface (they gate nothing — see the note above):
 
 | Harness | Proves |
 |---|---|
-| `audio-mix.cs` | The pure mixer core offline, pinned by two golden PCM hashes — no device, no GPU |
+| `audio-mix.cs` | The pure mixer core offline, with two self-referential PCM hashes — no device, no GPU |
 | `audio-device.cs` | Device liveness, structurally: the failure paths (unsupported, declining, mid-stream fault) degrade to silence, count rebinds, and stop without a throw |
 | `overlay-envelope.cs` | `OverlayFrameBuilder` at its declared maxima with no GPU: saturation drops are counted (never silent), the toast tail reservation cannot be starved, and clip-table overflow drops rather than bleeding unclipped |
 

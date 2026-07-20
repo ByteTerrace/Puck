@@ -76,11 +76,12 @@ it compiles so the surviving pinned files build, and Arc 12 deletes it.
   **`WorldLookResolver` reroute** of the 5 humanoid-role call sites (a humanoid-leaf
   anchor on a creation-look body resolves through the catalog rig — never black,
   never crash).
-- **The `autoInsert` third touch of the frozen worlds.** Arc 5's non-null `autoInsert`
-  route field re-goldened all three shipped worlds (`default`, `expo`, `kart-remap`)
-  a **third** time, beyond constraint 2's two *named* exceptions (Arc 1
-  collision/motion, Arc 4 OQ-12 cameras). It is byte-preserving in intent but is an
-  unmentioned touch **awaiting owner accept/reverse**.
+- **The `autoInsert` third touch of the frozen worlds — MOOT under [R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20).**
+  Arc 5's non-null `autoInsert` route field moved all three shipped worlds
+  (`default`, `expo`, `kart-remap`) a **third** time, beyond constraint 2's two
+  *named* exceptions (Arc 1 collision/motion, Arc 4 OQ-12 cameras). Recorded as
+  history; it owes no owner accept/reverse. Moving world bytes as a side effect of
+  a landing is fine — only baking a feature into the default world is not.
 
 **Adversarial-pass follow-up (2026-07-19).** `3827ccd` was an owner-authored
 adversarial review (the settled-answers register, `docs/vision.md`, doc/skill
@@ -105,12 +106,19 @@ items:
   timestamps (QPC) and the validator's `clock:"sim"` semantics are untouched.
   capture.* smoke wrote valid webm on both backends.
 
-**Still owed the owner** from that same list:
+**ACCEPTED by the owner (2026-07-20) — no longer open:**
 
-- **`networkPlayers` headroom.** `default.world.json` ships `networkPlayers 124`
-  against a ceiling of 124 — Arc 7's inhabitation has no headroom in the shipped
-  world. Lowering it changes the default scene, so it is a deliberate owner call,
-  left untouched here.
+- **The empty boot + summonable crowd.** R-C's inhabitants-as-players ruling made
+  `networkPlayers` an admission cap rather than a static boot reservation, so the
+  default world no longer boots a 124-body wander crowd — boot shows the joined
+  seats, and the crowd is summoned with `world.population <n>`. **The owner has
+  BLESSED this consequence.** It is the accepted behavior of the shipped default
+  world, not an open question, and the old `networkPlayers` headroom concern
+  (`default.world.json` shipping `124` against a ceiling of `124`) dissolved with
+  it: the table is free at boot and inhabitation lands at slot 127 on the
+  untouched file.
+
+**Still owed the owner** from that same list:
 - **OQ-14 / the replay tape — DONE 2026-07-19, then SUPERSEDED by ruling R-A
   (2026-07-19): TRUE DETERMINISTIC REPLAY.** The first pass wired the engine snapshot
   recorder as a *live input re-injection lever* (it re-drove the running session,
@@ -162,7 +170,10 @@ per-track notes.
    restatement.
 2. Read the [standing rulings](#standing-rulings). They resolve places where
    two arcs designed the same thing differently; an arc that re-opens one is
-   re-litigating a settled question.
+   re-litigating a settled question. **Start with
+   [R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20)** — goldens,
+   byte-identity, and the ouroboros round-trip are **not gates**, and R18
+   outranks any verification step in this document that still reads like one.
 3. Build the [shared primitives](#shared-primitives) in the arcs that own them,
    first, before feature work. Seven of them are consumed by three or more arcs.
 4. **Read the [open questions](#open-questions) and their gate table.** **Twelve
@@ -570,8 +581,8 @@ strikes it from its deletion table; Arc 6 already declines it.
 
 ### R12 — Every new section is nullable, `WhenWritingNull`, with a static default
 
-This is the plan-wide rule that keeps `default.world.json` byte-frozen without an
-owner exception, and it retires `design-population`'s blocking question about
+This is the plan-wide rule that keeps the shipped worlds clean of empty
+feature keys, and it retires `design-population`'s blocking question about
 emitting `"looks": []`.
 
 > Every new document section added by any arc is a **nullable** property with
@@ -581,9 +592,10 @@ emitting `"looks": []`.
 > documented STJ omitted-collection trap). `WorldDefinition.Default` leaves every
 > new section `null`.
 
-Eight arcs add a section. Without one idiom, half of them emit empty keys into
-the frozen default world and the ouroboros round-trip (`scripts/proof.cs worlddoc`)
-breaks arc-by-arc. Arc 1 codifies it and documents it in `src/Puck.World/README.md`.
+Eight arcs add a section. Without one idiom, half of them bake their feature into
+the shipped worlds as empty keys, arc by arc — which constraint 2 forbids on its
+own terms, independent of any byte check (R18). Arc 1 codifies it and documents it
+in `src/Puck.World/README.md`.
 
 ### R13 — `AffectsPopulation` / `CompileFixedTables` are sequential, never parallel
 
@@ -689,6 +701,54 @@ open question; **(c)** consumed by something outside `Puck.Demo` → it is not D
 code and does not move. Beat B's deletion table then lists every path it took, so
 Arc 12's precondition is checkable by reading one table rather than by re-deriving
 the measurement.
+
+### R18 — Goldens are not a gate (owner ruling, 2026-07-20)
+
+**This ruling OUTRANKS every conflicting verification step elsewhere in this
+document.** Where an arc, a risk, a precondition, or an acceptance list still
+reads as though a byte-identity check must pass before work lands, R18 is the
+answer and that step is informational.
+
+> **The owner, 2026-07-20:** *"As far as goldens are concerned: we don't actually
+> have any. That's a feature you keep rebuilding, which I love by the way, but
+> it's just not something we're ready to depend on yet. Goldens keep getting in
+> the way of feature development at this stage. Keep the idea around, but stop
+> chaining yourself to goldens for the time being."*
+
+**The operative rules.**
+
+1. **Byte-identity is not an acceptance criterion.** The ouroboros load→save
+   round-trip (`scripts/proof.cs worlddoc`), `git diff --exit-code` on the
+   shipped worlds, and any "re-golden the baseline" step are **no longer gates,
+   preconditions, or acceptance criteria** for `Puck.World` feature work. They
+   are observations a developer may make, and nothing blocks on them.
+2. **Verification is by RUNNING `Puck.World`** and exercising behavior over
+   stdin verbs (constraint 6). That is the whole contract.
+3. **A shipped world's JSON moving as a side effect of a landing is FINE.** Note
+   it in the arc's execution record and move on. No exception ceremony, no owner
+   sign-off ritual for the diff itself.
+4. **The frozen-default-world constraint (constraint 2) still means "do not bake
+   YOUR FEATURE into the default world."** It never meant "the bytes may not
+   move." A feature that authors itself into `default.world.json` is still a
+   constraint-2 violation; a mechanical re-encoding or a new non-null field
+   landing in the file is not.
+5. **KEEP THE IDEA.** Golden replays and baselines become worth building **when
+   the data settles** — record that as a future lever, not a current gate. The
+   deterministic replay capability built under ruling R-A (`replay.verify` /
+   `WorldReplaySnapshot`) stays exactly as built: it is a **capability**, not a
+   golden gate. Only "the hash must match a stored baseline" stops being a
+   landing requirement.
+6. **`Puck.Post` is a separate thing and is untouched.** The engine-tier
+   batteries — the cross-backend render contract, the SDF VM ISA, the
+   run-document schema, the deterministic numerics, and the GamingBrick
+   batteries — are not weakened, relaxed, or reinterpreted by this ruling. R18
+   governs World feature work only.
+
+**What this retires, concretely.** The two "named exceptions" ceremony around
+the frozen worlds — Arc 4's OQ-12 camera re-encoding and Arc 7's `autoInsert`
+re-golden — is **moot going forward**. Both were taken and both are recorded
+below as history; neither would require sign-off today, and no future arc owes
+one for moving world bytes.
 
 ## Arc sequence
 
@@ -845,7 +905,7 @@ specific failure the abstractions-not-specifics doctrine exists to prevent.
 
 | # | Primitive | Built in | Consumed by | Why it must not be rebuilt |
 |---|---|---|---|---|
-| **P1** | The optional-section idiom (R12): nullable property + `WhenWritingNull` + static `Default`/`None` + one coalesce in `Validate` | **Arc 1** (+ README) | *all ten arcs* | Eight arcs add a section. Without one idiom, half emit empty keys into the frozen default world and the ouroboros gate breaks arc-by-arc. |
+| **P1** | The optional-section idiom (R12): nullable property + `WhenWritingNull` + static `Default`/`None` + one coalesce in `Validate` | **Arc 1** (+ README) | *all ten arcs* | Eight arcs add a section. Without one idiom, half bake their feature into the shipped worlds as empty keys, arc by arc — a constraint-2 violation on its own terms (R18). |
 | **P2** | `IContactField` (`Resolve` + `TryUp`) | **Arc 1** | 2 (SDF provider), 7 (inhabited bodies) | R2. Without `TryUp` on the seam, Arc 2 forks the integrator with a third `MotionModel`. |
 | **P3** | Console verb sugar: `internal static class WorldVerbSugar` in `src/Puck.World/` — `Row<T>`, `NamedRow<T>`, and the read-patch-resubmit `With<T>` pattern (see the [P3 contract](#p3--the-console-verb-sugar-contract) below) | **Arc 1** (a new shared file; Arc 1 also de-duplicates the two existing private copies into it) | 4, 5, 6, 7, 8, 9, 10 | Seven arcs independently describe the same helper shapes, and **each builds its own `ICommandModule`** — a private factory in the mutation module reaches none of them. Also carries the known `kit.tune` RMW hazard (two same-tick sugar verbs on one row: last writer wins) into one documented place instead of seven. |
 | **P4** | `WorldRowAssignment` + `RowFor(index, rowCount, stream)` — the renamed, stream-parameterized low-discrepancy assignment | **Arc 6** | 6 (kits + looks), 7 | `WorldKitAssignment` is misnamed for a policy with nothing kit-specific in it. The `stream` parameter is load-bearing: without it the look bucket is a monotone function of the kit bucket and the crowd visibly bands. `stream: 0` reproduces today's kit mapping bit-identically. |
@@ -1340,7 +1400,7 @@ world.save scratch/loco.world.json
 Then reload the saved file and confirm the solid facets and response table
 survived. **The negative check that matters most:** boot the unmodified
 `expo.world.json` (no `collision` section), confirm `world.contacts` reports zero
-solid rows and the world behaves byte-identically to before the arc — proving the
+solid rows and the world behaves as it did before the arc — proving the
 absence-coalesces default (P1) is genuinely inert.
 
 ### Risks
@@ -1374,10 +1434,12 @@ absence-coalesces default (P1) is genuinely inert.
    extending that one method covers them — but a fifth authoritative-reposition
    path would carry momentum through a teleport. This is the single most likely
    correctness bug in the arc.
-6. **The ouroboros round-trip rests on `JsonIgnore` behaving as expected for
-   positional record-struct params.** The serializer's initializer-skip trap is a
-   documented hazard. Verify the round-trip on an untouched world **before**
-   building on top of it.
+6. **`JsonIgnore` on positional record-struct params is a known serializer
+   hazard** (the initializer-skip trap): a section meant to be absent can
+   materialize as an empty key, which is how a feature accidentally bakes itself
+   into a shipped world. Worth a load→save look on an untouched world early —
+   **informational, not a gate** (R18); if the shipped JSON moves, note it in the
+   execution record.
 7. **Feel constants are unmeasured.** The default world's three-row table is a
    scaling of the Demo's numbers through `DefaultActionScale`. Defensible first
    values, not tuned ones. Expect a feel pass.
@@ -2674,20 +2736,14 @@ must give a 1280×800 window that is **still fullscreen and still adaptive**, wi
 silently shows 1280×800 instead of 1920×1080 and the whole section is inert.
 
 **The frozen default:** `dotnet run --project src/Puck.World -c Release --
---exit-after-seconds 2` must be byte-identical in boot behavior to the pre-arc
-build, and
+--exit-after-seconds 2` must boot the same world it booted before the arc — the
+same scene, the same pacing line, no host section authored into the file. That is
+constraint 2's real content: **this arc bakes no feature into the default world.**
 
-```
-git diff --exit-code src/Puck.World/Assets/worlds/default.world.json
-```
-
-must be clean **relative to this arc's own baseline, not to the plan's start**.
-Two named exceptions move that baseline: Arc 1 holds the owner's collision/motion
-exception (constraint 2), and Arc 4 holds the **owner-granted OQ-12 re-encoding
-exception** (2026-07-19) covering `default`, `expo`, and `kart-remap`. Diff
-against `HEAD` as it stood when this arc started — which, under OQ-15, is the
-pre-Arc-1 tree, since Beat B executes first. The rule is *"this arc changed no
-world file"*, not *"no world file has ever changed."* (The path is
+**Not a gate (R18).** `git diff --exit-code src/Puck.World/Assets/worlds/…` is an
+optional observation, not an acceptance criterion. If you happen to notice the
+shipped world's JSON moved, note it in the execution record and move on — no
+baseline arithmetic, no named exception, no owner sign-off. (The path is
 `src/Puck.World/Assets/worlds/…`; a bare `Assets/worlds/…` resolves only from
 inside the project directory.)
 
@@ -2926,8 +2982,11 @@ internal sealed record WorldViewDefaults(WorldRig SeatRig, IReadOnlyList<WorldVi
 `Group` orientation resolves to identity (a group has no facing; a group shot
 frames in world axes — set `WorldAxes: true`).
 
-**The default world's behaviour is frozen; its `cameras` rows are not — and that
-needs an owner exception (OQ-12).** The section header in an earlier draft claimed
+**The default world's behaviour is frozen; its `cameras` rows are not.** (This
+needed a named owner exception when it was written — OQ-12. Under
+[R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20) it would need none:
+moving world bytes is fine, only baking a feature into the default world is not.)
+The section header in an earlier draft claimed
 the file stayed frozen while the body admitted the camera rows change. They cannot
 both be true, and the header is the one a downstream engineer trusts.
 
@@ -2969,13 +3028,16 @@ whole point), and its `lookAt` becomes `LookAt.Target`. Nothing else moves: no n
 rows, no reordering, no `views` key.
 
 > **APPROVED by owner ruling, 2026-07-19 (OQ-12).** Re-encode the camera rows in
-> **all three** shipped worlds — `default`, `expo`, `kart-remap`. This is now the
-> **second named exception** to the frozen-default-world constraint, standing
-> alongside Arc 1's collision/motion one, and it is the last: no third arc may
-> reach for it by analogy. It remains what it claims to be — a mechanical
-> re-encoding required by a record change, with rendered output byte-unchanged —
-> and the arc's verification below is what proves that claim rather than
-> asserting it. The refused-case fallback (keeping `anchored`/`fixed` as on-disk
+> **all three** shipped worlds — `default`, `expo`, `kart-remap`. This was taken
+> at the time as the **second named exception** to the frozen-default-world
+> constraint, alongside Arc 1's collision/motion one. **That ceremony is retired
+> by [R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20) (2026-07-20):**
+> the historical record stands, but the re-encoding would require no sign-off
+> today, and no later arc owes one for moving world bytes. It remains what it
+> claims to be — a mechanical re-encoding required by a record change, with
+> rendered output unchanged — and the arc's verification below is what shows
+> that rather than asserting it. The refused-case fallback (keeping
+> `anchored`/`fixed` as on-disk
 > `$type`s that deserialize into the collapsed record) is **dead**: it was
 > read-side tolerance for a retired shape, **R8 stands and forbids it**, and with
 > the exception granted nothing needs it.
@@ -3210,7 +3272,7 @@ a `Group` anchor with an out-of-range entity index; a `Dolly` with
 unknown; **and a camera row still carrying the retired `"$type": "anchored"` —
 which must be a loud unknown-kind rejection, not silent tolerance (R8).**
 
-**The OQ-12 re-encoding check — the proof the granted exception rests on.** Boot each of the three shipped worlds
+**The OQ-12 re-encoding check — behavior, not bytes.** Boot each of the three shipped worlds
 (`default`, `expo`, `kart-remap`) after re-encoding their `cameras` rows and
 confirm `world.cameras` reports the same names, the same anchors, and the same
 field of view as the pre-arc build, and that the rendered first frame is unchanged.
@@ -3218,14 +3280,12 @@ The re-encoding is required to be *mechanical*: if any of the three needs a
 judgement call about framing, it is not a re-encoding and OQ-12's premise is
 wrong.
 
-`git diff --exit-code src/Puck.World/Assets/worlds/*.world.json` is therefore
-**expected to be non-empty for this arc** — that is what the owner granted. The
-baselines everywhere else in the plan follow from it, and the plan states them
-consistently: **Arc 3's gate diffs against its own start** (pre-Arc-1, since Beat
-B executes first under OQ-15), and **Arc 12's gate diffs against the post-Arc-1 /
-post-Arc-4 tree**, which is the only baseline under which a correct plan comes up
-clean. Do not treat a red diff here as a failed arc, and do not re-baseline
-Arc 3's gate against Arc 4 — Arc 3 runs first and touches no world file.
+This arc moves the shipped worlds' JSON, and **that is fine** — under
+[R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20) there is no
+`git diff --exit-code` gate anywhere in this plan and no baseline arithmetic to
+carry. Note the move in the execution record and move on. What the arc still owes
+is the behavioral check above: the same names, anchors, and framing, and no
+`views` key authored into any shipped world.
 
 ### Risks
 
@@ -3954,10 +4014,12 @@ again in range — disengage.
    capabilities** is undecided. It has its own `AgbLinkSession` and its own options
    vocabulary, so both interfaces are implementable — but nothing in this arc
    requires it, and doing it would widen scope. Flagged, not designed.
-5. **`world.save` round-tripping a magazine** must keep the ouroboros property. A
-   nested polymorphic list inside an optional record is the most complex shape the
-   canonical serializer has been asked for; the `worlddoc` proof is the check and
-   it may need the new types registered in `WorldJsonContext` source-gen.
+5. **`world.save` round-tripping a magazine.** A nested polymorphic list inside an
+   optional record is the most complex shape the canonical serializer has been
+   asked for, and it may need the new types registered in `WorldJsonContext`
+   source-gen. The real failure to watch for is a save that *loses* magazine
+   content or authors an empty `magazine` key into a shipped world; the `worlddoc`
+   round-trip is a convenient way to look, **not a gate** (R18).
 6. **The engage gesture's nearest-screen resolution lives client-side** (the binder
    is client-owned), so it reads the server body's pose in-process. That is the
    same LOOPBACK-ONLY caveat `PlayerCommandModule`'s radius check already carries
@@ -5690,8 +5752,9 @@ file the world points at; `Cartridge` = content the world derives.**
 `screen.insert`'s description says "external content by path — for a cartridge the
 world declares, use `screen.cart`", and `screen.cart`'s says the inverse. Chosen
 over the alternative (retire `Machine`, migrate everything to cartridge rows)
-because that would rewrite `default.world.json`'s one machine screen and needs the
-same owner exception as OQ-12 — a larger change to remove a smaller redundancy.
+because that would rewrite `default.world.json`'s one machine screen — a larger
+change to remove a smaller redundancy. (Rewriting it is *allowed* under R18; it is
+declined here on design grounds, not on a byte-freeze one.)
 
 **The forge stops being a noun.** It becomes the verb `cart.build`, and a
 *materializer* is an implementation detail of the screen binder.
@@ -6564,7 +6627,8 @@ null slot keeps today's in-memory-only behaviour.
 returning a new `EditorModeOutcome.NotPermitted` that narrates **which milestone
 still withholds it.** `WorldSessionCapture.Capture` drops `Raised` ids whose
 milestone has `Persist: false` — the existing SAVED-BYTES-ONLY fold posture,
-idempotent on a freshly-booted world, so the ouroboros gate is untouched.
+idempotent on a freshly-booted world, so a boot-then-save keeps reproducing the
+file it loaded.
 
 **Verbs** — a new `WorldProgressionCommandModule`:
 
@@ -7432,19 +7496,16 @@ are the plan's only two `Puck.Post` edits, both surfaced under R14.
 ```
 dotnet build -c Release                       # green, no Puck.Demo
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
-git diff --exit-code src/Puck.World/Assets/worlds/default.world.json   # vs the post-Arc-4 baseline
 dotnet run --project src/Puck.Post -c Release            # engine contract battery still green
-dotnet run src/Puck.World/scripts/proof.cs -- worlddoc   # the ouroboros round-trip
 ```
 
-The default-world diff is **relative to the tree after Arcs 1 and 4**, not to the
-plan's start: Arc 1 holds the owner's named collision/motion exception and Arc 4
-holds OQ-12's re-encoding exception, **granted by the owner on 2026-07-19 and
-covering `default`, `expo`, and `kart-remap`**. Diffing against the pre-plan tree
-makes this gate permanently red on a correct plan. The same baseline applies if
-this gate is widened to
-`src/Puck.World/Assets/worlds/*.world.json` — all three re-encoded worlds moved
-at Arc 4 and none moves here.
+The World check is behavioral: the terminal arc removes `Puck.Demo` and must
+leave the default world booting exactly the game it booted before. **There is no
+world-file diff gate** (R18) — `git diff` on
+`src/Puck.World/Assets/worlds/*.world.json` and
+`proof.cs worlddoc`'s round-trip are optional observations; if the shipped JSON
+moved, note it in the execution record. `Puck.Post` is untouched by that ruling
+and stays a hard gate.
 
 Plus: `grep -rn "Puck\.Demo" --include=*.cs --include=*.csproj --include=*.md .`
 returns **nothing outside git history.**
@@ -7927,18 +7988,15 @@ collision/motion exception, but Arc 4's collapsed `WorldCamera` retires the
 rows must be re-authored — in **three** shipped worlds, not one (`default`,
 `expo`, `kart-remap`, all verified).
 *The ruling:* **approved. Re-encode the camera rows in all three shipped worlds.**
-*What changed:* the frozen-default-world constraint now carries a **second named
-exception** alongside Arc 1's collision/motion one, and it is the last — no arc
-may reach for a third by analogy. Arc 4's sign-off blockquote is rewritten as
-granted, and the arc-sequence table's "needs the exception before it starts"
-becomes "carries the exception." **The refused-case fallback is dead**: it was
-read-side tolerance for a retired `$type`, and **R8 stands** and forbids it. The
-`git diff --exit-code` gates are stated consistently everywhere they appear —
-**Arc 3 diffs against its own start** (which under OQ-15 is the pre-Arc-1 tree,
-since Beat B executes first, and Arc 3 touches no world file), and **Arc 12 diffs
-against the post-Arc-1 / post-Arc-4 tree**. Arc 4's own world-file diff is
-**expected non-empty**. Left unamended these gates would go permanently red on a
-correct Arc 4.
+*What changed:* the frozen-default-world constraint carried a **second named
+exception** alongside Arc 1's collision/motion one. Arc 4's sign-off blockquote is
+rewritten as granted, and the arc-sequence table's "needs the exception before it
+starts" becomes "carries the exception." **The refused-case fallback is dead**: it
+was read-side tolerance for a retired `$type`, and **R8 stands** and forbids it.
+*Superseded 2026-07-20 by [R18](#r18--goldens-are-not-a-gate-owner-ruling-2026-07-20):*
+the exception ceremony is **moot** — this re-encoding would need no sign-off today
+— and the `git diff --exit-code` gates it required to be re-baselined are gone
+from the plan entirely, so there is nothing left to keep consistent.
 
 **OQ-13 — the diegetic console screen. RESOLVED 2026-07-19 — OPTION (a): Arc 5
 GAINS A `WorldScreenSource.Console` VARIANT.**
@@ -8177,7 +8235,7 @@ document**, and the three are easy to mistake for each other:
 | Item | Scope | What it produces |
 |---|---|---|
 | **OQ-14** | The Demo's whole `CommandSnapshot` replay + tick-introspection class (`tick.explain`, `tick.watch`, `hash.mark`, divergence bisection) — 9 files, deleted by Arc 3, ported by no arc | An **introspection** tool for debugging a divergence |
-| **[closeout-15](#track-e--branch-closeout-and-retired-plan-opens)** (Replay Reel) | `capture.render` — an offline sim-clock pump through the **already-landed** recording graph | A `.webm`, and a **demonstration** of determinism via byte-identical double-render |
+| **[closeout-15](#track-e--branch-closeout-and-retired-plan-opens)** (Replay Reel) | `capture.render` — an offline sim-clock pump through the **already-landed** recording graph | A `.webm`, and a **demonstration** of determinism via a double-render comparison (the row's own deliverable — informational, never a gate on other work: R18) |
 | **[sdf-34](#track-b--sdf-vm-render-and-perf)** (backlog #35) | Per-tick player-intent recording at the `IWorldQuery` level, for gravity/garden/RTS proofs | A deterministic **intent trace**, narrower than either |
 
 **The risk is specific and likely.** Building the Replay Reel gives World a
@@ -8864,7 +8922,7 @@ history holds the originals.
 | closeout-12 | Audio: adaptive-music tiers — reactive tune input bits (gameplay state feeds the tune compiler) plus an addon music director that stitches tunes into a dynamic score | `src/Puck.Forge` tune chain / `src/Puck.World/Audio` | CONFIRMED-OPEN | L |
 | closeout-13 | Rename `PhaseThreeDir` — phase-vocabulary scar tissue; held follow-up from the commentary hygiene pass | `src/Puck.World/scripts/proof.cs:1659` + 6 call sites (verified: 7 occurrences) | CONFIRMED-OPEN | S |
 | closeout-14 | Rename `ToastWriter` → `OverlayToastWriter` for consistency with the `Overlay*` family; held follow-up from the same pass | `src/Puck.Overlays/ToastWriter.cs:12` (verified: still `ToastWriter`) | CONFIRMED-OPEN | S |
-| closeout-15 | **The Replay Reel.** `capture.render <corpus\|replay> <recording-doc> [output]` — an offline pump driving the fixed-step loop from a **tick counter, not the presentation clock**, blocking on the encode queue instead of dropping, feeding every frame to the existing recording graph on `clock: "sim"`. Proved by a **byte-identical double-render** of the same corpus, plus a cross-quality re-render check | New — sits beside the launcher's fixed-step loop and the recording graph; no existing file owns it (verified: **no `capture.render` or `OfflinePump` symbol anywhere in `src/`**) | CONFIRMED-OPEN | L |
+| closeout-15 | **The Replay Reel.** `capture.render <corpus\|replay> <recording-doc> [output]` — an offline pump driving the fixed-step loop from a **tick counter, not the presentation clock**, blocking on the encode queue instead of dropping, feeding every frame to the existing recording graph on `clock: "sim"`. Demonstrated by a **double-render comparison** of the same corpus, plus a cross-quality re-render check — the row's own deliverable, **not a gate** on any other work (R18) | New — sits beside the launcher's fixed-step loop and the recording graph; no existing file owns it (verified: **no `capture.render` or `OfflinePump` symbol anywhere in `src/`**) | CONFIRMED-OPEN | L |
 
 **Closeout-set rollup: 6 S, 5 M, 4 L.** The two renames (closeout-13/14) are
 mechanical and independent of everything; the four L rows (walkability,
