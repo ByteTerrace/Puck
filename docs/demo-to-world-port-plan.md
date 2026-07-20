@@ -69,7 +69,7 @@ truth-up, and the DirectX half of the HIGH GPU-sync defect). Its "handed to the
 implementer" list, verified-not-fixed there, is now closed on three mechanical
 items:
 
-- **HIGH-2 twin** — `aa4d7f6`→`241d1af` (this session's GPU-sync commit): the
+- **HIGH-2 twin** — `241d1af` (this session's GPU-sync commit): the
   Vulkan upload rebuild path now drains via `m_device?.TryWaitIdle()` before
   `DisposeResources()`, restoring backend symmetry with `3827ccd`. Both HIGH rows
   are FIXED in the [Immediate action](#immediate-action--two-high-severity-gpu-sync-fixes)
