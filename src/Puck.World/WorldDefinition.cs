@@ -1196,6 +1196,15 @@ internal readonly record struct WorldSpawnPoint(string Id, Vector3 Position);
 /// <param name="Table">The row-name cycle for <see cref="TablePolicy"/> (entries resolve to rows at compile); empty
 /// and ignored under <see cref="HashPolicy"/>.</param>
 internal sealed record WorldRowAssignment(string Policy, IReadOnlyList<string> Table) {
+    private readonly IReadOnlyList<string> m_table = (Table ?? []);
+
+    /// <summary>The row-name cycle. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="MotionTuning.Response"/>'s does.</summary>
+    public IReadOnlyList<string> Table {
+        get => m_table;
+        init => m_table = (value ?? []);
+    }
+
     /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.RowFor"/>).</summary>
     public const string HashPolicy = "hash";
 

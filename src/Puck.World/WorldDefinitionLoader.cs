@@ -43,10 +43,11 @@ internal static class WorldDefinitionLoader {
     }
 
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
-    /// reuses so it never reimplements the deserialize → coalesce → schema-check → validate path. Read → deserialize →
-    /// coalesce absent optional sections → schema-check → validate. Any failure yields a one-line reason (line endings
-    /// collapsed) and <see langword="false"/>; a broad catch is deliberate here — a load boundary must fail safe to
-    /// the baked default, never throw out of <see cref="TryLoadFile"/>.</summary>
+    /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
+    /// reason (line endings collapsed) and <see langword="false"/>; a broad catch is deliberate here — a load boundary
+    /// must fail safe to the baked default, never throw out of <see cref="TryLoadFile"/>. An INCOMPLETE document — one
+    /// missing a section the canonical writer emits — is a failure like any other: the validator names every missing
+    /// section and the boot line reports the baked-default fallback.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded definition on success; <see cref="WorldDefinition.Default"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
@@ -62,8 +63,8 @@ internal static class WorldDefinitionLoader {
 
         try {
             var json = File.ReadAllText(path: path);
-            var parsed = Normalize(definition: (JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
-                ?? throw new InvalidOperationException(message: "document deserialized to null")));
+            var parsed = (JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
+                ?? throw new InvalidOperationException(message: "document deserialized to null"));
 
             if (!string.Equals(a: parsed.Schema, b: WorldDefinition.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
                 reason = $"{path}: schema '{parsed.Schema ?? "(absent)"}' is not {WorldDefinition.SchemaVersion}";
@@ -81,34 +82,5 @@ internal static class WorldDefinitionLoader {
 
             return false;
         }
-    }
-
-    // Coalesce absent-in-JSON members (source generation leaves a member null when its JSON property is absent, even
-    // where the type declares it non-nullable — the run-document doctrine's trap) so the validator and downstream
-    // consumers never dereference null. A fully-authored document is unchanged by this pass.
-    internal static WorldDefinition Normalize(WorldDefinition definition) {
-        var assignment = (definition.Assignment is { } authored
-            ? new WorldRowAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
-            : WorldRowAssignment.Hash);
-
-        return (definition with {
-            Addons = (definition.Addons ?? []),
-            Assignment = assignment,
-            Audio = (definition.Audio ?? WorldAudioDefaults.Default),
-            BindingOverlays = (definition.BindingOverlays ?? []),
-            Collision = (definition.Collision ?? WorldCollision.None),
-            Creations = (definition.Creations ?? []),
-            Host = (definition.Host ?? WorldHostDefaults.Default),
-            LookAssignment = (definition.LookAssignment ?? WorldRowAssignment.Hash),
-            Looks = (definition.Looks ?? []),
-            Links = (definition.Links ?? []),
-            Patches = (definition.Patches ?? []),
-            Placements = (definition.Placements ?? []),
-            Speakers = (definition.Speakers ?? []),
-            Storage = (definition.Storage ?? WorldStorageDefaults.None),
-            Authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default),
-            Tunes = (definition.Tunes ?? []),
-            Views = (definition.Views ?? WorldViewDefaults.Default),
-        });
     }
 }

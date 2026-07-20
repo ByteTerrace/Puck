@@ -58,6 +58,8 @@ internal static class WorldDefinitionValidator {
     public static void Validate(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
+        RequireSections(definition: definition);
+
         var errors = new List<string>();
 
         if (!string.Equals(a: definition.Schema, b: WorldDefinition.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
@@ -79,9 +81,7 @@ internal static class WorldDefinitionValidator {
         }
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
-        // speaker rows below all resolve against the tune/patch id sets. The audio defaults coalesce here (the
-        // WorldAuthoringDefaults absence convention) so every downstream read sees a concrete row.
-        var audio = (definition.Audio ?? WorldAudioDefaults.Default);
+        // speaker rows below all resolve against the tune/patch id sets.
         var tuneIds = ValidateTunes(tunes: definition.Tunes, errors: errors);
         var patchIds = ValidatePatches(patches: definition.Patches, errors: errors);
 
@@ -92,10 +92,6 @@ internal static class WorldDefinitionValidator {
         // The spawn policy runs AFTER ValidateSpawnPoints has produced the id set a `points` policy resolves against.
         ValidateSpawnPolicy(policy: definition.Population.SpawnPolicy, spawnPointIds: spawnPointIds, errors: errors);
 
-        if (definition.Render is null) {
-            errors.Add(item: "render is required.");
-        }
-
         var (kitNames, attendCapableKits) = ValidateKits(definition: definition, errors: errors);
 
         ValidateAssignment(assignment: definition.Assignment, kitNames: kitNames, errors: errors);
@@ -103,18 +99,13 @@ internal static class WorldDefinitionValidator {
         ValidateBindingOverlays(overlays: definition.BindingOverlays, errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
 
-        // The host section: absent-in-JSON coalesces to the built-in default HERE (the same absence convention the
-        // storage/authoring/audio sections use). Called early — it references no other section.
+        // Called early — the host section references no other section.
         ValidateHost(host: definition.Host, errors: errors);
 
-        // The editor/authoring policy row: absent-in-JSON coalesces to the built-in default HERE (the
-        // same absence-coalesce convention WorldStorageDefaults uses) so every downstream read below sees a concrete row, never null.
-        var authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default);
+        var authoring = definition.Authoring;
 
         ValidateAuthoring(authoring: authoring, errors: errors);
 
-        // The contact-solver tuning (SIM-AFFECTING): absent-in-JSON coalesces to WorldCollision.None (collision off,
-        // the plan-wide new-section idiom), so every downstream solidity read sees a concrete provider.
         var collision = definition.Collision;
 
         ValidateCollision(collision: collision, errors: errors);
@@ -132,9 +123,9 @@ internal static class WorldDefinitionValidator {
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (definition.Cameras is not { } authoredCameras) {
-            errors.Add(item: "cameras is required.");
-        } else {
+        {
+            var authoredCameras = definition.Cameras;
+
             if (authoredCameras.Count > MaxCameras) {
                 errors.Add(item: $"cameras count {authoredCameras.Count} exceeds the maximum of {MaxCameras}.");
             }
@@ -187,11 +178,11 @@ internal static class WorldDefinitionValidator {
         // a document screen at one of these indices would silently collide with the reserved placeholder in the binder's
         // dict-fill, so the range is carved out of the authored screen-index space here.
         var reservedFaceStart = Puck.World.Client.WorldCreationFacets.DerivedFaceBase;
-        var reservedFaceEnd = (reservedFaceStart + (definition.Authoring ?? WorldAuthoringDefaults.Default).DerivedFaceScreens);
+        var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);
 
-        if (definition.Screens is not { } screens) {
-            errors.Add(item: "screens is required.");
-        } else {
+        {
+            var screens = definition.Screens;
+
             for (var index = 0; (index < screens.Count); index++) {
                 var screen = screens[index];
                 var path = $"screens[{index}]";
@@ -255,10 +246,54 @@ internal static class WorldDefinitionValidator {
         // placements name speaker rows, so the speaker pass hands its name set forward).
         var speakerNames = ValidateSpeakers(definition: definition, screenIndices: screenIndices, placementIds: placementIds, tuneIds: tuneIds, patchIds: patchIds, errors: errors);
 
-        ValidateAudioDefaults(audio: audio, cameras: cameras, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
+        ValidateAudioDefaults(audio: definition.Audio, cameras: cameras, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
 
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: errors)}");
+        }
+    }
+
+    // Every section the canonical writer emits is REQUIRED. A document missing one is incomplete, and an incomplete
+    // document is rejected by name rather than silently absorbing a default for a section its author never wrote — the
+    // loud fallback WorldDefinitionLoader promises. Source generation leaves an absent JSON property null even where
+    // the type declares the member non-nullable, so absence arrives here as null; every pass below dereferences these,
+    // so the gate throws on its own rather than joining the error list.
+    private static void RequireSections(WorldDefinition definition) {
+        var missing = new List<string>();
+
+        Require(section: definition.Scene, name: "scene", missing: missing);
+        Require(section: definition.SpawnPoints, name: "spawnPoints", missing: missing);
+        Require(section: definition.Render, name: "render", missing: missing);
+        Require(section: definition.Screens, name: "screens", missing: missing);
+        Require(section: definition.Cameras, name: "cameras", missing: missing);
+        Require(section: definition.Kits, name: "kits", missing: missing);
+        Require(section: definition.DefaultSeatKit, name: "defaultSeatKit", missing: missing);
+        Require(section: definition.Assignment, name: "assignment", missing: missing);
+        Require(section: definition.Addons, name: "addons", missing: missing);
+        Require(section: definition.BindingOverlays, name: "bindingOverlays", missing: missing);
+        Require(section: definition.Storage, name: "storage", missing: missing);
+        Require(section: definition.Creations, name: "creations", missing: missing);
+        Require(section: definition.Placements, name: "placements", missing: missing);
+        Require(section: definition.Authoring, name: "authoring", missing: missing);
+        Require(section: definition.Speakers, name: "speakers", missing: missing);
+        Require(section: definition.Tunes, name: "tunes", missing: missing);
+        Require(section: definition.Patches, name: "patches", missing: missing);
+        Require(section: definition.Audio, name: "audio", missing: missing);
+        Require(section: definition.Collision, name: "collision", missing: missing);
+        Require(section: definition.Host, name: "host", missing: missing);
+        Require(section: definition.Views, name: "views", missing: missing);
+        Require(section: definition.Looks, name: "looks", missing: missing);
+        Require(section: definition.LookAssignment, name: "lookAssignment", missing: missing);
+        Require(section: definition.Links, name: "links", missing: missing);
+
+        if (missing.Count > 0) {
+            throw new InvalidOperationException(message: $"Incomplete WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: missing)}");
+        }
+    }
+
+    private static void Require(object? section, string name, List<string> missing) {
+        if (section is null) {
+            missing.Add(item: $"{name} is required.");
         }
     }
 
@@ -685,12 +720,6 @@ internal static class WorldDefinitionValidator {
     private static HashSet<string> ValidateSpawnPoints(IReadOnlyList<WorldSpawnPoint> spawnPoints, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (spawnPoints is null) {
-            errors.Add(item: "spawnPoints is required.");
-
-            return ids;
-        }
-
         if (spawnPoints.Count < WorldPopulation.LocalSeatCount) {
             errors.Add(item: $"spawnPoints provides {spawnPoints.Count} entries; {WorldPopulation.LocalSeatCount} local slots require at least that many.");
         }
@@ -715,7 +744,7 @@ internal static class WorldDefinitionValidator {
     // The spawn policy (SIM-AFFECTING): a phyllotaxis radius that is finite and non-negative, or a `points` cycle that
     // names at least one spawn point, every id resolving, with a finite non-negative jitter. Null coalesces to the
     // default (nothing to validate).
-    private static void ValidateSpawnPolicy(WorldSpawnPolicy? policy, HashSet<string> spawnPointIds, List<string> errors) {
+    private static void ValidateSpawnPolicy(WorldSpawnPolicy policy, HashSet<string> spawnPointIds, List<string> errors) {
         switch (policy) {
             case null:
                 return;
