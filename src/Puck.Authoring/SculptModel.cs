@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using Puck.Maths;
 using Puck.SdfVm;
 
 namespace Puck.Authoring;
@@ -579,14 +580,14 @@ public sealed class SculptModel {
         }
 
         if (TargetIsBrush) {
-            m_brushType = (AvatarPrimitive)(((((int)m_brushType + direction) % PrimitiveCount) + PrimitiveCount) % PrimitiveCount);
+            m_brushType = (AvatarPrimitive)(((int)m_brushType + direction).FloorModulo(modulus: PrimitiveCount));
             Revision++;
 
             return m_brushType;
         }
 
         var shape = m_shapes[m_selectionIndex];
-        var next = (AvatarPrimitive)(((((int)shape.Type + direction) % PrimitiveCount) + PrimitiveCount) % PrimitiveCount);
+        var next = (AvatarPrimitive)(((int)shape.Type + direction).FloorModulo(modulus: PrimitiveCount));
 
         m_shapes[m_selectionIndex] = shape with { Type = next };
         Revision++;
@@ -622,7 +623,7 @@ public sealed class SculptModel {
         }
 
         var current = Array.IndexOf(array: BlendCycle, value: TargetBlend);
-        var next = BlendCycle[((((current + direction) % BlendCycle.Length) + BlendCycle.Length) % BlendCycle.Length)];
+        var next = BlendCycle[(current + direction).FloorModulo(modulus: BlendCycle.Length)];
 
         SetBlend(blend: next);
 
@@ -681,7 +682,7 @@ public sealed class SculptModel {
             return TargetMaterialIndex;
         }
 
-        return SetMaterialIndex(index: ((((TargetMaterialIndex + direction) % CreationDocument.PaletteSize) + CreationDocument.PaletteSize) % CreationDocument.PaletteSize));
+        return SetMaterialIndex(index: (TargetMaterialIndex + direction).FloorModulo(modulus: CreationDocument.PaletteSize));
     }
 
     /// <summary>Assigns the TARGET's palette slot directly (clamped into range).</summary>
