@@ -138,7 +138,7 @@ internal sealed class WorldRecordingCommandModule(
     private static long TryFileLength(string path) {
         try {
             return new FileInfo(fileName: path).Length;
-        } catch (Exception) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return 0L;
         }
     }

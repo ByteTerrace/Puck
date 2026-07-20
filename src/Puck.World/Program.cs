@@ -453,7 +453,7 @@ services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
 if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
     services.AddSingleton(implementationFactory: static sp => new GamepadManager(
         acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: static message => Console.Error.WriteLine(value: message)),
-        clock: sp.GetService<IInputClock>(),
+        clock: sp.GetRequiredService<IInputClock>(),
         diagnostics: static message => Console.Error.WriteLine(value: message),
         hidSource: new Win32HidDeviceSource()
     ));
