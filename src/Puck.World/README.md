@@ -1875,13 +1875,22 @@ contract. Nineteen subcommands:
 - **`editor-edit`** — selection, drag-coalesced manipulation, whole-row commit,
   frozen-preview retirement, and per-seat viewport clipping.
 - **`editor-cameras`** — the client-side editor camera rig swap and live camera
-  reconcile.
+  reconcile, with the document side read off the `world.cameras` table (a live
+  add appears in it, an undo takes it away) and every shipped world's camera
+  table read back against its declared count.
 - **`placements`** — creation/placement rows as world data: import and stamp in
   pixels, plus the corrupt-input rejection path.
 - **`sculpt`** — the sculpt workbench, whose preview is stamp-identical to the
   committed stamp by construction, including the 48-shape stamp cap.
 - **`audio`** — the audio world data model end to end: the emitter graph,
   emission facets, cues, and the device's honest-silence posture.
+- **`wire`** — the console-wire contract every other suite rests on:
+  `world.wait` asserted behaviourally (the same drive-then-read burst twice with
+  a wait lands bit-for-bit on the same pose and a real distance out, while the
+  identical burst without it travels nowhere), the inline-JSON parse seam under
+  four union-taking verb families x four `$type` malformations with the host
+  proven still answering afterwards, and the loud missing-`--world`/`--recording`
+  boot failures against a real path and the `--world baked` sentinel.
 
 Three standalone harnesses sit beside `proof.cs` in `scripts/`, run the same way
 and covering the same surface (they gate nothing — see the note above):

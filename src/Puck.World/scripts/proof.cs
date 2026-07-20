@@ -134,6 +134,12 @@
 //       offscreen view ('recreated live (WxH)'); (e) THE VIEW→NONE TRANSITION — re-sourcing the screen View→None unbinds
 //       the slot AND releases the camera registration (view-refresh count drops, world.screens reads none/unbound —
 //       no stale offscreen render); (f) world.camera.remove of the now-unreferenced row applies document-side.
+//       The document side of every claim is read off the world.cameras TABLE, not off a narration string: the two
+//       boot rows must parse (anchor keyword, a rig token from the closed chase|firstPerson|orbit|lookAt|dolly
+//       vocabulary, render dimensions), the live 'birdseye' add must APPEAR in the table, and a world.undo must
+//       take it back out. A third section boots EVERY shipped world and reads its camera table the same way,
+//       requiring the segment count to match world.status's declared count — the instrument the camera
+//       re-encoding across the shipped worlds never had.
 //   editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
 //       (player.leave 2..4) AND the census (world.population 0 — a static world so pixel diffs read the highlight,
@@ -254,6 +260,22 @@
 //       networkPlayers admission cap stays durable (R-C: a census raise is transient, never folded); (d) the third fold dimension positively — a
 //       runtime screen.insert of a real ROM makes world.status name the 'screens' drift and world.save fold the live
 //       machine into that screen row's Machine source. Expo's own ouroboros is covered by worlddoc.
+//   wire [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The console-wire contract proof — the three things every OTHER suite silently rests on, run in one
+//       --world baked session (the in-code document declares no solidity, so the scripted run lane is clear
+//       ground) plus four boot-only launches. (a) world.wait, asserted BEHAVIOURALLY: the same
+//       drive-then-read burst run twice with a wait must land on the same pose bit-for-bit and a real
+//       distance from the start, while the identical burst WITHOUT the wait travels under a quarter as far —
+//       the stable-vs-racy contrast is the check, so a gate that stopped holding collapses the waited rounds
+//       onto the control and reddens both halves; the release-tick echo must also equal the requested span
+//       past the tick the wire was on. (b) WorldJsonPayload, the one inline-JSON parse seam: four
+//       union-taking verb families (world.look.set, world.screen.set, world.camera.set, world.scene.row.set)
+//       x four discriminator malformations (absent, unknown, duplicate, misplaced $type) — sixteen payloads
+//       that must each be NAMED and REFUSED with the host still answering afterwards, because an absent
+//       discriminator once threw NotSupportedException past every catch (JsonException) and took the process
+//       down. (c) The loud boot assertions: a bogus --world and a bogus --recording path each exit 1 naming
+//       themselves, a real --world path boots, and --world baked boots the in-code document by name. Every
+//       round settles wire.errors — zero for (a), exactly sixteen for (b), then cleared.
 //
 // Puck.World simulation is fixed-point and host-ticked. These are World-owned live proofs (paced console journeys and
 // closed-form tableaux), while the shared fixed-step/snapshot/numerics contracts are enforced by Puck.Post Tier A.
@@ -317,8 +339,9 @@ static class ProofApp {
                 "sculpt" => SculptProof.RunSculpt(opts: opts),
                 "audio" => AudioProof.RunAudio(opts: opts),
                 "collision" => CollisionProof.RunCollision(opts: opts),
+                "wire" => WireProof.RunWire(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|population|sculpt|audio|collision)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|population|sculpt|audio|collision|wire)"),
             });
         }
         catch (ArgException ex) {
@@ -369,6 +392,7 @@ static class ProofApp {
         Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  collision [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  wire [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -8169,8 +8193,19 @@ static class EditorEditProof {
 // screen re-point (View→View) binds the new camera and releases the orphan, and the
 // View→None transition unbinds the slot AND releases the registration — the count drops and
 // no stale offscreen render survives. Runs on BOTH backends like editor-mode.
+//
+// The DOCUMENT side is read off world.cameras, the camera table itself, rather than off the
+// reconcile narration: the boot rows must parse (anchor keyword, a rig token from the closed
+// vocabulary, dimensions), a live add must APPEAR in the table and an undo must take it away.
+// A third section boots every shipped world and reads its camera table back the same way,
+// checking the segment count against world.status's — the instrument OQ-12 never had.
 // ============================================================================================
 static class EditorCamerasProof {
+    // One world.cameras row: '<name> anchor=<kind> rig=<kind> <W>x<H>', the rig token a CLOSED vocabulary.
+    static readonly Regex CameraSegment = new(options: RegexOptions.Compiled,
+        pattern: @"^(\S+) anchor=(entity:\d+|entityLeaf:\S+|placement:\S+|group:\S+|none) rig=(chase|firstPerson|orbit|lookAt|dolly) (\d+)x(\d+)$");
+    static readonly Regex StatusCameras = new(pattern: @"cameras (\d+)", options: RegexOptions.Compiled);
+
     public static int RunEditorCameras(ArgMap opts) {
         var noBuild = opts.Flag(name: "--no-build");
         var width = opts.GetInt(fallback: 1280, name: "--width");
@@ -8190,7 +8225,11 @@ static class EditorCamerasProof {
         Console.WriteLine(value: "[proof] === editor-cameras (b): Vulkan ===");
         var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
 
-        var passed = (directXPassed && vulkanPassed);
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-cameras (c): the camera table across every shipped world ===");
+        var shippedPassed = RunShippedWorlds(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed && shippedPassed);
 
         Console.WriteLine();
         Console.WriteLine(value: $"[proof] editor-cameras proof {(passed ? "PASS" : "FAIL")}");
@@ -8218,6 +8257,14 @@ static class EditorCamerasProof {
             // Baseline: both declared View screens registered their cameras' offscreen renders at boot.
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "boot-two-camera-views");
 
+            // The DOCUMENT-side baseline, read off the camera table itself rather than off a narration string: both
+            // declared rows, each with a closed-vocabulary rig token and its render dimensions.
+            var bootTable = ReadCameraTable(ctx: ctx);
+
+            passed &= ComposedShotKit.Check(name: "boot-camera-table",
+                ok: (WellFormedCameraTable(table: bootTable) && TableNames(table: bootTable).SetEquals(other: ["overhead", "first-person"])),
+                detail: (bootTable?.Trim() ?? "(no world.cameras echo)"));
+
             // (a) LIVE POSE EDIT (unanchored): re-aim 'overhead'. The mutation applies, the client reconcile rewrites
             // the running view's rig in place, and a stale "applies at next boot" narration must never appear.
             var mark = ctx.Collector.Count;
@@ -8243,9 +8290,29 @@ static class EditorCamerasProof {
 
             // (c) NEW ROW + RE-POINT (View→View): 'birdseye' enters the document, then screen 0 films it. The new
             // camera registers, the orphaned 'overhead' releases, and the pool count holds at 2.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx,
-                line: "world.camera.set {\"name\":\"birdseye\",\"anchor\":null,\"offset\":[12,10,0],\"rig\":{\"$type\":\"lookAt\",\"target\":[0,0,0],\"fieldOfViewRadians\":0.9},\"renderWidth\":256,\"renderHeight\":144}",
+            const string BirdseyeRow = "world.camera.set {\"name\":\"birdseye\",\"anchor\":null,\"offset\":[12,10,0],\"rig\":{\"$type\":\"lookAt\",\"target\":[0,0,0],\"fieldOfViewRadians\":0.9},\"renderWidth\":256,\"renderHeight\":144}";
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: BirdseyeRow,
                 expect: "[world.mutation: UpsertCamera 'birdseye' applied]", name: "new-camera-row-applies");
+
+            // THE TABLE IS THE READ-BACK. A live add must APPEAR in world.cameras and an undo must take it away —
+            // measured on the document's own camera listing, not on the mutation's narration.
+            var addedTable = ReadCameraTable(ctx: ctx);
+
+            passed &= ComposedShotKit.Check(name: "live-add-appears-in-camera-table",
+                ok: (WellFormedCameraTable(table: addedTable) && TableNames(table: addedTable).SetEquals(other: ["overhead", "first-person", "birdseye"])),
+                detail: (addedTable?.Trim() ?? "(no world.cameras echo)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "undo-the-new-row");
+
+            var undoneTable = ReadCameraTable(ctx: ctx);
+
+            passed &= ComposedShotKit.Check(name: "undo-removes-it-from-camera-table",
+                ok: (WellFormedCameraTable(table: undoneTable) && TableNames(table: undoneTable).SetEquals(other: ["overhead", "first-person"])),
+                detail: (undoneTable?.Trim() ?? "(no world.cameras echo)"));
+
+            // Put it back — the rest of the session films it.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: BirdseyeRow,
+                expect: "[world.mutation: UpsertCamera 'birdseye' applied]", name: "re-add-after-undo");
 
             mark = ctx.Collector.Count;
             ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"view\",\"cameraName\":\"birdseye\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
@@ -8305,6 +8372,115 @@ static class EditorCamerasProof {
         }
 
         return passed;
+    }
+
+    // (g) THE SHIPPED WORLDS, through the same table. Every checked-in world boots and its camera rows are read back
+    // off world.cameras: the segment count must match world.status's camera count (a row that failed to re-encode
+    // would go missing or double), and every segment must carry an anchor keyword, a rig token from the CLOSED
+    // vocabulary, and render dimensions. This is the instrument OQ-12 (the camera re-encoding across the shipped
+    // worlds) never had — it reads what the documents actually decoded to, on one backend, one boot each.
+    static bool RunShippedWorlds(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var worldsDir = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World", path4: Path.Combine("Assets", "worlds"));
+        var passed = true;
+
+        foreach (var worldName in new[] { "default.world.json", "kart-remap.world.json", "expo.world.json", "kiosk.world.json", "planetoid.world.json" }) {
+            var worldPath = Path.Combine(path1: worldsDir, path2: worldName);
+
+            if (!File.Exists(path: worldPath)) {
+                Console.WriteLine(value: $"[proof]   (skip) {worldName} not present — author it first");
+
+                continue;
+            }
+
+            passed &= ReadShippedWorldCameras(exe: exe, repoRoot: repoRoot, worldName: worldName, worldPath: worldPath, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+        }
+
+        return passed;
+    }
+
+    static bool ReadShippedWorldCameras(string exe, string repoRoot, string worldName, string worldPath, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height,
+            exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", worldPath]);
+        var process = ctx.Process;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var status = ComposedShotKit.Await(collector: ctx.Collector, mark: SendStatus(ctx: ctx), predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+            var declared = ((status is null) ? -1 : (StatusCameras.Match(input: status) is { Success: true } m ? int.Parse(s: m.Groups[1].Value, provider: ProofApp.Inv) : -1));
+            var table = ReadCameraTable(ctx: ctx);
+            var names = TableNames(table: table);
+
+            return ComposedShotKit.Check(name: $"{worldName}-camera-table",
+                ok: (WellFormedCameraTable(table: table) && (declared >= 0) && (names.Count == declared)),
+                detail: $"world.status declares {declared} camera(s), world.cameras lists {names.Count}: {table?.Trim() ?? "(no echo)"}");
+        }
+        finally {
+            ComposedShotKit.KillQuietly(process: process);
+        }
+    }
+
+    static int SendStatus(ComposedShotKit.Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        return mark;
+    }
+
+    // The camera table's echoed line, read Immediate (the stdin barrier holds it behind any pending mutation).
+    static string? ReadCameraTable(ComposedShotKit.Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.cameras");
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.cameras:"), deadlineSeconds: 15.0);
+    }
+
+    // Every listed camera must carry an anchor keyword, a rig token from the CLOSED vocabulary, and dimensions.
+    // An empty table ("none declared") is well-formed; a table whose rows do not parse is not.
+    static bool WellFormedCameraTable(string? table) {
+        if (table is null) {
+            return false;
+        }
+
+        if (table.Contains(value: "[world.cameras: none declared]")) {
+            return true;
+        }
+
+        return CameraSegments(table: table).All(predicate: segment => CameraSegment.IsMatch(input: segment));
+    }
+
+    // The camera NAMES the table lists — the identity set an add must join and an undo must leave.
+    static HashSet<string> TableNames(string? table) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if ((table is null) || table.Contains(value: "[world.cameras: none declared]")) {
+            return names;
+        }
+
+        foreach (var segment in CameraSegments(table: table)) {
+            if (CameraSegment.Match(input: segment) is { Success: true } match) {
+                _ = names.Add(item: match.Groups[1].Value);
+            }
+        }
+
+        return names;
+    }
+
+    // The listing's payload split on its ' | ' row separator: everything between '[world.cameras:' and the closing ']'.
+    static IEnumerable<string> CameraSegments(string table) {
+        var open = table.IndexOf(value: "[world.cameras:", comparisonType: StringComparison.Ordinal);
+        var close = table.LastIndexOf(value: ']');
+
+        if ((open < 0) || (close <= open)) {
+            return [];
+        }
+
+        return table[(open + "[world.cameras:".Length)..close].Split(separator: '|', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     // A stale camera "applies at next boot" narration must never resurface for a camera mutation.
@@ -10619,5 +10795,356 @@ static class CollisionProof {
         }
         catch (UnauthorizedAccessException) {
         }
+    }
+}
+
+// ============================================================================================
+// WIRE — the console-wire contract proof: the three things every OTHER suite silently rests on.
+//   (a) world.wait — the SEQUENCING primitive. Asserted behaviourally, not by its echo: the same
+//       drive-then-read burst run twice with a wait must land on the SAME pose bit-for-bit and a
+//       real distance from the start, while the identical burst WITHOUT the wait travels nowhere.
+//       The stable-vs-racy contrast is the check — if the gate stopped holding, the waited rounds
+//       collapse onto the control and both halves go red.
+//   (b) WorldJsonPayload — the one inline-JSON parse seam. Four union-taking verb families x four
+//       malformation shapes (absent, unknown, duplicate, misplaced $type). Every one must be NAMED
+//       and REFUSED, and the host must still be answering afterwards: a console line may never kill
+//       the host, and an absent discriminator once did exactly that (NotSupportedException past
+//       every catch (JsonException)).
+//   (c) The loud boot assertions — a bogus --world or --recording path exits non-zero naming
+//       itself, a real path boots, and `--world baked` boots the in-code document by name.
+// Runs one windowed session against --world baked (the in-code document declares no solidity, so a
+// scripted run lane is clear ground) plus four short boot-only launches.
+// ============================================================================================
+static class WireProof {
+    // [world.wait: 240 ticks from 1710 — releasing at tick 1950]
+    static readonly Regex WaitEcho = new(pattern: @"\[world\.wait: (\d+) ticks from (\d+)\D+tick (\d+)\]", options: RegexOptions.Compiled);
+
+    public static int RunWire(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 180, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === wire (a): world.wait — the sequencing primitive / (b): WorldJsonPayload — the inline-JSON parse seam ===");
+        var sessionPassed = RunSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === wire (c): the loud boot assertions ===");
+        var bootPassed = RunBootAssertions(exe: exe, repoRoot: repoRoot, width: width, height: height);
+
+        var passed = (sessionPassed && bootPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] wire proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // ----- (a) + (b): one live session -----------------------------------------------------
+
+    static bool RunSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height,
+            exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", "baked"]);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: seat 1 alone on empty ground, no crowd to shoulder the runner off its lane.
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
+            passed &= RunWaitRounds(ctx: ctx);
+            passed &= RunPayloadRejections(ctx: ctx);
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // (a) THE SEQUENCING PRIMITIVE.
+    static bool RunWaitRounds(ComposedShotKit.Ctx ctx) {
+        var passed = true;
+
+        // The release tick must be the requested span past the tick the wire was on — the arithmetic half.
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 240");
+
+        var echo = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.wait:"), deadlineSeconds: 15.0);
+        var match = ((echo is null) ? Match.Empty : WaitEcho.Match(input: echo));
+        var spanOk = (match.Success
+            && (long.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv)
+                == (long.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv) - long.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv))));
+
+        passed &= ComposedShotKit.Check(name: "release-tick-is-the-requested-span", ok: spanOk, detail: (echo?.Trim() ?? "(no world.wait echo)"));
+
+        // The behavioural half. The SAME burst twice: with the gate holding, one second of world time separates the
+        // two reads and the landing pose is a fixed point of the corpus, so the two rounds must agree EXACTLY.
+        var waited1 = DriveRound(ctx: ctx, name: "waited-1", waitTicks: 240);
+        var waited2 = DriveRound(ctx: ctx, name: "waited-2", waitTicks: 240);
+        // The control: the identical burst with NO wait. Every line drains in the same frame, so the read-back
+        // observes a pose one tick into the motion — the racy read the primitive exists to eliminate.
+        var control = DriveRound(ctx: ctx, name: "control-no-wait", waitTicks: 0);
+
+        var repeatable = ((waited1 is { } a) && (waited2 is { } b) && (a == b));
+
+        passed &= ComposedShotKit.Check(name: "waited-read-is-repeatable", ok: repeatable,
+            detail: $"two identical drive+wait+read bursts travelled {Fmt(value: waited1)} u and {Fmt(value: waited2)} u (want bit-identical)");
+
+        var spanned = ((waited1 is { } d) && (d > 2.0));
+
+        passed &= ComposedShotKit.Check(name: "the-wait-buys-a-real-span", ok: spanned,
+            detail: $"{Fmt(value: waited1)} u over 240 held ticks (want > 2.0 — one second at the authored move speed)");
+
+        var contrast = ((waited1 is { } w) && (control is { } c) && (c < (w / 4.0)));
+
+        passed &= ComposedShotKit.Check(name: "no-wait-travels-nowhere", ok: contrast,
+            detail: $"unheld burst travelled {Fmt(value: control)} u against the held {Fmt(value: waited1)} u (want under a quarter — the gate is what makes the span)");
+
+        // Nothing above was a refusal.
+        passed &= SettleWireErrors(ctx: ctx, name: "wait-rounds-clean", expected: 0);
+
+        return passed;
+    }
+
+    // One drive-then-read burst from a pinned pose. Returns the planar distance travelled, or null if a read was lost.
+    static double? DriveRound(ComposedShotKit.Ctx ctx, string name, int waitTicks) {
+        // Pin the start: a cleared tape, a known spot on open ground well clear of the plaza, a known heading.
+        ComposedShotKit.Send(ctx: ctx, line: "player.stop 1");
+        ComposedShotKit.Send(ctx: ctx, line: "player.warp 0 14 1");
+        ComposedShotKit.Send(ctx: ctx, line: "player.face 0 1");
+
+        var start = ReadPose(ctx: ctx);
+
+        // The burst. Every line after the wait stays queued until the simulation has advanced <waitTicks> ticks, so
+        // the stop cuts a segment that has run for a fixed, tick-counted span rather than a wall-clock one.
+        ComposedShotKit.Send(ctx: ctx, line: "player.run 1 0 0 3 1");
+
+        if (waitTicks > 0) {
+            ComposedShotKit.Send(ctx: ctx, line: $"world.wait {waitTicks.ToString(provider: ProofApp.Inv)}");
+        }
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.stop 1");
+
+        var end = ReadPose(ctx: ctx);
+
+        if ((start is not { } from) || (end is not { } to)) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(a player.where read was lost)");
+
+            return null;
+        }
+
+        var travelled = Math.Sqrt(d: (((to.X - from.X) * (to.X - from.X)) + ((to.Z - from.Z) * (to.Z - from.Z))));
+
+        Console.WriteLine(value: $"[proof]   (note) {name}: start z={from.Z.ToString(format: "0.00", provider: ProofApp.Inv)} end z={to.Z.ToString(format: "0.00", provider: ProofApp.Inv)} travelled {Fmt(value: travelled)} u");
+
+        return travelled;
+    }
+
+    static Pose? ReadPose(ComposedShotKit.Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.where 1");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+            predicate: l => (l.Contains(value: "[player.where:") && ProofApp.WhereEcho.IsMatch(input: l)), deadlineSeconds: 20.0);
+
+        if (line is null) {
+            return null;
+        }
+
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return new Pose(
+            X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+            Y: double.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv),
+            Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv),
+            Yaw: int.Parse(s: match.Groups[5].Value, provider: ProofApp.Inv),
+            Pitch: int.Parse(s: match.Groups[6].Value, provider: ProofApp.Inv),
+            Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv));
+    }
+
+    // (b) THE PARSE SEAM. Four union-taking verb families x the four discriminator malformations. The union is nested
+    // one level down for look/screen/camera and is the payload's OWN top level for a scene row, so all four shapes are
+    // exercised at both depths.
+    static bool RunPayloadRejections(ComposedShotKit.Ctx ctx) {
+        var passed = true;
+        var refusals = 0;
+
+        foreach (var row in MalformedPayloads()) {
+            passed &= Reject(ctx: ctx, name: $"{row.Family}-{row.Shape}", line: $"{row.Verb} {row.Payload}", verb: row.Verb);
+            refusals++;
+        }
+
+        // THE RULE: a console line may never kill the host. An absent discriminator used to take the process down, so
+        // liveness is asserted at the wire, after every malformation above, and not merely inferred from the echoes.
+        passed &= ComposedShotKit.Check(name: "host-process-alive", ok: !ctx.Process.HasExited, detail: $"{refusals} malformed payload(s) refused, process still running");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "[world.status:", name: "host-still-answering");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.cameras", expect: "[world.cameras:", name: "host-document-intact");
+        passed &= SettleWireErrors(ctx: ctx, name: "payload-refusals-counted", expected: refusals);
+
+        return passed;
+    }
+
+    // The malformation table. Each row is (verb, family label, shape label, payload).
+    //   absent    — no discriminator at all (the one that threw NotSupportedException past every catch (JsonException))
+    //   unknown   — a discriminator naming no derived type
+    //   duplicate — the discriminator twice
+    //   misplaced — a discriminator that is not the first property, which the reader requires
+    static IEnumerable<(string Verb, string Family, string Shape, string Payload)> MalformedPayloads() {
+        yield return ("world.look.set", "look-source", "absent-type", "{\"name\":\"x\",\"source\":{},\"scale\":1}");
+        yield return ("world.look.set", "look-source", "unknown-type", "{\"name\":\"x\",\"source\":{\"$type\":\"holograph\"},\"scale\":1}");
+        yield return ("world.look.set", "look-source", "duplicate-type", "{\"name\":\"x\",\"source\":{\"$type\":\"catalog\",\"$type\":\"creation\"},\"scale\":1}");
+        yield return ("world.look.set", "look-source", "misplaced-type", "{\"name\":\"x\",\"source\":{\"index\":0,\"$type\":\"catalog\"},\"scale\":1}");
+
+        yield return ("world.screen.set", "screen-source", "absent-type", "{\"index\":0,\"source\":{}}");
+        yield return ("world.screen.set", "screen-source", "unknown-type", "{\"index\":0,\"source\":{\"$type\":\"kinescope\"}}");
+        yield return ("world.screen.set", "screen-source", "duplicate-type", "{\"index\":0,\"source\":{\"$type\":\"none\",\"$type\":\"testPattern\"}}");
+        yield return ("world.screen.set", "screen-source", "misplaced-type", "{\"index\":0,\"source\":{\"cameraName\":\"overhead\",\"$type\":\"view\"}}");
+
+        yield return ("world.camera.set", "camera-rig", "absent-type", "{\"name\":\"x\",\"rig\":{},\"renderWidth\":256,\"renderHeight\":144}");
+        yield return ("world.camera.set", "camera-rig", "unknown-type", "{\"name\":\"x\",\"rig\":{\"$type\":\"crane\"},\"renderWidth\":256,\"renderHeight\":144}");
+        yield return ("world.camera.set", "camera-rig", "duplicate-type", "{\"name\":\"x\",\"rig\":{\"$type\":\"orbit\",\"$type\":\"dolly\"},\"renderWidth\":256,\"renderHeight\":144}");
+        yield return ("world.camera.set", "camera-anchor", "misplaced-type", "{\"name\":\"x\",\"anchor\":{\"index\":0,\"$type\":\"entity\"},\"rig\":{\"$type\":\"chase\"},\"renderWidth\":256,\"renderHeight\":144}");
+
+        // The scene row's union IS the payload — the discriminator sits at the top level, not nested.
+        yield return ("world.scene.row.set", "scene-row", "absent-type", "{\"id\":\"x\",\"radius\":1}");
+        yield return ("world.scene.row.set", "scene-row", "unknown-type", "{\"$type\":\"obelisk\",\"id\":\"x\"}");
+        yield return ("world.scene.row.set", "scene-row", "duplicate-type", "{\"$type\":\"boulder\",\"$type\":\"slab\",\"id\":\"x\"}");
+        yield return ("world.scene.row.set", "scene-row", "misplaced-type", "{\"id\":\"x\",\"$type\":\"boulder\",\"radius\":1}");
+    }
+
+    // A deliberate refusal: the verb must NAME itself in its rejection, which is what proves the payload was refused
+    // at the parse seam rather than swallowed, mis-parsed into a default row, or thrown past the handler.
+    static bool Reject(ComposedShotKit.Ctx ctx, string name, string line, string verb) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var seen = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+            predicate: l => l.Contains(value: $"[{verb}:"), deadlineSeconds: 15.0);
+
+        return ComposedShotKit.Check(name: name, ok: (seen is not null), detail: (seen?.Trim() ?? $"(no '[{verb}: ...]' refusal — the payload was NOT named and refused)"));
+    }
+
+    // ----- (c) the loud boot assertions ----------------------------------------------------
+
+    static bool RunBootAssertions(string exe, string repoRoot, int width, int height) {
+        var pid = Environment.ProcessId;
+        var missingWorld = Path.Combine(Path.GetTempPath(), $"puck-wire-missing-{pid}.world.json");
+        var missingRecording = Path.Combine(Path.GetTempPath(), $"puck-wire-missing-{pid}.recording.json");
+        var shippedWorld = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World", path4: Path.Combine("Assets", "worlds", "default.world.json"));
+        var passed = true;
+
+        passed &= Boot(exe: exe, repoRoot: repoRoot, name: "missing-world-path-fails-loudly", width: width, height: height,
+            args: ["--world", missingWorld], wantExitCode: 1, wantLine: $"[world] --world no file at {missingWorld}");
+        passed &= Boot(exe: exe, repoRoot: repoRoot, name: "missing-recording-path-fails-loudly", width: width, height: height,
+            args: ["--recording", missingRecording], wantExitCode: 1, wantLine: $"[recording] --recording no file at {missingRecording}");
+        passed &= Boot(exe: exe, repoRoot: repoRoot, name: "real-world-path-boots", width: width, height: height,
+            args: ["--world", shippedWorld], wantExitCode: 0, wantLine: $"[world] definition: {shippedWorld} (--world)");
+        passed &= Boot(exe: exe, repoRoot: repoRoot, name: "baked-sentinel-boots", width: width, height: height,
+            args: ["--world", "baked"], wantExitCode: 0, wantLine: "[world] definition: baked default (in-code; requested by --world baked)");
+
+        return passed;
+    }
+
+    // Boot-only: launch, let it run its bounded life or fail out, and assert BOTH the exit code and the naming line.
+    // The exit code alone would pass on any non-zero exit; the line alone would pass on a warn-and-continue.
+    static bool Boot(string exe, string repoRoot, string name, string[] args, int wantExitCode, string wantLine, int width, int height) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        foreach (var arg in args) {
+            psi.ArgumentList.Add(item: arg);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: "3");
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+
+        _ = process.Start();
+        stopwatch.Start();
+        collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+        collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+        if (!process.WaitForExit(milliseconds: 90_000)) {
+            ComposedShotKit.KillQuietly(process: process);
+
+            return ComposedShotKit.Check(name: name, ok: false, detail: "the boot did not finish within 90 seconds");
+        }
+
+        Thread.Sleep(millisecondsTimeout: 400); // let the reader threads drain the closed pipes
+
+        var code = process.ExitCode;
+        var lineSeen = collector.Snapshot().Any(predicate: l => l.Contains(value: wantLine, comparisonType: StringComparison.Ordinal));
+
+        return ComposedShotKit.Check(name: name, ok: ((code == wantExitCode) && lineSeen),
+            detail: $"exit {code} (want {wantExitCode}), naming line {(lineSeen ? "present" : "ABSENT")}: {wantLine}");
+    }
+
+    // Settle the wire's refused-line counter against the refusals just provoked, then zero it.
+    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
+        string? last = null;
+
+        for (var attempt = 0; (attempt < 20); attempt++) {
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "wire.errors");
+            last = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+
+            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
+                if (expected > 0) {
+                    mark = ctx.Collector.Count;
+                    ComposedShotKit.Send(ctx: ctx, line: "wire.errors reset");
+                    _ = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+                }
+
+                return ComposedShotKit.Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 200);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+    }
+
+    static string Fmt(double? value) {
+        return ((value is { } v) ? v.ToString(format: "0.000", provider: ProofApp.Inv) : "(?)");
     }
 }
