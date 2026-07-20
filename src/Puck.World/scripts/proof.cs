@@ -4691,6 +4691,11 @@ static class GrantsProof {
     // (e): exclusivity must actually exclude, in BOTH grant orders, and the exclusive holder must be the SOLE effective
     // driver. The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
     // starts clean; the two order tests use fresh bodies so they never interfere with each other.
+    //
+    // The grant table is bookkeeping over an integer subject — it never consults EntryBody — so the accept/reject
+    // echoes below would read identically over bodies that do not exist. The census RunGrantSession raises makes
+    // body:11/body:12 real, and the sole-driver round is what actually spends that: it ends on a body whose motion
+    // answers the question the echoes only assert.
     static bool RunExclusivityOrders(Ctx ctx) {
         var passed = true;
 
@@ -4717,9 +4722,13 @@ static class GrantsProof {
         // Sole-driver enforcement: while the addon holds body:12 exclusively, the console — which holds the seeded
         // Drive/all wildcard — is OVERRIDDEN at the intent boundary, so its command to that body is denied. Exactly one
         // principal (the addon) can drive an exclusively-held body; the wildcard cannot.
+        //
+        // The segment is a full-forward one, not the all-zero hold it used to be: a zero segment moves nothing even when
+        // accepted, so a denial of it proved only that a string was printed. The SAME line is re-issued after the revoke
+        // below, where it must actually travel.
         var mark = ctx.Collector.Count;
 
-        Send(ctx: ctx, line: $"player.run 0 0 0 1 {ExclusivePlayerIndex}");
+        Send(ctx: ctx, line: $"player.run 1 0 0 1 {ExclusivePlayerIndex}");
 
         var deniedLine = Await(collector: ctx.Collector, mark: mark,
             predicate: l => (l.Contains(value: "[world.grant denied:") && l.Contains(value: "console") && l.Contains(value: $"body:{ExclusiveBodyIndex}")),
@@ -4728,7 +4737,37 @@ static class GrantsProof {
         passed &= Check(name: "exclusive-overrides-console-wildcard", ok: (deniedLine is not null),
             detail: (deniedLine?.Trim() ?? $"(no '[world.grant denied: console ... body:{ExclusiveBodyIndex} ...]' line — the wildcard was not overridden)"));
 
+        // GROUND THE LEASE IN THE BODY. A denial line alone would prove only that some string was printed: a command
+        // that could never move body:12 anyway would produce the same green. So drop the hold and re-issue the
+        // IDENTICAL command — it must now be accepted (no fresh denial) and the body must actually travel. The lease is
+        // exactly that difference: the same input, over the same real body, inert under the hold and effective without
+        // it. The revoked body idles first (the driver left IntentSource at Live, so nothing else moves it), which is
+        // what makes the post-release displacement attributable to the console's segment and nothing else.
         Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
+
+        Thread.Sleep(millisecondsTimeout: 600);
+
+        var beforeRelease = ReadWhere(ctx: ctx, index: ExclusivePlayerIndex);
+
+        mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.run 1 0 0 1 {ExclusivePlayerIndex}");
+
+        Thread.Sleep(millisecondsTimeout: 1400);
+
+        var afterRelease = ReadWhere(ctx: ctx, index: ExclusivePlayerIndex);
+        var releaseDistance = Distance(a: beforeRelease, b: afterRelease);
+
+        passed &= Check(name: "released-body-accepts-console-drive",
+            ok: ((beforeRelease is not null) && (afterRelease is not null) && (releaseDistance > MovedEpsilon)),
+            detail: $"p{ExclusivePlayerIndex} {Fmt(pose: beforeRelease)} -> {Fmt(pose: afterRelease)} (delta {releaseDistance:0.000} u, want > {MovedEpsilon})");
+
+        var reDeniedLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => (l.Contains(value: "[world.grant denied:") && l.Contains(value: "console") && l.Contains(value: $"body:{ExclusiveBodyIndex}")),
+            deadlineSeconds: 1.0);
+
+        passed &= Check(name: "released-body-stops-denying-console", ok: (reDeniedLine is null),
+            detail: (reDeniedLine?.Trim() ?? "no denial after the exclusive hold was revoked"));
 
         // (f) EXCLUSIVE WILDCARD: an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
         // reservation must name a concrete subject, checked on a fresh table AND with a concrete ordinary hold

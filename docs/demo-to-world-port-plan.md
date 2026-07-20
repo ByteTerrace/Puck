@@ -601,8 +601,10 @@ still holds. It never meant "the file may not gain a key."
 
 Arc 1 adds scene mutations, Arc 6 placement mutations, Arc 7 placement + creation
 mutations to the same switches. The conflict is semantic, not textual. Order
-1 → 6 → 7; each arc re-runs the crowd census check (`world.population` per-kit
-counts unchanged before/after) as its own regression.
+1 → 6 → 7; each arc re-runs the crowd census check — `world.population 124`
+**first** (the peer slice boots EMPTY, so per-kit counts are all 0 until a crowd
+is summoned), **then** the per-kit counts, unchanged before/after — as its own
+regression.
 
 ### R14 — Post-stage deletions are surfaced to the owner, not buried
 
@@ -1358,7 +1360,7 @@ world.kit.collider runner 0.35 1.7
 world.kit.response runner [{"gate":{"$type":"now","fact":"Grounded"},"engageRate":45,"releaseRate":55},{"gate":null,"engageRate":30,"releaseRate":17}]
 world.scene.solid boulder-2 0.05
 world.scene.solid boulder-2 off
-world.contacts 0
+world.contacts 1
 world.grant addon:physics mutate section:collision exclusive
 world.undo 3
 world.save
@@ -4672,11 +4674,10 @@ review rather than deleting silently.
 
 ```
 dotnet run --project src/Puck.World -c Release
+world.population 12
 world.looks
 world.look.set {"name":"stocky","source":{"$type":"catalog","index":42},"scale":1.4,"motion":{"gaitAmplitude":1,"replayFrames":false,"secondsPerFrame":0}}
 world.look.assign table stocky
-world.looks
-world.population 12
 world.looks
 world.look.tune stocky scale 0.6
 world.status
@@ -4693,16 +4694,18 @@ world.status
 
 What to look for, in order:
 
-1. The first `world.looks` prints one implicit row
-   (`catalog (index-derived): 128`) on a world with no `looks` section — **proving
+1. `world.population 12` **leads** — the peer slice boots EMPTY, and
+   `ActiveLookCounts()` counts only ACTIVE entries, so without a summon every row
+   reads `: 1` (the joined seat) and the rest of this block has no crowd to act
+   on. The first `world.looks` then prints one implicit row
+   (`catalog (index-derived): 12`) on a world with no `looks` section — **proving
    the absence-coalesces default.**
 2. `[world.mutation: UpsertLook 'stocky' applied]` on **stderr**, with
    `world.look.set` itself echoing nothing — the quiet-ack contract.
 3. **On screen:** after `world.look.assign table stocky`, every visible body
    switches to the same rig at 1.4×. **This is the whole capability; if the crowd
    does not change, nothing else matters.**
-4. `world.looks` after `world.population 12` shows `stocky: 12` — census and look
-   agree.
+4. `world.looks` after the assignment shows `stocky: 12` — census and look agree.
 5. `world.look.tune stocky scale 0.6` shrinks the crowd live; `dirty` increments
    per mutation.
 6. `world.undo 1` restores 1.4× **visually** — proving replay-based undo works
@@ -4849,7 +4852,9 @@ stills the limbs), and the `Catalog(Index)` **rig pin** (geometry sourced from
 the pinned rig, written to the entity's own frozen slot range clamped to its leaf
 count, so a pin never grows the frozen capacity). RECOMPILE-KIT hot-swap survives:
 `world.kit.tune` mid-run preserved pose (`player.where` drifted a few cm of wander,
-did not teleport to spawn).
+did not teleport to spawn) — recorded **pre-R-C**, when a census booted populated;
+reproducing it now needs an explicit `world.population <n>` first, or there is no
+wander to drift.
 
 **OQ-7 measurement (construction-probe approach, MEASURED before reserving).**
 Instrumented the boot probe: **ProgramWordCapacity 407 172, InstanceCapacity 2 241,
@@ -5404,12 +5409,15 @@ world.faces
      PROVES derived cameras AND derived faces both resolved — the fish's eye feeds the robot's face.
 
 player.warp 2 -3 1              # <x> <z> [player] — seat 1 next to 'lure'; wait ~2 s of ticks
-player.where 127                # twice — 127 is a POPULATION entry, the top slot the reconciler claims
+player.where <L>                # twice. READ <L> BACK, never hard-code it: world.inhabitants prints 'lure'
+                                # at body=<n> 0-BASED, and player.where is 1-BASED, so <L> = n + 1. Which of
+                                # the two inhabitants lands on the top slot is the reconciler's ordering, not
+                                # a guarantee — a literal 127 can silently read the OTHER one, or nothing.
   -> the inhabitant has CLOSED to within ~standoffRadius (1.6) and keeps changing between reads.
      PROVES the attend producer acquired, approached, and is orbiting — the whole of the Demo's
      companion steering, from authored constants.
 
-player.warp 40 40 1             # wait ~2 s; player.where 127 twice
+player.warp 40 40 1             # wait ~2 s; player.where <L> twice (the same read-back index as above)
   -> drifting on its wander flavor, not chasing. PROVES release-radius hysteresis.
 
 world.kit.attend drifter 20 24 4.0 0.55 0.30 face seat
