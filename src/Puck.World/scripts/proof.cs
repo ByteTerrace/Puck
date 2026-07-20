@@ -14,8 +14,8 @@
 //       threads, marks each sweep, asserts (closed-form #expect / band / separation where
 //       present; report-only otherwise), and asserts the last rolling world.fps sample is at
 //       least 60 avg/worst by default. Pass --min-fps 0 to disable the performance assertion.
-//       --world-arg forwards a --world <path> argument to the launched child (e.g. to force the
-//       baked-default fallback with a nonexistent path). DEFAULT kind when nothing is specified: expo.
+//       --world-arg forwards a --world <value> argument to the launched child — a world file, or the
+//       literal `baked` to run the in-code definition. DEFAULT kind when nothing is specified: expo.
 //   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
 //       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
 //   screens [--width W] [--height H] [--no-build] [--rom PATH]
@@ -30,10 +30,12 @@
 //       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo, kiosk, planetoid) boots, saves,
 //       and re-saves from its own output to the same bytes, so a save that folds session state stays
 //       idempotent on a fresh boot (the saved file is never compared against the checked-in one —
-//       R18); (b) baked-default parity — a checked-in-world run and a
-//       missing-world (baked-default fallback) run of the same short hop corpus compare
-//       byte-identical, and the loud "[world] definition: baked default (...)" line appears only
-//       in the fallback run.
+//       R18); (b) the baked default boots, runs, and is deterministic — one checked-in-world run plus TWO
+//       `--world baked` runs (the in-code definition, requested by name) of the same short hop corpus: all
+//       three capture full pose coverage, the two baked runs compare byte-identical (determinism is a
+//       per-document property), and the loud "[world] definition: baked default (...)" line appears only in
+//       the baked runs. The checked-in-vs-baked delta is REPORTED, never asserted — they are different
+//       documents (the shipped world declares solidity the in-code one does not).
 //   mutate [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The mutation-vocabulary round-trip proof: (a) a scripted world.kit.tune / world.undo /
 //       world.save round-trip over stdin, asserting the journal-length dirty counter at each step and the
@@ -2561,7 +2563,7 @@ static class WorldDocProof {
         }
 
         Console.WriteLine();
-        Console.WriteLine(value: "[proof] === worlddoc (b): baked-default parity ===");
+        Console.WriteLine(value: "[proof] === worlddoc (b): the baked default boots, runs, and is deterministic ===");
         var parityPassed = RunBakedDefaultParity(checkedInPath: checkedInPath);
 
         var passed = (ouroborosPassed && parityPassed);
@@ -2672,58 +2674,77 @@ static class WorldDocProof {
         }
     }
 
-    // Two feeder runs of the SAME short deterministic corpus (kind hop, small population): one against the
-    // checked-in world file, one against a path that does not exist (forcing the loud baked-default fallback).
-    // Their final sweeps must compare byte-identical, and only the fallback run's transcript may carry the loud line.
+    // Three feeder runs of the SAME short deterministic corpus (kind hop, small population): one against the checked-in
+    // world file, then TWO against `--world baked` — the EXPLICIT request for the in-code definition. (The baked run
+    // used to be forced with a nonexistent path, which stopped working the day a missing --world path became a loud
+    // boot failure; the proof was depending on the bug.)
+    //
+    // What is asserted, and what is only reported:
+    //   * The in-code document BOOTS and RUNS the corpus — full pose coverage on both baked runs, and the loud
+    //     "baked default" line present in exactly those two and never in the checked-in run.
+    //   * DETERMINISM, which is a per-document property: the two baked runs must compare byte-identical. Same
+    //     document + same input -> the same final sweep, which is the claim worth gating.
+    //   * The checked-in vs baked comparison is a NOTE. Assets/worlds/default.world.json is a DIFFERENT world from
+    //     WorldDefinition.Default — it declares solidity facets and a collision response table the in-code document
+    //     does not — so their entities legitimately land in different places. Asserting identity there would only
+    //     pressure someone to re-golden a shipped world to keep a number stable (R18).
     //
     // The gate does NOT require the feeder's own in-flight #expect-band assertion to pass: that assertion samples a
-    // ~0.2s mid-air window and is sensitive to host render throughput (it can fail identically in BOTH runs on a
-    // loaded machine, independent of the world document — see the worlddoc report). What this gate actually proves —
-    // that the two runs land in the exact same place — is the byte-identical final-sweep compare below, guarded by an
-    // explicit pose-coverage check so a crashed/empty transcript cannot vacuously pass an empty comparison.
+    // ~0.2s mid-air window and is sensitive to host render throughput (it can fail independently of the world
+    // document — see the worlddoc report). The pose-coverage check guards the compare so a crashed/empty transcript
+    // cannot vacuously pass an empty comparison.
     static bool RunBakedDefaultParity(string checkedInPath) {
         const int population = 8;
         var pid = Environment.ProcessId;
         var logA = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-checked-in-{pid}.log");
         var logB = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-baked-default-{pid}.log");
-        var missingWorldPath = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-missing-{pid}.world.json");
+        var logC = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-baked-default-rerun-{pid}.log");
 
         Console.WriteLine(value: "[proof]   run A: --world <checked-in file>");
-        var codeA = Feeder.RunFeeder(opts: new ArgMap(args: [
-            "--kind", "hop", "--population", population.ToString(provider: ProofApp.Inv), "--headless", "--no-build",
-            "--quality", "low", "--width", "640", "--height", "480", "--min-fps", "0",
-            "--log", logA, "--world-arg", checkedInPath,
-        ]));
+        var codeA = RunHopCorpus(logPath: logA, population: population, worldArg: checkedInPath);
 
         Console.WriteLine();
-        Console.WriteLine(value: "[proof]   run B: --world <nonexistent path> (forces the baked-default fallback)");
-        var codeB = Feeder.RunFeeder(opts: new ArgMap(args: [
-            "--kind", "hop", "--population", population.ToString(provider: ProofApp.Inv), "--headless", "--no-build",
-            "--quality", "low", "--width", "640", "--height", "480", "--min-fps", "0",
-            "--log", logB, "--world-arg", missingWorldPath,
-        ]));
+        Console.WriteLine(value: "[proof]   run B: --world baked (the in-code definition, requested by name)");
+        var codeB = RunHopCorpus(logPath: logB, population: population, worldArg: "baked");
 
         Console.WriteLine();
-        Console.WriteLine(value: $"[proof]   (info) feeder exit codes — run A={codeA}, run B={codeB} (their in-flight #expect-band assertion is NOT the worlddoc gate; see comment above)");
+        Console.WriteLine(value: "[proof]   run C: --world baked again (the determinism rerun)");
+        var codeC = RunHopCorpus(logPath: logC, population: population, worldArg: "baked");
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof]   (info) feeder exit codes — run A={codeA}, run B={codeB}, run C={codeC} (their in-flight #expect-band assertion is NOT the worlddoc gate; see comment above)");
 
         var posesA = DistinctPoseCount(logPath: logA);
         var posesB = DistinctPoseCount(logPath: logB);
-        var coveragePassed = ((posesA == population) && (posesB == population));
+        var posesC = DistinctPoseCount(logPath: logC);
+        var coveragePassed = ((posesA == population) && (posesB == population) && (posesC == population));
 
-        Console.WriteLine(value: $"[proof]   {(coveragePassed ? "PASS" : "FAIL")} pose coverage — run A captured {posesA}/{population}, run B captured {posesB}/{population}");
+        Console.WriteLine(value: $"[proof]   {(coveragePassed ? "PASS" : "FAIL")} pose coverage — run A captured {posesA}/{population}, run B {posesB}/{population}, run C {posesC}/{population}");
 
-        var comparePassed = (Comparer.RunCompare(opts: new ArgMap(args: ["--reference", logA, "--candidate", logB])) == 0);
+        var determinismPassed = (Comparer.RunCompare(opts: new ArgMap(args: ["--reference", logB, "--candidate", logC])) == 0);
 
-        var linesA = File.ReadAllLines(path: logA);
-        var linesB = File.ReadAllLines(path: logB);
-        var bakedInA = linesA.Any(predicate: l => l.Contains(value: "baked default"));
-        var bakedInB = linesB.Any(predicate: l => l.Contains(value: "baked default"));
-        var loudLinePassed = (!bakedInA && bakedInB);
+        Console.WriteLine(value: $"[proof]   {(determinismPassed ? "PASS" : "FAIL")} baked-document determinism — run B vs run C final sweeps byte-identical");
+        Console.WriteLine(value: "[proof]   (note) run A vs run B — a different DOCUMENT, not a rerun; the shipped default declares solidity the in-code one does not, so a pose delta here is content, never a regression:");
+        _ = Comparer.RunCompare(opts: new ArgMap(args: ["--reference", logA, "--candidate", logB]));
 
-        Console.WriteLine(value: $"[proof]   {(loudLinePassed ? "PASS" : "FAIL")} loud-fallback line — run A (checked-in) baked-default={bakedInA} (want false), run B (missing) baked-default={bakedInB} (want true)");
-        Console.WriteLine(value: $"[proof]   transcripts: {logA} | {logB}");
+        var bakedInA = File.ReadLines(path: logA).Any(predicate: l => l.Contains(value: "baked default"));
+        var bakedInB = File.ReadLines(path: logB).Any(predicate: l => l.Contains(value: "baked default"));
+        var bakedInC = File.ReadLines(path: logC).Any(predicate: l => l.Contains(value: "baked default"));
+        var loudLinePassed = (!bakedInA && bakedInB && bakedInC);
 
-        return (coveragePassed && comparePassed && loudLinePassed);
+        Console.WriteLine(value: $"[proof]   {(loudLinePassed ? "PASS" : "FAIL")} loud baked-default line — run A (checked-in) baked-default={bakedInA} (want false), runs B/C (--world baked) baked-default={bakedInB}/{bakedInC} (want true)");
+        Console.WriteLine(value: $"[proof]   transcripts: {logA} | {logB} | {logC}");
+
+        return (coveragePassed && determinismPassed && loudLinePassed);
+    }
+
+    // One feeder pass of the shared short hop corpus against a given --world value.
+    static int RunHopCorpus(string logPath, int population, string worldArg) {
+        return Feeder.RunFeeder(opts: new ArgMap(args: [
+            "--kind", "hop", "--population", population.ToString(provider: ProofApp.Inv), "--headless", "--no-build",
+            "--quality", "low", "--width", "640", "--height", "480", "--min-fps", "0",
+            "--log", logPath, "--world-arg", worldArg,
+        ]));
     }
 
     // The count of distinct players whose final pose landed in the transcript (the last player.where echo per

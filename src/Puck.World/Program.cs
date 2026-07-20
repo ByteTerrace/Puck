@@ -52,7 +52,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load; a missing or invalid file falls back loudly to the baked default. Default: Assets/worlds/default.world.json beside the executable.",
+    Description = "The world definition file (puck.world.def.v1) to load, or the literal 'baked' to run the in-code baked definition outright. An explicit file that is missing or invalid FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/default.world.json beside the executable loads, falling back loudly to the baked definition only when no such asset ships.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -119,9 +119,9 @@ if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
     }
 }
 
-// The world definition (see WorldDefinition) — a --world file, or Assets/worlds/default.world.json beside the
-// executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
-// WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those now read their
+// The world definition (see WorldDefinition) — a --world file, `--world baked` (the in-code document, asked for by
+// name), or the shipped Assets/worlds/default.world.json beside the executable, loaded / schema-checked / validated
+// (see WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those now read their
 // values from the resolved host section. Read by DI from the roster, population, frame source, render settings, and the
 // world.quality verb; the resolved source is registered so world.save knows its default target (null when baked).
 // An explicit --world path that will not load ends the boot here — a typo must never quietly run a different world.
