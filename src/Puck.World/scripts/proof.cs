@@ -167,6 +167,26 @@
 //       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
 //       canonical embeds and the world.save hash recompute are byte-stable). Decodes the engine's own PNGs
 //       inline like ui-floor.
+//   population [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The crowd-shape proof (looks, kit hot-swap, spawn policy, inhabitation), one windowed session on the default
+//       backend. It PINS its stage first — seat 1 alone, every entity on the runner kit, a 24-strong idle census — so no
+//       count below is inherited from boot, and asserts: (a) THE LOOK TABLE both ways — two authored rows plus a
+//       `table stocky stocky tiny` assignment make world.looks read the exact 17/8 split the cycle implies (a number the
+//       hash policy it replaced does not produce), and a world.look.tune of the majority row's render SCALE repaints the
+//       crowd decisively over a static control pair (the pixel half — a look table nothing renders passes every count and
+//       changes no frame), with the no-cascade removal of a still-referenced row rejecting loudly and the journal holding;
+//       (b) THE KIT HOT-SWAP — a body warped OFF its spawn footprint FIRST (a body still at its spawn would satisfy
+//       'pose survives' even against a rebuild), then a live world.kit.tune, then the pose read back bit-for-bit;
+//       (c) THE SPAWN POLICY both halves — world.population.spawn points leaves the standing body exactly where it is,
+//       and the next activation (census drained to 0 and readmitted) lands ON the authored spawn point, tens of units from
+//       the phyllotaxis default; (d) INHABITATION END TO END — an imported proof-authored creation placed, its kit given
+//       an attend flavor, world.placement.inhabit claiming a body at the highest free slot (world.inhabitants names it),
+//       the ATTEND producer measurably closing the range to seat 1, the derived-face census plus a world.placement.face
+//       override (one journal entry; an unknown face rejects loudly), detach freeing the slot, and world.undo
+//       reconstructing the registration; (e) THE TWO REFUSAL LANES — an inhabit facet naming an undeclared kit is a
+//       DOCUMENT refusal (loud, journal unchanged) while a claim against a table filled by a 124-peer census is a RUNTIME
+//       admission refusal (the document applies; the server says loudly that no slot was free and nobody is admitted).
+//       Every round settles wire.errors against its own deliberate refusals and the session ends asserting zero.
 //   audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
 //       patches/tune through the HASH-PIN handshake (a bogus hash rejects loudly NAMING the canonical sha256, which
@@ -188,6 +208,26 @@
 //       the world.volume session lever (document read → lever engage → 'audio' drift → the save FOLDS it into
 //       audio.masterGain), and the ouroboros now carries the cue table + folded volume — with the rebooted cue
 //       table still FIRING (the behavioral half). speaker.state itself is exercised throughout.
+//   collision [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The solidity/contact + host-section proof (Arc 1, Arc 2, Beat A), run on BOTH backends because the host
+//       read's RESOLVED column names the one actually hosting. Every claim is measured on a pose or a counter, never on
+//       an echo alone: (a) SOLIDITY IS DATA — a proof-authored slab across the run lane stops the body dead (z 11.13
+//       against a face at 11.5) and zeroes its planar speed while the tape still commands full forward, and the
+//       IDENTICAL segment carries it to z 26 once world.scene.solid drops the facet from the same row (the world.contacts
+//       census tracking the row count both ways); (b) THE RESPONSE TABLE SHAPES MOMENTUM — the same 0.6 s segment over
+//       empty ground travels 5.44 u through an empty table and 0.55 u through an authored engageRate-1.5 row: the DELTA
+//       is the feature; (c) THE KIT FACETS — a volumeless kit (world.kit.collider none) is not solved at all and walks
+//       through the solid wall, world.kit.model grounded/free flips whether the up channel integrates (y 0.00 vs 9.00 on
+//       one player.fly segment), and world.collision.off/on drops and restores solving while the rows keep their facets;
+//       (d) THE FIELD PROVIDER — world.collision.probe answers three different gradients around a floating solid sphere
+//       (+Y at the pole, +Z and +X on the flanks) and a walk over it sheds 12.9 u of height while the RADIUS from its
+//       center holds to 0.00 u — the planetoid signature the analytic provider cannot produce (the identical pose and
+//       segment diverge by 25 u); (e) THE REJECTION TABLE — an out-of-range slope, a gradient under the analytic
+//       provider, a probe with no field, a capsule shorter than its diameter, and the two host-tune grammars, each loud;
+//       (f) THE HOST SECTION — the three-column read (document 1280x800 vs the CLI-resolved size vs the live levers), a
+//       tune that moves the DOCUMENT and so marks 'host' drift, a world.undo that clears it, the section's grant denial,
+//       and the SERIALIZATION PIN: world.save writes presentMode PascalCase ("Mailbox") beside the lowercase
+//       backend/surfaceFormat tokens, and a relaunch --world <that file> reads it back as mailbox (the reader half).
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The second world + session write-back proof: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -257,10 +297,12 @@ static class ProofApp {
                 "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
                 "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
                 "placements" => PlacementsProof.RunPlacements(opts: opts),
+                "population" => PopulationProof.RunPopulation(opts: opts),
                 "sculpt" => SculptProof.RunSculpt(opts: opts),
                 "audio" => AudioProof.RunAudio(opts: opts),
+                "collision" => CollisionProof.RunCollision(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt|audio)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|population|sculpt|audio|collision)"),
             });
         }
         catch (ArgException ex) {
@@ -307,8 +349,10 @@ static class ProofApp {
         Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  population [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  collision [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -8608,6 +8652,494 @@ static class PlacementsProof {
     }
 }
 
+// ============================================================================================
+// POPULATION — the crowd-shape proof: the LOOK table (a row's appearance as data), the
+// live kit hot-swap (a retune must not teleport a standing body), the SPAWN POLICY (an authored
+// policy places future activations where it says), and INHABITATION end to end (a placement's
+// inhabit facet claims a body over the loopback link, its kit's attend producer drives that body
+// toward the nearest seat, detach frees the slot, undo reconstructs it) plus the two loud
+// admission refusals. One windowed session on the default backend; the appearance half is
+// asserted in PIXELS (a census/looks read-back alone would pass on a look table nothing renders).
+// See the header's subcommand block for the assertion list.
+// ============================================================================================
+static class PopulationProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+
+    // The pinned stage: seat 1 alone plus a 24-strong idle census, every entity on the `runner` kit. Every count this
+    // proof asserts is derived from these two numbers, never inherited from boot (the census boots at 0 and kit
+    // assignment is hash policy, so an unpinned run measures a different crowd every time).
+    const int Census = 24;
+    const int ActiveEntities = (Census + 1);        // the 24 stand-ins plus the one local seat this proof keeps
+    const int PeerIndex = 5;                        // player.where's 1-based index for census entry 0 (slot 4)
+    // The look table's exact split under `table stocky stocky tiny` over the active entity set: slot 0 (seat 1) and
+    // census slots 4..27 take table[slot % 3], so tiny lands on slots 5, 8, ... 26 — eight of them.
+    const int StockyCount = 17;
+    const int TinyCount = 8;
+    // The inhabited body claims the HIGHEST free slot (127 downward), so its player.where index is fixed at 128.
+    const int InhabitantIndex = 128;
+    const string InhabitedPlacement = "dock-1";
+    const string ProbeCreation = "probe-walker";
+    // The authored spawn point the `points` policy cycles — far outside the disc the default phyllotaxis policy
+    // scatters census slot 0 into, so the landing assertion cannot be satisfied by the policy it replaces.
+    const double DockX = 25.0;
+    const double DockZ = -18.0;
+    const double LandingEpsilon = 0.5;              // u — the points policy carries jitter 0, so the landing is exact
+    const double FrozenEpsilon = 0.02;              // u — an unmoved body must not drift at all (2-decimal echo precision)
+    // u — the attend producer's convergence over the sampled window. The inhabited body starts ~10.8 u from seat 1 and
+    // closes to the kit's 2 u standoff; nothing else can move it (its intent source is Attend, never Wander), so the
+    // floor discriminates against a producer that stopped driving, not against ambient drift.
+    const double AttendCloseEpsilon = 4.0;
+
+    public static int RunPopulation(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 300, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        var passed = RunSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] population proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var controlAPath = ShotPath(pid: pid, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, name: "control-b");
+        var scaledPath = ShotPath(pid: pid, name: "scaled");
+        var creationFixture = Path.Combine(Path.GetTempPath(), $"puck-population-{pid}-walker.creation.json");
+
+        File.WriteAllText(path: creationFixture, contents: WalkerProbeCreationJson);
+
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= PinStage(ctx: ctx);
+            passed &= RunLookRound(ctx: ctx, width: width, height: height, controlAPath: controlAPath, controlBPath: controlBPath, scaledPath: scaledPath);
+            passed &= RunKitHotSwapRound(ctx: ctx);
+            passed &= RunSpawnPolicyRound(ctx: ctx);
+            passed &= RunInhabitRound(ctx: ctx, creationFixture: creationFixture);
+            passed &= RunAdmissionRefusalRound(ctx: ctx);
+
+            // Every deliberate refusal above was settled and cleared by its own round. A nonzero count here is a line
+            // this suite MEANT to succeed and the wire refused — the failure mode that reads as green everywhere else.
+            passed &= SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "population-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: scaledPath);
+            ComposedShotKit.TryDelete(path: creationFixture);
+        }
+
+        return passed;
+    }
+
+    // PIN the stage before anything is asserted about it: console panel off (the shots read the world), seat 1 alone
+    // (a dev-machine pad auto-seats extra players), every entity on ONE kit, and a fixed idle census. Nothing below
+    // inherits a boot value.
+    static bool PinStage(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+        for (var seat = 2; (seat <= 4); seat++) {
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+        }
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.kit.assign table runner",
+            expect: "[world.mutation: SetKitAssignment 'table' applied]", name: "pin-kit-table");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.population {Census} idle",
+            expect: $"[world.population: {Census} network-human stand-ins active", name: "pin-census");
+
+        return passed;
+    }
+
+    // (a) THE LOOK TABLE. The census read-back is the bookkeeping half — it must agree with the authored assignment
+    // exactly, not approximately — and the pixel band is the behavioral half: a look row nothing renders would pass
+    // every count above and change no frame.
+    static bool RunLookRound(ComposedShotKit.Ctx ctx, int width, int height, string controlAPath, string controlBPath, string scaledPath) {
+        // The implicit single row a world with no `looks` section wears, over the pinned entity set — the baseline the
+        // assignment below has to move.
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.looks",
+            expect: $"[world.looks: catalog=catalog(index-derived):{ActiveEntities}]", name: "looks-baseline-implicit-row");
+
+        var dirty0 = ReadDirty(ctx: ctx, name: "dirty-before-looks");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.look.set {LookRowJson(name: "stocky", catalogIndex: 42)}",
+            expect: "[world.mutation: UpsertLook 'stocky' applied]", name: "look-set-stocky");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.look.set {LookRowJson(name: "tiny", catalogIndex: 7)}",
+            expect: "[world.mutation: UpsertLook 'tiny' applied]", name: "look-set-tiny");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.look.assign table stocky stocky tiny",
+            expect: "[world.mutation: SetLookAssignment 'table' applied]", name: "look-assign-table");
+        passed &= ComposedShotKit.Check(name: "looks-are-three-journal-entries", ok: (ReadDirty(ctx: ctx, name: "dirty-after-looks") == (dirty0 + 3)), detail: "two rows + one assignment = three entries");
+
+        // THE READ-BACK AGREES: the 2:1 cycle over 25 entities is 17/8 — a split the hash policy it replaced does not
+        // produce, so the assertion fails if the assignment silently stayed on hash.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.looks",
+            expect: $"[world.looks: stocky=catalog(index 42):{StockyCount} tiny=catalog(index 7):{TinyCount}]", name: "looks-census-matches-assignment");
+
+        // THE PIXEL HALF: bound the static noise floor with a control pair (the census is idle and seat 1 is stopped,
+        // so the stage holds still), then quadruple the majority row's render scale and demand a decisive repaint.
+        Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: the control pair must read geometry only
+        passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "look-control-shot-a", path: controlAPath);
+        passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "look-control-shot-b", path: controlBPath);
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.look.tune stocky scale 4",
+            expect: "[world.mutation: UpsertLook 'stocky' applied]", name: "look-tune-scale");
+        Thread.Sleep(millisecondsTimeout: 3400);
+        passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "look-scaled-shot", path: scaledPath);
+
+        var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+        var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+        var scaled = ComposedShotKit.DecodePng(path: scaledPath);
+        // The crowd fills the middle of the frame under the seat-1 chase camera; the band excludes the outer eighth so
+        // an edge-of-frame overlay element cannot carry the diff.
+        var bandX = (width / 8);
+        var bandY = (height / 8);
+        var bandW = (width - (width / 4));
+        var bandH = (height - (height / 4));
+        var noise = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+        var scaleDiff = MeanAbsDiff(a: scaled, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+        passed &= ComposedShotKit.Check(
+            name: "look-scale-repaints-the-crowd",
+            // The floor is calibrated against a measured REVERT: with the look scale stripped from the render path the
+            // band still reads ~2.9 (the assignment's own rig churn), so the absolute floor sits well above that, not at
+            // the noise pair's heels.
+            ok: ((scaleDiff > 4.0) && (scaleDiff > (noise * 4.0))),
+            detail: $"look band diff {scaleDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 4.0 and > 4x noise)"
+        );
+
+        // NO CASCADE: a look row the assignment table still names cannot be removed — loud, and the journal holds.
+        var dirtyBeforeRemove = ReadDirty(ctx: ctx, name: "dirty-before-look-remove");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.look.remove stocky",
+            expect: "lookAssignment.table[0] 'stocky' names no look row", name: "look-remove-referenced-rejects");
+        passed &= ComposedShotKit.Check(name: "look-remove-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-look-remove") == dirtyBeforeRemove), detail: "journal unchanged");
+        passed &= SettleWireErrors(ctx: ctx, name: "look-round-refused-only-its-one", expected: 1);
+
+        return passed;
+    }
+
+    // (b) THE KIT HOT-SWAP CONTRACT: a live kit retune recompiles a standing body's tuning IN PLACE. The body is
+    // warped OFF its spawn footprint first — a body still standing at its spawn would satisfy "pose survives" even if
+    // the retune rebuilt it from scratch, which is exactly the vacuous check this premise closes.
+    static bool RunKitHotSwapRound(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"player.warp 12 -7 {PeerIndex}", expect: "[player.warp: (12.00, -7.00)]", name: "peer-warped-off-spawn");
+
+        var beforeTune = ReadWhere(ctx: ctx, index: PeerIndex);
+        // The premise, measured rather than assumed: the body is nowhere near where a rebuild would put it (census
+        // slot 0's phyllotaxis spawn sits within a few units of the origin).
+        var spawnDistance = Distance(a: beforeTune, b: Origin);
+
+        passed &= ComposedShotKit.Check(name: "hot-swap-premise-off-spawn", ok: (spawnDistance > 10.0),
+            detail: $"p{PeerIndex} {Fmt(pose: beforeTune)} is {spawnDistance.ToString(format: "F2", provider: ProofApp.Inv)} u from the origin (want > 10)");
+
+        var dirtyBefore = ReadDirty(ctx: ctx, name: "dirty-before-kit-tune");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.kit.tune runner moveSpeed 9",
+            expect: "[world.mutation: UpsertKit 'runner' applied]", name: "kit-retuned-mid-run");
+        passed &= ComposedShotKit.Check(name: "kit-tune-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-kit-tune") == (dirtyBefore + 1)), detail: "retune = one journal entry");
+
+        var afterTune = ReadWhere(ctx: ctx, index: PeerIndex);
+        var drift = Distance(a: beforeTune, b: afterTune);
+
+        passed &= ComposedShotKit.Check(name: "hot-swap-preserves-pose", ok: (drift <= FrozenEpsilon),
+            detail: $"p{PeerIndex} {Fmt(pose: beforeTune)} -> {Fmt(pose: afterTune)} (delta {drift.ToString(format: "F3", provider: ProofApp.Inv)} u, want <= {FrozenEpsilon})");
+
+        return passed;
+    }
+
+    // (c) THE SPAWN POLICY: authored placement of FUTURE activations. Both halves of the verb's contract are asserted
+    // — the standing body does not move when the policy changes, and the next activation lands on the named point.
+    static bool RunSpawnPolicyRound(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"world.spawns.set {SpawnPointsJson}",
+            expect: "[world.mutation: SetSpawns applied]", name: "spawn-point-authored");
+
+        var beforePolicy = ReadWhere(ctx: ctx, index: PeerIndex);
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population.spawn points 0 proof-dock",
+            expect: "spawn policy live for future activations, standing bodies unmoved", name: "spawn-policy-applied");
+
+        var afterPolicy = ReadWhere(ctx: ctx, index: PeerIndex);
+        var policyDrift = Distance(a: beforePolicy, b: afterPolicy);
+
+        passed &= ComposedShotKit.Check(name: "standing-body-unmoved-by-policy", ok: (policyDrift <= FrozenEpsilon),
+            detail: $"p{PeerIndex} {Fmt(pose: beforePolicy)} -> {Fmt(pose: afterPolicy)} (delta {policyDrift.ToString(format: "F3", provider: ProofApp.Inv)} u, want <= {FrozenEpsilon})");
+
+        // Re-activate the census slot: deactivate to zero, then admit one entry again — the ONLY moment the policy is
+        // read. The landing is exact (jitter 0) and tens of units from where the phyllotaxis default would place it.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population: 0 network-human stand-ins active", name: "census-drained");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 1 idle", expect: "[world.population: 1 network-human stand-ins active", name: "census-readmits-one");
+
+        var landed = ReadWhere(ctx: ctx, index: PeerIndex);
+        var landingError = Distance(a: landed, b: new Pose(X: DockX, Y: 0.0, Z: DockZ, Yaw: 0, Pitch: 0, Roll: 0));
+
+        passed &= ComposedShotKit.Check(name: "activation-lands-on-authored-point", ok: (landingError <= LandingEpsilon),
+            detail: $"p{PeerIndex} {Fmt(pose: landed)} vs the authored ({ProofApp.F(value: DockX, format: "0.00")}, 0.00, {ProofApp.F(value: DockZ, format: "0.00")}) — error {landingError.ToString(format: "F3", provider: ProofApp.Inv)} u (want <= {LandingEpsilon})");
+
+        return passed;
+    }
+
+    // (d) INHABITATION END TO END: a placement's inhabit facet joins a body over the loopback link, the kit's attend
+    // producer drives it, the declared creation face derives a screen, detach frees the slot, and undo reconstructs it.
+    static bool RunInhabitRound(ComposedShotKit.Ctx ctx, string creationFixture) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {creationFixture}",
+            expect: $"[world.mutation: UpsertCreation '{ProbeCreation}' applied]", name: "import-walker-probe");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.set {PlacementJson}",
+            expect: $"[world.mutation: UpsertPlacement '{InhabitedPlacement}' applied]", name: "place-walker-probe");
+
+        // The default world declares no attend flavor on any kit, so the facet's Attend source would be rejected
+        // outright: give `runner` one first (release 18 > notice 12 >= standoff 2), targeting the nearest seat.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.kit.attend runner 12 18 2 0.8 0.2 face seat",
+            expect: "[world.mutation: UpsertKit 'runner' applied]", name: "kit-declares-attend-flavor");
+
+        // The derived-face census: the creation declares one face, so the placement derives one screen slot. The
+        // census read-back is what a derived-face regression would silence.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.faces",
+            expect: $"{InhabitedPlacement}/visor[screen=", name: "faces-census-names-derived-face");
+
+        var dirtyBeforeFace = ReadDirty(ctx: ctx, name: "dirty-before-face-override");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.face {InhabitedPlacement} visor test",
+            expect: "source applies at next boot", name: "face-override-reaches-the-screen-slot");
+        passed &= ComposedShotKit.Check(name: "face-override-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-face-override") == (dirtyBeforeFace + 1)), detail: "override = one journal entry");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.face {InhabitedPlacement} no-such-face test",
+            expect: $"'no-such-face' names no declared face on creation '{ProbeCreation}'", name: "face-override-unknown-face-rejects");
+        passed &= ComposedShotKit.Check(name: "bad-face-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-bad-face") == (dirtyBeforeFace + 1)), detail: "journal unchanged");
+        passed &= SettleWireErrors(ctx: ctx, name: "face-round-refused-only-its-one", expected: 1);
+
+        // THE CLAIM: the facet admits one body at the highest free slot (127 -> player index 128).
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} runner attend 1 0",
+            expect: $"[world.mutation: UpsertPlacement '{InhabitedPlacement}' applied]", name: "inhabit-facet-applied");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.inhabitants",
+            expect: $"{InhabitedPlacement}[creation={ProbeCreation} kit=runner source=Attend body=127", name: "inhabitant-claims-a-body");
+
+        // THE ATTEND PRODUCER DRIVES: the body starts ~10.8 u from seat 1 and closes on the kit's 2 u standoff. Its
+        // intent source is Attend, so no wander producer can touch it — the closure is the attend lane's alone.
+        var seat = ReadWhere(ctx: ctx, index: 1);
+        var beforeAttend = ReadWhere(ctx: ctx, index: InhabitantIndex);
+
+        Thread.Sleep(millisecondsTimeout: 2500);
+
+        var afterAttend = ReadWhere(ctx: ctx, index: InhabitantIndex);
+        var openRange = Distance(a: beforeAttend, b: seat);
+        var closedRange = Distance(a: afterAttend, b: seat);
+        var closed = (openRange - closedRange);
+
+        passed &= ComposedShotKit.Check(name: "attend-producer-closes-on-the-seat", ok: (closed > AttendCloseEpsilon),
+            detail: $"p{InhabitantIndex} range to p1 {openRange.ToString(format: "F2", provider: ProofApp.Inv)} -> {closedRange.ToString(format: "F2", provider: ProofApp.Inv)} u (closed {closed.ToString(format: "F2", provider: ProofApp.Inv)}, want > {AttendCloseEpsilon})");
+
+        // DETACH frees the slot; UNDO reconstructs the registration from the journal.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} -",
+            expect: $"[world.mutation: UpsertPlacement '{InhabitedPlacement}' applied]", name: "detach-applied");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.inhabitants", expect: "[world.inhabitants: none]", name: "detach-frees-the-slot");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1", name: "undo-drops-the-detach");
+        Thread.Sleep(millisecondsTimeout: 500); // the reconcile runs on the tick that installs the restored document
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.inhabitants",
+            expect: $"{InhabitedPlacement}[creation={ProbeCreation} kit=runner source=Attend body=127", name: "undo-reconstructs-the-inhabitant");
+
+        return passed;
+    }
+
+    // (e) THE TWO LOUD REFUSALS: an inhabit facet naming a kit the world does not declare is a DOCUMENT error (the
+    // validator refuses it and the journal holds), while a claim against a genuinely full entity table is a RUNTIME
+    // admission failure (the document is valid, so it applies — and the server says loudly that no slot was free).
+    static bool RunAdmissionRefusalRound(ComposedShotKit.Ctx ctx) {
+        var dirtyBefore = ReadDirty(ctx: ctx, name: "dirty-before-refusals");
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} no-such-kit",
+            expect: "inhabit names no kit; the world declares: flyer, swimmer, jumper, runner, kart", name: "inhabit-unresolved-kit-rejects");
+
+        passed &= ComposedShotKit.Check(name: "unresolved-kit-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-unresolved-kit") == dirtyBefore), detail: "journal unchanged");
+        passed &= SettleWireErrors(ctx: ctx, name: "unresolved-kit-refused-only-its-one", expected: 1);
+
+        // THE FULL TABLE: retire the inhabitant, fill every peer slot with census stand-ins, and claim again — 124
+        // peers plus the local seat leave no free slot for an inhabited body.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} -",
+            expect: $"[world.mutation: UpsertPlacement '{InhabitedPlacement}' applied]", name: "retire-before-flood");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 124 idle", expect: "[world.population: 124 network-human stand-ins active", name: "census-fills-the-table", deadlineSeconds: 30.0);
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.placement.inhabit {InhabitedPlacement} runner attend 1 0",
+            expect: $"inhabited '{InhabitedPlacement}' has no free entity slot", name: "full-table-claim-rejects-loudly", deadlineSeconds: 30.0);
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.inhabitants", expect: "[world.inhabitants: none]", name: "full-table-claim-admitted-nobody");
+
+        // Drain back to a small census so the closing wire.errors settle is not racing 124 producers.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 1 idle", expect: "[world.population: 1 network-human stand-ins active", name: "census-drained-after-flood", deadlineSeconds: 30.0);
+
+        return passed;
+    }
+
+    // One WorldLook row as compact inline JSON — a catalog-pinned rig at unit scale and full gait.
+    static string LookRowJson(string name, int catalogIndex) {
+        return $"{{\"name\":\"{name}\",\"source\":{{\"$type\":\"catalog\",\"index\":{catalogIndex}}},\"scale\":1.0,\"motion\":{{\"gaitAmplitude\":1.0,\"replayFrames\":false,\"secondsPerFrame\":0.125}}}}";
+    }
+
+    static readonly Pose Origin = new(X: 0.0, Y: 0.0, Z: 0.0, Yaw: 0, Pitch: 0, Roll: 0);
+
+    // The four authored seat spawns (order maps slots, so they lead unchanged) plus the far dock the points policy
+    // cycles. world.spawns.set replaces the whole list.
+    const string SpawnPointsJson =
+        "[{\"id\":\"seat-1\",\"position\":[0,0,0]},{\"id\":\"seat-2\",\"position\":[-3,0,2]},{\"id\":\"seat-3\",\"position\":[3,0,2]},{\"id\":\"seat-4\",\"position\":[0,0,4]},{\"id\":\"proof-dock\",\"position\":[25,0,-18]}]";
+
+    // The inhabited placement: 10 u up-Z of the spawn plaza, inside the attend flavor's 12 u notice radius.
+    const string PlacementJson =
+        "{\"id\":\"dock-1\",\"creationId\":\"probe-walker\",\"position\":[0,0,10],\"yawDegrees\":0,\"scale\":1}";
+
+    // THE WALKER PROBE — a two-primitive figure authored HERE (the proof owns its art), declaring one face so the
+    // placement derives a screen slot. Vector3/Quaternion members use the creation serializer's field shape.
+    const string WalkerProbeCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-walker",
+          "palette": [
+            { "albedo": { "x": 0.9, "y": 0.5, "z": 0.2 } },
+            { "albedo": { "x": 0.2, "y": 0.5, "z": 0.9 }, "emissive": 0.3 }
+          ],
+          "shapes": [
+            { "id": 0, "type": "Box", "position": { "x": 0, "y": 1.0, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.2, "y": 2.0, "z": 1.2 }, "material": 0 },
+            { "id": 1, "type": "Sphere", "position": { "x": 0, "y": 2.4, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.4, "y": 1.4, "z": 1.4 }, "material": 1 }
+          ],
+          "behavior": { "locomotion": "runner", "faces": [ { "name": "visor", "shapeId": 1, "defaultSource": "none" } ] }
+        }
+        """;
+
+    // Settle the wire's refused-line counter: poll `wire.errors` until it reads the number of refusals the round just
+    // ahead of the call DELIBERATELY provoked, then zero it. Polling (rather than one read) is required because a
+    // validator denial is DEFERRED — the line is accepted, and the refusal is counted a tick later through the
+    // edit-echo tap. Clearing the deliberate ones is what lets the final zero assertion mean "nothing ELSE was refused".
+    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
+        string? last = null;
+
+        for (var attempt = 0; (attempt < 25); attempt++) {
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "wire.errors");
+
+            last = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+
+            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
+                mark = ctx.Collector.Count;
+
+                ComposedShotKit.Send(ctx: ctx, line: "wire.errors reset");
+                _ = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[wire.errors:"), deadlineSeconds: 5.0);
+
+                return ComposedShotKit.Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+    }
+
+    static Pose? ReadWhere(ComposedShotKit.Ctx ctx, int index) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: $"player.where {index}");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => ProofApp.WhereEcho.IsMatch(input: l), deadlineSeconds: 10.0);
+
+        if (line is null) {
+            return null;
+        }
+
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return new Pose(
+            X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+            Y: double.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv),
+            Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv),
+            Yaw: int.Parse(s: match.Groups[5].Value, provider: ProofApp.Inv),
+            Pitch: int.Parse(s: match.Groups[6].Value, provider: ProofApp.Inv),
+            Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv));
+    }
+
+    // Euclidean distance between two samples, or NaN when either read failed — a NaN fails BOTH the "moved beyond
+    // epsilon" and "held within epsilon" comparisons, which is the correct verdict for a missing sample.
+    static double Distance(Pose? a, Pose? b) {
+        if ((a is not { } pa) || (b is not { } pb)) {
+            return double.NaN;
+        }
+
+        var dx = (pb.X - pa.X);
+        var dy = (pb.Y - pa.Y);
+        var dz = (pb.Z - pa.Z);
+
+        return Math.Sqrt(d: ((dx * dx) + (dy * dy) + (dz * dz)));
+    }
+
+    static string Fmt(Pose? pose) {
+        return (pose is { } p ? $"({ProofApp.F(value: p.X, format: "0.00")}, {ProofApp.F(value: p.Y, format: "0.00")}, {ProofApp.F(value: p.Z, format: "0.00")})" : "(?)");
+    }
+
+    static string ShotPath(int pid, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-population-{pid}-{name}.png");
+    }
+
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Sends world.status and parses the journal dirty counter (the stdin barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // sculpt — the creation sub-editor proof, on BOTH backends: sculpt a creation from NOTHING over stdin
 // (editor.sculpt.* — primitives, palette, a chain/IK pose), commit it as ONE canonicalized UpsertCreation, stamp it
@@ -9431,5 +9963,576 @@ static class AudioProof {
         var actual = ((statusLine is null) ? -1 : int.Parse(s: DirtyEcho.Match(input: statusLine).Groups[1].Value, provider: ProofApp.Inv));
 
         return ComposedShotKit.Check(name: name, ok: (actual == dirty), detail: ((statusLine is null) ? "(no world.status echo)" : $"dirty {actual} (want {dirty})"));
+    }
+}
+
+// ============================================================================================
+// COLLISION — the solidity/contact + host-section proof (Arc 1, Arc 2, Beat A). Every check is a
+// BEHAVIOR, not an echo: a body that stops against a solid row and stops stopping when the facet
+// is turned off, a displacement DELTA between two response tables, the field provider's
+// gradient-derived up (the planetoid signature the analytic provider cannot produce), and the
+// host section's three-column read / drift / undo / denial / reject table. Runs on BOTH backends
+// because the host read's RESOLVED column names the one actually hosting.
+// ============================================================================================
+static class CollisionProof {
+    // The proof-authored wall: a wide, thin solid slab across the clear ground north of the boulder field, with the run
+    // lane (z 8 -> 12) empty of every checked-in row.
+    const string WallId = "proof-wall";
+    const string WallJson = """{"$type":"slab","id":"proof-wall","center":[0,1,12],"halfExtents":[6,2,0.5],"round":0.05,"smooth":0,"albedo":[0.5,0.5,0.5],"solid":{"margin":0}}""";
+    // The proof-authored planetoid: a solid sphere floating far above the ground plane, so the plane never wins the
+    // union anywhere the walk happens and "up" is the sphere's own gradient.
+    const string PlanetoidJson = """{"$type":"boulder","id":"proof-planetoid","center":[0,40,60],"radius":8,"smooth":0,"solid":{"margin":0}}""";
+    const double PlanetoidCenterY = 40.0;
+    const double PlanetoidCenterZ = 60.0;
+    const double PlanetoidRadius = 8.0;
+    // The lane the wall crosses: the body starts here and runs +Z into the slab's face at z = 11.5.
+    const double LaneStartZ = 8.0;
+    // u — the wall's near face (11.5) minus the capsule radius and skin lands the body at ~11.13; a body that passed
+    // through the slab is out past 20 within the same segment (measured: 26.00 at ~9 u/s over 2 s).
+    const double BlockedCeilingZ = 12.0;
+    const double PassedFloorZ = 20.0;
+    // u — the radial distance from the planetoid center must HOLD across the walk (measured: 8.02 -> 8.02 under the
+    // field provider, 8.02 -> 33.0 under analytic).
+    const double RadialHoldEpsilon = 0.35;
+    const double RadialDivergeFloor = 10.0;
+    // u — the height the walk must shed while that radius holds (measured: 12.89 over a two-second segment).
+    const double PlanetoidDropFloor = 5.0;
+
+    static readonly Regex PlanarSpeedEcho = new(options: RegexOptions.Compiled, pattern: @"planarSpeed=(-?[0-9.]+)");
+    static readonly Regex DriftEcho = new(options: RegexOptions.Compiled, pattern: @"session-drift (\S+)");
+
+    public static int RunCollision(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        // D3D12 FIRST (World's default backend), then Vulkan — the host read's resolved column names each one.
+        Console.WriteLine(value: "[proof] === collision (a): Direct3D 12 (the default backend) ===");
+
+        var directXPassed = RunBackend(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === collision (b): Vulkan ===");
+
+        var vulkanPassed = RunBackend(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] collision proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // One backend: the driving session, then the relaunch that reads its saved host row back.
+    static bool RunBackend(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var tag = (backend ?? "directx");
+        var savedPath = Path.Combine(Path.GetTempPath(), $"puck-world-collision-{Environment.ProcessId}-{tag}.world.json");
+
+        try {
+            var sessionPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savedPath: savedPath);
+            var reloadPassed = RunReload(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savedPath: savedPath);
+
+            return (sessionPassed && reloadPassed);
+        }
+        finally {
+            TryDelete(path: savedPath);
+        }
+    }
+
+    // The driving session: solidity, the response table, the collider/model facets, the provider swap, the rejection
+    // table, and the host round — one boot, every claim measured on a pose or a counter.
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, string savedPath) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Mask seat 1's device stream: every displacement below must be a SUBMITTED tape segment's, never a held
+            // key leaking in from the machine this runs on.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control idle 1", expect: "[player.control: p1 is idle]", name: "seat-parked-idle");
+
+            passed &= RunSolidityRound(ctx: ctx);
+            passed &= RunResponseRound(ctx: ctx);
+            passed &= RunColliderRound(ctx: ctx);
+            passed &= RunFieldRound(ctx: ctx);
+            passed &= RunRejectionRound(ctx: ctx);
+            passed &= RunHostRound(ctx: ctx, backend: backend, width: width, height: height, savedPath: savedPath);
+
+            // Every deliberate refusal above was settled and cleared by its own round. A nonzero count here is a line
+            // this scenario MEANT to succeed and the wire refused — the silent no-op that reads green everywhere else.
+            passed &= SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // (a) SOLIDITY IS DATA. A proof-authored slab crosses the run lane; the body stops dead against it, and the SAME
+    // segment carries the body clean past the slab's plane once the facet is dropped. The mid-run world.contacts read is
+    // the second half: the solver zeroes the velocity driving into the surface, so planar speed reads 0 while the tape
+    // is still commanding full forward.
+    static bool RunSolidityRound(ComposedShotKit.Ctx ctx) {
+        var passed = ExpectEcho(ctx: ctx, name: "contacts-census-boot", line: "world.contacts", needle: "[world.contacts: collision on — 10 solid rows (5 spheres, 5 boxes)]");
+
+        passed &= ExpectMutation(ctx: ctx, name: "wall-authored", line: $"world.scene.row.set {WallJson}", needle: $"[world.mutation: UpsertSceneRow '{WallId}' applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "contacts-census-counts-the-wall", line: "world.contacts", needle: "[world.contacts: collision on — 11 solid rows (5 spheres, 6 boxes)]");
+
+        var (blocked, blockedSpeed) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "solid-wall-stops-body", ok: ((blocked is { } b) && (b.Z < BlockedCeilingZ)),
+            detail: $"p1 z {Fmt(value: blocked?.Z)} after a two-second forward segment from z {ProofApp.F(value: LaneStartZ)} (want < {ProofApp.F(value: BlockedCeilingZ)})");
+        passed &= Check(name: "solid-wall-kills-planar-speed", ok: ((blockedSpeed is { } s) && (s < 0.5)),
+            detail: $"world.contacts planarSpeed {Fmt(value: blockedSpeed)} mid-segment (want < 0.5 — the tape still commands full forward)");
+
+        // Drop the facet, keeping the row: solidity is the FACET, not the geometry.
+        passed &= ExpectMutation(ctx: ctx, name: "wall-facet-dropped", line: $"world.scene.solid {WallId} off", needle: $"[world.mutation: UpsertSceneRow '{WallId}' applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "contacts-census-drops-the-wall", line: "world.contacts", needle: "[world.contacts: collision on — 10 solid rows (5 spheres, 5 boxes)]");
+
+        var (passedThrough, freeSpeed) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "decorative-wall-stops-nothing", ok: ((passedThrough is { } p) && (p.Z > PassedFloorZ)),
+            detail: $"p1 z {Fmt(value: passedThrough?.Z)} on the IDENTICAL segment (want > {ProofApp.F(value: PassedFloorZ)})");
+        passed &= Check(name: "decorative-wall-leaves-speed-alone", ok: ((freeSpeed is { } fs) && (fs > 4.0)),
+            detail: $"world.contacts planarSpeed {Fmt(value: freeSpeed)} mid-segment (want > 4)");
+
+        // Restore the facet for the collider round, which re-uses the same wall.
+        passed &= ExpectMutation(ctx: ctx, name: "wall-facet-restored", line: $"world.scene.solid {WallId} 0", needle: $"[world.mutation: UpsertSceneRow '{WallId}' applied]");
+        passed &= SettleWireErrors(ctx: ctx, name: "solidity-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // (b) THE RESPONSE TABLE SHAPES MOMENTUM. The same 0.6-second segment, from the same warp, over empty ground: an
+    // empty table snaps to full speed instantly, an authored slow-converging row ramps. The DELTA is the feature — a
+    // build that ignored the table would post the same displacement twice.
+    static bool RunResponseRound(ComposedShotKit.Ctx ctx) {
+        var passed = ExpectMutation(ctx: ctx, name: "response-cleared", line: "world.kit.response runner none", needle: "[world.mutation: UpsertKit 'runner' applied]");
+
+        var snap = RunOpenGround(ctx: ctx, seconds: 0.6);
+
+        passed &= ExpectMutation(ctx: ctx, name: "response-table-authored", line: """world.kit.response runner [{"engageRate":1.5,"releaseRate":1.5}]""", needle: "[world.mutation: UpsertKit 'runner' applied]");
+
+        var ramped = RunOpenGround(ctx: ctx, seconds: 0.6);
+        var delta = (snap - ramped);
+
+        passed &= Check(name: "empty-table-snaps", ok: (snap > 4.0), detail: $"{Fmt(value: snap)} u travelled in 0.6 s with no response rows (want > 4)");
+        passed &= Check(name: "authored-table-ramps", ok: (ramped < 1.5), detail: $"{Fmt(value: ramped)} u travelled on the IDENTICAL segment through an engageRate-1.5 row (want < 1.5)");
+        passed &= Check(name: "response-table-shapes-momentum", ok: (delta > 3.0), detail: $"delta {Fmt(value: delta)} u between the two tables (want > 3)");
+
+        // Back to the snap table so the later lanes travel at full speed.
+        passed &= ExpectMutation(ctx: ctx, name: "response-restored", line: "world.kit.response runner none", needle: "[world.mutation: UpsertKit 'runner' applied]");
+        passed &= SettleWireErrors(ctx: ctx, name: "response-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // (c) THE KIT FACETS. A volumeless kit is not solved against the contact field at all (it walks through the restored
+    // solid wall); the motion model is a live document switch (a grounded body ignores the up channel, a free one
+    // integrates it); and collision.off drops solidity world-wide while the rows keep their facets in the document.
+    static bool RunColliderRound(ComposedShotKit.Ctx ctx) {
+        var passed = ExpectMutation(ctx: ctx, name: "collider-removed", line: "world.kit.collider runner none", needle: "[world.mutation: UpsertKit 'runner' applied]");
+
+        passed &= ExpectEcho(ctx: ctx, name: "status-drops-the-runner-collider", line: "world.collision.status", needle: "colliders=[jumper(r=0.35 h=1.7), kart(r=0.35 h=1.7)]");
+
+        var (volumeless, _) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "volumeless-kit-ignores-solids", ok: ((volumeless is { } v) && (v.Z > PassedFloorZ)),
+            detail: $"p1 z {Fmt(value: volumeless?.Z)} through the SOLID wall (want > {ProofApp.F(value: PassedFloorZ)})");
+
+        passed &= ExpectMutation(ctx: ctx, name: "collider-restored", line: "world.kit.collider runner 0.35 1.7", needle: "[world.mutation: UpsertKit 'runner' applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "status-regains-the-runner-collider", line: "world.collision.status", needle: "colliders=[jumper(r=0.35 h=1.7), runner(r=0.35 h=1.7), kart(r=0.35 h=1.7)]");
+
+        var (revolumed, _) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "restored-collider-stops-again", ok: ((revolumed is { } r) && (r.Z < BlockedCeilingZ)),
+            detail: $"p1 z {Fmt(value: revolumed?.Z)} (want < {ProofApp.F(value: BlockedCeilingZ)})");
+
+        // The motion model: the up channel is inert under grounded and integrated under free — the DOCUMENT facet, not
+        // the per-body player.motion override, is what flips it.
+        var groundedRise = RunUpChannel(ctx: ctx);
+
+        passed &= Check(name: "grounded-model-pins-the-up-channel", ok: ((groundedRise is { } g) && (Math.Abs(value: g) < 0.05)),
+            detail: $"p1 y {Fmt(value: groundedRise)} after a one-second up segment (want ~0)");
+
+        passed &= ExpectMutation(ctx: ctx, name: "model-set-free", line: "world.kit.model runner free", needle: "[world.mutation: UpsertKit 'runner' applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "body-reads-free", line: "player.motion 1", needle: "[player.motion: player 1 is free]");
+
+        var freeRise = RunUpChannel(ctx: ctx);
+
+        passed &= Check(name: "free-model-integrates-the-up-channel", ok: ((freeRise is { } f) && (f > 4.0)),
+            detail: $"p1 y {Fmt(value: freeRise)} on the IDENTICAL segment (want > 4)");
+
+        passed &= ExpectMutation(ctx: ctx, name: "model-restored", line: "world.kit.model runner grounded", needle: "[world.mutation: UpsertKit 'runner' applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "body-reads-grounded", line: "player.motion 1", needle: "[player.motion: player 1 is grounded]");
+
+        // Collision OFF: the rows keep their facets (the census still counts them) and nothing is solved.
+        passed &= ExpectMutation(ctx: ctx, name: "collision-off", line: "world.collision.off", needle: "[world.mutation: SetCollision applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "census-reads-off-with-rows-intact", line: "world.contacts", needle: "[world.contacts: collision off — 11 solid rows (5 spheres, 6 boxes)]");
+
+        var (unsolved, _) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "collision-off-stops-nothing", ok: ((unsolved is { } u) && (u.Z > PassedFloorZ)),
+            detail: $"p1 z {Fmt(value: unsolved?.Z)} with collision off (want > {ProofApp.F(value: PassedFloorZ)})");
+
+        passed &= ExpectMutation(ctx: ctx, name: "collision-on", line: "world.collision.on", needle: "[world.mutation: SetCollision applied]");
+
+        var (resolved, _) = RunLane(ctx: ctx, seconds: 2.0);
+
+        passed &= Check(name: "collision-on-stops-again", ok: ((resolved is { } re) && (re.Z < BlockedCeilingZ)),
+            detail: $"p1 z {Fmt(value: resolved?.Z)} (want < {ProofApp.F(value: BlockedCeilingZ)})");
+        passed &= SettleWireErrors(ctx: ctx, name: "collider-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // (d) THE FIELD PROVIDER. Its up axis is the compiled SDF's gradient, so a walk over a floating solid sphere sheds
+    // height while the radius from the sphere's center HOLDS — the planetoid signature. The analytic provider answers a
+    // constant +Y and cannot produce it: the identical pose and segment walk off the top and fall away.
+    static bool RunFieldRound(ComposedShotKit.Ctx ctx) {
+        var passed = ExpectMutation(ctx: ctx, name: "planetoid-authored", line: $"world.scene.row.set {PlanetoidJson}", needle: "[world.mutation: UpsertSceneRow 'proof-planetoid' applied]");
+
+        passed &= ExpectMutation(ctx: ctx, name: "provider-switched-to-field", line: "world.collision.provider field", needle: "[world.mutation: SetCollision applied]");
+        passed &= ExpectEcho(ctx: ctx, name: "status-reads-a-compiled-field", line: "world.collision.status", needle: "provider=field instructions=34");
+
+        // The gradient is GEOMETRY-derived, not a constant: probes around the sphere answer three different ups.
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-at-north-pole", line: "world.collision.probe 0 48 60", needle: "distance=0.000 material=6 gradient=(0.000, 1.000, 0.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-z-flank", line: "world.collision.probe 0 40 68", needle: "distance=0.000 material=6 gradient=(0.000, 0.000, 1.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-up-on-the-x-flank", line: "world.collision.probe 8 40 60", needle: "distance=0.000 material=6 gradient=(1.000, 0.000, 0.000)");
+        passed &= ExpectEcho(ctx: ctx, name: "probe-inside-reads-negative", line: "world.collision.probe 0 44 60", needle: "distance=-4.000");
+
+        var fieldWalk = RunPlanetoidWalk(ctx: ctx);
+
+        passed &= Check(name: "field-walk-sheds-height", ok: ((fieldWalk.Drop is { } d) && (d > PlanetoidDropFloor)),
+            detail: $"y fell {Fmt(value: fieldWalk.Drop)} u over a two-second segment (want > {ProofApp.F(value: PlanetoidDropFloor)})");
+        passed &= Check(name: "field-walk-holds-the-radius", ok: ((fieldWalk.RadialDelta is { } r) && (Math.Abs(value: r) <= RadialHoldEpsilon)),
+            detail: $"radius from the planetoid center moved {Fmt(value: fieldWalk.RadialDelta)} u ({Fmt(value: fieldWalk.RadiusBefore)} -> {Fmt(value: fieldWalk.RadiusAfter)}, want <= {ProofApp.F(value: RadialHoldEpsilon)}) — the body walked OVER the surface, not off it");
+
+        // The negative control on the same geometry: constant +Y cannot hold a curved surface.
+        passed &= ExpectMutation(ctx: ctx, name: "provider-switched-to-analytic", line: "world.collision.provider analytic", needle: "[world.mutation: SetCollision applied]");
+
+        var analyticWalk = RunPlanetoidWalk(ctx: ctx);
+
+        passed &= Check(name: "analytic-walk-leaves-the-surface", ok: ((analyticWalk.RadialDelta is { } ar) && (ar > RadialDivergeFloor)),
+            detail: $"radius from the planetoid center moved {Fmt(value: analyticWalk.RadialDelta)} u ({Fmt(value: analyticWalk.RadiusBefore)} -> {Fmt(value: analyticWalk.RadiusAfter)}, want > {ProofApp.F(value: RadialDivergeFloor)}) — the constant-+Y provider walked the body off the top");
+        passed &= SettleWireErrors(ctx: ctx, name: "field-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // (e) THE REJECTION TABLE. Each of these must be LOUD; the settle at the end is what proves nothing ELSE in the
+    // rounds above quietly no-opped.
+    static bool RunRejectionRound(ComposedShotKit.Ctx ctx) {
+        var passed = ExpectEcho(ctx: ctx, name: "slope-out-of-range-rejected", line: "world.collision.slope 120",
+            needle: "collision.maxSlopeDegrees must be in (0, 90)", deadlineSeconds: 20.0);
+
+        passed &= ExpectEcho(ctx: ctx, name: "gradient-under-analytic-rejected", line: "world.collision.gradient 0.05",
+            needle: "collision.gradientProbe > 0 is meaningless under provider 'analytic'", deadlineSeconds: 20.0);
+        passed &= ExpectEcho(ctx: ctx, name: "probe-under-analytic-rejected", line: "world.collision.probe 0 48 60",
+            needle: "[world.collision.probe: no field — set collision on with provider 'field']");
+        passed &= ExpectEcho(ctx: ctx, name: "short-capsule-rejected", line: "world.kit.collider runner 1.0 1.0",
+            needle: "is a capsule shorter than its diameter", deadlineSeconds: 20.0);
+        passed &= ExpectEcho(ctx: ctx, name: "unknown-host-field-rejected", line: "world.host.tune bogus 1",
+            needle: "[world.host.tune: unknown field 'bogus'");
+        passed &= ExpectEcho(ctx: ctx, name: "host-width-out-of-range-rejected", line: "world.host.tune width 0",
+            needle: "[world.host.tune: bad width '0' — an integer in 1..16384]");
+
+        // The rejected collider must have left the kit table alone.
+        passed &= ExpectEcho(ctx: ctx, name: "rejected-collider-left-the-kit-alone", line: "world.collision.status", needle: "runner(r=0.35 h=1.7)");
+        // Six deliberate refusals: the two collision-tuning rejects, the fieldless probe, the short capsule, and the two
+        // host tunes.
+        passed &= SettleWireErrors(ctx: ctx, name: "rejection-round-refused-only-its-six", expected: 6);
+
+        return passed;
+    }
+
+    // (f) THE HOST SECTION. The three-column read separates what the document says from what the CLI resolved and what
+    // the live levers hold; a tune moves the DOCUMENT (so world.status names 'host' drift against the untouched live
+    // lever) and world.undo clears it; the section is grant-gated; the write verbs reject loudly. The closing save is
+    // the serialization pin — presentMode PascalCase beside the lowercase backend/surfaceFormat tokens.
+    static bool RunHostRound(ComposedShotKit.Ctx ctx, string? backend, int width, int height, string savedPath) {
+        var hostedOn = (backend ?? "directx");
+        var line = ReadLine(ctx: ctx, command: "world.host", needle: "[world.host:");
+
+        // DOCUMENT vs RESOLVED: the checked-in row says 1280x800, the CLI flags this session booted with say otherwise,
+        // and the read must show BOTH — the whole reason the verb has three columns.
+        var passed = Check(name: "host-document-column-is-the-authored-row",
+            ok: ((line is not null) && line.Contains(value: "document {backend=auto width=1280 height=800 surfaceFormat=r8g8b8a8 fullscreen=false presentMode=immediate targetHertz=0")),
+            detail: (line?.Trim() ?? "(no world.host echo)"));
+
+        passed &= Check(name: "host-resolved-column-carries-the-cli-override",
+            ok: ((line is not null) && line.Contains(value: $"resolved {{backend={hostedOn} width={width.ToString(provider: ProofApp.Inv)} height={height.ToString(provider: ProofApp.Inv)} ")),
+            detail: (line?.Trim() ?? "(no world.host echo)"));
+        passed &= Check(name: "host-live-column-reads-the-levers", ok: ((line is not null) && line.Contains(value: "live {targetHertz=display timing=off}]")),
+            detail: (line?.Trim() ?? "(no world.host echo)"));
+
+        // A tune moves the document only — which is exactly what makes it DRIFT against the untouched live lever.
+        passed &= ExpectStatusDrift(ctx: ctx, name: "host-baseline-no-drift", drift: "none");
+        passed &= ExpectMutation(ctx: ctx, name: "host-target-tuned", line: "world.host.tune targetHertz 90", needle: "[world.mutation: SetHostDefaults applied");
+        passed &= ExpectEcho(ctx: ctx, name: "host-tune-moves-the-document-not-the-lever", line: "world.host", needle: "targetHertz=90 exitAfterSeconds=0 rayQuery=true timing=false genlock=(none)} resolved");
+        passed &= ExpectStatusDrift(ctx: ctx, name: "host-tune-marks-drift", drift: "host");
+        passed &= ExpectEcho(ctx: ctx, name: "host-undo-accepted", line: "world.undo", needle: "[world.undo: dropped 1");
+        passed &= ExpectStatusDrift(ctx: ctx, name: "host-undo-clears-drift", drift: "none");
+
+        // The section is grant-gated like every other.
+        passed &= ExpectEcho(ctx: ctx, name: "console-loses-host-mutate", line: "world.revoke console mutate section:host", needle: "[world.revoke: console mutate section:host]");
+        passed &= ExpectEcho(ctx: ctx, name: "host-tune-denied-without-grant", line: "world.host.tune presentMode mailbox",
+            needle: "[world.grant denied: console cannot mutate section:host", deadlineSeconds: 20.0);
+        passed &= ExpectStatusDrift(ctx: ctx, name: "denied-host-tune-changed-nothing", drift: "none");
+        // One deliberate refusal: the denied tune.
+        passed &= SettleWireErrors(ctx: ctx, name: "host-round-refused-only-the-denied-tune", expected: 1);
+        passed &= ExpectEcho(ctx: ctx, name: "console-regains-host-mutate", line: "world.grant console mutate section:host", needle: "[world.grant: console mutate section:host]");
+        passed &= ExpectMutation(ctx: ctx, name: "host-tune-applies-after-regrant", line: "world.host.tune presentMode mailbox", needle: "[world.mutation: SetHostDefaults applied");
+        passed &= ExpectEcho(ctx: ctx, name: "present-mode-reads-back-lowercase", line: "world.host", needle: "presentMode=mailbox targetHertz=0");
+
+        // The save: the host row's two token grammars land in the file in their own spellings. The relaunch that reads
+        // this file back is what proves the PascalCase presentMode is not write-only.
+        passed &= ExpectEcho(ctx: ctx, name: "host-save-writes", line: $"world.save {savedPath}", needle: "[world.save:", deadlineSeconds: 30.0);
+
+        var json = (File.Exists(path: savedPath) ? File.ReadAllText(path: savedPath) : null);
+
+        passed &= Check(name: "saved-present-mode-is-pascal-case", ok: ((json is not null) && json.Contains(value: "\"presentMode\": \"Mailbox\"")),
+            detail: ((json is null) ? $"{savedPath} was never written" : "\"presentMode\": \"Mailbox\""));
+        passed &= Check(name: "saved-backend-and-format-stay-lowercase", ok: ((json is not null) && json.Contains(value: "\"backend\": \"auto\"") && json.Contains(value: "\"surfaceFormat\": \"r8g8b8a8\"")),
+            detail: ((json is null) ? $"{savedPath} was never written" : "\"backend\": \"auto\" + \"surfaceFormat\": \"r8g8b8a8\""));
+
+        return passed;
+    }
+
+    // The other half of the serialization split: a relaunch against the saved file must READ the PascalCase presentMode
+    // back as mailbox. A writer/reader disagreement would surface here as the built-in default (immediate) or a loud
+    // load failure, not as a silent pass.
+    static bool RunReload(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, string savedPath) {
+        if (!File.Exists(path: savedPath)) {
+            return Check(name: "host-reload", ok: false, detail: $"{savedPath} was never written — the session did not reach world.save");
+        }
+
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savedPath]);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            var bootLine = ComposedShotKit.Await(collector: ctx.Collector, mark: 0, predicate: l => (l.Contains(value: "[world] definition:") && l.Contains(value: Path.GetFileName(path: savedPath))), deadlineSeconds: 40.0);
+
+            passed &= Check(name: "reload-boots-the-saved-file", ok: (bootLine is not null), detail: (bootLine?.Trim() ?? $"(no '[world] definition: {savedPath}' boot line)"));
+
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ExpectEcho(ctx: ctx, name: "reloaded-present-mode-survives", line: "world.host", needle: "presentMode=mailbox");
+            passed &= ExpectEcho(ctx: ctx, name: "reloaded-collision-section-survives", line: "world.collision.status", needle: "on provider=analytic");
+            passed &= ExpectEcho(ctx: ctx, name: "reloaded-solid-rows-survive", line: "world.contacts", needle: "[world.contacts: collision on — 12 solid rows (6 spheres, 6 boxes)]");
+            passed &= SettleWireErrors(ctx: ctx, name: "reload-refused-nothing", expected: 0);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // --- The measured journeys ---
+
+    // The wall lane: warp to the lane start facing +Z, command a full-forward segment, sample world.contacts while it is
+    // still live (the mid-run planar speed), and read the settled pose once it expires.
+    static (Pose? End, double? MidSpeed) RunLane(ComposedShotKit.Ctx ctx, double seconds) {
+        ComposedShotKit.Send(ctx: ctx, line: $"player.warp 0 {ProofApp.F(value: LaneStartZ)} 1");
+        ComposedShotKit.Send(ctx: ctx, line: "player.face 180 1");
+        Thread.Sleep(millisecondsTimeout: 600);
+        ComposedShotKit.Send(ctx: ctx, line: $"player.run 1 0 0 {ProofApp.F(value: seconds)} 1");
+        Thread.Sleep(millisecondsTimeout: (int)((seconds * 1000.0) * 0.7));
+
+        var midSpeed = ReadPlanarSpeed(ctx: ctx);
+
+        Thread.Sleep(millisecondsTimeout: (int)((seconds * 1000.0) * 0.6));
+
+        return (ReadWhere(ctx: ctx), midSpeed);
+    }
+
+    // The open-ground journey: the response-round measurement, run far from every solid row so the only thing shaping
+    // the displacement is the kit's response table.
+    static double RunOpenGround(ComposedShotKit.Ctx ctx, double seconds) {
+        ComposedShotKit.Send(ctx: ctx, line: "player.warp 40 40 1");
+        ComposedShotKit.Send(ctx: ctx, line: "player.face 180 1");
+        Thread.Sleep(millisecondsTimeout: 700);
+        ComposedShotKit.Send(ctx: ctx, line: $"player.run 1 0 0 {ProofApp.F(value: seconds)} 1");
+        Thread.Sleep(millisecondsTimeout: (int)((seconds * 1000.0) + 900.0));
+
+        return ((ReadWhere(ctx: ctx) is { } pose) ? (pose.Z - 40.0) : double.NaN);
+    }
+
+    // The up-channel journey: a one-second player.fly up segment from the ground, answering how much height it bought.
+    static double? RunUpChannel(ComposedShotKit.Ctx ctx) {
+        ComposedShotKit.Send(ctx: ctx, line: "player.pose 40 0 40 180 0 0 1");
+        Thread.Sleep(millisecondsTimeout: 600);
+        ComposedShotKit.Send(ctx: ctx, line: "player.fly 0 0 1 0 0 0 1 1");
+        Thread.Sleep(millisecondsTimeout: 1500);
+
+        return (ReadWhere(ctx: ctx)?.Y);
+    }
+
+    // The planetoid journey: stand on the sphere's north pole, walk a two-second segment, and report the height shed and
+    // the change in radius from the sphere's center.
+    static (double? Drop, double? RadialDelta, double? RadiusBefore, double? RadiusAfter) RunPlanetoidWalk(ComposedShotKit.Ctx ctx) {
+        ComposedShotKit.Send(ctx: ctx, line: $"player.pose 0 {ProofApp.F(value: (PlanetoidCenterY + PlanetoidRadius + 0.2))} {ProofApp.F(value: PlanetoidCenterZ)} 180 0 0 1");
+        Thread.Sleep(millisecondsTimeout: 1000);
+
+        var before = ReadWhere(ctx: ctx);
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.run 1 0 0 2 1");
+        Thread.Sleep(millisecondsTimeout: 2500);
+
+        var after = ReadWhere(ctx: ctx);
+
+        if ((before is not { } b) || (after is not { } a)) {
+            return (null, null, null, null);
+        }
+
+        var radiusBefore = Radius(pose: b);
+        var radiusAfter = Radius(pose: a);
+
+        return ((b.Y - a.Y), (radiusAfter - radiusBefore), radiusBefore, radiusAfter);
+    }
+
+    static double Radius(Pose pose) {
+        var dy = (pose.Y - PlanetoidCenterY);
+        var dz = (pose.Z - PlanetoidCenterZ);
+
+        return Math.Sqrt(d: ((pose.X * pose.X) + (dy * dy) + (dz * dz)));
+    }
+
+    // --- Reads + assertions ---
+
+    static Pose? ReadWhere(ComposedShotKit.Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.where 1");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => ProofApp.WhereEcho.IsMatch(input: l), deadlineSeconds: 10.0);
+
+        if (line is null) {
+            return null;
+        }
+
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return new Pose(
+            X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+            Y: double.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv),
+            Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv),
+            Yaw: int.Parse(s: match.Groups[5].Value, provider: ProofApp.Inv),
+            Pitch: int.Parse(s: match.Groups[6].Value, provider: ProofApp.Inv),
+            Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv));
+    }
+
+    static double? ReadPlanarSpeed(ComposedShotKit.Ctx ctx) {
+        var line = ReadLine(ctx: ctx, command: "world.contacts 1", needle: "[world.contacts: p1 ");
+
+        if (line is null) {
+            return null;
+        }
+
+        var match = PlanarSpeedEcho.Match(input: line);
+
+        return (match.Success ? double.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    static string? ReadLine(ComposedShotKit.Ctx ctx, string command, string needle, double deadlineSeconds = 15.0) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: command);
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: deadlineSeconds);
+    }
+
+    static bool ExpectEcho(ComposedShotKit.Ctx ctx, string name, string line, string needle, double deadlineSeconds = 15.0) {
+        var hit = ReadLine(ctx: ctx, command: line, needle: needle, deadlineSeconds: deadlineSeconds);
+
+        return Check(name: name, ok: (hit is not null), detail: (hit?.Trim() ?? $"(no line containing '{needle}')"));
+    }
+
+    // A Simulation-routed mutation acks quietly; the server's own loud accept line is the settle point, and the stdin
+    // barrier holds every following read behind it.
+    static bool ExpectMutation(ComposedShotKit.Ctx ctx, string name, string line, string needle) {
+        return ExpectEcho(ctx: ctx, name: name, line: line, needle: needle, deadlineSeconds: 20.0);
+    }
+
+    static bool ExpectStatusDrift(ComposedShotKit.Ctx ctx, string name, string drift) {
+        var line = ReadLine(ctx: ctx, command: "world.status", needle: "[world.status:");
+        var actual = ((line is null) ? null : (DriftEcho.Match(input: line) is { Success: true } match ? match.Groups[1].Value : null));
+
+        return Check(name: name, ok: string.Equals(a: actual, b: drift, comparisonType: StringComparison.Ordinal),
+            detail: $"session-drift {actual ?? "(no world.status echo)"} (want {drift})");
+    }
+
+    // Settle the wire's refused-line counter against the refusals the round just ahead DELIBERATELY provoked, then zero
+    // it. Polling is required because a capability denial is counted a tick later through the edit-echo tap.
+    static bool SettleWireErrors(ComposedShotKit.Ctx ctx, string name, int expected) {
+        string? last = null;
+
+        for (var attempt = 0; (attempt < 25); attempt++) {
+            last = ReadLine(ctx: ctx, command: "wire.errors", needle: "[wire.errors:", deadlineSeconds: 5.0);
+
+            if ((last is not null) && last.Contains(value: $"[wire.errors: {expected} rejected]")) {
+                _ = ReadLine(ctx: ctx, command: "wire.errors reset", needle: "[wire.errors:", deadlineSeconds: 5.0);
+
+                return Check(name: name, ok: true, detail: $"{expected} deliberate refusal(s) counted, counter cleared");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+
+        return Check(name: name, ok: false, detail: $"{last?.Trim() ?? "(no '[wire.errors: ...]' echo)"} — want {expected} rejected");
+    }
+
+    static bool Check(string name, bool ok, string detail) {
+        return ComposedShotKit.Check(name: name, ok: ok, detail: detail);
+    }
+
+    static string Fmt(double? value) {
+        return ((value is { } v) ? v.ToString(format: "0.000", provider: ProofApp.Inv) : "(?)");
+    }
+
+    static void TryDelete(string path) {
+        try {
+            if (File.Exists(path: path)) {
+                File.Delete(path: path);
+            }
+        }
+        catch (IOException) {
+        }
+        catch (UnauthorizedAccessException) {
+        }
     }
 }
