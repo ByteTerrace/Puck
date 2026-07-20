@@ -820,6 +820,34 @@ a loader pass — `WorldRowAssignment.Table` joined `MotionTuning.Response` and
 `WorldPopulationDefaults.SpawnPolicy` in coalescing inside its `init` accessor,
 which is the one place every construction path crosses.
 
+### U6 — Motion: the tuning a body actually reads
+
+Of the eleven fields on the top-level `motion` section, runtime read exactly
+three: `groundY` (the ground plane, `WorldColliderSet`/`WorldSolidField`),
+`moveSpeed` and `turnSpeed` (the profileless stand-in fallback,
+`WorldPopulation`). `jumpSpeed`, `riseGravity`, `fallGravity`, `maxFallSpeed`,
+`jumpCutMultiplier`, `coyoteTime`, `jumpBufferTime` and `response` were
+validated, round-tripped, and carried in every shipped world for zero effect —
+every body integrates under its **kit's** `MotionTuning`. This plan's own Arc 1
+record admitted it: `motion` *"keeps the table too (harmless fallback)"*. A
+half-migration, kept for schema shape after the substance moved to per-kit
+tuning.
+
+`WorldDefinition.Motion` is now `WorldMotionDefaults(MoveSpeed, TurnSpeed,
+GroundY)` with its own `FixedMotionDefaults` compile. `MotionTuning` survives
+unchanged where it is real — `WorldKit.Tuning` — and `world.kit.tune` is the
+only surface that moves jump feel.
+
+**`definition.Motion` did not die.** Its three live fields have no other home:
+`groundY` is a world fact, not a kit's, and the profileless speeds are the
+fallback for a body with no seated profile. The vestigial eight died.
+
+`WorldMotionDefaults` carries `[JsonUnmappedMemberHandling(Disallow)]`, so
+`world.motion.set {"…","jumpSpeed":7}` now answers *"The JSON property
+'jumpSpeed' could not be mapped to any .NET member contained in type
+'Puck.World.WorldMotionDefaults'"* instead of silently accepting a value nothing
+reads. The three shipped worlds' `motion` sections shrank to three keys.
+
 ## Arc sequence
 
 Twelve arcs. Owner ruling pins #1–#2; every other position is justified by

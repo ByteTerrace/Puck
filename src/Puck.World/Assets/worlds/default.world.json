@@ -2,37 +2,7 @@
   "motion": {
     "moveSpeed": 4,
     "turnSpeed": 2.5,
-    "groundY": 0,
-    "jumpSpeed": 5.5,
-    "riseGravity": 14,
-    "fallGravity": 23,
-    "maxFallSpeed": 20,
-    "jumpCutMultiplier": 0.45,
-    "coyoteTime": 0.09,
-    "jumpBufferTime": 0.1,
-    "response": [
-      {
-        "gate": {
-          "$type": "recently",
-          "fact": "Grounded",
-          "windowSeconds": 0.09
-        },
-        "engageRate": 45,
-        "releaseRate": 55
-      },
-      {
-        "gate": {
-          "$type": "now",
-          "fact": "Falling"
-        },
-        "engageRate": 34,
-        "releaseRate": 18
-      },
-      {
-        "engageRate": 30,
-        "releaseRate": 17
-      }
-    ]
+    "groundY": 0
   },
   "wander": {
     "driftSpeed": 1.5,

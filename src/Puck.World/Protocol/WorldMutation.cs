@@ -81,7 +81,7 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Replaces the profileless locomotion/jump tuning.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Motion">The motion tuning.</param>
-    internal sealed record SetMotion(WorldPrincipal Principal, MotionTuning Motion) : WorldMutation(Principal);
+    internal sealed record SetMotion(WorldPrincipal Principal, WorldMotionDefaults Motion) : WorldMutation(Principal);
 
     /// <summary>Replaces the wander tuning.</summary>
     /// <param name="Principal">The acting identity.</param>

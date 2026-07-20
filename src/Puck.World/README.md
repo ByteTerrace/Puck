@@ -170,9 +170,10 @@ verbatim — every value byte-equal to what shipped. It bundles the static
 `boulder-N` spheres and `slab-N` material-carrying boxes, upserted/removed by
 stable id), the seat
 `SpawnPoints` (each a stable `seat-N` id + position), the `WanderTuning` (the
-stand-ins' drift/weave/inward-steer), the `MotionTuning` (move/turn speeds, the
-ground plane, and the whole jump feel kit — one number, `ActionScale`, retunes
-the whole feel), and the `WorldRenderDefaults` (the boot render levers + the
+stand-ins' drift/weave/inward-steer), the `WorldMotionDefaults` (the ground
+plane plus the profileless move/turn speeds — the whole jump feel kit lives on
+each kit's `MotionTuning`, where every body reads it, retuned by one number,
+`ActionScale`), and the `WorldRenderDefaults` (the boot render levers + the
 `world.quality` preset table). Every consumer — the roster, the population, the
 frame source, the render settings, the `world.quality` verb — takes it by
 construction/DI and reads the fields; nothing bakes the constants inline anymore.
@@ -248,7 +249,7 @@ scripted `mutate-then-read` pair needs no polling.
 | `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); applies LIVE — a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension/kind change recreates it, a removal releases it |
 | `world.scene.set <scene-json>` | replaces the whole static scene (albedos + rows); the per-row editor grain is `UpsertSceneRow`/`RemoveSceneRow` (the `editor.*` verbs) |
 | `world.spawns.set <spawns-json-array>` | replaces the seat spawn-point list |
-| `world.motion.set <json>` | replaces the profileless `MotionTuning` |
+| `world.motion.set <json>` | replaces the `WorldMotionDefaults` (`moveSpeed`, `turnSpeed`, `groundY`); any other field is rejected by name — jump feel is `world.kit.tune` |
 | `world.wander.set <json>` | replaces `WanderTuning` |
 | `world.population.defaults <local> <network>` | sets the census defaults (document-only; preserves the peer-source default, which the live `world.population idle\|wander` verb owns and `world.save` folds) |
 | `world.render.defaults <json>` | replaces `WorldRenderDefaults` |

@@ -75,7 +75,7 @@ internal sealed class WorldPopulation {
     private readonly Entry[] m_entries = new Entry[MaxPopulation];
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
-    private FixedMotionTuning m_fixedMotion;
+    private FixedMotionDefaults m_fixedMotion;
     private FixedWanderTuning m_wander;
     // The definition's kit rows: the authored rows (body construction reads a row's tuning) and their fixed-point
     // compilations (the wander producer reads flavor), plus the resolved seat row. Assigned by CompileFixedTables from
@@ -171,7 +171,7 @@ internal sealed class WorldPopulation {
         var authoredMotion = definition.Motion;
         var authoredWander = definition.Wander;
 
-        m_fixedMotion = FixedMotionTuning.Compile(tuning: in authoredMotion);
+        m_fixedMotion = FixedMotionDefaults.Compile(motion: in authoredMotion);
         m_wander = FixedWanderTuning.Compile(tuning: in authoredWander);
         m_wanderForwardDeflection = (m_wander.DriftSpeed / m_fixedMotion.MoveSpeed);
         m_kitRows = definition.Kits;

@@ -180,8 +180,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.motion.set",
-            description: "Replaces the profileless locomotion/jump tuning from one inline-JSON MotionTuning: world.motion.set <json>. Recompiles live bodies' feel (pose survives).",
-            info: WorldJsonContext.Default.MotionTuning,
+            description: "Replaces the world's motion defaults from one inline-JSON WorldMotionDefaults (moveSpeed, turnSpeed, groundY): world.motion.set <json>. Moves the ground plane and the profileless stand-in speeds; jump feel, gravity and the velocity-response table are per-kit — use world.kit.tune. Any other field is rejected by name.",
+            info: WorldJsonContext.Default.WorldMotionDefaults,
             toMutation: static motion => new WorldMutation.SetMotion(Principal: WorldPrincipal.Console, Motion: motion)
         );
         yield return Row(

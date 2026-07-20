@@ -69,7 +69,7 @@ internal static class WorldDefinitionValidator {
         // The profileless fallback tunings (SIM-AFFECTING): a stand-in with no seated profile advances on Motion, and
         // the wander producer reads Wander — both compile to fixed point, so a non-finite or unphysical value here
         // poisons the quantized sim.
-        ValidateMotionTuning(tuning: definition.Motion, path: "motion", errors: errors);
+        ValidateMotionDefaults(motion: definition.Motion, path: "motion", errors: errors);
         ValidateWanderTuning(wander: definition.Wander, path: "wander", errors: errors);
 
         if ((definition.Population.LocalPlayers < 1) || (definition.Population.LocalPlayers > WorldPopulation.LocalSeatCount)) {
@@ -1593,6 +1593,14 @@ internal static class WorldDefinitionValidator {
     }
 
     // A locomotion/jump tuning: speeds/gravities/max-fall positive, time windows non-negative, everything finite.
+    private static void ValidateMotionDefaults(in WorldMotionDefaults motion, string path, List<string> errors) {
+        RequirePositive(value: motion.MoveSpeed, name: $"{path}.moveSpeed", errors: errors);
+        RequirePositive(value: motion.TurnSpeed, name: $"{path}.turnSpeed", errors: errors);
+        RequireFinite(value: motion.GroundY, name: $"{path}.groundY", errors: errors);
+    }
+
+    // A kit's full locomotion tuning: the motion defaults' three fields plus the jump/gravity feel and the
+    // velocity-response table every body actually integrates under.
     private static void ValidateMotionTuning(in MotionTuning tuning, string path, List<string> errors) {
         RequirePositive(value: tuning.MoveSpeed, name: $"{path}.moveSpeed", errors: errors);
         RequirePositive(value: tuning.TurnSpeed, name: $"{path}.turnSpeed", errors: errors);

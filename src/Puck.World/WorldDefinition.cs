@@ -77,6 +77,39 @@ internal readonly record struct MotionTuning(
     );
 }
 
+/// <summary>
+/// The world's MOTION defaults — the ground plane every grounded body pins its foot point to, plus the profileless
+/// locomotion speeds a stand-in with no seated profile advances on. This is the whole top-level motion section: jump
+/// feel, gravity, and the velocity-response table are PER-KIT (<see cref="WorldKit.Tuning"/>), which is the only place
+/// a body ever reads them from, and <c>world.kit.tune</c> is the surface that moves them.
+/// </summary>
+/// <remarks>Unmapped members are REJECTED: a <c>world.motion.set</c> or a document carrying <c>jumpSpeed</c> here fails
+/// by name rather than accepting a value nothing reads.</remarks>
+/// <param name="MoveSpeed">Locomotion speed in world units per second — the profileless fallback a stand-in advances on
+/// (a seated player reads its live profile's speed instead, so <c>profile.set</c> stays real-time).</param>
+/// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart to <paramref name="MoveSpeed"/>).</param>
+/// <param name="GroundY">The ground plane the grounded model pins the avatar's foot point to (unless a jump has lifted it).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal readonly record struct WorldMotionDefaults(
+    float MoveSpeed,
+    float TurnSpeed,
+    float GroundY
+) {
+    /// <summary>The built-in motion defaults.</summary>
+    public static WorldMotionDefaults Default { get; } = new WorldMotionDefaults(MoveSpeed: 4f, TurnSpeed: 2.5f, GroundY: 0f);
+}
+
+/// <summary>The one-time fixed-point compilation of the world's motion defaults. Runtime simulation reads only this
+/// form.</summary>
+internal readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed, FixedQ4816 GroundY) {
+    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
+    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
+        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
+        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
+        GroundY: FixedQ4816.FromDouble(value: motion.GroundY)
+    );
+}
+
 /// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
 /// target while <paramref name="Gate"/> holds. Rows evaluate in order, FIRST match wins; a body matching no row
 /// snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the
@@ -116,7 +149,7 @@ internal enum WorldContactProvider : byte {
 }
 
 /// <summary>The contact solver's world-scale tuning. Collision is OFF under <see cref="None"/>: the world keeps its
-/// flat <see cref="MotionTuning.GroundY"/> plane.</summary>
+/// flat <see cref="WorldMotionDefaults.GroundY"/> plane.</summary>
 /// <param name="Enabled">Whether contact resolution runs at all.</param>
 /// <param name="Provider">Which contact field answers. <c>analytic</c> derives convex colliders from the document's own
 /// solid rows (cheap, the default); <c>field</c> compiles them into an SDF (Arc 2).</param>
@@ -139,7 +172,7 @@ internal sealed record WorldCollision(bool Enabled, WorldContactProvider Provide
 /// <see cref="FixedWanderTuning"/> before simulation.
 /// </summary>
 /// <remarks>The forward-drift deflection is <see cref="DriftSpeed"/> divided by the profileless move speed
-/// (<see cref="MotionTuning.MoveSpeed"/>), so it crosses both tunings; <see cref="WorldPopulation"/> derives it from the
+/// (<see cref="WorldMotionDefaults.MoveSpeed"/>), so it crosses both sections; <see cref="WorldPopulation"/> derives it from the
 /// two.</remarks>
 /// <param name="DriftSpeed">The forward drift in world units per second a stand-in gently walks at.</param>
 /// <param name="SoftRadius">The disc radius a stand-in is spring-steered back inside once it strays past.</param>
@@ -1511,12 +1544,12 @@ internal sealed record WorldHostDefaults(
 /// <summary>
 /// The definition of this world — the aggregate describing what the world is, distinct from the live session state that
 /// plays in it. It gathers the static scene (<see cref="Scene"/>), the seat spawn points (<see cref="SpawnPoints"/>),
-/// the population's wander tuning (<see cref="Wander"/>), the locomotion/jump feel (<see cref="Motion"/>), and the
+/// the population's wander tuning (<see cref="Wander"/>), the motion defaults (<see cref="Motion"/>), and the
 /// render-lever defaults and quality presets (<see cref="Render"/>). Every consumer takes it by construction.
 /// </summary>
 /// <remarks>These records are serialization-friendly. <see cref="Default"/> supplies the built-in definition, and
 /// loaders can construct the same shapes from external data.</remarks>
-/// <param name="Motion">The locomotion + jump feel every <see cref="WorldBody"/> integrates under.</param>
+/// <param name="Motion">The ground plane and the profileless locomotion speeds (see <see cref="WorldMotionDefaults"/>). Jump feel is per-kit.</param>
 /// <param name="Wander">The simulated stand-ins' synthetic wander tuning.</param>
 /// <param name="Scene">The world's static scene (ground + boulders).</param>
 /// <param name="SpawnPoints">Where each local seat's avatar spawns (X/Z; Y rides the ground plane), by slot.</param>
@@ -1568,7 +1601,7 @@ internal sealed record WorldHostDefaults(
 /// <param name="Links">The cable-link rows (default empty) — groups of screens whose machines advance as one
 /// interleaved unit (see <see cref="WorldScreenLink"/>).</param>
 internal sealed record WorldDefinition(
-    MotionTuning Motion,
+    WorldMotionDefaults Motion,
     WanderTuning Wander,
     WorldScene Scene,
     IReadOnlyList<WorldSpawnPoint> SpawnPoints,
@@ -1614,7 +1647,7 @@ internal sealed record WorldDefinition(
 
     /// <summary>The built-in default world.</summary>
     public static WorldDefinition Default { get; } = new WorldDefinition(
-        Motion: MotionTuning.Default,
+        Motion: WorldMotionDefaults.Default,
         Wander: WanderTuning.Default,
         Scene: WorldScene.Default,
         // The five built-in locomotion kits. The R1-hash
