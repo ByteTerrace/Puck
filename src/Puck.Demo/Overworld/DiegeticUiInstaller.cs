@@ -5,7 +5,7 @@ using Puck.SdfVm;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// The demo-side coupling absorber for <see cref="OverworldRenderNode"/>'s <see cref="SdfWorldRenderSpec"/> assembly
+/// The demo-side coupling absorber for <c>OverworldRenderNode</c>'s <see cref="SdfWorldRenderSpec"/> assembly
 /// — that node and <see cref="OverworldFrameSource"/> both sit at their exact CA1506 coupling ceilings, so composition
 /// that would otherwise need to name several Demo types lives HERE instead, reached through delegate/static seams
 /// whose arities are already in the coupling set (the documented escape hatch: compose elsewhere, wire through a

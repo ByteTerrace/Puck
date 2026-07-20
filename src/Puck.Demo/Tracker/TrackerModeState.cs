@@ -3,7 +3,7 @@ using Puck.Input.Devices;
 namespace Puck.Demo.Tracker;
 
 /// <summary>
-/// The tracker mode's ENTIRE host-side footprint, composed as one object so <see cref="Overworld.OverworldRenderNode"/>
+/// The tracker mode's ENTIRE host-side footprint, composed as one object so <c>OverworldRenderNode</c>
 /// holds a single field for it (mirrors the node's own note in the creator-mode comments: "a mode class should own
 /// its own state"). Owns the authored-document model (<see cref="TrackerScene"/>), the pad state machine
 /// (<see cref="TrackerController"/>), and the headless preview player's lifecycle — entering/leaving the mode,

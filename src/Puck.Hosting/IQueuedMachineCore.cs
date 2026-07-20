@@ -56,4 +56,18 @@ public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, I
     /// <param name="address">A machine-defined bus address.</param>
     /// <param name="value">The byte to store.</param>
     void PokeByte(int address, byte value) { }
+
+    /// <summary>Retargets the running core across its engine's options vocabulary WITHOUT a reboot — the worker-thread
+    /// source of a host's <see cref="Puck.Abstractions.Machines.IReconfigurableMachine.TryReconfigure"/>. The worker
+    /// calls this on its own execution thread between steps, so the swap observes a coherent inter-instruction boundary.
+    /// The default rejects (a core with no live-reconfiguration path); an implementor parses the engine's own options
+    /// string and applies the retarget. On success <paramref name="reason"/> may carry an advisory the host echoes.</summary>
+    /// <param name="options">The engine-specific options string, or <see langword="null"/> for defaults.</param>
+    /// <param name="reason">The rejection reason, or an advisory/empty string on success.</param>
+    /// <returns>Whether the reconfigure was applied.</returns>
+    bool Reconfigure(string? options, out string reason) {
+        reason = "this machine does not support live reconfiguration";
+
+        return false;
+    }
 }

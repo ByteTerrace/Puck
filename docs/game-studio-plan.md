@@ -1,5 +1,13 @@
 # In-engine game studio roadmap
 
+> **STATUS (2026-07-19): LIVING ROADMAP + PORT-REFERENCE.** The studio's
+> destination is `Puck.World` and the shared libraries; the Demo is a
+> **library that no longer runs** (Beat B of the
+> [Demo → World port](demo-to-world-port-plan.md)). Verify studio work by running
+> `Puck.World`, never the Demo. This roadmap is port-reference for the studio arcs
+> (Arc 7 creator/inhabitation, Arc 8 RomForge); the **execution order lives in the
+> port plan**, and Arc 12 rewrites this document around the surviving World surface.
+
 The studio connects authoring, deterministic baking, cartridge assembly, and
 play inside one running overworld:
 

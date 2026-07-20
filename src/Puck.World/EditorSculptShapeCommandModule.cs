@@ -42,77 +42,77 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: AddCommand,
             description: "Adds a shape to the seat's sculpt and selects it: editor.sculpt.add [primitive] [<x> <y> <z>] [seat] — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone (default: the brush's primitive) at workbench-local coordinates (default: the spawn point). The new shape inherits the brush's style and the brush's palette slot advances (siblings stay distinct). The chord twin is South on the sculpt page.",
             handler: AddHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: RemoveCommand,
             description: "Deletes the SELECTED shape (the selection clears): editor.sculpt.remove [seat]. The chord twin is D-pad Down on the sculpt page.",
             handler: RemoveHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: DuplicateCommand,
             description: "Duplicates the SELECTED shape in place (nudged aside; a grouped member's twin joins the same group) and selects the twin: editor.sculpt.duplicate [seat]. The chord twin is D-pad Up on the sculpt page.",
             handler: DuplicateHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.select",
             description: "Selects a sculpt shape by id or name: editor.sculpt.select <id|name> [seat]. Edit verbs then act on it; editor.sculpt.deselect reverts the target to the brush.",
             handler: SelectHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: NextCommand,
             description: "Cycles the sculpt target forward — through the shapes, THEN the chain goals, wrapping through none/brush: editor.sculpt.next [seat]. The chord twin is D-pad Right on the sculpt page.",
-            handler: (context, args) => CycleHandler(context: context, args: args, direction: 1, verb: NextCommand)
+            handler: (context, args) => CycleHandler(context: context, args: in args, direction: 1, verb: NextCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: PrevCommand,
             description: "Cycles the sculpt target backward: editor.sculpt.prev [seat]. The chord twin is D-pad Left on the sculpt page.",
-            handler: (context, args) => CycleHandler(context: context, args: args, direction: -1, verb: PrevCommand)
+            handler: (context, args) => CycleHandler(context: context, args: in args, direction: -1, verb: PrevCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: DeselectCommand,
             description: "Clears the sculpt selection (the target reverts to the brush): editor.sculpt.deselect [seat]. The chord twin is West on the LT bench page.",
             handler: DeselectHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: PrimitiveCommand,
             description: "Re-types the TARGET's primitive: editor.sculpt.primitive [sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev] [seat] (default next — the chord twin is North on the sculpt page). On the brush it changes what the next add draws.",
             handler: PrimitiveHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.move",
             description: "Places the TARGET at exact workbench-local coordinates (a targeted chain goal moves and re-solves): editor.sculpt.move <x> <y> <z> [seat]. The stick twin is the move stick while sculpting.",
-            handler: (context, args) => PositionHandler(context: context, args: args, relative: false, verb: "editor.sculpt.move")
+            handler: (context, args) => PositionHandler(context: context, args: in args, relative: false, verb: "editor.sculpt.move")
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.nudge",
             description: "Moves the TARGET by a workbench-local delta: editor.sculpt.nudge <dx> <dy> <dz> [seat].",
-            handler: (context, args) => PositionHandler(context: context, args: args, relative: true, verb: "editor.sculpt.nudge")
+            handler: (context, args) => PositionHandler(context: context, args: in args, relative: true, verb: "editor.sculpt.nudge")
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.rotate",
             description: "Sets the SELECTED shape's orientation from Tait-Bryan degrees (yaw about +Y, pitch about +X, roll about +Z): editor.sculpt.rotate <yawDeg> <pitchDeg> <rollDeg> [seat].",
             handler: RotateHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.scale",
             description: "Sets the TARGET's scale (uniform or per-axis, clamped 0.2..3): editor.sculpt.scale <s> [seat] or editor.sculpt.scale <x> <y> <z> [seat]. The chord twins are the style page's Grow/Shrink steps.",
             handler: ScaleHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: GrowCommand,
             description: "Steps the TARGET's uniform scale up ~15%: editor.sculpt.grow [seat]. The chord twin is D-pad Right on the RT style page.",
-            handler: (context, args) => ScaleStepHandler(context: context, args: args, grow: true, verb: GrowCommand)
+            handler: (context, args) => ScaleStepHandler(context: context, args: in args, grow: true, verb: GrowCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: ShrinkCommand,
             description: "Steps the TARGET's uniform scale down ~15%: editor.sculpt.shrink [seat]. The chord twin is D-pad Left on the RT style page.",
-            handler: (context, args) => ScaleStepHandler(context: context, args: args, grow: false, verb: ShrinkCommand)
+            handler: (context, args) => ScaleStepHandler(context: context, args: in args, grow: false, verb: ShrinkCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.sculpt.rename",
             description: "Names the SELECTED shape (chain definitions and selection accept names): editor.sculpt.rename <name> [seat].",
             handler: RenameHandler
@@ -122,38 +122,73 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
     /// <summary>Parses a primitive name token (case-insensitive). Internal — shared with the add/primitive verbs.</summary>
     /// <param name="token">The name token.</param>
     /// <param name="type">The parsed primitive.</param>
-    internal static bool TryParsePrimitive(string token, out AvatarPrimitive type) {
-        switch (token.ToLowerInvariant()) {
-            case "sphere": type = AvatarPrimitive.Sphere; return true;
-            case "box": type = AvatarPrimitive.Box; return true;
-            case "torus": type = AvatarPrimitive.Torus; return true;
-            case "cylinder": type = AvatarPrimitive.Cylinder; return true;
-            case "capsule": type = AvatarPrimitive.Capsule; return true;
-            case "ellipsoid": type = AvatarPrimitive.Ellipsoid; return true;
-            case "roundcone": type = AvatarPrimitive.RoundCone; return true;
-            default: type = AvatarPrimitive.Sphere; return false;
+    internal static bool TryParsePrimitive(ReadOnlySpan<char> token, out AvatarPrimitive type) {
+        if (token.Equals(other: "sphere", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Sphere;
+
+            return true;
         }
+
+        if (token.Equals(other: "box", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Box;
+
+            return true;
+        }
+
+        if (token.Equals(other: "torus", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Torus;
+
+            return true;
+        }
+
+        if (token.Equals(other: "cylinder", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Cylinder;
+
+            return true;
+        }
+
+        if (token.Equals(other: "capsule", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Capsule;
+
+            return true;
+        }
+
+        if (token.Equals(other: "ellipsoid", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.Ellipsoid;
+
+            return true;
+        }
+
+        if (token.Equals(other: "roundcone", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            type = AvatarPrimitive.RoundCone;
+
+            return true;
+        }
+
+        type = AvatarPrimitive.Sphere;
+
+        return false;
     }
 
-    private CommandResult AddHandler(CommandContext context, string[] args) {
+    private CommandResult AddHandler(CommandContext context, WireArgs args) {
         // Shapes: [primitive] [x y z] [seat] — the primitive token is non-numeric, so presence is unambiguous.
-        var hasType = ((args.Length >= 1) && TryParsePrimitive(token: args[0], type: out _));
+        var hasType = ((args.Count >= 1) && TryParsePrimitive(token: args[0], type: out _));
         var positionAt = (hasType ? 1 : 0);
-        var hasPosition = (args.Length >= (positionAt + 3)) &&
-            EditorCommandModule.TryFloat(args: args, at: positionAt, value: out _);
+        var hasPosition = (args.Count >= (positionAt + 3)) &&
+            EditorCommandModule.TryFloat(args: in args, at: positionAt, value: out _);
 
         var x = 0f;
         var y = 0f;
         var z = 0f;
 
-        if (hasPosition && (!EditorCommandModule.TryFloat(args: args, at: positionAt, value: out x) ||
-            !EditorCommandModule.TryFloat(args: args, at: (positionAt + 1), value: out y) ||
-            !EditorCommandModule.TryFloat(args: args, at: (positionAt + 2), value: out z))) {
+        if (hasPosition && (!EditorCommandModule.TryFloat(args: in args, at: positionAt, value: out x) ||
+            !EditorCommandModule.TryFloat(args: in args, at: (positionAt + 1), value: out y) ||
+            !EditorCommandModule.TryFloat(args: in args, at: (positionAt + 2), value: out z))) {
             return Error(text: $"[{AddCommand}: could not parse <x> <y> <z> as finite numbers]");
         }
 
         var seatAt = (positionAt + (hasPosition ? 3 : 0));
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: seatAt, verb: AddCommand, session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: seatAt, verb: AddCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -163,8 +198,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
 
         if (hasType && TryParsePrimitive(token: args[0], type: out var parsedType)) {
             type = parsedType;
-        } else if ((args.Length > 0) && !hasType && (args.Length > seatAt) && !hasPosition && !int.TryParse(s: args[0], result: out _)) {
-            return Error(text: $"[{AddCommand}: unknown primitive '{args[0]}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone]");
+        } else if ((args.Count > 0) && !hasType && (args.Count > seatAt) && !hasPosition && !int.TryParse(s: args[0], result: out _)) {
+            return Error(text: $"[{AddCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone]");
         }
 
         var added = model!.AddShape(type: type, position: (hasPosition ? new Vector3(x: x, y: y, z: z) : null));
@@ -179,8 +214,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult RemoveHandler(CommandContext context, string[] args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 0, verb: RemoveCommand, session: m_session, workbench: m_workbench);
+    private CommandResult RemoveHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: RemoveCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -193,8 +228,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         return Echo(slot: slot, verb: RemoveCommand, detail: $"shape removed — {model.StampShapeCount}/{model.ShapeCapacity} stamp shapes");
     }
 
-    private CommandResult DuplicateHandler(CommandContext context, string[] args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 0, verb: DuplicateCommand, session: m_session, workbench: m_workbench);
+    private CommandResult DuplicateHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: DuplicateCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -212,19 +247,21 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult SelectHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 1 or > 2)) {
+    private CommandResult SelectHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return Error(text: "[editor.sculpt.select: expected <id|name> plus an optional seat 1..4]");
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 1, verb: "editor.sculpt.select", session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: "editor.sculpt.select", session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
         }
 
-        if (model!.Select(idOrName: args[0]) is not { } shape) {
-            return Error(text: $"[editor.sculpt.select: no shape '{args[0]}' — editor.sculpt.status lists the model]");
+        var idOrName = args[0].ToString();
+
+        if (model!.Select(idOrName: idOrName) is not { } shape) {
+            return Error(text: $"[editor.sculpt.select: no shape '{idOrName}' — editor.sculpt.status lists the model]");
         }
 
         return Echo(slot: slot, verb: "editor.sculpt.select", detail: string.Create(
@@ -233,8 +270,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult CycleHandler(CommandContext context, string[] args, int direction, string verb) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
+    private CommandResult CycleHandler(CommandContext context, in WireArgs args, int direction, string verb) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -245,8 +282,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         return Echo(slot: slot, verb: verb, detail: DescribeTarget(model: model));
     }
 
-    private CommandResult DeselectHandler(CommandContext context, string[] args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 0, verb: DeselectCommand, session: m_session, workbench: m_workbench);
+    private CommandResult DeselectHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: DeselectCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -257,10 +294,10 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         return Echo(slot: slot, verb: DeselectCommand, detail: "target=brush");
     }
 
-    private CommandResult PrimitiveHandler(CommandContext context, string[] args) {
+    private CommandResult PrimitiveHandler(CommandContext context, WireArgs args) {
         // Shapes: [] = cycle next (the chord), [next|prev|name] [seat].
-        var hasToken = ((args.Length >= 1) && !int.TryParse(s: args[0], result: out _));
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: (hasToken ? 1 : 0), verb: PrimitiveCommand, session: m_session, workbench: m_workbench);
+        var hasToken = ((args.Count >= 1) && !int.TryParse(s: args[0], result: out _));
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: (hasToken ? 1 : 0), verb: PrimitiveCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -268,32 +305,32 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
 
         AvatarPrimitive applied;
 
-        if (!hasToken || string.Equals(a: args[0], b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!hasToken || args.Is(index: 0, value: "next")) {
             applied = model!.CyclePrimitive(direction: 1);
-        } else if (string.Equals(a: args[0], b: "prev", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (args.Is(index: 0, value: "prev")) {
             applied = model!.CyclePrimitive(direction: -1);
         } else if (TryParsePrimitive(token: args[0], type: out var parsed)) {
             model!.SetPrimitive(type: parsed);
             applied = parsed;
         } else {
-            return Error(text: $"[{PrimitiveCommand}: unknown primitive '{args[0]}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev]");
+            return Error(text: $"[{PrimitiveCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev]");
         }
 
         return Echo(slot: slot, verb: PrimitiveCommand, detail: $"{applied} ({(model!.TargetIsBrush ? "brush — the next add" : "selected shape")})");
     }
 
-    private CommandResult PositionHandler(CommandContext context, string[] args, bool relative, string verb) {
-        if (args.Length is (< 3 or > 4)) {
+    private CommandResult PositionHandler(CommandContext context, in WireArgs args, bool relative, string verb) {
+        if (args.Count is (< 3 or > 4)) {
             return Error(text: $"[{verb}: expected <x> <y> <z> plus an optional seat 1..4]");
         }
 
-        if (!EditorCommandModule.TryFloat(args: args, at: 0, value: out var x) ||
-            !EditorCommandModule.TryFloat(args: args, at: 1, value: out var y) ||
-            !EditorCommandModule.TryFloat(args: args, at: 2, value: out var z)) {
+        if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var x) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var y) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var z)) {
             return Error(text: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 3, verb: verb, session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 3, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -319,18 +356,18 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult RotateHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 3 or > 4)) {
+    private CommandResult RotateHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 3 or > 4)) {
             return Error(text: "[editor.sculpt.rotate: expected <yawDeg> <pitchDeg> <rollDeg> plus an optional seat 1..4]");
         }
 
-        if (!EditorCommandModule.TryFloat(args: args, at: 0, value: out var yaw) ||
-            !EditorCommandModule.TryFloat(args: args, at: 1, value: out var pitch) ||
-            !EditorCommandModule.TryFloat(args: args, at: 2, value: out var roll)) {
+        if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var yaw) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var pitch) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var roll)) {
             return Error(text: "[editor.sculpt.rotate: could not parse the angles as finite numbers]");
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 3, verb: "editor.sculpt.rotate", session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 3, verb: "editor.sculpt.rotate", session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -346,15 +383,15 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult ScaleHandler(CommandContext context, string[] args) {
+    private CommandResult ScaleHandler(CommandContext context, WireArgs args) {
         // Shapes: <s> [seat] or <x y z> [seat].
-        if (args.Length is (< 1 or > 4)) {
+        if (args.Count is (< 1 or > 4)) {
             return Error(text: "[editor.sculpt.scale: expected <s> or <x> <y> <z>, plus an optional seat 1..4]");
         }
 
-        var perAxis = (args.Length >= 3) && EditorCommandModule.TryFloat(args: args, at: 2, value: out _);
+        var perAxis = (args.Count >= 3) && EditorCommandModule.TryFloat(args: in args, at: 2, value: out _);
         var seatAt = (perAxis ? 3 : 1);
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: seatAt, verb: "editor.sculpt.scale", session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: seatAt, verb: "editor.sculpt.scale", session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -363,15 +400,15 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         Vector3 requested;
 
         if (perAxis) {
-            if (!EditorCommandModule.TryFloat(args: args, at: 0, value: out var x) ||
-                !EditorCommandModule.TryFloat(args: args, at: 1, value: out var y) ||
-                !EditorCommandModule.TryFloat(args: args, at: 2, value: out var z)) {
+            if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var x) ||
+                !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var y) ||
+                !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var z)) {
                 return Error(text: "[editor.sculpt.scale: could not parse <x> <y> <z> as finite numbers]");
             }
 
             requested = new Vector3(x: x, y: y, z: z);
         } else {
-            if (!EditorCommandModule.TryFloat(args: args, at: 0, value: out var uniform)) {
+            if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var uniform)) {
                 return Error(text: "[editor.sculpt.scale: could not parse <s> as a finite number]");
             }
 
@@ -386,8 +423,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult ScaleStepHandler(CommandContext context, string[] args, bool grow, string verb) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
+    private CommandResult ScaleStepHandler(CommandContext context, in WireArgs args, bool grow, string verb) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
@@ -402,22 +439,24 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         ));
     }
 
-    private CommandResult RenameHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 1 or > 2)) {
+    private CommandResult RenameHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return Error(text: "[editor.sculpt.rename: expected <name> plus an optional seat 1..4]");
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: args, at: 1, verb: "editor.sculpt.rename", session: m_session, workbench: m_workbench);
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: "editor.sculpt.rename", session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
         }
 
-        if (!model!.RenameSelected(name: args[0])) {
+        var name = args[0].ToString();
+
+        if (!model!.RenameSelected(name: name)) {
             return Error(text: "[editor.sculpt.rename: no shape selected]");
         }
 
-        return Echo(slot: slot, verb: "editor.sculpt.rename", detail: $"shape named '{args[0]}'");
+        return Echo(slot: slot, verb: "editor.sculpt.rename", detail: $"shape named '{name}'");
     }
 
     // The target readout the cycle/position echoes share.

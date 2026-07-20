@@ -544,6 +544,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                         ExecuteMemoryAccess(core: core, request: current.Memory!);
                         current.Completion!.Set();
                         break;
+                    case WorkKind.Reconfigure:
+                        ExecuteReconfigure(core: core, request: current.Reconfigure!);
+                        current.Completion!.Set();
+                        break;
                     case WorkKind.Barrier:
                         current.Completion!.Set();
                         break;
@@ -817,6 +821,53 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
     }
 
+    // Executes one marshaled live-reconfigure on the worker thread, between steps — so the model swap observes a coherent
+    // inter-instruction boundary and never lands mid-instruction (Machine.SwitchModel's own contract). A successful swap
+    // changes the machine's identity, so the rewind ring's snapshots no longer restore into it: drop the history in the
+    // SAME work item as the swap (atomic order), then re-stage the framebuffer so the pane reflects the retarget.
+    private void ExecuteReconfigure(IQueuedMachineCore core, ReconfigureRequest request) {
+        request.Ok = core.Reconfigure(options: request.Options, reason: out var reason);
+        request.Reason = reason;
+
+        if (request.Ok) {
+            m_timeTravel?.Reset();
+            StageMachineFrame(core: core);
+        }
+    }
+
+    /// <summary>Reconfigures the attached core live across the engine's options vocabulary (marshaled between steps), so a
+    /// host's <see cref="Puck.Abstractions.Machines.IReconfigurableMachine.TryReconfigure"/> never lands the swap
+    /// mid-instruction or races the running core. Draining the queue first is unnecessary — the request is FIFO-ordered
+    /// behind every accepted step, so it executes only after they complete. Returns a failure with a reason when no core
+    /// is attached or the core rejects the options.</summary>
+    /// <param name="options">The engine-specific options string, or <see langword="null"/> for defaults.</param>
+    /// <returns>Whether the reconfigure was accepted, and the engine's reason/advisory text.</returns>
+    public (bool Ok, string Reason) Reconfigure(string? options) {
+        var request = new ReconfigureRequest { Options = options };
+        var worker = m_worker;
+
+        if (worker is null) {
+            return (Ok: false, Reason: "no machine to reconfigure");
+        }
+
+        using var completion = new ManualResetEventSlim(initialState: false);
+        var queued = false;
+
+        lock (m_workLock) {
+            if (m_acceptingWork && (m_workerFault is null)) {
+                m_work.Enqueue(item: WorkItem.ForReconfigure(request: request, completion: completion));
+                Monitor.Pulse(obj: m_workLock);
+                queued = true;
+            }
+        }
+
+        if (queued) {
+            completion.Wait();
+        }
+
+        return (Ok: request.Ok, Reason: request.Reason);
+    }
+
     // Marshals one debug memory access onto the worker thread (the single-producer discipline: peek/poke touch the same
     // core arrays/mapper state the worker mutates while stepping, so they must never be driven cross-thread), blocking
     // until it completes between steps. A no-op leaving the default result (peek 0) when no core is attached.
@@ -926,6 +977,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         Stop,
         TimeTravel,
         Memory,
+        Reconfigure,
     }
 
     private enum TimeTravelOp {
@@ -954,6 +1006,14 @@ public sealed class QueuedMachineWorker : IDisposable {
         public TimeTravelStatus Status;
     }
 
+    // A marshaled live-reconfigure request + its result box, filled on the worker thread (between steps, so the swap
+    // never lands mid-instruction) and read by the producer after the barrier completes.
+    private sealed class ReconfigureRequest {
+        public string? Options;
+        public bool Ok;
+        public string Reason = string.Empty;
+    }
+
     private readonly record struct WorkItem(
         WorkKind Kind,
         ulong DeltaTicks,
@@ -962,24 +1022,28 @@ public sealed class QueuedMachineWorker : IDisposable {
         bool ForceFlush,
         ManualResetEventSlim? Completion,
         TimeTravelRequest? TimeTravel,
-        MemoryRequest? Memory
+        MemoryRequest? Memory,
+        ReconfigureRequest? Reconfigure
     ) {
         public static WorkItem Step(ulong deltaTicks, in MachinePadState input, bool forceStage) =>
-            new(Kind: WorkKind.Step, DeltaTicks: deltaTicks, Input: input, ForceStage: forceStage, ForceFlush: false, Completion: null, TimeTravel: null, Memory: null);
+            new(Kind: WorkKind.Step, DeltaTicks: deltaTicks, Input: input, ForceStage: forceStage, ForceFlush: false, Completion: null, TimeTravel: null, Memory: null, Reconfigure: null);
 
         public static WorkItem Flush(bool force, ManualResetEventSlim completion) =>
-            new(Kind: WorkKind.Flush, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: force, Completion: completion, TimeTravel: null, Memory: null);
+            new(Kind: WorkKind.Flush, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: force, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
 
         public static WorkItem Barrier(ManualResetEventSlim completion) =>
-            new(Kind: WorkKind.Barrier, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null);
+            new(Kind: WorkKind.Barrier, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
 
         public static WorkItem Stop(ManualResetEventSlim completion) =>
-            new(Kind: WorkKind.Stop, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null);
+            new(Kind: WorkKind.Stop, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
 
         public static WorkItem ForTimeTravel(TimeTravelRequest request, ManualResetEventSlim completion) =>
-            new(Kind: WorkKind.TimeTravel, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: request, Memory: null);
+            new(Kind: WorkKind.TimeTravel, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: request, Memory: null, Reconfigure: null);
 
         public static WorkItem ForMemory(MemoryRequest request, ManualResetEventSlim completion) =>
-            new(Kind: WorkKind.Memory, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: request);
+            new(Kind: WorkKind.Memory, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: request, Reconfigure: null);
+
+        public static WorkItem ForReconfigure(ReconfigureRequest request, ManualResetEventSlim completion) =>
+            new(Kind: WorkKind.Reconfigure, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: request);
     }
 }

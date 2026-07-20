@@ -2,13 +2,22 @@ using Puck.Hosting;
 
 namespace Puck.Overlays;
 
+/// <summary>One scrollback row: the text plus the verdict that decides how it is painted.</summary>
+/// <param name="Text">The row's text.</param>
+/// <param name="Refused">Whether the row belongs to a REFUSED result (rendered in the danger hue, matching the toast
+/// channel) rather than an accepted one.</param>
+public readonly record struct ConsolePanelLine(
+    string Text,
+    bool Refused
+);
+
 /// <summary>The per-frame console-panel snapshot the unified overlay renders.</summary>
 /// <param name="Visible">Whether the console panel is shown (hidden = the writer emits nothing).</param>
 /// <param name="Lines">The output history, oldest first; the writer shows the trailing lines that fit.</param>
 /// <param name="Input">The in-progress input line (rendered on the bottom row after the prompt).</param>
 public readonly record struct ConsolePanelFrame(
     bool Visible,
-    IReadOnlyList<string> Lines,
+    IReadOnlyList<ConsolePanelLine> Lines,
     string Input
 );
 

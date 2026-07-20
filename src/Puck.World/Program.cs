@@ -3,7 +3,9 @@ using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Capture;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.AdvancedGamingBrick;
@@ -25,29 +27,32 @@ using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
-var backendOption = new Option<string>(name: "--backend") {
-    DefaultValueFactory = static _ => (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240) ? "directx" : "vulkan"),
-    Description = "The graphics backend: directx (the Windows default) or vulkan.",
+// The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
+// with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
+// host defaults). A DefaultValueFactory here would silently defeat the document on every unflagged run.
+var backendOption = new Option<string?>(name: "--backend") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the world's graphics backend: auto, directx, or vulkan. Absent uses the world document's host.backend. A --backend directx on a non-Direct3D-12 OS is an operator assertion and hard-exits (a document preference degrades to Vulkan loudly instead).",
 };
-var widthOption = new Option<int>(name: "--width") {
-    DefaultValueFactory = static _ => 1280,
-    Description = "The window client width in pixels.",
+var widthOption = new Option<int?>(name: "--width") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the window client width in pixels. Absent uses the world document's host.width.",
 };
-var heightOption = new Option<int>(name: "--height") {
-    DefaultValueFactory = static _ => 800,
-    Description = "The window client height in pixels.",
+var heightOption = new Option<int?>(name: "--height") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the window client height in pixels. Absent uses the world document's host.height.",
 };
-var exitAfterSecondsOption = new Option<int>(name: "--exit-after-seconds") {
-    DefaultValueFactory = static _ => 0,
-    Description = "Seconds before the world auto-exits; 0 or less runs until the window is closed.",
+var exitAfterSecondsOption = new Option<int?>(name: "--exit-after-seconds") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the auto-exit seconds; 0 or less runs until the window is closed. Absent uses the world document's host.exitAfterSeconds.",
 };
-var presentModeOption = new Option<string>(name: "--present-mode") {
-    DefaultValueFactory = static _ => "immediate",
-    Description = "Swapchain presentation algorithm: vsync, mailbox, immediate, or adaptive. Immediate is the measured World default under VRR.",
+var presentModeOption = new Option<string?>(name: "--present-mode") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the swapchain presentation algorithm: vsync, mailbox, immediate, or adaptive. Absent uses the world document's host.presentMode.",
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load; a missing or invalid file falls back loudly to the baked default. Default: Assets/worlds/default.world.json beside the executable.",
+    Description = "The world definition file (puck.world.def.v1) to load, or the literal 'baked' to run the in-code baked definition outright. An explicit file that is missing or invalid FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/default.world.json beside the executable loads, falling back loudly to the baked definition only when no such asset ships.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -83,48 +88,89 @@ if (parseResult.Errors.Count > 0) {
 
     return 1;
 }
-var exitAfterSeconds = parseResult.GetValue(option: exitAfterSecondsOption);
-var backendName = parseResult.GetValue(option: backendOption)!;
-bool? backendIsDirectX = backendName.ToUpperInvariant() switch {
-    "DIRECTX" => true,
-    "VULKAN" => false,
-    _ => null,
-};
+// Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
+// mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
+WorldBackendPreference? backendOverride = null;
 
-if (backendIsDirectX is not { } hostsOnDirectX) {
-    Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected directx or vulkan.");
+if (parseResult.GetValue(option: backendOption) is { } backendName) {
+    backendOverride = WorldHostTokens.ParseBackend(token: backendName);
+
+    if (backendOverride is null) {
+        Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected auto, directx, or vulkan.");
+
+        return 1;
+    }
+}
+PresentMode? presentModeOverride = null;
+
+if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
+    presentModeOverride = presentModeName.ToUpperInvariant() switch {
+        "VSYNC" => PresentMode.Vsync,
+        "MAILBOX" => PresentMode.Mailbox,
+        "IMMEDIATE" => PresentMode.Immediate,
+        "ADAPTIVE" => PresentMode.Adaptive,
+        _ => null,
+    };
+
+    if (presentModeOverride is null) {
+        Console.Error.WriteLine(value: $"Unknown --present-mode '{presentModeName}'; expected vsync, mailbox, immediate, or adaptive.");
+
+        return 1;
+    }
+}
+
+// The world definition (see WorldDefinition) — a --world file, `--world baked` (the in-code document, asked for by
+// name), or the shipped Assets/worlds/default.world.json beside the executable, loaded / schema-checked / validated
+// (see WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those now read their
+// values from the resolved host section. Read by DI from the roster, population, frame source, render settings, and the
+// world.quality verb; the resolved source is registered so world.save knows its default target (null when baked).
+// An explicit --world path that will not load ends the boot here — a typo must never quietly run a different world.
+if (!WorldDefinitionLoader.TryResolve(explicitPath: parseResult.GetValue(option: worldOption), source: out var worldSource, failure: out var worldFailure)) {
+    Console.Error.WriteLine(value: worldFailure);
 
     return 1;
 }
 
-if (hostsOnDirectX && !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
+// which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
+// assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
+var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
+var hostSettings = WorldHostSettings.Resolve(
+    defaults: worldSource.Definition.Host,
+    directXAvailable: directXAvailable,
+    backendOverride: backendOverride,
+    widthOverride: parseResult.GetValue(option: widthOption),
+    heightOverride: parseResult.GetValue(option: heightOption),
+    exitAfterSecondsOverride: parseResult.GetValue(option: exitAfterSecondsOption),
+    presentModeOverride: presentModeOverride
+);
+
+if (hostSettings.BackendUnsatisfiable) {
     Console.Error.WriteLine(value: "The Direct3D 12 backend requires Windows 10 or newer; use --backend vulkan on this platform.");
 
     return 1;
 }
 
-var height = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: heightOption));
-var presentModeName = parseResult.GetValue(option: presentModeOption)!;
-PresentMode? presentMode = presentModeName.ToUpperInvariant() switch {
-    "VSYNC" => PresentMode.Vsync,
-    "MAILBOX" => PresentMode.Mailbox,
-    "IMMEDIATE" => PresentMode.Immediate,
-    "ADAPTIVE" => PresentMode.Adaptive,
-    _ => null,
-};
-
-if (presentMode is not { } resolvedPresentMode) {
-    Console.Error.WriteLine(value: $"Unknown --present-mode '{presentModeName}'; expected vsync, mailbox, immediate, or adaptive.");
-
-    return 1;
+if (hostSettings.BackendDowngraded) {
+    Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }
+var hostsOnDirectX = hostSettings.HostsOnDirectX;
+var width = (uint)hostSettings.Width;
+var height = (uint)hostSettings.Height;
+// The GPU-timing arm boots from the host section's timing field — the lowest-precedence seed (a live world.timing
+// SetArmed always overrides). TrySeed is idempotent and claims the control only if nothing above has.
+GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
 
-var width = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: widthOption));
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
+services.AddSingleton(implementationInstance: worldSource);
+services.AddSingleton(implementationInstance: worldSource.Definition);
+// The resolved host settings — read by the window/launcher/presentation registrations below and the world.host verb.
+services.AddSingleton(implementationInstance: hostSettings);
 services.Configure<NativeWindowOptions>(configureOptions: options => {
     options.Height = height;
     options.Mode = NativeWindowMode.PlatformWindow;
+    options.StartFullscreen = hostSettings.Fullscreen;
     options.Title = WorldApplicationDefaults.WindowTitle;
     options.Width = width;
 });
@@ -132,20 +178,17 @@ services.Configure<NativeWindowOptions>(configureOptions: options => {
 // TryAddSingleton<LauncherOptions> defers to this one. A null target selects automatic display pacing from verified
 // VRR capabilities or active signal timing; the world.fps verb observes the result.
 services.AddSingleton(implementationInstance: new LauncherOptions {
-    ExitAfter = ((exitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: exitAfterSeconds) : null),
-    TargetRenderRate = null,
+    ExitAfter = ((hostSettings.ExitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds) : null),
+    TargetRenderRate = hostSettings.TargetRenderRate,
 });
 services.AddSingleton(implementationInstance: new PresentationOptions {
-    PresentMode = resolvedPresentMode,
-    SurfaceFormat = SurfaceFormat.R8G8B8A8Unorm,
+    PresentMode = hostSettings.PresentMode,
+    SurfaceFormat = hostSettings.SurfaceFormat,
 });
-// The world definition (see WorldDefinition) — a --world file, or Assets/worlds/default.world.json beside the
-// executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
-// WorldDefinitionLoader). Read by DI from the roster, population, frame source, render settings, and the world.quality
-// verb. The resolved source is registered so world.save knows its default target (null SourcePath when baked/fallback).
-var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(option: worldOption));
-services.AddSingleton(implementationInstance: worldSource);
-services.AddSingleton(implementationInstance: worldSource.Definition);
+// The external-clock election policy from the host section's genlock field. Registered BEFORE AddWorldGpuHost →
+// AddLauncherTerminal so the launcher's TryAddSingleton<ExternalClockRegistry> defers to this one. An explicitly-null
+// genlock (every shipped world writes the host section) is the launcher's automatic election.
+services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: hostSettings.Genlock));
 
 // The storage host-section: the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
 // --user-id CLI reflection. RESERVED — nothing constructs an Azure target from these yet. The identity resolver
@@ -241,14 +284,14 @@ services.AddSingleton<ICommandModule, EditorSculptRigCommandModule>();
 // place-by-name twins. The animated-placement replay pool sits immediately after the avatar catalog's frozen
 // dynamic-transform capacity (the slot-base contract the frame source's capacity arithmetic mirrors).
 services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
-services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
+services.AddSingleton(implementationInstance: new WorldStampPool(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
 // The audio director: derives the emitter table from the delivered definition, resolves poses per produced
 // frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for the device pump.
 // Registered as its own singleton so the audio verb surface (audio.emitters) reads the same instance.
 services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
     client: sp.GetRequiredService<WorldClient>(),
-    animator: sp.GetRequiredService<WorldPlacementAnimator>()
+    animator: sp.GetRequiredService<WorldStampPool>()
 ));
 // The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads.
 // One dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a
@@ -285,13 +328,21 @@ services.AddSingleton(implementationFactory: static sp => WorldAddonDriver.Creat
     server: sp.GetRequiredService<WorldServer>()
 ));
 
+// The shared live composition-override store — written by DeliverComposition (an accepted view.layout/view.camera), read
+// by the frame source's view composer. One instance shared by the client and the frame source.
+services.AddSingleton<WorldCompositionState>();
+// The window composer — layout selection + eased transitions. One shared instance the frame source drives each produced
+// frame and the world.view.state read observes.
+services.AddSingleton<WorldViewComposer>();
+
 // The client half: the snapshot-fed entity view + per-tick seat-intent submitter, bound to the loopback at
 // construction (the bind delivers a primer snapshot so the render path sees the boot state before the first tick).
 services.AddSingleton(implementationFactory: static sp => {
     var client = new WorldClient(
         roster: sp.GetRequiredService<PlayerRoster>(),
         link: sp.GetRequiredService<IServerLink>(),
-        definition: sp.GetRequiredService<WorldDefinition>()
+        definition: sp.GetRequiredService<WorldDefinition>(),
+        composition: sp.GetRequiredService<WorldCompositionState>()
     );
 
     sp.GetRequiredService<LoopbackTransport>().Bind(sink: client);
@@ -330,7 +381,9 @@ services.AddSingleton<IScreenMachineEngine, AdvancedGamingBrickEngine>();
 // window captures); shared by the render factory (its provider maps feed the render spec, and the frame source publishes
 // through it each frame) and the world.screens verb.
 services.AddSingleton(implementationFactory: sp => new WorldScreenBinder(
-    screens: sp.GetRequiredService<WorldDefinition>().Screens,
+    // Reserve the derived-face slot range up front (None-sourced placeholders) so a creation FACE appearing at a later
+    // delivery re-points a slot that already exists — the render provider key set is frozen at boot (Arc 7).
+    screens: [.. sp.GetRequiredService<WorldDefinition>().Screens, .. Puck.World.Client.WorldCreationFacets.ReservedFaceSlots(derivedFaceBase: Puck.World.Client.WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: sp.GetRequiredService<WorldDefinition>().Authoring.DerivedFaceScreens)],
     engagement: sp.GetRequiredService<WorldEngagement>(),
     engines: sp.GetServices<IScreenMachineEngine>(),
     cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
@@ -345,9 +398,25 @@ services.AddSingleton<ICommandModule, WorldCommandModule>();
 // The world-mutation verb surface — the dev reflection of the WorldMutation protocol (world.kit.*/screen.*/scene.*/…,
 // world.load/undo/status/save). A SEPARATE module from WorldCommandModule to keep that class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
+// The contact/solidity verb surface — world.collision(.on/.off/.skin/.slope/.gradient/.provider), world.kit.collider/
+// .model/.response, world.scene.solid, and the world.contacts read. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
+// The LOOK verb surface — world.look.set/.remove/.assign/.tune, world.population.spawn (the spawn-policy RMW), and the
+// world.looks census. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldLookCommandModule>();
+// The Arc 7 inhabitation + creation-facet verb surface (world.placement.inhabit/.face, world.kit.attend,
+// world.inhabitants, world.faces). A SEPARATE module (WorldMutationCommandModule is at its analyzer ceiling).
+services.AddSingleton<ICommandModule, WorldPlacementCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
+// The host-section verb surface — world.host (the DOCUMENT/RESOLVED/LIVE read-back) + world.host.set/world.host.tune.
+// A SEPARATE module because the world.host read needs PresentPacingControl + GpuTimingControl, which would push
+// WorldMutationCommandModule past its analyzer ceiling.
+services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+// The window-composition verb surface — world.view.rig/.layout.set/.remove (durable), view.layout/view.camera (live
+// overrides), and the world.view.state read. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 // The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the
 // mutation twins and the derived-emitter listing). A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
@@ -365,9 +434,28 @@ services.AddSingleton<ICommandModule, WorldStorageCommandModule>();
 // factories off Windows) and the shared session clock. The RecordingTap is the swappable sink the capture render node is
 // wired to for its whole lifetime; capture.start/stop arm and finalize a RecordingSession through it.
 services.AddRecordingPlatform();
-services.AddSingleton(implementationInstance: RecordingDocumentLoader.Load(explicitPath: parseResult.GetValue(option: recordingOption)));
+
+if (!RecordingDocumentLoader.TryResolve(explicitPath: parseResult.GetValue(option: recordingOption), source: out var recordingSource, failure: out var recordingFailure)) {
+    Console.Error.WriteLine(value: recordingFailure);
+
+    return 1;
+}
+
+services.AddSingleton(implementationInstance: recordingSource);
 services.AddSingleton<RecordingTap>();
 services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
+
+// The true-deterministic-replay tape (the seed of a future Puck.Replay) — captures the running session's per-tick
+// server-input stream + starting state off the loopback, and rehydrates a fresh world to verify a recorded-vs-replayed
+// hash match offline. WorldSimulation closes each captured tick inside Step; the replay.* verb surface arms and verifies
+// it. Immediate verbs, a live non-document surface (the capture.* precedent). Constructed here so the sim and the verbs
+// share it.
+services.AddSingleton(implementationFactory: static sp => new WorldReplayTape(
+    liveServer: sp.GetRequiredService<WorldServer>(),
+    profiles: sp.GetRequiredService<WorldProfiles>(),
+    transport: sp.GetRequiredService<LoopbackTransport>()
+));
+services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
 
 // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll thread),
 // the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the hosted service that
@@ -377,7 +465,7 @@ services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
 if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
     services.AddSingleton(implementationFactory: static sp => new GamepadManager(
         acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: static message => Console.Error.WriteLine(value: message)),
-        clock: sp.GetService<IInputClock>(),
+        clock: sp.GetRequiredService<IInputClock>(),
         diagnostics: static message => Console.Error.WriteLine(value: message),
         hidSource: new Win32HidDeviceSource()
     ));
@@ -402,20 +490,38 @@ services.AddSingleton<EditorHudStore>();
 services.AddSingleton<EditorGizmoStore>();
 services.AddSingleton<OverlayToastStore>();
 services.AddSingleton<WorldConsoleMirror>();
+// The mirror also observes the DISPATCH path, so a Simulation-routed verb's tick-deferred verdict — which the submit
+// callback below never sees (Submit returned None) — paints on the panel too, a refusal in the danger role.
+services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleMirror>());
+// The console's sequencing primitive: the tick barrier world.wait arms (published by WorldSimulation each step) and the
+// verb that arms it. The gate is a leaf — it depends on nothing — so the TextCommandSource factory below can hold it
+// without a cycle back through the registry.
+services.AddSingleton<WorldConsoleWaitGate>();
+services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
 services.AddSingleton(implementationFactory: static sp => {
     var mirror = sp.GetRequiredService<WorldConsoleMirror>();
     var output = sp.GetRequiredService<BufferedConsoleOutput>();
+    var waitGate = sp.GetRequiredService<WorldConsoleWaitGate>();
 
     return new TextCommandSource(
         onResult: (line, result) => {
             if (!string.IsNullOrEmpty(value: result.Output)) {
-                output.WriteLine(value: result.Output);
+                // A REFUSED line goes to stderr, an accepted one to the buffered stdout — the same split the launcher's
+                // own sink makes (this one replaces it to also feed the on-screen console mirror). Without it a
+                // rejection is byte-shaped like success on the same stream and a scripted run reads green.
+                if (result.IsError) {
+                    output.WriteErrorLine(value: result.Output);
+                } else {
+                    output.WriteLine(value: result.Output);
+                }
             }
 
             mirror.Record(line: line, result: result);
         },
         registry: sp.GetRequiredService<CommandRegistry>()
-    );
+    ) {
+        HoldGate = waitGate.IsHolding,
+    };
 });
 services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     binder: sp.GetRequiredService<WorldScreenBinder>(),
@@ -433,7 +539,8 @@ services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     store: sp.GetRequiredService<BindingBarStore>(),
     targeting: sp.GetRequiredService<WorldEditorTargeting>(),
     workbench: sp.GetRequiredService<WorldWorkbench>(),
-    audio: sp.GetRequiredService<WorldAudioDirector>()
+    audio: sp.GetRequiredService<WorldAudioDirector>(),
+    pacing: sp.GetRequiredService<PresentPacingControl>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
 services.AddSingleton<ICommandModule, WorldUiCommandModule>();
@@ -464,10 +571,12 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         editor: sp.GetRequiredService<WorldEditorSession>(),
         targeting: sp.GetRequiredService<WorldEditorTargeting>(),
         drag: sp.GetRequiredService<WorldEditorDrag>(),
-        animator: sp.GetRequiredService<WorldPlacementAnimator>(),
+        animator: sp.GetRequiredService<WorldStampPool>(),
         workbench: sp.GetRequiredService<WorldWorkbench>(),
         audio: sp.GetRequiredService<WorldAudioDirector>(),
-        gizmos: sp.GetRequiredService<EditorGizmoStore>()
+        gizmos: sp.GetRequiredService<EditorGizmoStore>(),
+        composition: sp.GetRequiredService<WorldCompositionState>(),
+        composer: sp.GetRequiredService<WorldViewComposer>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a
@@ -485,10 +594,24 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var toasts = sp.GetRequiredService<OverlayToastStore>();
     var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
     var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
+    var editorWorkbench = sp.GetRequiredService<WorldWorkbench>();
     var audioDirector = sp.GetRequiredService<WorldAudioDirector>();
+    var consoleMirror = sp.GetRequiredService<WorldConsoleMirror>();
+    var consoleRegistry = sp.GetRequiredService<CommandRegistry>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
         toasts.Publish(message: echo.Message, isError: echo.Rejected);
+        // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
+        // capacity reason too long for the toast stays readable where the operator is already looking.
+        consoleMirror.RecordEcho(message: echo.Message, refused: echo.Rejected);
+
+        // A world edit is Simulation-routed: the SUBMIT succeeded (the line entered the tick queue) and the server
+        // refuses it a tick later, so the registry's own dispatch accounting cannot see it. This tap is the one place
+        // both halves meet — count the deferred refusal here so `wire.errors` reports it exactly like a synchronous
+        // one. No double count: a line refused synchronously never reaches the server and so never echoes.
+        if (echo.Rejected) {
+            consoleRegistry.NoteDeferredRejection();
+        }
 
         // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
         if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {
@@ -499,6 +622,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the deadline.
         if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
             editorDrag.NoteRejected(mutation: rejectedMutation);
+            // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
+            // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
+            editorWorkbench.NoteCommitRejected(mutation: rejectedMutation);
         }
 
         // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token —
@@ -583,6 +709,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             HostsOnDirectX = hostsOnDirectX,
             InstanceCapacity = frameSource.InstanceCapacity,
             ProgramWordCapacity = frameSource.ProgramWordCapacity,
+            // The ray-query hardware path from the host section — World previously left this unset, so SdfEngineNode fell
+            // back to the PUCK_RAY_QUERY env read (an env var no world document could see); now the document decides.
+            RayQuery = hostSettings.RayQuery,
             // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its room glow;
             // an unbound screen has no provider (the engine's procedural fallback lights it).
             ScreenLights = binder.ScreenLights,

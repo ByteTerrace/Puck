@@ -46,31 +46,23 @@ public sealed record CommandDefinition(
     public CommandRouting Routing { get; init; } = CommandRouting.Immediate;
 
     /// <summary>
-    /// Whether this verb's <see cref="CommandResult.Output"/> IS the answer the caller asked for (a query like
-    /// <c>player.where</c>), rather than an acknowledgement of a side effect. Defaults to <see langword="false"/>. A
-    /// data-echoing verb is NEVER suppressed by <c>wire.ack quiet</c> — quiet only drops the success ACKS of
-    /// side-effecting wire verbs, so a query still returns its data on a quiet pipe.
+    /// Whether this verb's SUCCESS <see cref="CommandResult.Output"/> is a bare acknowledgement of a side effect —
+    /// noise a flooded scripted pipe does not read — so <c>wire.ack quiet</c> may drop it. Defaults to
+    /// <see langword="false"/>: the output is treated as an ANSWER (a read-back, a status line, a listing) and quiet
+    /// never suppresses it. Errors are never suppressed either way.
     /// </summary>
-    public bool EchoesData { get; init; }
-
-    /// <summary>
-    /// The raw trailing-token handler for a command built by <see cref="WithTrailingArgs"/> — the same delegate
-    /// wrapped into <see cref="Handler"/>, exposed so a text-dispatch fast path can hand it a pre-tokenized argument
-    /// array WITHOUT running the full System.CommandLine parse (see <c>CommandRegistry.Submit</c>). <see langword="null"/>
-    /// for every other definition shape (a bare <see cref="Verb"/>, a hand-built definition, or a module's own trailing
-    /// wrapper), which keeps those off the fast path and on the unchanged parse. The wrapped <see cref="Handler"/> stays
-    /// the single source of truth for the normal path; this is only an accelerator hook the registry may or may not use.
-    /// </summary>
-    internal Func<CommandContext, string[], CommandResult>? TrailingArgsHandler { get; init; }
+    /// <remarks>
+    /// This is the ONE discriminator behind quiet mode. It is deliberately opt-in rather than derived from the
+    /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
+    /// </remarks>
+    public bool AcknowledgementOnly { get; init; }
 
     /// <summary>
     /// The raw wire-argument handler for a command built by <see cref="WithWireArgs"/> — the same delegate wrapped into
     /// <see cref="Handler"/>, exposed so the text-dispatch fast path can hand it a zero-copy <see cref="WireArgs"/> view
-    /// over the submitted line (no substrings, no argument array) instead of running the System.CommandLine parse. Its
-    /// non-<see langword="null"/>-ness also marks the definition as WIRE-NATIVE: the only verbs whose success acks
-    /// <c>wire.ack quiet</c> may suppress. <see langword="null"/> for every other definition shape (a bare
-    /// <see cref="Verb"/>, a <see cref="WithTrailingArgs"/> command, a hand-built definition), which keeps those verbs on
-    /// their existing paths and never suppresses them.
+    /// over the submitted line (no substrings, no argument array) instead of running the System.CommandLine parse.
+    /// <see langword="null"/> only for a bare <see cref="Verb"/> or a hand-built definition, which stay on the full
+    /// parse.
     /// </summary>
     internal Func<CommandContext, WireArgs, CommandResult>? WireArgsHandler { get; init; }
 
@@ -113,49 +105,12 @@ public sealed record CommandDefinition(
         };
     }
 
-    /// <summary>Creates a definition whose text command takes ONE trailing token list, handed to the handler as a raw
-    /// <see cref="string"/> array — the shared form behind every argument-taking console verb. This is the canonical
-    /// home of the helper that had been copy-pasted per command module; new modules call this instead of re-declaring
-    /// it (parse the tokens with <see cref="CommandArgs"/>).</summary>
-    /// <param name="name">The unique name used to identify and dispatch the command.</param>
-    /// <param name="description">A human-readable description shown in help output.</param>
-    /// <param name="handler">The delegate invoked on each activation, given the trailing tokens (empty when the
-    /// command was driven by a source rather than a parsed text line).</param>
-    /// <param name="map">The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
-    /// <param name="routing">The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>.</param>
-    /// <returns>A new <see cref="CommandDefinition"/> backed by a trailing-token text command.</returns>
-    public static CommandDefinition WithTrailingArgs(
-        string name,
-        string description,
-        Func<CommandContext, string[], CommandResult> handler,
-        string map = CommandMaps.Global,
-        CommandRouting routing = CommandRouting.Immediate
-    ) {
-        var rest = new Argument<string[]>(name: "args") {
-            Arity = ArgumentArity.ZeroOrMore,
-            Description = description,
-        };
-
-        return new CommandDefinition(
-            Name: name,
-            Description: description,
-            ValueKind: CommandValueKind.Digital,
-            TextCommand: new Command(description: description, name: name) {
-                rest,
-            },
-            Handler: context => handler(arg1: context, arg2: (context.Parse?.GetValue(argument: rest) ?? [])),
-            Map: map
-        ) {
-            Routing = routing,
-            TrailingArgsHandler = handler,
-        };
-    }
-
     /// <summary>Creates a WIRE-NATIVE definition whose handler receives its trailing tokens as a zero-copy
     /// <see cref="WireArgs"/> view rather than a materialized <see cref="string"/> array — the argument-bearing verb
     /// shape the stdin hot path dispatches without allocating (span tokenize → frozen alternate-lookup → this handler,
-    /// see <c>CommandRegistry.Submit</c>). It registers the SAME trailing-token text command as <see cref="WithTrailingArgs"/>,
-    /// so quoted lines, the help listing, and System.CommandLine parse-error text keep working; on that fallback path the
+    /// see <c>CommandRegistry.Submit</c>) — THE argument-bearing verb mechanism, with no sibling. It also registers a
+    /// trailing-token text command, so quoted lines, the help listing, and System.CommandLine parse-error text keep
+    /// working; on that fallback path the
     /// wrapped <see cref="Handler"/> adapts the parsed <see cref="string"/> array into an array-mode <see cref="WireArgs"/>
     /// and invokes THIS handler — one wire handler is the single source of truth for both the fast and fallback paths.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
@@ -165,8 +120,8 @@ public sealed record CommandDefinition(
     /// safely drop only its successes) and SHOULD gate its success-echo construction on <see cref="WireArgs.Echo"/>.</param>
     /// <param name="map">The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
     /// <param name="routing">The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>.</param>
-    /// <param name="echoesData">Whether the verb's output is a QUERY answer (see <see cref="EchoesData"/>) that
-    /// <c>wire.ack quiet</c> must never suppress — <see langword="true"/> for a read-back like <c>player.where</c>.</param>
+    /// <param name="ackOnly">Whether the verb's success output is a bare acknowledgement <c>wire.ack quiet</c> may drop
+    /// (see <see cref="AcknowledgementOnly"/>). Leave <see langword="false"/> for anything a caller reads back.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
@@ -174,7 +129,7 @@ public sealed record CommandDefinition(
         Func<CommandContext, WireArgs, CommandResult> handler,
         string map = CommandMaps.Global,
         CommandRouting routing = CommandRouting.Immediate,
-        bool echoesData = false
+        bool ackOnly = false
     ) {
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -200,7 +155,7 @@ public sealed record CommandDefinition(
             ),
             Map: map
         ) {
-            EchoesData = echoesData,
+            AcknowledgementOnly = ackOnly,
             Routing = routing,
             WireArgsHandler = handler,
         };

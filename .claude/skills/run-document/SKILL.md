@@ -1,6 +1,6 @@
 ---
 name: run-document
-description: Working on the data-driven run document and composition graph — src/Puck.Scene (PuckRunDocument, SceneObject/ViewportSource/ScreenSourceDocument records, RunDocumentValidator, the JSON schema) and its consumers (GraphBuilder/DemoRunDocuments/DemoFlags in Puck.Demo, docs/examples). Use whenever adding or changing a document field, section, graph kind, viewport/screen source, or CLI flag; authoring or fixing example documents; or touching validation/schema. Carries the document doctrine (validator as the one thick gate, the serializer's initializer-skip trap, the add-a-field ritual) so changes don't fork the contract.
+description: Working on the ENGINE-TIER run document — src/Puck.Scene (PuckRunDocument, SceneObject/ViewportSource/ScreenSourceDocument records, RunDocumentValidator, schema/run.schema.json) and its examples under docs/examples. Use whenever adding or changing a run-document field, section, graph kind, viewport/screen source; authoring or fixing example documents; or touching validation/schema. NOT the live game document: Puck.World boots puck.world.def.v1 (src/Puck.World/WorldDefinition.cs + WorldDefinitionValidator), a structurally unrelated schema — for world-document work read src/Puck.World/README.md and docs/capability-register.md, not this skill. puck.run.v1 only live consumer today is Puck.Post run-document stage (parse/validate/round-trip/schema-sync); its graph-building path left with Puck.Demo composition root. Carries the document doctrine (validator as the one thick gate, the serializer initializer-skip trap, the add-a-field ritual).
 ---
 
 # The run document: everything as data, one gate
@@ -21,10 +21,13 @@ GENERATED, never hand-edited.
 - **One versioned document** (`puck.run.v1`) describes an entire run: host,
   scene, viewports, screenSources, graph, input, validation, fuzzing. A run
   has exactly ONE root intent (graph | validation | fuzzing).
-- **Flags are thin aliases**: every `Puck.Demo --*` flag synthesizes a
-  document through `DemoRunDocuments.Synthesize` (`--overworld`, `--rom`,
-  `--validate-overworld`). There is ONE code path; never add a second imperative
-  path, and never make a flag do something a document cannot express.
+- **Flags are thin aliases** (the doctrine, which outlives its first instance):
+  a CLI flag synthesizes a document and changes nothing else. There is ONE code
+  path; never add a second imperative path, and never make a flag do something a
+  document cannot express. The original instance — `Puck.Demo`'s `--overworld` /
+  `--rom` / `--validate-overworld` through `DemoRunDocuments.Synthesize` — left
+  with that project's composition root. `Puck.World` upholds the same rule: its
+  nine flags overlay document fields and nothing more.
 - **The validator is the thick gate** (`RunDocumentValidator`): every
   semantic invariant the GPU and builders assume is asserted at parse, all
   failures collected with source-attributed paths. A document that survives
@@ -64,8 +67,9 @@ canonical statement.)
    `RunDocumentValidator` for a top-level list — see `ValidateScreenSources`
    for the shape). Range-check scene params against `ShapeBounds`
    (`fuzzing.bounds` overrides the envelope).
-3. Regenerate the schema: `dotnet run --project src/Puck.Demo -c Release --
-   --emit-schema schema/run.schema.json` and COMMIT it.
+3. Regenerate the schema: `dotnet run tools/Tools.cs -- schema` (calls
+   `Puck.Scene.RunDocumentSchema.Export()` directly — no game process involved)
+   and COMMIT the result.
 4. Gate: `dotnet run --project src/Puck.Post -c Release -- --stage
    run-document` — parses+round-trips EVERY `docs/examples/*.json`, checks
    the committed schema is in sync, and runs the negatives corpus. Rebuild
@@ -144,7 +148,7 @@ validator's job.
 
 ## Verifying
 
-`--stage run-document` (above) is the model's gate; a live consumer change
-also wants the relevant graph run (`--run docs/examples/...`) and, for
-overworld-affecting wiring, `--validate-overworld`. Full routing: the
-`verifying-puck-changes` skill.
+`--stage run-document` (above) is the model's gate, and today it is the ONLY
+one — `puck.run.v1` has no live graph-building consumer since `Puck.Demo`'s
+composition root was deleted, so there is no run to exercise alongside it.
+Full routing: the `verifying-puck-changes` skill.

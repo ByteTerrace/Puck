@@ -15,7 +15,7 @@ namespace Puck.Demo.Overworld;
 /// (<see cref="EnsureRoster"/> seats each ghost's padless roster occupant, <see cref="OwnsSlot"/> tells the human
 /// sampler which slots to skip, <see cref="Apply"/> ticks each ghost and folds its virtual-pad commands into the two
 /// intent rows), and the <c>addon</c> console VERBS (<see cref="ListAddons"/> / <see cref="SetAddonEnabled"/>, the
-/// <c>addon list</c> / <c>addon enable</c> / <c>addon disable</c> control plane the <see cref="AddonCommandModule"/>
+/// <c>addon list</c> / <c>addon enable</c> / <c>addon disable</c> control plane the <c>AddonCommandModule</c>
 /// drives). Reached by the command module through <c>ICreatorModeHost.AddonControl</c> off the render-node root, exactly
 /// like the overworld control verbs reach their host. Host-side lifecycle only; the deterministic simulation never
 /// learns it exists.

@@ -32,10 +32,10 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The kit row name every seat body constructs from.</param>
     internal sealed record SetDefaultSeatKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 
-    /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldKitAssignment"/> row).</summary>
+    /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldRowAssignment"/> row).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Assignment">The assignment policy.</param>
-    internal sealed record SetKitAssignment(WorldPrincipal Principal, WorldKitAssignment Assignment) : WorldMutation(Principal);
+    internal sealed record SetKitAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
 
     /// <summary>Upserts a diegetic screen addressed by <see cref="WorldScreen.Index"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -81,7 +81,7 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Replaces the profileless locomotion/jump tuning.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Motion">The motion tuning.</param>
-    internal sealed record SetMotion(WorldPrincipal Principal, MotionTuning Motion) : WorldMutation(Principal);
+    internal sealed record SetMotion(WorldPrincipal Principal, WorldMotionDefaults Motion) : WorldMutation(Principal);
 
     /// <summary>Replaces the wander tuning.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -201,4 +201,71 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Authoring">The whole authoring policy row.</param>
     internal sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole contact-solver tuning (the <see cref="WorldCollision"/> section). Applies LIVE: the
+    /// population rebuilds the collider set and hands it to every body on the next tick.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Collision">The contact-solver tuning.</param>
+    internal sealed record SetCollision(WorldPrincipal Principal, WorldCollision Collision) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole host-section defaults row (window/backend/present/pacing/timing/genlock). DOCUMENT-
+    /// DEFAULTS class: the boot-only fields take effect at the NEXT boot (a running window cannot resize its backend or
+    /// surface), and the two live-lever fields (<c>TargetHertz</c> via <c>world.target</c>, <c>Timing</c> via
+    /// <c>world.timing</c>) set the value the next boot wakes on — <c>world.save</c> folds the running levers back into
+    /// them. The row is validated immediately, so a bad value is rejected loudly regardless of when it applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Host">The whole host defaults row.</param>
+    internal sealed record SetHostDefaults(WorldPrincipal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole window-composition defaults row — the seat framing plus the authored layouts (see
+    /// <see cref="WorldViewDefaults"/>). Applies LIVE: the frame source recompiles the seat rigs and the composer reads
+    /// the new layouts on the next produced frame. The <c>world.view.rig</c> verb RMWs the seat rig into this.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Views">The whole views defaults row.</param>
+    internal sealed record SetViewDefaults(WorldPrincipal Principal, WorldViewDefaults Views) : WorldMutation(Principal);
+
+    /// <summary>Upserts one named window layout addressed by <see cref="WorldViewLayout.Name"/> — replaces the matching
+    /// row or appends a new one (the views section's layout grain).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Layout">The whole layout row.</param>
+    internal sealed record UpsertViewLayout(WorldPrincipal Principal, WorldViewLayout Layout) : WorldMutation(Principal);
+
+    /// <summary>Removes the window layout named <paramref name="Name"/>. Always allowed — the composer falls back to the
+    /// authored/built-in selection when the active layout is removed.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The layout name to remove.</param>
+    internal sealed record RemoveViewLayout(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Upserts a LOOK row (whole-row, keyed by name) into the <see cref="WorldSection.Looks"/> section. Applies
+    /// LIVE — the population re-resolves the look table and the client rebuilds the avatar program (the appearance
+    /// change is visible the next frame). Riding the render-envelope gate: a creation look changes the emitted program
+    /// word count.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Look">The whole look row.</param>
+    internal sealed record UpsertLook(WorldPrincipal Principal, WorldLook Look) : WorldMutation(Principal);
+
+    /// <summary>Removes a LOOK row by name. Rejected loudly by full-document revalidation while the look assignment
+    /// table still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The look name to remove.</param>
+    internal sealed record RemoveLook(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Sets the look→entity assignment policy (the same <see cref="WorldRowAssignment"/> primitive the kit
+    /// assignment uses). Applies LIVE.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Assignment">The look assignment policy.</param>
+    internal sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
+
+    /// <summary>Upserts a cable-link row (whole-row, keyed by name) into the <see cref="WorldSection.Links"/> section —
+    /// the durable twin of the <c>screen.link</c> verb. Applies LIVE: the binder reconciles the declared links to the
+    /// new definition, establishing (or reporting dormant) the group. Rejected by full-document revalidation when a
+    /// named screen is undeclared, a screen is in two links, or fewer than two screens are named.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Link">The whole cable-link row.</param>
+    internal sealed record UpsertScreenLink(WorldPrincipal Principal, WorldScreenLink Link) : WorldMutation(Principal);
+
+    /// <summary>Removes a cable-link row by name. Rejected loudly when no row declares that name.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The link name to remove.</param>
+    internal sealed record RemoveScreenLink(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

@@ -59,103 +59,103 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.select",
             description: "Selects a document row explicitly: editor.select <scene|screens|spawns|cameras|placements|speakers> <id-or-index> [seat]. Screens key by engine index; every other section by its stable string id. Selection is client state (never protocol); the selected scene row or placement tints in the render, and a selected speaker's gizmo chip lights accent.",
             handler: SelectHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: PickCommand,
             description: "Picks the row under the editor camera's crosshair via the document-derived fixed-point picking ray: editor.pick [seat]. Scene rows and screens pick by their real geometry; spawns and fixed cameras by small proxy spheres. The chord twins are South on the RT select page and North on the LT camera page.",
             handler: PickHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: NextCommand,
             description: "Cycles the selection to the next proximity candidate around the editor focus point (nearest-first, wraps; the ring is BOUNDED — the nearest 16 rows within 32u): editor.next [seat]. The chord twin is D-pad Right on the select page.",
             handler: (context, args) => CycleHandler(context: context, args: args, direction: 1, verb: NextCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: PrevCommand,
             description: "Cycles the selection to the previous proximity candidate: editor.prev [seat]. The chord twin is D-pad Left on the select page.",
             handler: (context, args) => CycleHandler(context: context, args: args, direction: -1, verb: PrevCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: DeselectCommand,
             description: "Clears the seat's selection: editor.deselect [seat]. The chord twin is West on the select page.",
             handler: DeselectHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: DeleteCommand,
             description: "Deletes the selected row as one whole-row mutation: editor.delete [seat] — RemoveSceneRow / RemoveScreen / RemoveCamera / RemovePlacement / RemoveSpeaker by section; a spawn delete resends the spawn list minus the row (and rejects loudly when the local seats then lack spawns). The chord twin is East on the select page.",
             handler: DeleteHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: GrabCommand,
             description: "Toggles the drag channel on the selection: editor.grab [seat] begins a client-local drag (sticks move the pending row; NOTHING crosses the wire), and a second grab commits it as ONE whole-row mutation. Scene rows, screens, placements, and fixed/bed speakers drag; move spawns/cameras/anchored speakers with editor.move. The chord twins are South on the place page and North on the select page.",
             handler: GrabHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: ReleaseCommand,
             description: "Commits the live drag as ONE whole-row mutation (the release edge — a whole drag is one journal entry, one undo step): editor.release [seat].",
             handler: ReleaseHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: CancelCommand,
             description: "Aborts the live drag — the pending row never existed (no mutation, no journal entry): editor.cancel [seat]. The chord twin is East on the place page.",
             handler: CancelHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.drag",
             description: "Moves the live drag's pending row by a world-space delta — the typed twin of stick drag motion, client-local only: editor.drag <dx> <dy> <dz> [seat]. Snap applies; commit with editor.release.",
             handler: DragHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.move",
             description: "Moves the selected row to an ABSOLUTE position as one whole-row mutation: editor.move <x> <y> <z> [seat]. Scene rows move their center, screens their face origin, spawns their position; a fixed camera moves its eye (aim held), an anchored camera/speaker sets its attachment offset; a fixed speaker moves its position, a bed its center.",
             handler: (context, args) => MoveHandler(context: context, args: args, relative: false, verb: "editor.move"),
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.nudge",
             description: "Moves the selected row by a RELATIVE delta as one whole-row mutation: editor.nudge <dx> <dy> <dz> [seat]. A fixed camera translates eye and aim together; an anchored camera shifts its attachment offset.",
             handler: (context, args) => MoveHandler(context: context, args: args, relative: true, verb: "editor.nudge"),
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.place",
             description: "Places a NEW row at the editor focus point as one mutation (the immediate typed twin of the spawn-ghost chords): editor.place boulder [radius [smooth]] | slab [hx hy hz] | <creationId> [yawDeg [scale]]. A creation id stamps a placement of that world creation row (place-by-name — see editor.creations / editor.import); ids allocate as boulder-N/slab-N/place-N. Acts for seat 1 when typed.",
             handler: PlaceHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: SpawnBoulderCommand,
             description: "Begins a new-boulder GHOST drag at the editor focus point (previewed client-side; enters the document only on release): editor.spawn.boulder [seat]. The chord twin is D-pad Up on the place page.",
             handler: (context, args) => SpawnHandler(context: context, args: args, slab: false, verb: SpawnBoulderCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: SpawnSlabCommand,
             description: "Begins a new-slab GHOST drag at the editor focus point: editor.spawn.slab [seat]. The chord twin is D-pad Down on the place page.",
             handler: (context, args) => SpawnHandler(context: context, args: args, slab: true, verb: SpawnSlabCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: SnapCommand,
             description: "Grid snap for drags: editor.snap [on|off|<pitch>] [seat]. No argument toggles (the West place-page chord); a pitch sets the X/Z lattice (Y stays free — floor-rest placement) and enables snapping.",
             handler: SnapHandler
         );
     }
 
-    private CommandResult SelectHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 2 or > 3)) {
+    private CommandResult SelectHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 2 or > 3)) {
             return Error(text: "[editor.select: expected <scene|screens|spawns|cameras|placements|speakers> <id-or-index> [seat]]");
         }
 
         var section = ParseSection(token: args[0]);
 
         if (section is not { } resolvedSection) {
-            return Error(text: $"[editor.select: unknown section '{args[0]}' — scene|screens|spawns|cameras|placements|speakers]");
+            return Error(text: $"[editor.select: unknown section '{args[0].ToString()}' — scene|screens|spawns|cameras|placements|speakers]");
         }
 
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 2, verb: "editor.select");
@@ -168,14 +168,14 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
             return guard;
         }
 
-        if (!m_targeting.TrySelect(slot: slot, section: resolvedSection, key: args[1], selection: out var selection, error: out var reason)) {
+        if (!m_targeting.TrySelect(slot: slot, section: resolvedSection, key: args[1].ToString(), selection: out var selection, error: out var reason)) {
             return Error(text: $"[editor.select: {reason}]");
         }
 
         return Echo(slot: slot, verb: "editor.select", detail: DescribeSelection(slot: slot, selection: in selection));
     }
 
-    private CommandResult PickHandler(CommandContext context, string[] args) {
+    private CommandResult PickHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: PickCommand);
 
         if (error is { } resolveError) {
@@ -193,7 +193,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: PickCommand, detail: $"selected {DescribeSelection(slot: slot, selection: in selection)}");
     }
 
-    private CommandResult CycleHandler(CommandContext context, string[] args, int direction, string verb) {
+    private CommandResult CycleHandler(CommandContext context, WireArgs args, int direction, string verb) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: verb);
 
         if (error is { } resolveError) {
@@ -217,7 +217,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         ));
     }
 
-    private CommandResult DeselectHandler(CommandContext context, string[] args) {
+    private CommandResult DeselectHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: DeselectCommand);
 
         if (error is { } resolveError) {
@@ -231,7 +231,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: DeselectCommand, detail: (m_targeting.Deselect(slot: slot) ? "cleared" : "nothing selected"));
     }
 
-    private CommandResult DeleteHandler(CommandContext context, string[] args) {
+    private CommandResult DeleteHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: DeleteCommand);
 
         if (error is { } resolveError) {
@@ -289,7 +289,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: DeleteCommand, detail: $"{selection.Describe()} — remove submitted");
     }
 
-    private CommandResult GrabHandler(CommandContext context, string[] args) {
+    private CommandResult GrabHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: GrabCommand);
 
         if (error is { } resolveError) {
@@ -316,7 +316,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: GrabCommand, detail: $"dragging {selection.Describe()} — sticks move it, grab again commits, {CancelCommand} aborts");
     }
 
-    private CommandResult ReleaseHandler(CommandContext context, string[] args) {
+    private CommandResult ReleaseHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: ReleaseCommand);
 
         if (error is { } resolveError) {
@@ -338,7 +338,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: verb, detail: echo);
     }
 
-    private CommandResult CancelHandler(CommandContext context, string[] args) {
+    private CommandResult CancelHandler(CommandContext context, WireArgs args) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: CancelCommand);
 
         if (error is { } resolveError) {
@@ -356,8 +356,8 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: CancelCommand, detail: echo);
     }
 
-    private CommandResult DragHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 3 or > 4)) {
+    private CommandResult DragHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 3 or > 4)) {
             return Error(text: "[editor.drag: expected <dx> <dy> <dz> [seat]]");
         }
 
@@ -384,8 +384,8 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: "editor.drag", detail: (m_drag.Describe(slot: slot) ?? "moved"));
     }
 
-    private CommandResult MoveHandler(CommandContext context, string[] args, bool relative, string verb) {
-        if (args.Length is (< 3 or > 4)) {
+    private CommandResult MoveHandler(CommandContext context, WireArgs args, bool relative, string verb) {
+        if (args.Count is (< 3 or > 4)) {
             return Error(text: $"[{verb}: expected <x> <y> <z> [seat]]");
         }
 
@@ -487,23 +487,18 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                         continue;
                     }
 
-                    switch (camera) {
-                        case WorldCamera.Fixed fixedCamera:
-                            target = (relative ? (fixedCamera.Position + value) : value);
-                            // A relative nudge carries the aim along (a parallel translate); an absolute move re-poses
-                            // the eye and holds the authored aim point.
-                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: (fixedCamera with {
-                                Position = target,
-                                LookAt = (relative ? (fixedCamera.LookAt + value) : fixedCamera.LookAt),
-                            })));
+                    target = (relative ? (camera.Offset + value) : value);
+                    var moved = (camera with { Offset = target });
 
-                            return true;
-                        case WorldCamera.Anchored anchored:
-                            target = (relative ? (anchored.Offset + value) : value);
-                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: (anchored with { Offset = target })));
-
-                            return true;
+                    // An unanchored look-at carries its aim along on a relative nudge (a parallel translate); an
+                    // absolute move re-poses the eye and holds the authored aim point.
+                    if (relative && (camera.Anchor is null) && (camera.Rig is WorldRig.LookAt look)) {
+                        moved = (moved with { Rig = (look with { Target = (look.Target + value) }) });
                     }
+
+                    m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: moved));
+
+                    return true;
                 }
 
                 break;
@@ -542,8 +537,8 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return false;
     }
 
-    private CommandResult PlaceHandler(CommandContext context, string[] args) {
-        if (args.Length == 0) {
+    private CommandResult PlaceHandler(CommandContext context, WireArgs args) {
+        if (args.Count == 0) {
             return Error(text: "[editor.place: expected boulder [radius [smooth]] | slab [hx hy hz] | <creationId> [yawDeg [scale]]]");
         }
 
@@ -556,7 +551,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         var focus = m_session.Focus(slot: slot);
 
         // Place-by-name: a first token naming a world creation row stamps a placement of it.
-        if (args[0].ToUpperInvariant() is not ("BOULDER" or "SLAB")) {
+        if (!(args.Is(index: 0, value: "boulder") || args.Is(index: 0, value: "slab"))) {
             return PlaceCreation(slot: slot, args: args, focus: focus);
         }
 
@@ -576,25 +571,25 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
     // The creation stamp: editor.place <creationId> [yawDeg [scale]] — an immediate whole-row UpsertPlacement at the
     // editor focus point (the ghost/drag flow is editor.spawn.creation on the place page).
-    private CommandResult PlaceCreation(int slot, string[] args, Vector3 focus) {
-        if (FindCreation(client: m_client, id: args[0]) is null) {
-            return Error(text: $"[editor.place: unknown kind '{args[0]}' — boulder|slab, or a creation id (see editor.creations)]");
+    private CommandResult PlaceCreation(int slot, in WireArgs args, Vector3 focus) {
+        if (FindCreation(client: m_client, id: args[0].ToString()) is null) {
+            return Error(text: $"[editor.place: unknown kind '{args[0].ToString()}' — boulder|slab, or a creation id (see editor.creations)]");
         }
 
         var yaw = 0f;
         var scale = 1f;
 
-        if ((args.Length >= 2) && !TryFloat(token: args[1], value: out yaw)) {
-            return Error(text: $"[editor.place: bad yawDeg '{args[1]}']");
+        if ((args.Count >= 2) && !TryFloat(token: args[1], value: out yaw)) {
+            return Error(text: $"[editor.place: bad yawDeg '{args[1].ToString()}']");
         }
 
-        if ((args.Length >= 3) && !TryFloat(token: args[2], value: out scale)) {
-            return Error(text: $"[editor.place: bad scale '{args[2]}']");
+        if ((args.Count >= 3) && !TryFloat(token: args[2], value: out scale)) {
+            return Error(text: $"[editor.place: bad scale '{args[2].ToString()}']");
         }
 
         var placement = new WorldPlacement(
             Id: m_drag.NextFreePlacementId(),
-            CreationId: args[0],
+            CreationId: args[0].ToString(),
             Position: focus,
             YawDegrees: yaw,
             Scale: scale
@@ -619,53 +614,52 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
     }
 
     // Parse the place shape: `boulder [radius [smooth]]` or `slab [hx hy hz]`, defaults per the constants above.
-    private WorldSceneRow? BuildRow(string[] args, Vector3 focus, out string reason) {
+    private WorldSceneRow? BuildRow(in WireArgs args, Vector3 focus, out string reason) {
         reason = string.Empty;
 
-        switch (args[0].ToUpperInvariant()) {
-            case "BOULDER": {
-                var radius = DefaultBoulderRadius;
-                var smooth = DefaultBoulderSmooth;
+        if (args.Is(index: 0, value: "boulder")) {
+            var radius = DefaultBoulderRadius;
+            var smooth = DefaultBoulderSmooth;
 
-                if ((args.Length >= 2) && !TryFloat(token: args[1], value: out radius)) {
-                    reason = $"bad radius '{args[1]}'";
-
-                    return null;
-                }
-
-                if ((args.Length >= 3) && !TryFloat(token: args[2], value: out smooth)) {
-                    reason = $"bad smooth '{args[2]}'";
-
-                    return null;
-                }
-
-                return new WorldSceneRow.Boulder(Id: m_drag.NextFreeSceneRowId(prefix: "boulder-"), Center: focus, Radius: radius, Smooth: smooth);
-            }
-            case "SLAB": {
-                var halfExtents = s_defaultSlabHalfExtents;
-
-                if (args.Length >= 4) {
-                    if (!TryVector(args: args, at: 1, value: out halfExtents)) {
-                        reason = "bad <hx> <hy> <hz>";
-
-                        return null;
-                    }
-                } else if (args.Length != 1) {
-                    reason = "slab takes zero or three dimensions: slab [hx hy hz]";
-
-                    return null;
-                }
-
-                return new WorldSceneRow.Slab(Id: m_drag.NextFreeSceneRowId(prefix: "slab-"), Center: focus, HalfExtents: halfExtents, Round: DefaultSlabRound, Smooth: DefaultSlabSmooth, Albedo: s_defaultSlabAlbedo);
-            }
-            default:
-                reason = $"unknown kind '{args[0]}' — boulder|slab";
+            if ((args.Count >= 2) && !TryFloat(token: args[1], value: out radius)) {
+                reason = $"bad radius '{args[1].ToString()}'";
 
                 return null;
+            }
+
+            if ((args.Count >= 3) && !TryFloat(token: args[2], value: out smooth)) {
+                reason = $"bad smooth '{args[2].ToString()}'";
+
+                return null;
+            }
+
+            return new WorldSceneRow.Boulder(Id: m_drag.NextFreeSceneRowId(prefix: "boulder-"), Center: focus, Radius: radius, Smooth: smooth);
         }
+
+        if (args.Is(index: 0, value: "slab")) {
+            var halfExtents = s_defaultSlabHalfExtents;
+
+            if (args.Count >= 4) {
+                if (!TryVector(args: args, at: 1, value: out halfExtents)) {
+                    reason = "bad <hx> <hy> <hz>";
+
+                    return null;
+                }
+            } else if (args.Count != 1) {
+                reason = "slab takes zero or three dimensions: slab [hx hy hz]";
+
+                return null;
+            }
+
+            return new WorldSceneRow.Slab(Id: m_drag.NextFreeSceneRowId(prefix: "slab-"), Center: focus, HalfExtents: halfExtents, Round: DefaultSlabRound, Smooth: DefaultSlabSmooth, Albedo: s_defaultSlabAlbedo);
+        }
+
+        reason = $"unknown kind '{args[0].ToString()}' — boulder|slab";
+
+        return null;
     }
 
-    private CommandResult SpawnHandler(CommandContext context, string[] args, bool slab, string verb) {
+    private CommandResult SpawnHandler(CommandContext context, WireArgs args, bool slab, string verb) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 0, verb: verb);
 
         if (error is { } resolveError) {
@@ -688,10 +682,10 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         return Echo(slot: slot, verb: verb, detail: $"ghost scene '{row.Id}' — sticks move it, {GrabCommand} commits, {CancelCommand} discards");
     }
 
-    private CommandResult SnapHandler(CommandContext context, string[] args) {
+    private CommandResult SnapHandler(CommandContext context, WireArgs args) {
         // Shapes: none = toggle (the chord act); [on|off|<pitch>] [seat] — the first token is ALWAYS the mode when
         // present (so `editor.snap 1` is a 1-unit pitch, never a seat), the seat rides second.
-        var hasMode = (args.Length >= 1);
+        var hasMode = (args.Count >= 1);
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 1, verb: SnapCommand);
 
         if (error is { } resolveError) {
@@ -706,25 +700,16 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
         if (!hasMode) {
             snap = m_drag.SetSnapEnabled(slot: slot, enabled: !snap.Enabled);
+        } else if (args.Is(index: 0, value: "on")) {
+            snap = m_drag.SetSnapEnabled(slot: slot, enabled: true);
+        } else if (args.Is(index: 0, value: "off")) {
+            snap = m_drag.SetSnapEnabled(slot: slot, enabled: false);
         } else {
-            switch (args[0].ToUpperInvariant()) {
-                case "ON":
-                    snap = m_drag.SetSnapEnabled(slot: slot, enabled: true);
-
-                    break;
-                case "OFF":
-                    snap = m_drag.SetSnapEnabled(slot: slot, enabled: false);
-
-                    break;
-                default:
-                    if (!TryFloat(token: args[0], value: out var pitch) || (pitch <= 0f)) {
-                        return Error(text: $"[{SnapCommand}: expected on|off|<pitch> — got '{args[0]}']");
-                    }
-
-                    snap = m_drag.SetSnapPitch(slot: slot, pitch: pitch);
-
-                    break;
+            if (!TryFloat(token: args[0], value: out var pitch) || (pitch <= 0f)) {
+                return Error(text: $"[{SnapCommand}: expected on|off|<pitch> — got '{args[0].ToString()}']");
             }
+
+            snap = m_drag.SetSnapPitch(slot: slot, pitch: pitch);
         }
 
         return Echo(slot: slot, verb: SnapCommand, detail: string.Create(
@@ -759,21 +744,39 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         IsError = true,
     };
 
-    private static WorldSection? ParseSection(string token) => token.ToUpperInvariant() switch {
-        "SCENE" => WorldSection.Scene,
-        "SCREENS" => WorldSection.Screens,
-        "SPAWNS" => WorldSection.Spawns,
-        "CAMERAS" => WorldSection.Cameras,
-        "PLACEMENTS" => WorldSection.Placements,
-        "SPEAKERS" => WorldSection.Speakers,
-        _ => null,
-    };
+    private static WorldSection? ParseSection(ReadOnlySpan<char> token) {
+        if (token.Equals(other: "scene", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Scene;
+        }
+
+        if (token.Equals(other: "screens", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Screens;
+        }
+
+        if (token.Equals(other: "spawns", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Spawns;
+        }
+
+        if (token.Equals(other: "cameras", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Cameras;
+        }
+
+        if (token.Equals(other: "placements", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Placements;
+        }
+
+        if (token.Equals(other: "speakers", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return WorldSection.Speakers;
+        }
+
+        return null;
+    }
 
     // The shared FINITE parse boundary — the drag/move/place/snap twins of EditorCommandModule.TryFloat.
-    private static bool TryFloat(string token, out float value) =>
+    private static bool TryFloat(ReadOnlySpan<char> token, out float value) =>
         (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
 
-    private static bool TryVector(string[] args, int at, out Vector3 value) {
+    private static bool TryVector(in WireArgs args, int at, out Vector3 value) {
         value = default;
 
         if (!TryFloat(token: args[at], value: out var x) ||

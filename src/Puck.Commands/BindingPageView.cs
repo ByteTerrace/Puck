@@ -13,7 +13,8 @@ namespace Puck.Commands;
 /// <param name="Buttons">The page's bindings, in profile order.</param>
 /// <param name="Modifiers">Every modifier the profile declares, flagged with whether this page's chord requires it.</param>
 /// <param name="CommandChords">The command-meaning chord rows of this page's group, in profile order — the hints a
-/// binding bar renders so a player can discover a chord-fired act (e.g. <c>[lt, rt] → editor.enter</c>).</param>
+/// binding bar renders so a player can discover a chord-fired act (a group that binds one; a group whose chords are
+/// all pages carries none).</param>
 public sealed record BindingPageView(
     string PageId,
     string Group,

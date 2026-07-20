@@ -338,7 +338,7 @@ typed text, or a pointer delta/position, each carrying a `CommandPhase`) and nam
 ## Binding chords (grouped modifier-chord profiles)
 
 The engine-side chord mechanism lives in `Puck.Commands` (not here): a `BindingProfileDocument` (JSON,
-`puck.bindings.v8`) declares **modifiers** — any input source, e.g. `gamepad.leftTrigger`, made digital by
+`puck.bindings.v1`) declares **modifiers** — any input source, e.g. `gamepad.leftTrigger`, made digital by
 press/release hysteresis thresholds — and **chord rows**: `(group, ordered chord) → meaning`, where the meaning
 is a **page** (an entry table) or a **command** (a direct chord-fired binding). `["left","right"]` and
 `["right","left"]` are distinct rows; the empty chord is a group's resting page. `BindingProfile.Compile`

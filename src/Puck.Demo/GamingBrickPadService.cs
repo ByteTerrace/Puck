@@ -30,7 +30,7 @@ internal enum GamepadRouting {
 /// lanes, so that type never touches <see cref="GamepadManager.Drain"/> itself.
 /// </summary>
 /// <summary>Composition-root wiring for the pad-routing service, kept out of the top-level program to keep its
-/// class coupling in check (the same discipline as <see cref="GamepadDemoRegistration"/>).</summary>
+/// class coupling in check (the same discipline as <c>GamepadDemoRegistration</c>).</summary>
 internal static class GamingBrickPadRegistration {
     /// <summary>Whether the document routes controllers through the shared pad service (any gaming-brick viewport
     /// pane) — in which case that service must be the run's sole gamepad drainer.</summary>

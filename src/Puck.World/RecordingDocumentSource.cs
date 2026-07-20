@@ -14,38 +14,52 @@ internal sealed record RecordingDocumentSource(RecordingDocument Document, strin
 /// <summary>
 /// Resolves the recording document at boot: a <c>--recording &lt;path&gt;</c> argument (or the checked-in
 /// <c>Assets/recordings/default.recording.json</c> beside the executable), loaded and validated through the document's
-/// own <see cref="RecordingDocumentSerialization.TryLoad"/>. ANY failure — missing file, parse error, schema mismatch,
-/// or a validation error — falls back LOUDLY to the baked <see cref="RecordingDocument.CreateDefault"/>. Boot always
-/// prints exactly one <c>[recording] document:</c> line naming the resolved path (or the baked-default reason).
+/// own <see cref="RecordingDocumentSerialization.TryLoad"/>.
 /// </summary>
+/// <remarks>An EXPLICIT <c>--recording</c> path is an assertion — absent, unreadable, or invalid, it fails the boot with
+/// a named reason and a non-zero exit, exactly as <see cref="WorldDefinitionLoader"/> treats <c>--world</c>. Only the
+/// implicit default path falls back to the baked <see cref="RecordingDocument.CreateDefault"/>, and it says so.</remarks>
 internal static class RecordingDocumentLoader {
     /// <summary>The default recording file, resolved against <see cref="AppContext.BaseDirectory"/> when no
     /// <c>--recording</c> path is supplied.</summary>
     public static readonly string DefaultRelativePath = Path.Combine(path1: "Assets", path2: "recordings", path3: "default.recording.json");
 
-    /// <summary>Loads the active recording document, honoring an optional explicit path and falling back loudly to the
-    /// baked default on any failure. Prints the one-line boot origin to <see cref="Console.Error"/>.</summary>
+    /// <summary>Resolves the active recording document. An explicit path that will not load is a boot failure; the
+    /// implicit default path falls back loudly to the baked document.</summary>
     /// <param name="explicitPath">The <c>--recording</c> path, or <see langword="null"/>/empty for the default file.</param>
-    /// <returns>The active document and its origin.</returns>
-    public static RecordingDocumentSource Load(string? explicitPath) {
-        var path = (string.IsNullOrWhiteSpace(value: explicitPath)
-            ? Path.Combine(path1: AppContext.BaseDirectory, path2: DefaultRelativePath)
-            : Path.GetFullPath(path: explicitPath));
+    /// <param name="source">The resolved document and its origin, when this returns <see langword="true"/>.</param>
+    /// <param name="failure">The one-line boot-failure message, or empty on success.</param>
+    /// <returns><see langword="true"/> when the boot may proceed.</returns>
+    public static bool TryResolve(string? explicitPath, out RecordingDocumentSource source, out string failure) {
+        var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
+        var path = (explicitly ? Path.GetFullPath(path: explicitPath!) : Path.Combine(path1: AppContext.BaseDirectory, path2: DefaultRelativePath));
 
         if (TryLoadFile(path: path, document: out var loaded, reason: out var reason)) {
             Console.Error.WriteLine(value: $"[recording] document: {path}");
 
-            return new RecordingDocumentSource(Document: loaded!, SourcePath: path);
+            source = new RecordingDocumentSource(Document: loaded!, SourcePath: path);
+            failure = string.Empty;
+
+            return true;
+        }
+
+        if (explicitly) {
+            source = new RecordingDocumentSource(Document: RecordingDocument.CreateDefault(), SourcePath: null);
+            failure = $"[recording] --recording {reason}";
+
+            return false;
         }
 
         Console.Error.WriteLine(value: $"[recording] document: baked default ({reason})");
 
-        return new RecordingDocumentSource(Document: RecordingDocument.CreateDefault(), SourcePath: null);
+        source = new RecordingDocumentSource(Document: RecordingDocument.CreateDefault(), SourcePath: null);
+        failure = string.Empty;
+
+        return true;
     }
 
-    // Read → validate through the document's own loader. A missing file is the common no-arg case (no default asset
-    // shipped) and yields a quiet-ish reason; every other failure surfaces the loader's one-line reason. A broad catch
-    // is deliberate — a load boundary with a safe baked fallback, mirroring WorldDefinitionLoader.
+    // Read → validate through the document's own loader, naming the three failure classes apart: an ABSENT file, an
+    // UNREADABLE file, and an INVALID document. A broad catch is deliberate — a load boundary must never throw.
     private static bool TryLoadFile(string path, out RecordingDocument? document, out string reason) {
         document = null;
 
@@ -55,10 +69,28 @@ internal static class RecordingDocumentLoader {
             return false;
         }
 
+        byte[] utf8Json;
+
         try {
-            return RecordingDocumentSerialization.TryLoad(utf8Json: File.ReadAllBytes(path: path), document: out document, reason: out reason);
+            utf8Json = File.ReadAllBytes(path: path);
         } catch (Exception exception) {
-            reason = $"{path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        try {
+            if (RecordingDocumentSerialization.TryLoad(utf8Json: utf8Json, document: out document, reason: out var loadReason)) {
+                reason = loadReason;
+
+                return true;
+            }
+
+            reason = $"{path} is not a valid recording document: {loadReason}";
+
+            return false;
+        } catch (Exception exception) {
+            reason = $"{path} is not a valid recording document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }

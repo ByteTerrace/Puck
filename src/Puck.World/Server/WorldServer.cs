@@ -67,6 +67,14 @@ internal sealed class WorldServer {
     private WorldDefinition m_definition;
     private WorldDefinition m_base;
     private IClientSink? m_sink;
+    // The live SDF contact field under the FIELD provider (null under analytic / collision off) — the server OWNS this
+    // provider's lifecycle: it is built ONCE at apply time (for its loud excluded-op rejection) and handed to the
+    // population's rebuild, so a body's first step after a solid edit already solves against the new field. Adopted at
+    // construction from the population's boot build so it is never compiled twice for one boundary.
+    private WorldSolidField? m_solids;
+    // The solid-field revision — bumped each time m_solids is rebuilt (a solid-affecting edit under the field provider),
+    // the world.collision.status read-back. Starts at 1 when the boot world uses the field provider, else 0.
+    private int m_solidRevision;
 
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
     /// <param name="definition">The loaded world definition (the initial live definition and journal base).</param>
@@ -85,6 +93,14 @@ internal sealed class WorldServer {
         m_population = population;
         m_profiles = profiles;
         m_envelope = envelope;
+        // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
+        // construction) — the server owns it from here without a second build.
+        m_solids = population.SolidField;
+        m_solidRevision = ((m_solids is null) ? 0 : 1);
+        // Join the bodies the boot definition's inhabited placements declare into free peer slots (the population
+        // constructor activates nothing — the boot census is zero, the whole peer slice is free). Every later Install
+        // re-runs this after Rebuild.
+        m_population.ReconcileInhabitants(definition: definition);
     }
 
     /// <summary>The live world definition this server runs — swapped in place as buffered edits apply.</summary>
@@ -103,6 +119,15 @@ internal sealed class WorldServer {
     /// <summary>The journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
+
+    /// <summary>The live SDF contact field under the FIELD provider, or <see langword="null"/> under the analytic
+    /// provider / collision off — the <c>world.collision.probe</c>/<c>world.collision.status</c> reads' window onto the
+    /// surface the simulation itself solves against.</summary>
+    public WorldSolidField? SolidField => m_solids;
+
+    /// <summary>The solid-field revision — bumped each time the field is rebuilt (a solid-affecting edit under the field
+    /// provider). The <c>world.collision.status</c> read-back.</summary>
+    public int SolidRevision => m_solidRevision;
 
     /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
     /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
@@ -191,6 +216,27 @@ internal sealed class WorldServer {
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: (removed ? $"revoke {label}" : $"revoke {label} — nothing held"), Rejected: !removed, Kind: WorldEditEchoKind.GrantTable));
     }
 
+    /// <summary>Applies a LIVE window-composition override SYNCHRONOUSLY (the <c>view.layout</c>/<c>view.camera</c> path
+    /// and Arc 9's milestone camera cut). Checks <see cref="WorldCapability.Control"/> over
+    /// <see cref="GrantSubject.Composition"/>; on accept pushes it to the client composer, on denial prints a loud line
+    /// and changes nothing. Never durable — no document, no journal.</summary>
+    /// <param name="composition">The composition override.</param>
+    /// <param name="principal">The acting identity the override is checked against.</param>
+    public void ApplyComposition(WorldComposition composition, WorldPrincipal principal) {
+        ArgumentNullException.ThrowIfNull(argument: composition);
+
+        if (!m_grants.Allows(principal: principal, capability: WorldCapability.Control, subject: GrantSubject.Composition)) {
+            var denial = $"{principal.Describe()} cannot control composition — {composition.GetType().Name} dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
+
+            return;
+        }
+
+        m_sink?.DeliverComposition(composition: composition);
+    }
+
     /// <summary>Applies an authority command to its target body. Synchronous at submit (see the class summary), so a
     /// policy read following the command in the same batch observes its effect. A command whose entity is not live
     /// no-ops (validation happened at submit; the miss is benign).</summary>
@@ -199,7 +245,10 @@ internal sealed class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: command);
 
         if (!m_grants.Allows(principal: command.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: command.EntityIndex))) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {command.Principal.Describe()} cannot drive body:{command.EntityIndex} — {command.GetType().Name} dropped]");
+            var denial = $"{command.Principal.Describe()} cannot drive body:{command.EntityIndex} — {command.GetType().Name} dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
 
             return;
         }
@@ -336,7 +385,7 @@ internal sealed class WorldServer {
 
         return query switch {
             WorldQuery.PlayerWhere where when (Body(index: (where.Index - 1)) is { } body) => new QueryAnswer(Text: body.DescribeWhere(index: where.Index)),
-            WorldQuery.PlayerWhere where => new QueryAnswer(Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]"),
+            WorldQuery.PlayerWhere where => new QueryAnswer(Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]", Refused: true),
             WorldQuery.PlayerDocument => new QueryAnswer(Text: WorldPlayerJson.Serialize(document: m_profiles.ToDocument())),
             _ => new QueryAnswer(Text: string.Empty),
         };
@@ -433,7 +482,37 @@ internal sealed class WorldServer {
             return false;
         }
 
-        Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
+        // Step 4b — the SDF contact field, built once here (before install) so the warp-free evaluator's excluded-op
+        // ceiling is a LOUD apply-time rejection (the definition and the field both stay byte-identical on failure)
+        // rather than a constructor throw at install. Only a solid-affecting mutation rebuilds it; otherwise the live
+        // field carries forward untouched.
+        var solids = m_solids;
+        var solidAffecting = AffectsSolidField(mutation: mutation);
+
+        if (solidAffecting) {
+            // A SetCollision edit touches only the collision tuning row — the compiled SDF program (scene rows, screens,
+            // placements, ground plane) is byte-identical — so when the live field is already the field provider and the
+            // candidate still is, re-wrap the existing evaluator with the new scalars instead of recompiling the program
+            // (a slope/skin drag never rebuilds hundreds of instructions). Every other solid-affecting edit, and a
+            // provider/enabled flip, rebuilds from scratch.
+            if ((mutation is WorldMutation.SetCollision) && (m_solids is { } live) && UsesFieldProvider(definition: candidate)) {
+                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: candidate.Collision));
+            } else if (!TryBuildSolids(definition: candidate, solids: out solids, reason: out var solidReason)) {
+                Reject(mutation: mutation, reason: solidReason);
+
+                return false;
+            }
+        }
+
+        // Assign the field BEFORE the rebuild so a recompiled body's first step already solves against it. A field change
+        // forces a population rebuild (bodies must receive the new field reference) even when the mutation kind is not
+        // otherwise population-affecting; the analytic path is untouched (solidAffecting is inert without the field provider).
+        if (solidAffecting && !ReferenceEquals(objA: solids, objB: m_solids)) {
+            m_solids = solids;
+            m_solidRevision++;
+        }
+
+        Install(definition: candidate, rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && UsesFieldProvider(definition: candidate))));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
 
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
@@ -444,9 +523,13 @@ internal sealed class WorldServer {
         // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
         // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
         var documentOnly = IsDocumentDefaults(mutation: mutation);
-        var message = (mutation is WorldMutation.SetAuthoringDefaults
-            ? $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot"
-            : $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}");
+        var message = mutation switch {
+            WorldMutation.SetAuthoringDefaults => $"{Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot",
+            // SetPopulationDefaults is a THIRD timing class: the census figures are document defaults (next boot), but
+            // the SpawnPolicy is LIVE for future activations while INERT for bodies already standing — spell out the split.
+            WorldMutation.SetPopulationDefaults => $"{Describe(mutation: mutation)} applied — census figures next boot; spawn policy live for future activations, standing bodies unmoved",
+            _ => $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}",
+        };
 
         Console.Error.WriteLine(value: $"[world.mutation: {message}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation), Mutation: mutation));
@@ -460,23 +543,34 @@ internal sealed class WorldServer {
     private bool ApplyDefinition(WorldDefinition definition, WorldPrincipal principal) {
         // A whole-document swap can touch any section: the principal must hold Mutate over EVERY section.
         if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.load dropped]");
+            var denial = $"{principal.Describe()} cannot mutate every section — world.load dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.Mutation, Denied: true));
 
             return false;
         }
 
         if (!WorldDefinitionValidator.TryValidate(definition: definition, reason: out var validationReason)) {
-            Console.Error.WriteLine(value: $"[world.definition rejected: {validationReason}]");
+            RejectDefinition(reason: validationReason);
 
             return false;
         }
 
         if (!m_envelope.TryFit(candidate: definition, reason: out var capacityReason)) {
-            Console.Error.WriteLine(value: $"[world.definition rejected: {capacityReason}]");
+            RejectDefinition(reason: capacityReason);
 
             return false;
         }
 
+        // A whole-document swap rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged).
+        if (!TryBuildSolids(definition: definition, solids: out var swapSolids, reason: out var swapSolidReason)) {
+            RejectDefinition(reason: swapSolidReason);
+
+            return false;
+        }
+
+        SwapSolids(solids: swapSolids);
         Install(definition: definition, rebuildPopulation: true);
         m_base = definition;
         m_journal.Clear();
@@ -491,13 +585,17 @@ internal sealed class WorldServer {
     private bool ApplyUndo(int count, WorldPrincipal principal) {
         // Journal control is Mutate territory over every section (a replay can rebuild any).
         if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.undo dropped]");
+            var denial = $"{principal.Describe()} cannot mutate every section — world.undo dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.Mutation, Denied: true));
 
             return false;
         }
 
         if (m_journal.Count == 0) {
             Console.Error.WriteLine(value: "[world.undo: nothing to undo]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: "undo refused: nothing to undo", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
             return false;
         }
@@ -513,6 +611,7 @@ internal sealed class WorldServer {
             if (!TryCompose(current: candidate, mutation: entry.Mutation, candidate: out var next, reason: out var reason) ||
                 !WorldDefinitionValidator.TryValidate(definition: next, reason: out reason)) {
                 Console.Error.WriteLine(value: $"[world.undo: replay failed at journal entry {index} — {reason}]");
+                EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"undo replay failed at journal entry {index}: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
                 break;
             }
@@ -521,6 +620,16 @@ internal sealed class WorldServer {
             kept.Add(item: entry);
         }
 
+        // The replayed candidate is a validated document the journal previously produced, so its solids rebuild; a
+        // failure stops loudly rather than installing a half-built field.
+        if (!TryBuildSolids(definition: candidate, solids: out var undoSolids, reason: out var undoSolidReason)) {
+            Console.Error.WriteLine(value: $"[world.undo: solid field rebuild failed — {undoSolidReason}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"undo refused: solid field rebuild failed — {undoSolidReason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
+
+            return false;
+        }
+
+        SwapSolids(solids: undoSolids);
         Install(definition: candidate, rebuildPopulation: true);
         m_journal.Clear();
         m_journal.AddRange(collection: kept);
@@ -537,8 +646,17 @@ internal sealed class WorldServer {
         m_definition = definition;
 
         if (rebuildPopulation) {
-            m_population.Rebuild(definition: definition);
+            m_population.Rebuild(definition: definition, solids: m_solids);
+            // Reconcile inhabited placements AFTER the census rebuild (a placement/creation/kit edit can add, retire, or
+            // re-kit a driven body). Idempotent — a no-op when the inhabited set is unchanged.
+            m_population.ReconcileInhabitants(definition: definition);
         }
+    }
+
+    // A refused whole-document swap: loud, and echoed so the same tap that counts a refused mutation counts this too.
+    private void RejectDefinition(string reason) {
+        Console.Error.WriteLine(value: $"[world.definition rejected: {reason}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"definition rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
     }
 
     private void Reject(WorldMutation mutation, string reason) {
@@ -549,13 +667,68 @@ internal sealed class WorldServer {
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
     // Everything else, cameras included, applies live on delivery.
     private static bool IsDocumentDefaults(WorldMutation mutation) => mutation is
-        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
-    // compiled tuning/actions). Scene/screen/camera/render/population-default/addon edits do not.
+    // compiled tuning/actions, AND the analytic collider set). A scene-row/screen/collision edit rebuilds the collider
+    // set so a live world.scene.solid / world.screen / world.collision takes effect on the next tick with no restart —
+    // the analytic WorldColliderSet bakes solid SCREENS too, so a screen edit must rebuild it (the field provider already
+    // rebuilds on screens via AffectsSolidField; this closes the same staleness under the analytic provider).
     private static bool AffectsPopulation(WorldMutation mutation) => mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
-        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
+        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns or
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
+        // The LOOK mutations re-resolve the population's look table (PRESENTATION-ONLY, but Rebuild is the one path that
+        // re-runs ResolveLookIndices and bumps the client's program-rebuild revision).
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment or
+        // SetPopulationDefaults now carries the SpawnPolicy row: Rebuild is the one path that recompiles the fixed spawn
+        // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
+        // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
+        WorldMutation.SetPopulationDefaults or
+        // A placement row can change the census (Arc 7's Inhabit facet: a placement contributes driven bodies), and an
+        // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
+        // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation;
+
+    // Build the SDF contact field for a candidate — null when collision is off or the analytic provider is selected (the
+    // analytic set is derived inside the population's compile, not here), the built field under the FIELD provider, or a
+    // named failure when a solid names an op the warp-free evaluator cannot interpret.
+    private static bool TryBuildSolids(WorldDefinition definition, out WorldSolidField? solids, out string reason) {
+        reason = string.Empty;
+
+        if (!UsesFieldProvider(definition: definition)) {
+            solids = null;
+
+            return true;
+        }
+
+        return WorldSolidField.TryBuild(definition: definition, built: out solids, reason: out reason);
+    }
+
+    // Adopt a wholesale-rebuilt field (a swap/undo), bumping the revision when the field actually moved so the status
+    // read-back tracks it. A swap into an analytic/off world clears the field.
+    private void SwapSolids(WorldSolidField? solids) {
+        if (!ReferenceEquals(objA: solids, objB: m_solids)) {
+            m_solids = solids;
+            m_solidRevision++;
+        }
+    }
+
+    // Whether the definition selects the SDF field contact provider (collision on, provider field).
+    private static bool UsesFieldProvider(WorldDefinition definition) =>
+        (definition.Collision is { Enabled: true, Provider: WorldContactProvider.Field });
+
+    // Whether a mutation can change the SDF contact field: the collision tuning (provider/probe/skin/slope), the ground
+    // plane (SetMotion positions the ground half-space), and every solid-bearing section (scene rows, screens, creations
+    // that reshape a stamp, placements). Coarse by section, matching AffectsPopulation/AffectsRenderEnvelope.
+    private static bool AffectsSolidField(WorldMutation mutation) => mutation is
+        WorldMutation.SetCollision or WorldMutation.SetMotion or
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
 
     // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs /
     // creation stamps — an UpsertCreation re-shapes every live placement of it, so it measures too).
@@ -563,7 +736,12 @@ internal sealed class WorldServer {
         WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        // A creation look will change the emitted program word count (a body worn as a stamp) once creation-look
+        // rendering lands (Arc 7); catalog looks add zero words today, so this arm is honest groundwork — all three look
+        // mutations already ride the envelope gate so the loud capacity rejection will fire at apply time, not at a later
+        // GPU allocation, the moment creation stamps render.
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
@@ -586,7 +764,14 @@ internal sealed class WorldServer {
         WorldMutation.UpsertTune or WorldMutation.RemoveTune => WorldSection.Tunes,
         WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
-        _ => WorldSection.Kits,
+        WorldMutation.SetCollision => WorldSection.Collision,
+        WorldMutation.SetHostDefaults => WorldSection.Host,
+        WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
+        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
+        WorldMutation.UpsertScreenLink or WorldMutation.RemoveScreenLink => WorldSection.Links,
+        // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
+        // missing arm is a build-time authoring gap, surfaced loudly rather than mis-authorized.
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
     };
 
     // The dependents a placement-removal guard names: every speaker anchored to the placement (null = none).
@@ -674,6 +859,16 @@ internal sealed class WorldServer {
         WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Id}'",
         WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
         WorldMutation.SetAudioDefaults => "SetAudioDefaults",
+        WorldMutation.SetCollision => "SetCollision",
+        WorldMutation.SetHostDefaults => "SetHostDefaults",
+        WorldMutation.SetViewDefaults => "SetViewDefaults",
+        WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
+        WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
+        WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
+        WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
+        WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Policy}'",
+        WorldMutation.UpsertScreenLink m => $"UpsertScreenLink '{m.Link.Name}'",
+        WorldMutation.RemoveScreenLink m => $"RemoveScreenLink '{m.Name}'",
         _ => "unknown",
     };
 
@@ -984,6 +1179,39 @@ internal sealed class WorldServer {
                 candidate = (current with { Authoring = m.Authoring });
 
                 return true;
+            case WorldMutation.SetCollision m:
+                candidate = (current with { Collision = m.Collision });
+
+                return true;
+            case WorldMutation.SetHostDefaults m:
+                candidate = (current with { Host = m.Host });
+
+                return true;
+            case WorldMutation.SetViewDefaults m:
+                candidate = (current with { Views = m.Views });
+
+                return true;
+            case WorldMutation.UpsertViewLayout m: {
+                var views = current.Views;
+
+                candidate = (current with { Views = (views with { Layouts = Upsert(list: views.Layouts, item: m.Layout, keyOf: static layout => layout.Name) }) });
+
+                return true;
+            }
+            case WorldMutation.RemoveViewLayout m: {
+                var views = current.Views;
+
+                if (!Remove(list: views.Layouts, key: m.Name, keyOf: static layout => layout.Name, result: out var layouts)) {
+                    candidate = current;
+                    reason = $"no view layout named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Views = (views with { Layouts = layouts }) });
+
+                return true;
+            }
             case WorldMutation.RemoveBindingOverlay m:
                 if (!Remove(list: current.BindingOverlays, key: m.Id, keyOf: static overlay => overlay.Id, result: out var overlays)) {
                     candidate = current;
@@ -993,6 +1221,40 @@ internal sealed class WorldServer {
                 }
 
                 candidate = (current with { BindingOverlays = overlays });
+
+                return true;
+            case WorldMutation.UpsertLook m:
+                candidate = (current with { Looks = Upsert(list: current.Looks, item: m.Look, keyOf: static look => look.Name) });
+
+                return true;
+            case WorldMutation.RemoveLook m:
+                if (!Remove(list: current.Looks, key: m.Name, keyOf: static look => look.Name, result: out var looks)) {
+                    candidate = current;
+                    reason = $"no look row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Looks = looks });
+
+                return true;
+            case WorldMutation.SetLookAssignment m:
+                candidate = (current with { LookAssignment = m.Assignment });
+
+                return true;
+            case WorldMutation.UpsertScreenLink m:
+                candidate = (current with { Links = Upsert(list: current.Links, item: m.Link, keyOf: static link => link.Name) });
+
+                return true;
+            case WorldMutation.RemoveScreenLink m:
+                if (!Remove(list: current.Links, key: m.Name, keyOf: static link => link.Name, result: out var links)) {
+                    candidate = current;
+                    reason = $"no cable link named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Links = links });
 
                 return true;
             default:
@@ -1066,7 +1328,9 @@ internal sealed class WorldServer {
                 BodyColor: m_population.BodyColor(index: index),
                 Active: true,
                 Kit: m_population.KitIndex(index: index),
-                Continuity: body.TakeContinuity()
+                Look: m_population.LookIndex(index: index),
+                Continuity: body.TakeContinuity(),
+                PlacementId: m_population.InhabitantPlacementId(index: index)
             );
         }
 

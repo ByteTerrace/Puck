@@ -22,8 +22,8 @@ namespace Puck.Demo.Gravity;
 /// </para>
 /// <para>
 /// PLACEMENT: the planetoid sits at <see cref="PlanetCenter"/>, a FAR <see cref="WorldCoord3"/> cell (distinct from
-/// the room's own far-cell precedent — see <c>OverworldWorld</c>'s spawn-cell remarks and
-/// <c>OverworldDeterminism</c>'s <c>farCell</c> constant) — exercising the planet-scale coordinate seam. Only
+/// the room's own far-cell precedent — see <c>OverworldWorld</c>'s spawn-cell remarks) — exercising the planet-scale
+/// coordinate seam. Only
 /// <see cref="WorldCoord3.Local"/> feeds <see cref="SdfFieldEvaluator.TryDistance"/> (see its own remarks) — the
 /// walker's <see cref="WorldCoord3"/> stays in THIS SAME cell for the whole proof (a planetoid of radius
 /// <see cref="PlanetRadius"/> never approaches a cell boundary), so cell bookkeeping never needs to cross a seam
@@ -39,9 +39,9 @@ namespace Puck.Demo.Gravity;
 /// </para>
 /// </summary>
 public static class GravityScenario {
-    /// <summary>The planetoid's far cell (X and Z) — a different far location than the room's own precedent
-    /// (<c>OverworldDeterminism.farCell</c> = 1,000,000,000), proving the seam is a general coordinate capability, not
-    /// a single hard-coded location. Y stays at the origin cell (the planetoid has no reason to sit far vertically).</summary>
+    /// <summary>The planetoid's far cell (X and Z) — a far location (1,000,000,000) proving the seam is a general
+    /// coordinate capability, not a single hard-coded location. Y stays at the origin cell (the planetoid has no reason
+    /// to sit far vertically).</summary>
     public const long PlanetCellX = 1_000_000_000L;
     /// <summary>See <see cref="PlanetCellX"/>.</summary>
     public const long PlanetCellY = 0L;

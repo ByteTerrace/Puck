@@ -45,11 +45,11 @@ public sealed record UnifiedOverlaySources(
 public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
-    // The toast's tail reservation: its worst-case record shape (1 panel + rail/icon rects + two text runs,
-    // 46 glyph words) held back from the earlier writers so the transient echo always lands.
+    // The toast's tail reservation: its worst-case record shape (1 panel + rail/icon rects + the [OK]/[ER] label
+    // + every wrapped message line) held back from the earlier writers so the transient echo always lands whole.
     private const int ToastReservedPanels = 1;
-    private const int ToastReservedElements = 4;
-    private const int ToastReservedTextWords = 46;
+    private const int ToastReservedElements = (3 + ToastWriter.MaxMessageLines);
+    private const int ToastReservedTextWords = (2 + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
     // The glyph outline halo width, in encoded signed-distance units — the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;

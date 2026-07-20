@@ -15,6 +15,9 @@
 //     stream-decorrelation tripwires, advance/seek algebra, snapshot round-trips
 //   - gaussian moments/CDF/tails, alias-table distributions and weight overloads, shuffle uniformity,
 //     field-noise statistics/continuity, low-discrepancy coverage
+//   - modular-group determinant/adjugate-inverse/associativity, trace classification, cusp action vs BigInteger
+//     rationals, Gauss reduction into the fundamental domain (contravariant form action + discriminant + idempotence),
+//     and quadratic-surd continued-fraction periods (golden [1], silver [2]) with convergents approaching the value
 //   - quaternion/complex/rigid-transform/dual accuracy against mathematical references, incl. the
 //     exp/log bridges (bivector at the quaternion level, screw at the rigid level) and the FromTo shortest-arc
 //     constructors at both planar and spatial level; vector2 wedge/dot bit-identity against an independent
@@ -1807,6 +1810,787 @@ if ((Math.Abs((atZero.X.Value - expectedZero.X.Value)) > 32L) || (Math.Abs((atOn
     throw new InvalidOperationException("SCLERP ENDPOINTS FAILED");
 }
 Console.WriteLine("complex/rigid: gates + sclerp endpoints OK");
+
+// ---- CyclicRotation (deterministic order-30 looping rotation) ----
+// The clock must close its cycle bit-exactly (indexed, not accumulated), advance each plane at the speeds {1,7,11,13}
+// steps/tick, and hold the thirty baked rotations to the 30th roots of unity. Oracles are the residue arithmetic and an
+// independent double cos/sin, never the implementation's own table.
+int[] cyclicSpeeds = [1, 7, 11, 13];
+var cyclicMaxRotorUlp = 0L;
+var cyclicProbe = new FixedVector2(X: FixedQ4816.FromInteger(value: 1L), Y: FixedQ4816.FromInteger(value: 3L));
+for (var plane = 0; (plane < Puck.Maths.CyclicRotation.PlaneCount); ++plane) {
+    if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: 1L) != cyclicSpeeds[plane]) {
+        throw new InvalidOperationException("CYCLIC ROTATION PLANE SPEED IS WRONG");
+    }
+
+    for (var tick = -240L; (tick < 480L); ++tick) {
+        var phase = ((int)(((tick % 30L) + 30L) % 30L));
+        var expectedStep = ((cyclicSpeeds[plane] * phase) % 30);
+
+        if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: tick) != expectedStep) {
+            throw new InvalidOperationException("CYCLIC ROTATION STEP DISAGREES WITH RESIDUE ORACLE");
+        }
+        if (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != Puck.Maths.CyclicRotation.At(plane: plane, tick: (tick + 30L))) {
+            throw new InvalidOperationException("CYCLIC ROTATION CYCLE DID NOT CLOSE EXACTLY AT PERIOD");
+        }
+        if ((phase == 0) && (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != FixedComplex.MultiplicativeIdentity)) {
+            throw new InvalidOperationException("CYCLIC ROTATION DID NOT RETURN TO IDENTITY AT A MULTIPLE OF PERIOD");
+        }
+        if (Puck.Maths.CyclicRotation.Rotate(plane: plane, tick: tick, vector: cyclicProbe) != Puck.Maths.CyclicRotation.At(plane: plane, tick: tick).Rotate(vector: cyclicProbe)) {
+            throw new InvalidOperationException("CYCLIC ROTATION ROTATE DISAGREES WITH ITS ROTATION");
+        }
+    }
+}
+for (var step = 0; (step < 30); ++step) {
+    var rotation = Puck.Maths.CyclicRotation.At(plane: 0, tick: step);   // plane 0 turns one step per tick
+    var expectedCos = ((long)Math.Round((Math.Cos(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
+    var expectedSin = ((long)Math.Round((Math.Sin(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
+
+    cyclicMaxRotorUlp = Math.Max(cyclicMaxRotorUlp, Math.Max(Math.Abs((rotation.Real.Value - expectedCos)), Math.Abs((rotation.Imaginary.Value - expectedSin))));
+}
+if (cyclicMaxRotorUlp > 2L) {
+    throw new InvalidOperationException("CYCLIC ROTATION ROTORS DRIFTED FROM THE 30TH ROOTS OF UNITY");
+}
+Console.WriteLine($"cyclic rotation: exact 30-tick loop + identity resync, {{1,7,11,13}} plane speeds, rotors {cyclicMaxRotorUlp} raw ULP from unity OK");
+
+// ---- SymmetryLattice (the exact E8 root system CyclicRotation is the heartbeat of) ----
+// The 240 nodes must close under reflection (each an involution), those reflections must act transitively on all of them
+// (so composing them realizes the whole symmetry group W(E8)), the cycle must be an order-30 permutation cutting eight
+// rings of thirty (== CyclicRotation's period), and the projection must resolve those rings with radii in four
+// golden-ratio pairs, one cycle step turning a node a twelfth of a turn. Oracles: exact index arithmetic and
+// independent double geometry, never the implementation's own tables.
+if (SymmetryLattice.RingSize != Puck.Maths.CyclicRotation.Period) {
+    throw new InvalidOperationException("SYMMETRY LATTICE RING SIZE IS NOT THE CYCLIC ROTATION PERIOD");
+}
+var latticeRingSizes = new int[SymmetryLattice.RingCount];
+var latticeReached = new bool[SymmetryLattice.NodeCount];
+var latticeWorklist = new int[SymmetryLattice.NodeCount];
+for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+    if (SymmetryLattice.Ring(node: SymmetryLattice.Cycle(node: node)) != SymmetryLattice.Ring(node: node)) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP LEFT THE RING");
+    }
+
+    latticeRingSizes[SymmetryLattice.Ring(node: node)]++;
+
+    for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
+        if (SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: node, mirror: mirror), mirror: mirror) != node) {
+            throw new InvalidOperationException("SYMMETRY LATTICE REFLECTION IS NOT AN INVOLUTION");
+        }
+    }
+}
+for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
+    if (latticeRingSizes[ring] != SymmetryLattice.RingSize) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE ORBIT IS NOT A RING OF THIRTY");
+    }
+}
+var latticeCycleOrbit = 0;
+for (var cursor = SymmetryLattice.Cycle(node: 0); (cursor != 0); cursor = SymmetryLattice.Cycle(node: cursor)) {
+    if ((++latticeCycleOrbit) > SymmetryLattice.RingSize) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE IS NOT ORDER THIRTY");
+    }
+}
+// Reflections act transitively on all 240 nodes: the reflection group is the full symmetry group, not the order-30 cycle.
+latticeReached[0] = true;
+latticeWorklist[0] = 0;
+var latticePending = 1;
+var latticeReachedCount = 1;
+while (latticePending > 0) {
+    var node = latticeWorklist[--latticePending];
+
+    for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
+        var image = SymmetryLattice.Reflect(node: node, mirror: mirror);
+
+        if (!latticeReached[image]) {
+            latticeReached[image] = true;
+            latticeWorklist[latticePending++] = image;
+            ++latticeReachedCount;
+        }
+    }
+}
+if (latticeReachedCount != SymmetryLattice.NodeCount) {
+    throw new InvalidOperationException("SYMMETRY LATTICE REFLECTIONS ARE NOT TRANSITIVE ON THE NODES");
+}
+// Projection geometry: eight rings whose radii pair off by the golden ratio, one cycle step of a twelfth of a turn.
+var latticeGolden = ((1.0 + Math.Sqrt(5.0)) / 2.0);
+var latticeRingRadius = new double[SymmetryLattice.RingCount];
+for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+    var point = SymmetryLattice.Project(node: node);
+
+    latticeRingRadius[SymmetryLattice.Ring(node: node)] = Math.Sqrt((((double)point.X * (double)point.X) + ((double)point.Y * (double)point.Y)));
+}
+Array.Sort(latticeRingRadius);
+var latticeGoldenPairs = 0;
+for (var inner = 0; (inner < SymmetryLattice.RingCount); ++inner) {
+    for (var outer = (inner + 1); (outer < SymmetryLattice.RingCount); ++outer) {
+        if (Math.Abs(((latticeRingRadius[outer] / latticeRingRadius[inner]) - latticeGolden)) < 0.002) { ++latticeGoldenPairs; }
+    }
+}
+if (latticeGoldenPairs != (SymmetryLattice.RingCount / 2)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE PROJECTION RINGS ARE NOT IN GOLDEN-RATIO PAIRS");
+}
+var latticeBefore = SymmetryLattice.Project(node: 0);
+var latticeAfter = SymmetryLattice.Project(node: SymmetryLattice.Cycle(node: 0));
+var latticeTurn = (((Math.Atan2((double)latticeAfter.Y, (double)latticeAfter.X) - Math.Atan2((double)latticeBefore.Y, (double)latticeBefore.X)) * 180.0) / Math.PI);
+latticeTurn = (((latticeTurn % 360.0) + 360.0) % 360.0);
+if ((Math.Abs((latticeTurn - 12.0)) > 0.1) && (Math.Abs((latticeTurn - 348.0)) > 0.1)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP DID NOT TURN A TWELFTH OF A TURN");
+}
+Console.WriteLine($"symmetry lattice: 240 nodes, reflections transitive (full group), order-30 cycle into 8 rings of 30, projection {latticeGoldenPairs} golden pairs OK");
+
+// ---- HilbertCurve (locality-preserving space-filling curve) ----
+// Encode/Decode must be inverse, a bijection onto [0, 4^order), and map consecutive distances to grid neighbours (the
+// defining locality property). Oracles: the bijection/inverse definitions and Manhattan distance, never the code.
+for (var order = 1; (order <= 9); ++order) {
+    var side = (1U << order);
+    var cells = ((ulong)side * side);
+    var hilbertSeen = new bool[cells];
+    var previous = (X: 0U, Y: 0U);
+
+    for (var distance = 0UL; (distance < cells); ++distance) {
+        var point = HilbertCurve.Decode(order: order, distance: distance);
+
+        if (hilbertSeen[distance]) { throw new InvalidOperationException("HILBERT CURVE IS NOT A BIJECTION"); }
+        hilbertSeen[distance] = true;
+
+        if (HilbertCurve.Encode(order: order, x: point.X, y: point.Y) != distance) {
+            throw new InvalidOperationException("HILBERT ENCODE IS NOT THE INVERSE OF DECODE");
+        }
+        if ((distance > 0UL) && ((Math.Abs(((int)point.X - (int)previous.X)) + Math.Abs(((int)point.Y - (int)previous.Y))) != 1)) {
+            throw new InvalidOperationException("HILBERT CONSECUTIVE POINTS ARE NOT GRID NEIGHBOURS");
+        }
+
+        previous = point;
+    }
+}
+var hilbertProbe = 0x9E3779B97F4A7C15UL;
+for (var order = 1; (order <= 31); ++order) {
+    var mask = ((1U << order) - 1U);
+
+    for (var sample = 0; (sample < 4096); ++sample) {
+        hilbertProbe = unchecked(((hilbertProbe * 6364136223846793005UL) + 1442695040888963407UL));
+
+        var x = (((uint)(hilbertProbe >> 33)) & mask);
+        var y = (((uint)hilbertProbe) & mask);
+
+        if (HilbertCurve.Decode(order: order, distance: HilbertCurve.Encode(order: order, x: x, y: y)) != (x, y)) {
+            throw new InvalidOperationException("HILBERT ROUND TRIP FAILED AT HIGH ORDER");
+        }
+    }
+}
+Console.WriteLine("hilbert curve: bijection + inverse + neighbour adjacency (order 1-9), 31-bit round-trips OK");
+
+// ---- HexCoord (exact Eisenstein-integer hex grid) ----
+// Six distinct unit neighbours at distance one; 60° rotation (a unit multiply) has order six and preserves both Length
+// and Norm, with RotatedLeft/RotatedRight inverse; the Eisenstein product is an associative ring with ω²+ω+1=0; Length
+// is the true graph distance; Round snaps to the nearest cell. Oracles: BFS distance, the ring laws, Euclidean search.
+for (var direction = 0; (direction < HexCoord.NeighborCount); ++direction) {
+    if (HexCoord.Direction(direction: direction).Length != 1) {
+        throw new InvalidOperationException("HEXCOORD UNIT IS NOT AT DISTANCE ONE");
+    }
+
+    for (var other = (direction + 1); (other < HexCoord.NeighborCount); ++other) {
+        if (HexCoord.Direction(direction: direction) == HexCoord.Direction(direction: other)) {
+            throw new InvalidOperationException("HEXCOORD UNITS ARE NOT DISTINCT");
+        }
+    }
+}
+var hexOmega = new HexCoord(Q: 0, R: 1);
+if ((((hexOmega * hexOmega) + hexOmega) + HexCoord.MultiplicativeIdentity) != HexCoord.AdditiveIdentity) {
+    throw new InvalidOperationException("HEXCOORD RING RELATION w^2+w+1=0 FAILED");
+}
+for (var q = -24; (q <= 24); ++q) {
+    for (var r = -24; (r <= 24); ++r) {
+        var hex = new HexCoord(Q: q, R: r);
+
+        if ((hex.RotatedLeft().Length != hex.Length) || (hex.RotatedLeft().Norm != hex.Norm)) {
+            throw new InvalidOperationException("HEXCOORD ROTATION CHANGED LENGTH OR NORM");
+        }
+        if (hex.RotatedLeft().RotatedRight() != hex) {
+            throw new InvalidOperationException("HEXCOORD ROTATIONS ARE NOT INVERSE");
+        }
+
+        var spun = hex;
+        for (var i = 0; (i < 6); ++i) { spun = spun.RotatedLeft(); }
+        if (spun != hex) { throw new InvalidOperationException("HEXCOORD ROTATION IS NOT ORDER SIX"); }
+
+        var scaled = new HexCoord(Q: (q % 6), R: (r % 6));
+        if (((hex * hexOmega) * scaled) != (hex * (hexOmega * scaled))) {
+            throw new InvalidOperationException("HEXCOORD RING PRODUCT IS NOT ASSOCIATIVE");
+        }
+    }
+}
+// Length equals the breadth-first graph distance out to radius 12 (array BFS, no generic collections).
+const int hexRadius = 12;
+const int hexOffset = (hexRadius + 1);
+const int hexSpan = ((2 * hexOffset) + 1);
+var hexDistance = new int[hexSpan * hexSpan];
+var hexFrontier = new int[hexSpan * hexSpan];
+Array.Fill(array: hexDistance, value: -1);
+int[] hexDirQ = [1, 1, 0, -1, -1, 0];
+int[] hexDirR = [0, 1, 1, 0, -1, -1];
+var hexOrigin = ((hexOffset * hexSpan) + hexOffset);
+hexDistance[hexOrigin] = 0;
+var hexHead = 0;
+var hexTail = 0;
+hexFrontier[hexTail++] = hexOrigin;
+while (hexHead < hexTail) {
+    var packed = hexFrontier[hexHead++];
+    var cellQ = ((packed / hexSpan) - hexOffset);
+    var cellR = ((packed % hexSpan) - hexOffset);
+    var cellDistance = hexDistance[packed];
+
+    if (cellDistance >= hexRadius) { continue; }
+
+    for (var k = 0; (k < 6); ++k) {
+        var stepQ = (cellQ + hexDirQ[k]);
+        var stepR = (cellR + hexDirR[k]);
+
+        if ((stepQ < -hexOffset) || (stepQ > hexOffset) || (stepR < -hexOffset) || (stepR > hexOffset)) { continue; }
+
+        var stepPacked = (((stepQ + hexOffset) * hexSpan) + (stepR + hexOffset));
+
+        if (hexDistance[stepPacked] < 0) {
+            hexDistance[stepPacked] = (cellDistance + 1);
+            hexFrontier[hexTail++] = stepPacked;
+        }
+    }
+}
+for (var q = -hexRadius; (q <= hexRadius); ++q) {
+    for (var r = -hexRadius; (r <= hexRadius); ++r) {
+        var packed = (((q + hexOffset) * hexSpan) + (r + hexOffset));
+
+        if ((hexDistance[packed] >= 0) && (new HexCoord(Q: q, R: r).Length != hexDistance[packed])) {
+            throw new InvalidOperationException("HEXCOORD LENGTH DISAGREES WITH GRAPH DISTANCE");
+        }
+    }
+}
+// Round lands on the nearest cell, checked against an independent Euclidean search.
+for (var stepQ = -80; (stepQ <= 80); ++stepQ) {
+    for (var stepR = -80; (stepR <= 80); ++stepR) {
+        var fractionalQ = (stepQ * 0.15);
+        var fractionalR = (stepR * 0.15);
+        var rounded = HexCoord.Round(q: FixedQ4816.FromDouble(value: fractionalQ), r: FixedQ4816.FromDouble(value: fractionalR));
+        var best = double.MaxValue;
+
+        for (var a = -14; (a <= 14); ++a) {
+            for (var b = -14; (b <= 14); ++b) {
+                var dx = ((a - fractionalQ) - ((b - fractionalR) * 0.5));
+                var dy = ((b - fractionalR) * 0.8660254037844386);
+                best = Math.Min(best, ((dx * dx) + (dy * dy)));
+            }
+        }
+
+        var gx = ((rounded.Q - fractionalQ) - ((rounded.R - fractionalR) * 0.5));
+        var gy = ((rounded.R - fractionalR) * 0.8660254037844386);
+
+        if (((gx * gx) + (gy * gy)) > (best + 0.001)) {
+            throw new InvalidOperationException("HEXCOORD ROUND IS NOT THE NEAREST CELL");
+        }
+    }
+}
+Console.WriteLine("hexcoord: 6 unit neighbours, order-6 exact 60° rotation, associative ring w^2+w+1=0, Length = graph distance, Round to nearest cell OK");
+
+// ---- MetallicQuasicrystal random access (the general cut-and-project; subsumes the retired golden/silver files) ----
+// For each index n the ring-coordinate chain a + b·δₙ from the origin must stay in the set, invert under Previous, step
+// by exactly δₙ or δₙ² ((0,1) or (1,n)), advance monotonically, avoid the forbidden factors SS and Lⁿ⁺², and reach
+// density δₙ. Contains must equal the walked vertex set exactly over a coordinate box (a denser window would pass the walk
+// yet admit ghost points), and the ring-coordinate word must match the independently streamed substitution word — two
+// implementations of one tiling. Golden is n=1 (verified elsewhere to equal the former GoldenQuasicrystal coordinate for
+// coordinate) and silver is n=2.
+for (var metallicIndex = 1; (metallicIndex <= 6); ++metallicIndex) {
+    if (!MetallicQuasicrystal.Contains(n: metallicIndex, a: 0L, b: 0L)) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL ORIGIN IS NOT A MEMBER n={metallicIndex}");
+    }
+
+    var metallicPoint = (A: 0L, B: 0L);
+    var metallicLong = 0L;
+    var metallicShort = 0L;
+    var metallicRun = 0;
+    var metallicPrevLong = false;
+    var metallicWalkWord = new bool[6000];
+    var metallicVisited = new HashSet<(long A, long B)>();
+
+    for (var step = 0; (step < metallicWalkWord.Length); ++step) {
+        metallicVisited.Add(item: metallicPoint);
+
+        var isLong = MetallicQuasicrystal.StartsLongTile(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B);
+        var next = MetallicQuasicrystal.Next(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B);
+
+        metallicWalkWord[step] = isLong;
+
+        if (!MetallicQuasicrystal.Contains(n: metallicIndex, a: next.A, b: next.B)) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL WALK LEFT THE SET n={metallicIndex}");
+        }
+        if (MetallicQuasicrystal.Previous(n: metallicIndex, a: next.A, b: next.B) != metallicPoint) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT n={metallicIndex}");
+        }
+        if (isLong ? (((next.A - metallicPoint.A) != 1L) || ((next.B - metallicPoint.B) != metallicIndex)) : (((next.A - metallicPoint.A) != 0L) || ((next.B - metallicPoint.B) != 1L))) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL STEP IS NOT DELTA OR DELTA-SQUARED n={metallicIndex}");
+        }
+        if (MetallicQuasicrystal.Position(n: metallicIndex, a: next.A, b: next.B) <= MetallicQuasicrystal.Position(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B)) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL POSITIONS ARE NOT INCREASING n={metallicIndex}");
+        }
+
+        if (isLong) {
+            ++metallicLong;
+            metallicRun = (((step > 0) && metallicPrevLong) ? (metallicRun + 1) : 1);
+
+            if (metallicRun >= (metallicIndex + 2)) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL HAS A FORBIDDEN LONG RUN n={metallicIndex}");
+            }
+        } else {
+            ++metallicShort;
+
+            if ((step > 0) && !metallicPrevLong) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL HAS THE FORBIDDEN FACTOR SS n={metallicIndex}");
+            }
+
+            metallicRun = 0;
+        }
+
+        metallicPrevLong = isLong;
+        metallicPoint = next;
+    }
+
+    if (Math.Abs(((double)metallicLong / metallicShort) - ((double)MetallicQuasicrystal.InflationFactor(n: metallicIndex))) > 0.02) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL DENSITY IS NOT DELTA n={metallicIndex}");
+    }
+
+    // Contains must equal the walked set exactly over a coordinate box the walk fully covers — no ghost members admitted.
+    for (var boxA = 0L; (boxA <= 80L); ++boxA) {
+        for (var boxB = 0L; (boxB <= 80L); ++boxB) {
+            if (MetallicQuasicrystal.Contains(n: metallicIndex, a: boxA, b: boxB) != metallicVisited.Contains(item: (boxA, boxB))) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL CONTAINS DISAGREES WITH THE WALK n={metallicIndex} ({boxA},{boxB})");
+            }
+        }
+    }
+
+    // Two independent implementations agree: the cut-and-project walk word is a factor of the streamed substitution word.
+    var metallicStreamed = new bool[24000];
+    QuadraticQuasicrystal.Word(p: metallicIndex, q: 1L, d: (((long)metallicIndex * metallicIndex) + 4L), r: 2L, tiles: metallicStreamed);
+
+    if (!IsFactorOfWord(haystack: metallicStreamed, needle: metallicWalkWord.AsSpan(0, 1500))) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL RANDOM ACCESS != STREAMED WORD n={metallicIndex}");
+    }
+}
+Console.WriteLine("metallic quasicrystal: ring-coordinate chain n=1..6 (Contains==walk, Next/Previous inverse, delta/delta^2 steps, monotone, no SS/L^(n+2), density -> delta) == streamed word OK");
+
+// ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
+// The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
+// the Mobius action on cusps is a group action agreeing with exact BigInteger rational arithmetic; Gauss reduction
+// carries every positive-definite form into the fundamental domain by a determinant-one word verified against the
+// independent contravariant form action; and quadratic surds expand to eventually periodic continued fractions, the
+// golden and silver ratios coding the two shortest closed geodesics [1] and [2]. Oracles: the trace, BigInteger rational
+// reduction, the substitution form action, and the convergent recurrence -- never the implementation's own branches.
+if (ModularTransform.S.Classify() != ModularClass.Elliptic) {
+    throw new InvalidOperationException("MODULAR S IS NOT ELLIPTIC");
+}
+if ((ModularTransform.S * ModularTransform.T).Classify() != ModularClass.Elliptic) {
+    throw new InvalidOperationException("MODULAR S*T IS NOT ELLIPTIC");
+}
+if (ModularTransform.T.Classify() != ModularClass.Parabolic) {
+    throw new InvalidOperationException("MODULAR T IS NOT PARABOLIC");
+}
+if (ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L).Classify() != ModularClass.Hyperbolic) {
+    throw new InvalidOperationException("MODULAR [2,1,1,1] IS NOT HYPERBOLIC");
+}
+// S is order four and S*T order six in SL2(Z) (the elliptic orders); neither returns to the identity earlier.
+var modularSpin = ModularTransform.Identity;
+for (var power = 1; (power <= 4); ++power) {
+    modularSpin = (modularSpin * ModularTransform.S);
+
+    if ((modularSpin == ModularTransform.Identity) != (power == 4)) {
+        throw new InvalidOperationException("MODULAR S IS NOT ORDER FOUR");
+    }
+}
+var modularHex = ModularTransform.Identity;
+for (var power = 1; (power <= 6); ++power) {
+    modularHex = (modularHex * (ModularTransform.S * ModularTransform.T));
+
+    if ((modularHex == ModularTransform.Identity) != (power == 6)) {
+        throw new InvalidOperationException("MODULAR S*T IS NOT ORDER SIX");
+    }
+}
+// Random elements of SL2(Z), built as words in S and T: determinant one, adjugate inverse, associativity, class boundary.
+var modularRng = new Random(20260720);
+var modularWords = new ModularTransform[512];
+for (var index = 0; (index < modularWords.Length); ++index) {
+    var word = ModularTransform.Identity;
+
+    for (var step = 0; (step < 7); ++step) {
+        word = ((modularRng.Next(2) == 0)
+            ? (ModularTransform.S * word)
+            : (ModularTransform.Create(a: 1L, b: modularRng.Next(-3, 4), c: 0L, d: 1L) * word));
+    }
+
+    modularWords[index] = word;
+
+    if (Int128.One != (((Int128)word.A * word.D) - ((Int128)word.B * word.C))) {
+        throw new InvalidOperationException("MODULAR WORD DETERMINANT IS NOT ONE");
+    }
+    if ((word * word.Inverse) != ModularTransform.Identity) {
+        throw new InvalidOperationException("MODULAR INVERSE IS NOT THE ADJUGATE INVERSE");
+    }
+
+    var absoluteTrace = Int128.Abs(value: ((Int128)word.A + word.D));
+    var expectedClass = ((absoluteTrace < 2)
+        ? ModularClass.Elliptic
+        : ((absoluteTrace == 2) ? ModularClass.Parabolic : ModularClass.Hyperbolic));
+
+    if (word.Classify() != expectedClass) {
+        throw new InvalidOperationException("MODULAR CLASSIFY DISAGREES WITH THE TRACE");
+    }
+}
+for (var index = 0; (index < 200); ++index) {
+    var x = modularWords[modularRng.Next(modularWords.Length)];
+    var y = modularWords[modularRng.Next(modularWords.Length)];
+    var z = modularWords[modularRng.Next(modularWords.Length)];
+
+    if (((x * y) * z) != (x * (y * z))) {
+        throw new InvalidOperationException("MODULAR COMPOSITION IS NOT ASSOCIATIVE");
+    }
+}
+// Cusp action: agrees with exact BigInteger rational reduction, is a group action, and S acts as an involution on cusps.
+for (var index = 0; (index < modularWords.Length); ++index) {
+    var word = modularWords[index];
+
+    for (var trial = 0; (trial < 6); ++trial) {
+        var p = modularRng.Next(-40, 41);
+        var q = modularRng.Next(0, 41);
+
+        if ((p == 0) && (q == 0)) { q = 1; }
+
+        if (word.Apply(numerator: p, denominator: q) != ModularCuspOracle(g: word, p: p, q: q)) {
+            throw new InvalidOperationException("MODULAR CUSP ACTION DISAGREES WITH THE RATIONAL ORACLE");
+        }
+
+        var other = modularWords[modularRng.Next(modularWords.Length)];
+        var composed = (word * other).Apply(numerator: p, denominator: q);
+        var (innerP, innerQ) = other.Apply(numerator: p, denominator: q);
+
+        if (composed != word.Apply(numerator: innerP, denominator: innerQ)) {
+            throw new InvalidOperationException("MODULAR CUSP ACTION IS NOT A GROUP ACTION");
+        }
+
+        var (sP, sQ) = ModularTransform.S.Apply(numerator: p, denominator: q);
+
+        if (ModularTransform.S.Apply(numerator: sP, denominator: sQ) != ModularCuspOracle(g: ModularTransform.Identity, p: p, q: q)) {
+            throw new InvalidOperationException("MODULAR S IS NOT A CUSP INVOLUTION");
+        }
+    }
+}
+// Gauss reduction: reduced inequalities, discriminant preserved, the word carries the form (exact form action), idempotence,
+// and the reduced root lands in the fundamental domain through the approximate FixedComplex seam.
+var modularReductions = 0;
+for (var reduceA = 1L; (reduceA <= 24L); ++reduceA) {
+    for (var reduceB = -24L; (reduceB <= 24L); ++reduceB) {
+        for (var reduceC = 1L; (reduceC <= 24L); ++reduceC) {
+            if ((((Int128)reduceB * reduceB) - (((Int128)reduceA * reduceC) * 4)) >= Int128.Zero) { continue; }
+
+            var reduction = ModularTransform.GaussReduce(a: reduceA, b: reduceB, c: reduceC);
+
+            if (!((-reduction.A < reduction.B) && (reduction.B <= reduction.A) && (reduction.A <= reduction.C))) {
+                throw new InvalidOperationException("MODULAR REDUCED FORM VIOLATES -A < B <= A <= C");
+            }
+            if (Int128.One != (((Int128)reduction.Transform.A * reduction.Transform.D) - ((Int128)reduction.Transform.B * reduction.Transform.C))) {
+                throw new InvalidOperationException("MODULAR REDUCTION TRANSFORM IS NOT DETERMINANT ONE");
+            }
+            if ((((Int128)reduceB * reduceB) - (((Int128)reduceA * reduceC) * 4)) != (((Int128)reduction.B * reduction.B) - (((Int128)reduction.A * reduction.C) * 4))) {
+                throw new InvalidOperationException("MODULAR REDUCTION DID NOT PRESERVE THE DISCRIMINANT");
+            }
+            if (ModularFormAction(a: reduceA, b: reduceB, c: reduceC, g: reduction.Transform.Inverse) != (reduction.A, reduction.B, reduction.C)) {
+                throw new InvalidOperationException("MODULAR REDUCTION TRANSFORM DOES NOT CARRY THE FORM");
+            }
+            if (ModularTransform.GaussReduce(a: reduction.A, b: reduction.B, c: reduction.C).Transform != ModularTransform.Identity) {
+                throw new InvalidOperationException("MODULAR REDUCTION IS NOT IDEMPOTENT");
+            }
+
+            // Approximate seam: the transform applied to the original root approximates the reduced root, which lies in F.
+            if ((reduceA <= 8L) && (reduceB >= -8L) && (reduceB <= 8L) && (reduceC <= 8L)) {
+                var sourceRoot = FormRoot(a: reduceA, b: reduceB, c: reduceC);
+                var reducedRoot = FormRoot(a: reduction.A, b: reduction.B, c: reduction.C);
+                var mapped = reduction.Transform.Apply(point: sourceRoot);
+                var realError = Math.Abs((double)(mapped.Real - reducedRoot.Real));
+                var imaginaryError = Math.Abs((double)(mapped.Imaginary - reducedRoot.Imaginary));
+
+                if ((realError > 0.02) || (imaginaryError > 0.02)) {
+                    throw new InvalidOperationException("MODULAR REDUCTION SEAM DID NOT MAP THE ROOT INTO THE FUNDAMENTAL DOMAIN");
+                }
+            }
+
+            ++modularReductions;
+        }
+    }
+}
+// Continued fractions: the golden and silver periods, a table of surd expansions, and convergents that approach the value.
+Span<long> continuedFractionTerms = stackalloc long[64];
+(long P, long Q, long D, long R, int Start, long[] Period)[] continuedFractionCases = [
+    (1L, 1L, 5L, 2L, 0, [1L]),                       // golden ratio (1 + sqrt 5) / 2
+    (1L, 1L, 2L, 1L, 0, [2L]),                       // silver ratio 1 + sqrt 2
+    (0L, 1L, 2L, 1L, 1, [2L]),                       // sqrt 2 = [1; (2)]
+    (0L, 1L, 3L, 1L, 1, [1L, 2L]),                   // sqrt 3 = [1; (1, 2)]
+    (0L, 1L, 7L, 1L, 1, [1L, 1L, 1L, 4L]),           // sqrt 7 = [2; (1, 1, 1, 4)]
+    (0L, 1L, 13L, 1L, 1, [1L, 1L, 1L, 1L, 6L]),      // sqrt 13 = [3; (1, 1, 1, 1, 6)]
+];
+foreach (var continuedFractionCase in continuedFractionCases) {
+    var written = ContinuedFraction.Expand(
+        p: continuedFractionCase.P,
+        q: continuedFractionCase.Q,
+        d: continuedFractionCase.D,
+        r: continuedFractionCase.R,
+        terms: continuedFractionTerms,
+        periodStart: out var expansionStart,
+        periodLength: out var expansionLength
+    );
+
+    if ((expansionStart != continuedFractionCase.Start) || (expansionLength != continuedFractionCase.Period.Length)) {
+        throw new InvalidOperationException("CONTINUED FRACTION PERIOD STRUCTURE IS WRONG");
+    }
+
+    for (var offset = 0; (offset < expansionLength); ++offset) {
+        if (continuedFractionTerms[expansionStart + offset] != continuedFractionCase.Period[offset]) {
+            throw new InvalidOperationException("CONTINUED FRACTION PERIOD BLOCK IS WRONG");
+        }
+    }
+
+    // Independent convergence oracle: unfold head + several periods, run the convergent recurrence, approach the true value.
+    var value = ((continuedFractionCase.P + (continuedFractionCase.Q * Math.Sqrt(continuedFractionCase.D))) / continuedFractionCase.R);
+    double previousNumerator = 0.0, numerator = 1.0;
+    double previousDenominator = 1.0, denominator = 0.0;
+
+    for (var repeat = 0; (repeat < 24); ++repeat) {
+        var term = ((repeat < expansionStart) ? continuedFractionTerms[repeat] : continuedFractionTerms[expansionStart + ((repeat - expansionStart) % expansionLength)]);
+        (previousNumerator, numerator) = (numerator, ((term * numerator) + previousNumerator));
+        (previousDenominator, denominator) = (denominator, ((term * denominator) + previousDenominator));
+    }
+
+    if (Math.Abs(((numerator / denominator) - value)) > 1e-9) {
+        throw new InvalidOperationException("CONTINUED FRACTION CONVERGENTS DO NOT APPROACH THE VALUE");
+    }
+}
+Console.WriteLine($"modular: 3 classes + orders {{4,6,inf}}, det-1 adjugate inverse, cusp group action, {modularReductions} Gauss reductions into F, CF periods [1]/[2] (golden/silver) + surd table OK");
+
+// ---- QuadraticInflation + MetallicQuasicrystal (the inflation lens beneath the quasicrystal chains) ----
+// The lens reads a quadratic irrational's CF period as a substitution matrix; its trace, determinant, and discriminant
+// are exact conjugacy invariants, and the Perron eigenvalue is the chain's inflation factor. Golden and silver fall out
+// as the smallest members, with discriminants 5 and 8 tying back to the golden (sqrt 5) and silver (sqrt 8) chains —
+// read from the continued fraction, not fed in.
+(long P, long Q, long D, long R, int Period, long Det, long Disc, double Factor)[] inflationCases = [
+    (1L, 1L, 5L, 2L, 1, -1L, 5L, ((1.0 + Math.Sqrt(5.0)) / 2.0)),        // golden phi
+    (1L, 1L, 2L, 1L, 1, -1L, 8L, (1.0 + Math.Sqrt(2.0))),               // silver 1 + sqrt 2
+    (0L, 1L, 2L, 1L, 1, -1L, 8L, (1.0 + Math.Sqrt(2.0))),               // sqrt 2, same geodesic as silver
+    (0L, 1L, 3L, 1L, 2, 1L, 12L, (2.0 + Math.Sqrt(3.0))),               // sqrt 3 (even period, det +1)
+    (0L, 1L, 7L, 1L, 4, 1L, 252L, (8.0 + (3.0 * Math.Sqrt(7.0)))),      // sqrt 7 (even period, det +1)
+    (0L, 1L, 13L, 1L, 5, -1L, 1300L, (18.0 + (5.0 * Math.Sqrt(13.0)))), // sqrt 13 (odd period, det -1)
+];
+foreach (var inflationCase in inflationCases) {
+    var inflation = QuadraticInflation.FromQuadraticIrrational(p: inflationCase.P, q: inflationCase.Q, d: inflationCase.D, r: inflationCase.R);
+
+    if ((inflation.PeriodLength != inflationCase.Period) || (inflation.Determinant != inflationCase.Det) || (inflation.Discriminant != inflationCase.Disc)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION INVARIANTS WRONG d={inflationCase.D}");
+    }
+
+    // Determinant is exactly (-1)^period, the geodesic is a hyperbolic translation, and its axis is unimodular.
+    if (inflation.Determinant != (((inflation.PeriodLength & 1) == 0) ? 1L : -1L)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION DETERMINANT SIGN WRONG d={inflationCase.D}");
+    }
+    if ((inflation.GeodesicClass != ModularClass.Hyperbolic) || (inflation.Axis.Classify() != ModularClass.Hyperbolic)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION GEODESIC NOT HYPERBOLIC d={inflationCase.D}");
+    }
+    if ((inflation.Axis * inflation.Axis.Inverse) != ModularTransform.Identity) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION AXIS NOT UNIMODULAR d={inflationCase.D}");
+    }
+
+    // The exact surd (trace + sqrt disc)/2 equals the double reference and is a root of the matrix characteristic
+    // polynomial lambda^2 - trace*lambda + det; the fixed-point factor lands within the Q48.16 square-root seam.
+    var referenceFactor = ((inflation.Trace + Math.Sqrt(inflation.Discriminant)) / 2.0);
+
+    if (Math.Abs(referenceFactor - inflationCase.Factor) > 1e-9) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FACTOR REFERENCE WRONG d={inflationCase.D}");
+    }
+    if (Math.Abs(((referenceFactor * referenceFactor) - (inflation.Trace * referenceFactor)) + inflation.Determinant) > 1e-6) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FACTOR NOT A CHARACTERISTIC ROOT d={inflationCase.D}");
+    }
+    if (Math.Abs(((double)inflation.InflationFactor()) - referenceFactor) > 1e-3) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FIXED-POINT FACTOR OFF d={inflationCase.D}");
+    }
+}
+
+// Golden discriminant 5 and silver discriminant 8 are exactly the surds the golden and silver chains are built on, and
+// the two share their smallest-trace geodesics with the metallic family.
+if ((QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L) != QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L)) ||
+    (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L).Discriminant != 5L) ||
+    (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 2L, r: 1L).Discriminant != 8L)) {
+    throw new InvalidOperationException("QUADRATIC INFLATION GOLDEN/SILVER DISCRIMINANTS WRONG");
+}
+
+// MetallicQuasicrystal unifies golden (n=1) and silver (n=2) as one substitution generator: the streamed word contains
+// its own random-access walk word as a factor (same language, phase aside), long:short frequency approaches δₙ, and
+// sigma(word) reproduces the word (the fixed-point identity).
+var metallicGolden = new bool[8192];
+var metallicSilver = new bool[8192];
+MetallicQuasicrystal.Word(n: 1, tiles: metallicGolden);
+MetallicQuasicrystal.Word(n: 2, tiles: metallicSilver);
+
+var goldenFromOrigin = new bool[1500];
+var silverFromOrigin = new bool[1500];
+var goldenWalk = (A: 0L, B: 0L);
+var silverWalk = (A: 0L, B: 0L);
+for (var i = 0; (i < goldenFromOrigin.Length); ++i) {
+    goldenFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+    goldenWalk = MetallicQuasicrystal.Next(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+}
+for (var i = 0; (i < silverFromOrigin.Length); ++i) {
+    silverFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 2, a: silverWalk.A, b: silverWalk.B);
+    silverWalk = MetallicQuasicrystal.Next(n: 2, a: silverWalk.A, b: silverWalk.B);
+}
+
+if (!IsFactorOfWord(haystack: metallicGolden, needle: goldenFromOrigin) ||
+    !IsFactorOfWord(haystack: metallicSilver, needle: silverFromOrigin)) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL DOES NOT REPRODUCE THE GOLDEN/SILVER WORD");
+}
+if (IsFactorOfWord(haystack: metallicSilver, needle: goldenFromOrigin.AsSpan(0, 256))) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL SILVER GENERATOR MATCHED THE GOLDEN WORD");
+}
+
+for (var n = 1; (n <= 6); ++n) {
+    var metallicWord = new bool[20000];
+    MetallicQuasicrystal.Word(n: n, tiles: metallicWord);
+
+    var longCount = 0;
+
+    foreach (var isLong in metallicWord) { if (isLong) { ++longCount; } }
+
+    if (Math.Abs(((double)longCount / (metallicWord.Length - longCount)) - ((double)MetallicQuasicrystal.InflationFactor(n: n))) > 0.02) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL FREQUENCY OFF n={n}");
+    }
+
+    // sigma(word) == word: expand each tile (long -> long^n short, short -> long) and match the word in place.
+    var cursor = 0;
+
+    foreach (var isLong in metallicWord) {
+        if (cursor >= (metallicWord.Length - (n + 1))) { break; }
+
+        if (isLong) {
+            for (var repeat = 0; (repeat < n); ++repeat) {
+                if (!metallicWord[cursor++]) { throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}"); }
+            }
+
+            if (metallicWord[cursor++]) { throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}"); }
+        } else if (!metallicWord[cursor++]) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}");
+        }
+    }
+}
+Console.WriteLine("inflation lens: golden/silver recovered (disc 5/8, hyperbolic unimodular axes), surd = characteristic root; metallic family reproduces both chains, frequency -> delta_n, sigma(word) == word OK");
+
+// Is `needle` a contiguous factor of `haystack`? A phase-independent witness that two tiling words share a language.
+static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {
+    for (var start = 0; (start <= (haystack.Length - needle.Length)); ++start) {
+        if (haystack.Slice(start, needle.Length).SequenceEqual(needle)) { return true; }
+    }
+
+    return false;
+}
+
+// ---- QuadraticQuasicrystal (the general chain: arbitrary CF period, not just metallic [n]) ----
+// The general generator streams the tiling word for any quadratic irrational. Correctness with no reference impl: the
+// word must be Sturmian — exactly k+1 distinct factors of every length k — and the tile lengths must satisfy the
+// inflation identity λ·ℓ_long = A·ℓ_long + C·ℓ_short. Golden and silver are the single-term specializations.
+(long P, long Q, long D, long R)[] quasicrystalCases = [
+    (1L, 1L, 5L, 2L), (1L, 1L, 2L, 1L), (0L, 1L, 2L, 1L), (0L, 1L, 3L, 1L), (0L, 1L, 7L, 1L), (0L, 1L, 13L, 1L), (0L, 1L, 23L, 1L),
+];
+var quasicrystalWord = new bool[200_000];
+foreach (var quasicrystalCase in quasicrystalCases) {
+    QuadraticQuasicrystal.Word(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R, tiles: quasicrystalWord);
+
+    for (var k = 1; (k <= 24); ++k) {
+        if (WordComplexity(word: quasicrystalWord, k: k) != (k + 1)) {
+            throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL NOT STURMIAN d={quasicrystalCase.D} k={k}");
+        }
+    }
+
+    // The tile lengths are the left Perron eigenvector: λ·ℓ_long must equal the length of σ(long) = A longs plus C shorts.
+    var quasicrystalInflation = QuadraticInflation.FromQuadraticIrrational(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R);
+    var quasicrystalLambda = ((quasicrystalInflation.Trace + Math.Sqrt(quasicrystalInflation.Discriminant)) / 2.0);
+    var quasicrystalLongLength = (quasicrystalInflation.C / (quasicrystalLambda - quasicrystalInflation.A));
+
+    if (Math.Abs((quasicrystalLambda * quasicrystalLongLength) - ((quasicrystalInflation.A * quasicrystalLongLength) + quasicrystalInflation.C)) > 1e-9) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL TILE LENGTH IDENTITY WRONG d={quasicrystalCase.D}");
+    }
+    if (Math.Abs(((double)QuadraticQuasicrystal.LongTileLength(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R)) - quasicrystalLongLength) > 1e-3) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL FIXED-POINT TILE LENGTH OFF d={quasicrystalCase.D}");
+    }
+}
+
+// The general generator reproduces the hand-coded golden word, and the complexity oracle has teeth (a periodic word fails).
+var generalGoldenWord = new bool[8192];
+QuadraticQuasicrystal.Word(p: 1L, q: 1L, d: 5L, r: 2L, tiles: generalGoldenWord);
+if (!IsFactorOfWord(haystack: generalGoldenWord, needle: goldenFromOrigin)) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL DOES NOT REPRODUCE THE GOLDEN WORD");
+}
+for (var i = 0; (i < quasicrystalWord.Length); ++i) { quasicrystalWord[i] = ((i % 3) == 0); }
+if (WordComplexity(word: quasicrystalWord, k: 10) == 11) {
+    throw new InvalidOperationException("WORD COMPLEXITY ORACLE HAS NO TEETH");
+}
+Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, tile-length inflation identity, reproduces golden, oracle has teeth OK");
+
+// The number of distinct length-k factors of a word: exactly k+1 for a Sturmian word, bounded for a periodic one.
+static int WordComplexity(ReadOnlySpan<bool> word, int k) {
+    var seen = new HashSet<ulong>();
+    var mask = ((k == 64) ? ~0UL : ((1UL << k) - 1UL));
+    var window = 0UL;
+
+    for (var i = 0; (i < word.Length); ++i) {
+        window = (((window << 1) | (word[i] ? 1UL : 0UL)) & mask);
+
+        if (i >= (k - 1)) { seen.Add(item: window); }
+    }
+
+    return seen.Count;
+}
+
+static Puck.Maths.FixedComplex FormRoot(long a, long b, long c) {
+    // The upper-half-plane root of the positive-definite form: (-b + i*sqrt(4ac - b^2)) / (2a). Reference double build.
+    var twiceA = (2.0 * a);
+
+    return new Puck.Maths.FixedComplex(
+        Real: FixedQ4816.FromDouble(value: (-b / twiceA)),
+        Imaginary: FixedQ4816.FromDouble(value: (Math.Sqrt((((4.0 * a) * c) - ((double)b * b))) / twiceA))
+    );
+}
+static (long A, long B, long C) ModularFormAction(long a, long b, long c, ModularTransform g) {
+    // The substitution action f(alpha*x + beta*y, gamma*x + delta*y): the contravariant right action that carries a root.
+    var alpha = ((Int128)g.A);
+    var beta = ((Int128)g.B);
+    var gamma = ((Int128)g.C);
+    var delta = ((Int128)g.D);
+    var actedA = ((((Int128)a * alpha) * alpha) + (((Int128)b * alpha) * gamma) + (((Int128)c * gamma) * gamma));
+    var actedB = ((((2 * (Int128)a) * alpha) * beta) + ((Int128)b * ((alpha * delta) + (beta * gamma))) + (((2 * (Int128)c) * gamma) * delta));
+    var actedC = ((((Int128)a * beta) * beta) + (((Int128)b * beta) * delta) + (((Int128)c * delta) * delta));
+
+    return (checked((long)actedA), checked((long)actedB), checked((long)actedC));
+}
+static (long Numerator, long Denominator) ModularCuspOracle(ModularTransform g, long p, long q) {
+    var numerator = (((BigInteger)g.A * p) + ((BigInteger)g.B * q));
+    var denominator = (((BigInteger)g.C * p) + ((BigInteger)g.D * q));
+
+    if (denominator.IsZero) { return (1L, 0L); }
+    if (numerator.IsZero) { return (0L, 1L); }
+
+    var divisor = BigInteger.GreatestCommonDivisor(left: numerator, right: denominator);
+
+    numerator /= divisor;
+    denominator /= divisor;
+
+    if (denominator.Sign < 0) {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    return ((long)numerator, (long)denominator);
+}
+
 static long VectorNormLocal(long x, long y, long z) {
     // Mirror of the internal FixedQuaternion.VectorNorm: nearest integer sqrt of the exact raw Q32 product sum
     // (no rounded Q16 intermediate).
@@ -2251,6 +3035,79 @@ quatTimer.Restart();
 for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (benchDualA * benchDualB).Dual.Value; }
 quatTimer.Stop();
 Console.WriteLine($"dual multiply        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+var benchCyclicV2 = new FixedVector2(X: FixedQ4816.One, Y: FixedQ4816.FromInteger(value: 3L));
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Step(plane: (n & 3), tick: n); }
+quatTimer.Stop();
+Console.WriteLine($"cyclic step          : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.At(plane: (n & 3), tick: n).Real.Value; }
+quatTimer.Stop();
+Console.WriteLine($"cyclic at            : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 20_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Rotate(plane: (n & 3), tick: n, vector: benchCyclicV2).X.Value; }
+quatTimer.Stop();
+Console.WriteLine($"cyclic rotate        : {(quatTimer.Elapsed.TotalNanoseconds / 20_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Reflect(node: (n % 240), mirror: ((n * 7) % 240)); }
+quatTimer.Stop();
+Console.WriteLine($"lattice reflect      : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Cycle(node: (n % 240)); }
+quatTimer.Stop();
+Console.WriteLine($"lattice cycle        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Project(node: (n % 240)).X.Value; }
+quatTimer.Stop();
+Console.WriteLine($"lattice project      : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (long)Puck.Maths.HilbertCurve.Encode(order: 20, x: ((uint)n & 0xFFFFFU), y: (((uint)n * 2654435761U) & 0xFFFFFU)); }
+quatTimer.Stop();
+Console.WriteLine($"hilbert encode       : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (long)Puck.Maths.HilbertCurve.Decode(order: 20, distance: ((ulong)n & 0x3FFFFFFFFUL)).X; }
+quatTimer.Stop();
+Console.WriteLine($"hilbert decode       : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+var benchHexA = new Puck.Maths.HexCoord(Q: 5, R: -3);
+var benchHexB = new Puck.Maths.HexCoord(Q: 2, R: 4);
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (benchHexA * benchHexB).Q + n; }
+quatTimer.Stop();
+Console.WriteLine($"hex product          : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= new Puck.Maths.HexCoord(Q: n, R: (n * 3)).Length; }
+quatTimer.Stop();
+Console.WriteLine($"hex length           : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.HexCoord.Direction(direction: n).Q; }
+quatTimer.Stop();
+Console.WriteLine($"hex direction        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.MetallicQuasicrystal.Contains(n: 1, a: n, b: (n / 2)) ? 1 : 0); }
+quatTimer.Stop();
+Console.WriteLine($"quasicrystal contains: {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.MetallicQuasicrystal.Next(n: 1, a: n, b: (n / 2)).A; }
+quatTimer.Stop();
+Console.WriteLine($"quasicrystal next    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+var benchModularA = ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L);
+var benchModularB = ModularTransform.Create(a: 1L, b: 1L, c: 0L, d: 1L);
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (long)(benchModularA * benchModularB).A + n; }
+quatTimer.Stop();
+Console.WriteLine($"modular compose      : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= (long)benchModularA.Classify(); }
+quatTimer.Stop();
+Console.WriteLine($"modular classify     : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= benchModularA.Apply(numerator: n, denominator: (n | 1)).Numerator; }
+quatTimer.Stop();
+Console.WriteLine($"modular cusp apply   : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 5_000_000); n++) { quatSink ^= ModularTransform.GaussReduce(a: (30L + (n & 15)), b: 1L, c: 1L).A; }
+quatTimer.Stop();
+Console.WriteLine($"modular gauss reduce : {(quatTimer.Elapsed.TotalNanoseconds / 5_000_000d),8:F2} ns/op");
 sink ^= quatSink;
 Console.WriteLine($"(sink {sink})");
 Console.WriteLine();

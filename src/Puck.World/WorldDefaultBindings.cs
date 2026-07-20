@@ -12,9 +12,13 @@ namespace Puck.World;
 /// <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).
 /// </summary>
 /// <remarks>
-/// The play group is one resting page plus the ordered <c>[lt, rt]</c> chord row whose meaning is the COMMAND
-/// <c>editor.enter</c> — the trigger squeeze is the primary editor entry (both triggers are otherwise unbound in
-/// play, so the chord is deliberate), with Gamepad Back / Keyboard Tab as the assist twins on the resting page.
+/// The play group is FIVE pages, one per ordered trigger chord — the model every group in this document follows:
+/// <c>[]</c> base, <c>[lt]</c>, <c>[rt]</c>, <c>[lt, rt]</c>, <c>[rt, lt]</c>. Holding the triggers IS the page
+/// turn: the binding bar re-renders the page the held chord selects, so the chord vocabulary is discoverable by
+/// squeezing rather than memorized. Pages 1..4 are deliberately SPARSE — they carry only the stick routers (a held
+/// analog re-dispatches against the ACTIVE page each tick, so a page without them would stall movement while its
+/// chord is held) and wait to be authored through the binding document. Editor entry is Gamepad Back / Keyboard
+/// Tab on the base page; no trigger combination enters the editor.
 /// The classic doom keyboard layout (W/S forward/back, A/D turn, Q/E strafe; arrows mirror WASD) binds each movement
 /// source TWICE — a press edge (default phase) and a release edge (<see cref="CommandPhase.Completed"/>),
 /// <c>AnyModifiers</c> so an incidental Shift/Ctrl never breaks gameplay — so one verb handler reads the phase to
@@ -26,12 +30,20 @@ internal static class WorldDefaultBindings {
     /// <summary>The play group — the default page group every seat resolves in outside a mode.</summary>
     public const string PlayGroup = "play";
 
-    /// <summary>The play group's resting page id.</summary>
+    /// <summary>The play group's resting page id (chord: nothing held) — page 0.</summary>
     public const string BasePageId = "base";
+    /// <summary>The play group's page 1 id (chord: LT held).</summary>
+    public const string LeftPageId = "play-lt";
+    /// <summary>The play group's page 2 id (chord: RT held).</summary>
+    public const string RightPageId = "play-rt";
+    /// <summary>The play group's page 3 id (chord: LT then RT held).</summary>
+    public const string LeftRightPageId = "play-lt-rt";
+    /// <summary>The play group's page 4 id (chord: RT then LT held — the reverse squeeze).</summary>
+    public const string RightLeftPageId = "play-rt-lt";
 
     /// <summary>The left-trigger modifier id (chord vocabulary: <c>lt</c>). Declared here, on the engine default,
-    /// because modifiers are document-global: the play group's <c>editor.enter</c> chord and every editor page
-    /// chord reference the same two declarations.</summary>
+    /// because modifiers are document-global: every play and editor page chord references the same two
+    /// declarations.</summary>
     public const string LeftTriggerModifierId = "lt";
     /// <summary>The right-trigger modifier id (chord vocabulary: <c>rt</c>).</summary>
     public const string RightTriggerModifierId = "rt";
@@ -86,26 +98,40 @@ internal static class WorldDefaultBindings {
                             .. HoldRelease(source: InputSources.Gamepad.ButtonEast, command: PlayerCommandModule.SecondaryCommand),
                             // Start = device cycle (press edge).
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started, AnyModifiers: true),
-                            // The editor-entry assist twins beside the [lt, rt] chord row below — Gamepad Back (the
-                            // view/menu button) and Keyboard Tab, both free here and both deliberate.
+                            // Editor entry — Gamepad Back (the view/menu button) and Keyboard Tab, both free here and
+                            // both deliberate. The triggers turn pages; they never enter a mode.
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
                             new BindingPageEntryDefinition(Source: InputSources.Keyboard.Tab, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
                         ],
                         Label: "Base"
                     )
                 ),
-                // The reference chord-command: squeezing LT then RT fires editor.enter as DATA — the primary pad
-                // entry into the editor, declared through the same row vocabulary any author or player uses.
-                new BindingChordDefinition(
-                    Group: PlayGroup,
-                    Chord: [LeftTriggerModifierId, RightTriggerModifierId],
-                    Command: new BindingCommandDefinition(Command: EditorCommandModule.EnterCommand, Label: "Editor", Icon: "edit.op")
-                ),
+                // Pages 1..4 — the four ordered trigger chords, held to turn the bar. Sparse by construction: the
+                // stick routers only, so movement survives a held chord; content is authored into the document.
+                SparsePage(chord: [LeftTriggerModifierId], id: LeftPageId, label: "LT"),
+                SparsePage(chord: [RightTriggerModifierId], id: RightPageId, label: "RT"),
+                SparsePage(chord: [LeftTriggerModifierId, RightTriggerModifierId], id: LeftRightPageId, label: "LT+RT"),
+                SparsePage(chord: [RightTriggerModifierId, LeftTriggerModifierId], id: RightLeftPageId, label: "RT+LT"),
                 // The editor group (always compiled in; editor.enter flips the seat's active group onto it).
                 .. WorldEditorBindings.Rows(),
             ]
         );
     }
+
+    // One of the play group's four held-chord pages: labelled for the bar, carrying only the stick routers (a held
+    // analog re-dispatches against the ACTIVE page each tick, so omitting them would freeze movement mid-chord).
+    private static BindingChordDefinition SparsePage(string[] chord, string id, string label) => new(
+        Group: PlayGroup,
+        Chord: chord,
+        Page: new BindingPageDefinition(
+            Id: id,
+            Entries: [
+                new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
+                new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
+            ],
+            Label: label
+        )
+    );
 
     // A source bound to a command on BOTH edges (the HoldRelease pattern): a press-edge entry (default phase, fires on
     // Started/Active) and a release-edge entry (ActivateOn Completed), both AnyModifiers.

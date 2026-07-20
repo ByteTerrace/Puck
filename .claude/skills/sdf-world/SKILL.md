@@ -12,9 +12,10 @@ Plan of record for the render assembly:
 [docs/sdf-world-render-centralization-plan.md](../../../docs/sdf-world-render-centralization-plan.md)
 (status section = what is landed vs open).
 
-> **Unification-contract alignment** (see "The unification contract" atop
-> docs/overworld-demo-plan.md): the demo's world content is authored/loaded
-> in-session (world-sculpt + `world.load`), not only via `--forge-town`.
+> **Unification-contract alignment** (see docs/vision.md): world content is
+> authored and loaded in-session — the `editor.sculpt.*` workbench, the
+> `world.*` mutation verbs, and `world.load`/`world.save` — never only through
+> a CLI flag. `Puck.World` has no content-authoring flags at all.
 
 > **ISA admission rule (owner-ratified 2026-07-12).** An op or shape earns a
 > switch case ONLY if it cannot be composed EXACTLY from existing vocabulary —

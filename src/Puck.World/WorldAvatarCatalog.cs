@@ -159,12 +159,18 @@ internal static class WorldAvatarCatalog {
 
     /// <summary>Emits every active avatar's distinct leaf chains. Each leaf is its own dynamic cull instance: a tile
     /// touching one hand does not admit the other bones of that avatar or its neighbors.</summary>
+    /// <remarks>A <see cref="WorldLook"/> may pin a catalog rig (<paramref name="rigFor"/>) and a uniform render scale
+    /// (<paramref name="scaleFor"/>). Geometry is SOURCED from the pinned rig but WRITTEN to the entity's OWN frozen slot
+    /// range, clamped to that range's leaf count — so a pinned look never grows the frozen dynamic-transform capacity
+    /// (the probe emits the identity rig per slot). Defaults reproduce the pre-look behaviour: rig = avatar, scale = 1.</remarks>
     public static void Emit(
         SdfProgramBuilder builder,
         Func<int, bool> isActive,
         ReadOnlySpan<int> bodyMaterials,
         ReadOnlySpan<int> accentMaterials,
-        bool probeWorstCase
+        bool probeWorstCase,
+        Func<int, int>? rigFor = null,
+        Func<int, float>? scaleFor = null
     ) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(isActive);
@@ -175,12 +181,17 @@ internal static class WorldAvatarCatalog {
             }
 
             var range = s_ranges[avatar];
+            // The probe sources every avatar's own rig at unit scale (the frozen worst case); a live build sources the
+            // pinned rig's leaves and the look's uniform scale.
+            var rigRange = (probeWorstCase ? range : s_ranges[RigIndex(rigFor: rigFor, avatar: avatar)]);
+            var scale = (probeWorstCase ? 1f : ScaleFor(scaleFor: scaleFor, avatar: avatar));
 
             for (var slot = range.First; (slot < range.End); slot++) {
-                var leaf = s_leaves[slot];
+                var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: (slot - range.First))];
                 var material = (leaf.UseAccent ? accentMaterials[avatar] : bodyMaterials[avatar]);
+                var leafScale = (leaf.Scale * scale);
 
-                builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: LeafBoundRadius, active: true);
+                builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: (LeafBoundRadius * scale), active: true);
                 var chain = builder
                     .ResetPoint()
                     .TransformDynamic(slot: slot)
@@ -189,21 +200,21 @@ internal static class WorldAvatarCatalog {
 
                 _ = leaf.Shape switch {
                     AvatarShape.Box => chain.Box(
-                        halfExtents: new Vector3(x: (0.105f * leaf.Scale), y: (0.17f * leaf.Scale), z: (0.085f * leaf.Scale)),
-                        round: (0.038f * leaf.Scale),
+                        halfExtents: new Vector3(x: (0.105f * leafScale), y: (0.17f * leafScale), z: (0.085f * leafScale)),
+                        round: (0.038f * leafScale),
                         material: material
                     ),
                     AvatarShape.Capsule => chain.Capsule(
-                        endpoint: new Vector3(x: 0f, y: (0.27f * leaf.Scale), z: 0f),
-                        radius: (0.068f * leaf.Scale),
+                        endpoint: new Vector3(x: 0f, y: (0.27f * leafScale), z: 0f),
+                        radius: (0.068f * leafScale),
                         material: material
                     ),
                     AvatarShape.Cylinder => chain.Cylinder(
-                        radius: (0.082f * leaf.Scale),
-                        halfHeight: (0.155f * leaf.Scale),
+                        radius: (0.082f * leafScale),
+                        halfHeight: (0.155f * leafScale),
                         material: material
                     ),
-                    _ => chain.Sphere(radius: (0.108f * leaf.Scale), material: material),
+                    _ => chain.Sphere(radius: (0.108f * leafScale), material: material),
                 };
 
                 builder.EndInstance();
@@ -211,23 +222,28 @@ internal static class WorldAvatarCatalog {
         }
     }
 
-    /// <summary>Packs one avatar's root pose plus movement-driven gait into its frozen leaf slots.</summary>
+    /// <summary>Packs one avatar's root pose plus movement-driven gait into its frozen leaf slots. A pinned rig sources
+    /// the leaf poses (clamped to the entity's own slot range) and the look's uniform scale multiplies the anchor
+    /// offsets — rig = avatar, scale = 1 reproduce the pre-look behaviour.</summary>
     public static void PackTransforms(
         int avatar,
         Vector3 rootPosition,
         Quaternion rootOrientation,
         float gaitPhase,
         bool castsSoftShadow,
-        Span<DynamicTransform> transforms
+        Span<DynamicTransform> transforms,
+        int rig = -1,
+        float scale = 1f
     ) {
         var range = s_ranges[avatar];
+        var rigRange = s_ranges[((rig < 0) ? avatar : rig)];
 
         if (transforms.Length < range.End) {
             throw new ArgumentException(message: $"The avatar transform span has {transforms.Length} slots; avatar {avatar} requires {range.End}.", paramName: nameof(transforms));
         }
 
         for (var slot = range.First; (slot < range.End); slot++) {
-            var leaf = s_leaves[slot];
+            var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: (slot - range.First))];
             var swing = (leaf.GaitAmplitude <= 0f)
                 ? Quaternion.Identity
                 : Quaternion.CreateFromAxisAngle(
@@ -235,7 +251,7 @@ internal static class WorldAvatarCatalog {
                     angle: (leaf.GaitAmplitude * MathF.Sin(x: (gaitPhase + leaf.GaitPhaseOffset)))
                 );
             var orientation = Quaternion.Normalize(value: (swing * rootOrientation));
-            var position = (rootPosition + Vector3.Transform(value: leaf.Anchor, rotation: rootOrientation));
+            var position = (rootPosition + Vector3.Transform(value: (leaf.Anchor * scale), rotation: rootOrientation));
 
             transforms[slot] = new DynamicTransform(
                 Position: position,
@@ -243,6 +259,27 @@ internal static class WorldAvatarCatalog {
                 CastsSoftShadow: castsSoftShadow
             );
         }
+    }
+
+    // The geometry-source rig for an avatar (a WorldLook.Catalog(Index) pin), clamped to the built-in 128; a negative or
+    // out-of-range pin falls back to the avatar's own index.
+    private static int RigIndex(Func<int, int>? rigFor, int avatar) {
+        var rig = (rigFor?.Invoke(arg: avatar) ?? avatar);
+
+        return (((uint)rig < (uint)WorldPopulation.MaxPopulation) ? rig : avatar);
+    }
+
+    private static float ScaleFor(Func<int, float>? scaleFor, int avatar) {
+        var scale = (scaleFor?.Invoke(arg: avatar) ?? 1f);
+
+        return ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : 1f);
+    }
+
+    // The rig leaf a slot offset reads: the pinned rig's leaf at the same relative offset, CLAMPED to the rig's last
+    // leaf when the entity's slot range is longer (so a pinned rig with fewer leaves fills the entity's slots safely and
+    // a longer one is truncated — the frozen per-entity slot capacity is never exceeded).
+    private static int RigLeaf(AvatarRange rigRange, int offset) {
+        return (rigRange.First + Math.Min(val1: offset, val2: (rigRange.Count - 1)));
     }
 
     /// <summary>Returns the exact authored instruction count for an avatar.</summary>

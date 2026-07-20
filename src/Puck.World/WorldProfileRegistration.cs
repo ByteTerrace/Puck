@@ -28,7 +28,7 @@ internal static class WorldProfileRegistration {
             var @default = WorldPlayerDocument.BuildDefault();
 
             try {
-                var load = store.LoadOrMigrateAsync(@default: @default).AsTask().GetAwaiter().GetResult();
+                var load = store.LoadAsync(@default: @default).AsTask().GetAwaiter().GetResult();
                 var document = load.Document;
                 var lastUsedId = load.LastUsedId;
                 var lastSyncedRevision = load.LastSyncedRevision;

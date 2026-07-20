@@ -2,7 +2,8 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The binding-bar writer: renders each seat's active-page slot cluster from an <see cref="IBindingBarSource"/>
-/// snapshot as icon elements — the twelve slot chips (the mirrored-diamond layout) plus the modifier pips —
+/// snapshot as icon elements — the twelve slot chips (the mirrored-diamond layout), the modifier pips, and the
+/// active page's name —
 /// CONFINED to that seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars
 /// with the render node staying dumb. Pure record emission; no GPU types.
 /// </summary>
@@ -84,16 +85,29 @@ public sealed class BindingBarWriter {
 
         // The modifier pips sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
-
-        if (modifiers.Length == 0) {
-            return;
-        }
-
         var anchor = BindingBarLayout.BarAnchor(anchorOffsetY: m_layoutOptions.AnchorOffsetY, aspect: regionAspect);
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
         var pipHalf = ((m_layoutOptions.ButtonSize * 0.35f) * regionHeightPx);
         var pipSpacing = ((m_layoutOptions.ButtonSize * 1.1f) * regionHeightPx);
+        // The page NAME rides directly under the pips — the visible half of the page model: squeeze a trigger chord
+        // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
+        var labelCell = Math.Max(val1: 12, val2: (int)(pipHalf * 1.9f));
+
+        if (!string.IsNullOrEmpty(value: seat.Label)) {
+            builder.WriteText(
+                alpha: 0.9f,
+                cellHeight: labelCell,
+                role: OverlayColorRole.TextPrimary,
+                text: seat.Label,
+                x: (anchorX - (builder.TextWidth(chars: seat.Label.Length, cellHeight: labelCell) * 0.5f)),
+                y: (anchorY + (pipHalf * 1.4f))
+            );
+        }
+
+        if (modifiers.Length == 0) {
+            return;
+        }
 
         for (var index = 0; (index < modifiers.Length); index++) {
             var modifier = modifiers[index];

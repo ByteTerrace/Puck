@@ -25,8 +25,8 @@ namespace Puck.Post;
 /// Artifacts: the first seed's backend pair as smoke; a failing seed additionally writes its pair + diff heatmap.
 /// </summary>
 internal sealed class FuzzStage : IPostStage {
-    // The camera is the t=0 pose of the demo fuzz gate's single hero orbit (DemoRunDocuments.SingleViewports:
-    // azimuth 0, fov 60°, height 1.6, radius 5.2, target (0, 0.1, 0)) → eye (5.2, 1.7, 0) looking at the target.
+    // The camera is the t=0 pose of the fuzz gate's single hero orbit (azimuth 0, fov 60°, height 1.6,
+    // radius 5.2, target (0, 0.1, 0)) → eye (5.2, 1.7, 0) looking at the target.
     private static readonly Vector3 CameraPosition = new(x: 5.2f, y: 1.7f, z: 0f);
     private static readonly Vector3 CameraTarget = new(x: 0f, y: 0.1f, z: 0f);
 

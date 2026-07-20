@@ -235,6 +235,12 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             return;
         }
 
+        // A resize or format change destroys the image and view that in-flight GPU work — the SDF views kernel's
+        // screen sampler, the presenter blit — may still be reading. WaitForPendingUpload (inside DisposeResources)
+        // drains only this uploader's own copy fence, not those consumers, so idle the whole device first, exactly as
+        // Dispose does. The null-conditional skips the first allocation, where nothing has been submitted yet.
+        m_device?.TryWaitIdle();
+
         DisposeResources();
 
         var instance = deviceContext.Instance;

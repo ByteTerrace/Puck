@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 
 namespace Puck.World;
@@ -20,11 +21,18 @@ namespace Puck.World;
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
+[JsonSerializable(typeof(WorldScreenLink))]
 [JsonSerializable(typeof(WorldCamera))]
+// The camera's rig union (world.camera.set / world.view.rig accessors) and the views section rows (world.view.rig /
+// world.view.layout.set accessors). WorldRig is polymorphic ($type chase|firstPerson|orbit|lookAt|dolly); registering
+// the base emits every variant's source-gen metadata.
+[JsonSerializable(typeof(WorldRig))]
+[JsonSerializable(typeof(WorldViewDefaults))]
+[JsonSerializable(typeof(WorldViewLayout))]
 [JsonSerializable(typeof(WorldScene))]
 [JsonSerializable(typeof(WorldSceneRow))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
-[JsonSerializable(typeof(MotionTuning))]
+[JsonSerializable(typeof(WorldMotionDefaults))]
 [JsonSerializable(typeof(WanderTuning))]
 [JsonSerializable(typeof(WorldRenderDefaults))]
 [JsonSerializable(typeof(WorldAddonRow))]
@@ -40,6 +48,10 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPlacement))]
 // The editor/authoring policy row (world.authoring.set verb accessor).
 [JsonSerializable(typeof(WorldAuthoringDefaults))]
+// The contact-solver tuning (world.collision verb accessor) and the velocity-response array (world.kit.response verb
+// accessor). Both are also reachable from WorldDefinition/MotionTuning already; these entries expose the typed accessors.
+[JsonSerializable(typeof(WorldCollision))]
+[JsonSerializable(typeof(MotionResponse[]))]
 // The audio sections: the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
 // world.tune.set / world.patch.set / world.audio.set verb accessors). The embedded puck.audio.v1 / puck.synth.v1
 // documents ride their families' OWN canonical serializer shape, matching CreationDocumentJsonConverter's.
@@ -54,8 +66,20 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPatch))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
+// The host-section defaults row (world.host.set verb accessor + the document `host` section). WorldBackendPreference
+// and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
+// "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
+[JsonSerializable(typeof(WorldHostDefaults))]
+// The LOOK rows (world.look.set verb accessor + the document `looks`/`lookAssignment` sections). The polymorphic
+// look-source derived types carry explicit TypeInfoPropertyName entries so the source-gen simple names never collide
+// with WorldCreation / other "Catalog"/"Creation" nouns (SYSLIB1031), following the WorldSpeaker precedent above.
+[JsonSerializable(typeof(WorldLook))]
+[JsonSerializable(typeof(WorldLookSource.Catalog), TypeInfoPropertyName = "WorldLookSourceCatalog")]
+[JsonSerializable(typeof(WorldLookSource.Creation), TypeInfoPropertyName = "WorldLookSourceCreation")]
+[JsonSerializable(typeof(WorldSpawnPolicy.Phyllotaxis), TypeInfoPropertyName = "WorldSpawnPolicyPhyllotaxis")]
+[JsonSerializable(typeof(WorldSpawnPolicy.PointCycle), TypeInfoPropertyName = "WorldSpawnPolicyPointCycle")]
 [JsonSourceGenerationOptions(
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter) },
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = true
@@ -105,12 +129,51 @@ internal sealed class Vector3JsonConverter : JsonConverter<Vector3> {
 }
 
 /// <summary>
+/// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
+/// / <c>vulkan</c>) rather than the context's camelCase enum policy, which would emit <c>directX</c> — a spelling no one
+/// types and gratuitously divergent from World's token style. The <c>world.host.tune backend</c> value grammar uses the
+/// same map, so the verb and the document never disagree.
+/// </summary>
+internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldBackendPreference> {
+    /// <inheritdoc/>
+    public override WorldBackendPreference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldHostTokens.ParseBackend(token: reader.GetString())
+            ?? throw new JsonException(message: $"backend '{reader.GetString()}' must be '{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldBackendPreference value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldHostTokens.BackendToken(backend: value));
+    }
+}
+
+/// <summary>
+/// Reads and writes the two authorable <see cref="SurfaceFormat"/> values as explicit tokens (<c>r8g8b8a8</c> /
+/// <c>b8g8r8a8</c>) rather than the context's camelCase enum policy, which would emit the unreadable <c>r8G8B8A8Unorm</c>.
+/// <see cref="SurfaceFormat.Unknown"/> and any other member are rejected at read (the validator also rejects
+/// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
+/// <c>world.host.tune surfaceFormat</c> value grammar uses the same map.
+/// </summary>
+internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat> {
+    /// <inheritdoc/>
+    public override SurfaceFormat Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldHostTokens.ParseSurfaceFormat(token: reader.GetString())
+            ?? throw new JsonException(message: $"surfaceFormat '{reader.GetString()}' must be '{WorldHostTokens.SurfaceFormatRgba}' or '{WorldHostTokens.SurfaceFormatBgra}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, SurfaceFormat value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldHostTokens.SurfaceFormatToken(format: value));
+    }
+}
+
+/// <summary>
 /// Bridges an embedded <see cref="Puck.Authoring.CreationDocument"/> (a <see cref="WorldCreation.Document"/>) through
 /// the creation contract's OWN serializer shape (<see cref="Puck.Authoring.DocumentJsonOptions.Shared"/> — member
 /// order, string enums, and the LOAD-BEARING <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
-/// writer, which is deterministic — the ouroboros gate covers the composition.
+/// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
 internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Authoring.CreationDocument> {
     /// <inheritdoc/>
@@ -153,7 +216,9 @@ internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Autho
 }
 
 /// <summary>
-/// The canonical serializer for the world document — the ouroboros gate. <see cref="Save"/> emits a stable canonical
+/// The canonical serializer for the world document — the ouroboros round-trip.
+/// The round-trip is an observed property, not an acceptance criterion.
+/// <see cref="Save"/> emits a stable canonical
 /// form (member order = record declaration order, invariant number formatting, no incidental whitespace drift): UTF-8
 /// with no BOM, LF newlines, two-space indentation, and exactly one trailing newline at EOF, so a load→save reproduces
 /// the file byte-for-byte and world files stay diffable and git-friendly.
@@ -182,6 +247,29 @@ internal static class WorldDefinitionSerialization {
         stream.WriteByte(value: (byte)'\n');
 
         return stream.ToArray();
+    }
+
+    /// <summary>Deserializes and validates a definition from its canonical UTF-8 JSON bytes — the inverse of
+    /// <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes ride a
+    /// file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as one
+    /// <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.</summary>
+    /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
+    /// <returns>The deserialized, validated definition.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.def.v1</c> document.</exception>
+    public static WorldDefinition Deserialize(byte[] utf8Json) {
+        ArgumentNullException.ThrowIfNull(argument: utf8Json);
+
+        try {
+            var definition = (JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
+                ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null."));
+
+            WorldDefinitionValidator.Validate(definition: definition);
+
+            return definition;
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            throw new InvalidDataException(message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}", innerException: exception);
+        }
     }
 
     /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path).</summary>

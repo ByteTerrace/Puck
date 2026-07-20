@@ -4,15 +4,15 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// WHERE a placeable thing rides — the shared pose-target vocabulary a placeable camera
-/// (<see cref="WorldCamera.Anchored"/>) and a future placeable speaker both consume, distinct from HOW the thing
-/// looks at or emits from that pose (a rig, a feed). The <c>$type</c> string is the JSON discriminator, matching
-/// <see cref="WorldCamera"/>'s convention; a new anchor kind is a new derived record plus its
-/// <see cref="JsonDerivedTypeAttribute"/> line.
+/// WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable <see cref="WorldCamera"/> and a
+/// placeable <see cref="WorldSpeaker"/> both consume through the SAME resolver, distinct from HOW the thing looks at or
+/// emits from that pose (a <see cref="WorldRig"/>, a feed). The <c>$type</c> string is the JSON discriminator; a new
+/// anchor kind is a new derived record plus its <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
 [JsonDerivedType(typeof(WorldAnchor.Entity), typeDiscriminator: "entity")]
 [JsonDerivedType(typeof(WorldAnchor.EntityLeaf), typeDiscriminator: "entityLeaf")]
 [JsonDerivedType(typeof(WorldAnchor.Placement), typeDiscriminator: "placement")]
+[JsonDerivedType(typeof(WorldAnchor.Group), typeDiscriminator: "group")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldAnchor {
     private WorldAnchor() {
@@ -39,4 +39,14 @@ internal abstract record WorldAnchor {
     /// <param name="ShapeId">The referenced creation's <c>ShapeDocument.Id</c> to ride, or <see langword="null"/> for
     /// the placement's own stamped root transform.</param>
     internal sealed record Placement(string PlacementId, int? ShapeId) : WorldAnchor;
+
+    /// <summary>Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also
+    /// publishes the set's SPREAD (mean distance from the centroid), which <see cref="WorldRig.Chase"/> consumes through
+    /// its <c>SpreadPullback</c> to widen as the group scatters. A group has no facing, so its orientation resolves to
+    /// identity (frame a group shot in world axes — set <see cref="WorldRig.Chase.WorldAxes"/> to <see langword="true"/>).</summary>
+    /// <param name="Indices">The 0-based entity indices in the set, or <see langword="null"/> for the whole live
+    /// population (every active entity). Each index is validated 0..127.</param>
+    /// <param name="SmoothRate">The exponential smoothing rate (per second) the centroid/spread ease at (validated
+    /// positive and finite) — seeded un-smoothed on first resolve so a camera does not fly in from the origin.</param>
+    internal sealed record Group(IReadOnlyList<int>? Indices, float SmoothRate) : WorldAnchor;
 }

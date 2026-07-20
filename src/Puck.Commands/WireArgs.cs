@@ -24,6 +24,9 @@ namespace Puck.Commands;
 /// success echo string when acks are quiet — the branch that makes a flooded quiet wire path allocate nothing.
 /// </remarks>
 public readonly ref struct WireArgs {
+    // The scratch size Tail joins on the stack before renting the heap.
+    private const int MaxStackTail = 512;
+
     private readonly ReadOnlySpan<char> m_line;
     private readonly ReadOnlySpan<Range> m_ranges;
     private readonly string[]? m_array;
@@ -49,6 +52,10 @@ public readonly ref struct WireArgs {
         Echo = echo;
     }
 
+    /// <summary>An empty argument list — the explicit "this call site supplies no tokens" value for a helper that takes
+    /// <see cref="WireArgs"/> but is being reached from a path that has none.</summary>
+    public static WireArgs Empty => default;
+
     /// <summary>The number of trailing tokens (the verb token is not counted).</summary>
     public int Count => (m_array?.Length ?? m_ranges.Length);
 
@@ -69,6 +76,54 @@ public readonly ref struct WireArgs {
     /// string and marks the result <see cref="CommandResult.IsError"/>, and errors are never suppressed.
     /// </summary>
     public bool Echo { get; }
+
+    /// <summary>Whether the token at <paramref name="index"/> equals <paramref name="value"/> case-insensitively — the
+    /// allocation-free replacement for the <c>args[i].ToUpperInvariant() switch</c> idiom. An out-of-range index is
+    /// <see langword="false"/>, so a caller can test an optional token without first checking <see cref="Count"/>.</summary>
+    /// <param name="index">The zero-based trailing-token index.</param>
+    /// <param name="value">The word to compare against.</param>
+    /// <returns>Whether the token exists and matches.</returns>
+    public bool Is(int index, string value) => (((uint)index < (uint)Count) &&
+        this[index].Equals(other: value, comparisonType: StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Joins the tokens from <paramref name="start"/> onward with single spaces — the ONE place a verb whose
+    /// argument is free text (a path, a name, a message) or a whitespace-split inline-JSON payload rebuilds its tail.
+    /// Reproduces <c>string.Join(' ', args[start..])</c>: interior whitespace runs collapse to one space, exactly as
+    /// the token-array form always did.</summary>
+    /// <param name="start">The zero-based trailing-token index to join from.</param>
+    /// <returns>The joined text, or <see cref="string.Empty"/> when no token sits at or after <paramref name="start"/>.</returns>
+    public string Tail(int start) {
+        var count = Count;
+
+        if (start >= count) {
+            return string.Empty;
+        }
+
+        var length = (count - start - 1);
+
+        for (var index = start; (index < count); index++) {
+            length += this[index].Length;
+        }
+
+        // One allocation: the result. The scratch buffer is the stack below the common-tail size (a path, a name, a
+        // short inline-JSON row), a heap array only for a genuinely long tail.
+        var destination = ((length <= MaxStackTail) ? stackalloc char[MaxStackTail] : new char[length]);
+        var offset = 0;
+
+        for (var index = start; (index < count); index++) {
+            if (index > start) {
+                destination[offset++] = ' ';
+            }
+
+            var token = this[index];
+
+            token.CopyTo(destination: destination[offset..]);
+
+            offset += token.Length;
+        }
+
+        return new string(value: destination[..length]);
+    }
 
     /// <summary>Parses the token at <paramref name="index"/> as a finite invariant-culture <see cref="float"/> straight
     /// from its span (no thousands separators, NaN, or infinities), matching <see cref="CommandArgs.TryParseFloat"/>.</summary>

@@ -1,4 +1,3 @@
-using System.CommandLine;
 using System.Text;
 
 namespace Puck.Commands;
@@ -21,19 +20,19 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
             handler: _ => new CommandResult(List()),
             name: "feature.list"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Sets a feature switch: feature.set <name> <value>. The value must be one of the switch's allowed values; a switch may still reject it (read-only / boot-only).",
-            handler: (_, args) => new CommandResult(Set(args: args)),
+            handler: (_, args) => new CommandResult(Set(args: in args)),
             name: "feature.set"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Reads one feature switch: feature.get <name> — echoes its current value, default, kind, and allowed set.",
-            handler: (_, args) => new CommandResult(Get(args: args)),
+            handler: (_, args) => new CommandResult(Get(args: in args)),
             name: "feature.get"
         );
-        yield return WithArgs(
+        yield return CommandDefinition.WithWireArgs(
             description: "Resets a feature switch to its default: feature.reset [name]. With no name, resets every switch.",
-            handler: (_, args) => new CommandResult(Reset(args: args)),
+            handler: (_, args) => new CommandResult(Reset(args: in args)),
             name: "feature.reset"
         );
     }
@@ -77,13 +76,13 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
         // Trim the trailing newline so the result is one transcript block, not a block plus a blank line.
         return builder.ToString().TrimEnd();
     }
-    private string Set(string[] args) {
-        if (args.Length < 2) {
+    private string Set(in WireArgs args) {
+        if (args.Count < 2) {
             return "[feature.set: usage — feature.set <name> <value>]";
         }
 
-        var name = args[0];
-        var value = args[1];
+        var name = args[0].ToString();
+        var value = args[1].ToString();
 
         if (!m_registry.TryGet(name: name, descriptor: out var descriptor)) {
             return $"[feature.set: unknown switch '{name}' — feature.list shows the valid set]";
@@ -99,12 +98,12 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
 
         return $"[feature.set: {name} = {descriptor.Get()}]";
     }
-    private string Get(string[] args) {
-        if (args.Length < 1) {
+    private string Get(in WireArgs args) {
+        if (args.Count < 1) {
             return "[feature.get: usage — feature.get <name>]";
         }
 
-        var name = args[0];
+        var name = args[0].ToString();
 
         if (!m_registry.TryGet(name: name, descriptor: out var descriptor)) {
             return $"[feature.get: unknown switch '{name}' — feature.list shows the valid set]";
@@ -112,8 +111,8 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
 
         return $"[feature.get: {name} = {descriptor.Get()} (default {descriptor.DefaultValue}, kind {descriptor.Kind}, allowed {string.Join(separator: '/', values: descriptor.AllowedValues)})]";
     }
-    private string Reset(string[] args) {
-        if (args.Length == 0) {
+    private string Reset(in WireArgs args) {
+        if (args.Count == 0) {
             foreach (var entry in m_registry.All) {
                 _ = entry.Set(arg: entry.DefaultValue);
             }
@@ -121,7 +120,7 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
             return $"[feature.reset: {m_registry.All.Count} switch(es) restored to defaults]";
         }
 
-        var name = args[0];
+        var name = args[0].ToString();
 
         if (!m_registry.TryGet(name: name, descriptor: out var descriptor)) {
             return $"[feature.reset: unknown switch '{name}' — feature.list shows the valid set]";
@@ -146,22 +145,4 @@ public sealed class FeatureSwitchCommandModule(FeatureSwitchRegistry registry) :
     // A no-argument console verb (mirrors GravityCommandModule.Plain).
     private static CommandDefinition Plain(string description, Func<CommandContext, CommandResult> handler, string name) =>
         CommandDefinition.Verb(description: description, handler: handler, name: name, valueKind: CommandValueKind.Digital);
-
-    // An argument-taking console verb: one trailing token list, parsed by the handler (mirrors GravityCommandModule.WithArgs).
-    private static CommandDefinition WithArgs(string description, Func<CommandContext, string[], CommandResult> handler, string name) {
-        var rest = new Argument<string[]>(name: "args") {
-            Arity = ArgumentArity.ZeroOrMore,
-            Description = description,
-        };
-
-        return new CommandDefinition(
-            Description: description,
-            Handler: context => handler(arg1: context, arg2: (context.Parse?.GetValue(argument: rest) ?? [])),
-            Name: name,
-            TextCommand: new Command(description: description, name: name) {
-                rest,
-            },
-            ValueKind: CommandValueKind.Digital
-        );
-    }
 }

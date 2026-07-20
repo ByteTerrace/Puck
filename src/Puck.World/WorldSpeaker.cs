@@ -114,7 +114,7 @@ internal abstract record WorldSpeaker(
     /// <param name="Name">The speaker's stable name.</param>
     /// <param name="Center">The region's extent center, world space.</param>
     /// <param name="Radius">The region's outer radius — the envelope's zero and the cull edge.</param>
-    /// <param name="InnerRadius">The full-presence inner radius (null = 0 — the envelope shoulders from the center).</param>
+    /// <param name="InnerRadius">The full-presence inner radius; <c>0</c> shoulders the envelope from the center.</param>
     /// <param name="FadeSeconds">The presence slew bound in seconds (null = the audio defaults'
     /// <c>DefaultBedFadeSeconds</c>).</param>
     /// <param name="Feed">The feed it plays.</param>
@@ -122,7 +122,7 @@ internal abstract record WorldSpeaker(
         string Name,
         Vector3 Center,
         float Radius,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? InnerRadius,
+        float InnerRadius,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds,
         WorldSpeakerFeed Feed
     ) : WorldSpeaker(Name: Name, Feed: Feed, Attenuation: null);
@@ -260,16 +260,25 @@ internal sealed record WorldAudioCue(
 /// <param name="Listener">The listener policy: <see cref="ListenerFocus"/> (the active view
 /// camera's pose listens), <c>seat:&lt;n&gt;</c> (that seat's view camera), or a declared camera name — so a stage
 /// or museum world can pin its listener without touching the runtime.</param>
-/// <param name="Cues">THE CUE TABLE (default empty/absent): world events tied to sound as data —
-/// see <see cref="WorldAudioCue"/>. <see langword="null"/> in JSON reads as empty and is omitted on write.</param>
+/// <param name="Cues">THE CUE TABLE (default empty): world events tied to sound as data —
+/// see <see cref="WorldAudioCue"/>.</param>
 internal sealed record WorldAudioDefaults(
     float MasterGain,
     float DefaultSpeakerRadius,
     string DefaultCurve,
     float DefaultBedFadeSeconds,
     string Listener,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAudioCue>? Cues = null
+    IReadOnlyList<WorldAudioCue> Cues
 ) {
+    private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
+
+    /// <summary>The cue table. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="MotionTuning.Response"/>'s does.</summary>
+    public IReadOnlyList<WorldAudioCue> Cues {
+        get => m_cues;
+        init => m_cues = (value ?? []);
+    }
+
     /// <summary>The focus listener policy token — the active view camera's pose listens.</summary>
     public const string ListenerFocus = "focus";
     /// <summary>The seat listener policy prefix (<c>seat:1</c>..<c>seat:4</c>).</summary>
@@ -284,6 +293,7 @@ internal sealed record WorldAudioDefaults(
         DefaultSpeakerRadius: 8f,
         DefaultCurve: CurveSmoothstep,
         DefaultBedFadeSeconds: 0.5f,
-        Listener: ListenerFocus
+        Listener: ListenerFocus,
+        Cues: []
     );
 }

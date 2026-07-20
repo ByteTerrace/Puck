@@ -66,6 +66,7 @@ internal sealed class WorldOverlayFeed {
     private readonly WorldScreenBinder m_binder;
     private readonly WorldServer m_server;
     private readonly WorldAudioDirector m_audio;
+    private readonly Puck.Launcher.PresentPacingControl m_pacing;
     // The last edit act's class (fed by the EchoTap wiring and the settings-revision watch), the cached drift hint,
     // the per-seat exclusive-hold labels, and the generation counter the HUD caches key on — all bumped at human
     // cadence only.
@@ -109,8 +110,9 @@ internal sealed class WorldOverlayFeed {
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
     /// <param name="workbench">The sculpt workbench whose bench facts the HUD narrates while a seat sculpts.</param>
     /// <param name="audio">The audio director (the master-volume lever — a drift dimension).</param>
+    /// <param name="pacing">The present-pacing control (the world.target lever — a drift dimension).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio, Puck.Launcher.PresentPacingControl pacing) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -126,8 +128,10 @@ internal sealed class WorldOverlayFeed {
         ArgumentNullException.ThrowIfNull(argument: targeting);
         ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: pacing);
 
         m_audio = audio;
+        m_pacing = pacing;
         m_workbench = workbench;
         m_bindings = bindings;
         m_binder = binder;
@@ -222,6 +226,7 @@ internal sealed class WorldOverlayFeed {
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
                 Hints: HintLinesFor(slot: slot, view: view),
+                Label: (view.Label ?? view.PageId),
                 Modifiers: m_modifiers[viewIndex].AsMemory(start: 0, length: modifierCount),
                 PageId: view.PageId,
                 Slots: m_slots[viewIndex],
@@ -281,7 +286,7 @@ internal sealed class WorldOverlayFeed {
 
         m_sessionSweepCountdown = SessionSweepFrames;
 
-        var drift = WorldSessionCapture.DescribeDrift(definition: m_client.Definition, render: m_settings, population: m_population, binder: m_binder, audio: m_audio);
+        var drift = WorldSessionCapture.DescribeDrift(definition: m_client.Definition, render: m_settings, population: m_population, binder: m_binder, audio: m_audio, pacing: m_pacing);
 
         if (!string.Equals(a: drift, b: m_driftHint, comparisonType: StringComparison.Ordinal)) {
             // Drift moved without a lever write or a mutation note in the window: the remaining producers are the live

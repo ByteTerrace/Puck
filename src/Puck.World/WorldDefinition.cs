@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 using Puck.Authoring;
 using Puck.Commands;
 using Puck.Maths;
@@ -30,6 +31,8 @@ namespace Puck.World;
 /// <param name="JumpCutMultiplier">The early-release up-velocity cut (a dimensionless ratio) — a tap is a short hop.</param>
 /// <param name="CoyoteTime">The grace after leaving ground where a jump still fires (seconds — a time, so unscaled).</param>
 /// <param name="JumpBufferTime">The window before landing where a press is remembered and fires on touchdown (seconds — unscaled).</param>
+/// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING. The empty
+/// table snaps planar velocity instantly.</param>
 internal readonly record struct MotionTuning(
     float MoveSpeed,
     float TurnSpeed,
@@ -40,8 +43,19 @@ internal readonly record struct MotionTuning(
     float MaxFallSpeed,
     float JumpCutMultiplier,
     float CoyoteTime,
-    float JumpBufferTime
+    float JumpBufferTime,
+    IReadOnlyList<MotionResponse> Response
 ) {
+    private readonly IReadOnlyList<MotionResponse> m_response = (Response ?? []);
+
+    /// <summary>The velocity-response table. The type's ONE absence-coalesce: source generation constructs this struct
+    /// through its parameterless constructor and the init accessors, leaving an absent JSON property null, so the
+    /// accessor — not each reader — makes the table a list.</summary>
+    public IReadOnlyList<MotionResponse> Response {
+        get => m_response;
+        init => m_response = (value ?? []);
+    }
+
     /// <summary>The factor <see cref="Default"/> scales its jump-kit spatial constants by (World runs at half the speed
     /// scale the constants were authored at). See the type remarks for why the ratios and windows are exempt.</summary>
     public const float DefaultActionScale = 0.5f;
@@ -58,8 +72,98 @@ internal readonly record struct MotionTuning(
         MaxFallSpeed: (40f * DefaultActionScale),
         JumpCutMultiplier: 0.45f,
         CoyoteTime: 0.09f,
-        JumpBufferTime: 0.10f
+        JumpBufferTime: 0.10f,
+        Response: []
     );
+}
+
+/// <summary>
+/// The world's MOTION defaults — the ground plane every grounded body pins its foot point to, plus the profileless
+/// locomotion speeds a stand-in with no seated profile advances on. This is the whole top-level motion section: jump
+/// feel, gravity, and the velocity-response table are PER-KIT (<see cref="WorldKit.Tuning"/>), which is the only place
+/// a body ever reads them from, and <c>world.kit.tune</c> is the surface that moves them.
+/// </summary>
+/// <remarks>Unmapped members are REJECTED: a <c>world.motion.set</c> or a document carrying <c>jumpSpeed</c> here fails
+/// by name rather than accepting a value nothing reads.</remarks>
+/// <param name="MoveSpeed">Locomotion speed in world units per second — the profileless fallback a stand-in advances on
+/// (a seated player reads its live profile's speed instead, so <c>profile.set</c> stays real-time).</param>
+/// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart to <paramref name="MoveSpeed"/>).</param>
+/// <param name="GroundY">The ground plane the grounded model pins the avatar's foot point to (unless a jump has lifted it).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal readonly record struct WorldMotionDefaults(
+    float MoveSpeed,
+    float TurnSpeed,
+    float GroundY
+) {
+    /// <summary>The built-in motion defaults.</summary>
+    public static WorldMotionDefaults Default { get; } = new WorldMotionDefaults(MoveSpeed: 4f, TurnSpeed: 2.5f, GroundY: 0f);
+}
+
+/// <summary>The one-time fixed-point compilation of the world's motion defaults. Runtime simulation reads only this
+/// form.</summary>
+internal readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed, FixedQ4816 GroundY) {
+    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
+    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
+        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
+        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
+        GroundY: FixedQ4816.FromDouble(value: motion.GroundY)
+    );
+}
+
+/// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
+/// target while <paramref name="Gate"/> holds. Rows evaluate in order, FIRST match wins; a body matching no row
+/// snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the
+/// action-lane predicate vocabulary — only body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>) are admissible.</summary>
+/// <param name="Gate">The body-fact predicate that must hold for this row to win, or <see langword="null"/> for the
+/// always-row (permitted only as the final row).</param>
+/// <param name="EngageRate">The convergence rate (world units/second²) while the stick is deflected — acceleration
+/// toward the commanded target.</param>
+/// <param name="ReleaseRate">The convergence rate while the stick is centered — deceleration toward rest (the coast).</param>
+internal sealed record MotionResponse(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate,
+    float EngageRate,
+    float ReleaseRate
+);
+
+/// <summary>A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is
+/// the whole switch; <see langword="null"/> means decoration — the row is drawn but bodies pass through it.</summary>
+/// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
+/// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
+internal sealed record WorldSolid(float Margin);
+
+/// <summary>A kit's body VOLUME — a vertical capsule from the foot point in the body's own up axis. A kit with no
+/// collider is not solved against the contact field at all.</summary>
+/// <param name="Radius">The capsule radius (world units).</param>
+/// <param name="Height">Total height from the foot point; must be at least twice <paramref name="Radius"/> — a shorter
+/// capsule is a sphere and is rejected rather than silently clamped.</param>
+internal sealed record WorldCollider(float Radius, float Height);
+
+/// <summary>Which contact field answers a world's collision queries.</summary>
+internal enum WorldContactProvider : byte {
+    /// <summary>Derives convex colliders from the document's own solid rows (cheap, the default).</summary>
+    Analytic,
+
+    /// <summary>Compiles the solid rows into an SDF (required for planetoids, smooth-union contact surfaces, and solid
+    /// placements — landed by Arc 2).</summary>
+    Field,
+}
+
+/// <summary>The contact solver's world-scale tuning. Collision is OFF under <see cref="None"/>: the world keeps its
+/// flat <see cref="WorldMotionDefaults.GroundY"/> plane.</summary>
+/// <param name="Enabled">Whether contact resolution runs at all.</param>
+/// <param name="Provider">Which contact field answers. <c>analytic</c> derives convex colliders from the document's own
+/// solid rows (cheap, the default); <c>field</c> compiles them into an SDF (Arc 2).</param>
+/// <param name="ContactSkin">The signed skin the solver keeps between a body and every surface (world units).</param>
+/// <param name="MaxIterations">The relaxation iteration count per tick (above 8 is a solver pathology, not a choice).</param>
+/// <param name="MaxSlopeDegrees">The steepest surface a body still counts as STANDING on. A contact whose normal leans
+/// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
+/// <param name="GradientProbe">The finite-difference step the FIELD provider samples the surface normal with, in world
+/// units; 0 takes the evaluator's own default. Only meaningful under <c>field</c>.</param>
+internal sealed record WorldCollision(bool Enabled, WorldContactProvider Provider, float ContactSkin,
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
+    /// <summary>The built-in default: collision OFF (a world declaring nothing keeps its flat ground plane).</summary>
+    public static WorldCollision None { get; } = new(Enabled: false, Provider: WorldContactProvider.Analytic,
+        ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f);
 }
 
 /// <summary>
@@ -68,7 +172,7 @@ internal readonly record struct MotionTuning(
 /// <see cref="FixedWanderTuning"/> before simulation.
 /// </summary>
 /// <remarks>The forward-drift deflection is <see cref="DriftSpeed"/> divided by the profileless move speed
-/// (<see cref="MotionTuning.MoveSpeed"/>), so it crosses both tunings; <see cref="WorldPopulation"/> derives it from the
+/// (<see cref="WorldMotionDefaults.MoveSpeed"/>), so it crosses both sections; <see cref="WorldPopulation"/> derives it from the
 /// two.</remarks>
 /// <param name="DriftSpeed">The forward drift in world units per second a stand-in gently walks at.</param>
 /// <param name="SoftRadius">The disc radius a stand-in is spring-steered back inside once it strays past.</param>
@@ -276,6 +380,56 @@ internal readonly record struct WanderFlavor(
     float AltitudeRange
 );
 
+/// <summary>What an attending body steers toward. ADMISSION RULE: a genuinely new way of CHOOSING a target is a new
+/// member here; a new way of MOVING toward one is a new <see cref="AttendFlavor"/> value, never a member here.</summary>
+internal enum AttendTarget : byte {
+    /// <summary>The nearest active LOCAL seat (indices 0..3) — the companion's "amble toward the player" target.</summary>
+    NearestSeat,
+
+    /// <summary>The nearest active body of ANY kind (seat, peer, or inhabitant) other than the attending body itself.</summary>
+    NearestBody,
+}
+
+/// <summary>A kit's attend-producer flavor — the authored constants the deterministic attend producer shapes an
+/// entity's gap-filling intent with while a target is in range. A kit without one cannot attend. SIM-AFFECTING:
+/// compiled once, never re-read as float.</summary>
+/// <param name="NoticeRadius">Where an in-band target is acquired (the acquire threshold).</param>
+/// <param name="ReleaseRadius">Where an acquired target is dropped back to the wander flavor (must exceed
+/// <paramref name="NoticeRadius"/> — the hysteresis band that stops edge flicker).</param>
+/// <param name="StandoffRadius">The distance the body holds off its target at (the orbit standoff).</param>
+/// <param name="Approach">The forward closure deflection while outside standoff (0..1).</param>
+/// <param name="Orbit">The strafe deflection held at standoff — the lateral amble (0..1; 0 = face and hold).</param>
+/// <param name="FaceTarget">Whether the body turns to face its target.</param>
+/// <param name="Target">What the body steers toward.</param>
+internal readonly record struct AttendFlavor(float NoticeRadius, float ReleaseRadius, float StandoffRadius,
+    float Approach, float Orbit, bool FaceTarget, AttendTarget Target);
+
+/// <summary>The one-time fixed-point compilation of an <see cref="AttendFlavor"/>. Radii compile to SQUARES so the
+/// producer never takes a square root per body per tick.</summary>
+internal readonly record struct FixedAttendFlavor(FixedQ4816 NoticeRadiusSquared, FixedQ4816 ReleaseRadiusSquared,
+    FixedQ4816 StandoffRadius, FixedQ4816 Approach, FixedQ4816 Orbit, bool FaceTarget, AttendTarget Target) {
+    /// <summary>Compiles an authored attend flavor to fixed point (the once-at-the-boundary rule), or <see langword="null"/>
+    /// for a kit that declares none (it cannot attend).</summary>
+    public static FixedAttendFlavor? Compile(AttendFlavor? flavor) {
+        if (flavor is not { } value) {
+            return null;
+        }
+
+        var notice = FixedQ4816.FromDouble(value: value.NoticeRadius);
+        var release = FixedQ4816.FromDouble(value: value.ReleaseRadius);
+
+        return new FixedAttendFlavor(
+            NoticeRadiusSquared: (notice * notice),
+            ReleaseRadiusSquared: (release * release),
+            StandoffRadius: FixedQ4816.FromDouble(value: value.StandoffRadius),
+            Approach: FixedQ4816.FromDouble(value: value.Approach),
+            Orbit: FixedQ4816.FromDouble(value: value.Orbit),
+            FaceTarget: value.FaceTarget,
+            Target: value.Target
+        );
+    }
+}
+
 /// <summary>One locomotion kit — a world-definition row naming a way of moving: the integrator it runs under
 /// (<see cref="Puck.World.Protocol.MotionModel"/>, an engine fact selected per row), the locomotion/jump tuning its
 /// bodies compile, its wander-producer flavor, and its action-lane bindings. Every game-flavored movement noun is a
@@ -286,13 +440,20 @@ internal readonly record struct WanderFlavor(
 /// <param name="Flavor">The wander-producer flavor.</param>
 /// <param name="PrimaryAction">The <see cref="Puck.World.Protocol.ActionLanes.Primary"/> binding, or <see langword="null"/> unbound.</param>
 /// <param name="SecondaryAction">The <see cref="Puck.World.Protocol.ActionLanes.Secondary"/> binding, or <see langword="null"/> unbound.</param>
+/// <param name="Collider">The kit's body VOLUME — a vertical capsule solved against the world contact field, or
+/// <see langword="null"/> for a kit with no volume (never solved against the field). Omitted from the wire when null.</param>
+/// <param name="Attend">The attend-producer flavor a body wakes on under <see cref="Puck.World.Protocol.IntentSource.Attend"/>,
+/// or <see langword="null"/> for a kit that cannot attend (validation rejects an <c>Attend</c>-sourced inhabitant on a
+/// kit with no flavor). Omitted from the wire when null.</param>
 internal sealed record WorldKit(
     string Name,
     MotionModel Model,
     MotionTuning Tuning,
     WanderFlavor Flavor,
     ActionSpec? PrimaryAction,
-    ActionSpec? SecondaryAction
+    ActionSpec? SecondaryAction,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AttendFlavor? Attend = null
 );
 
 /// <summary>The flattened, fixed-point form of one predicate (a conjunction element).</summary>
@@ -370,7 +531,9 @@ internal sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrig
         );
     }
 
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
+    // Flattens a predicate ADT into a fixed-point conjunction gate, allocating one shared recency slot per Recently
+    // instance. Promoted to internal so the motion-response compiler (a non-lane caller) reuses the same slotting.
+    internal static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
         switch (predicate) {
             case null:
                 break;
@@ -456,7 +619,9 @@ internal readonly record struct FixedWorldKit(
     FixedQ4816 AltitudeBase,
     FixedQ4816 AltitudeRange,
     CompiledActionSpec? Primary,
-    CompiledActionSpec? Secondary
+    CompiledActionSpec? Secondary,
+    FixedWorldCollider? Collider,
+    FixedAttendFlavor? Attend
 ) {
     /// <summary>Compiles a kit row's authored floats to fixed point (the once-at-the-boundary rule).</summary>
     public static FixedWorldKit Compile(WorldKit kit) => new(
@@ -472,14 +637,18 @@ internal readonly record struct FixedWorldKit(
         AltitudeBase: FixedQ4816.FromDouble(value: kit.Flavor.AltitudeBase),
         AltitudeRange: FixedQ4816.FromDouble(value: kit.Flavor.AltitudeRange),
         Primary: CompiledActionSpec.Compile(spec: kit.PrimaryAction),
-        Secondary: CompiledActionSpec.Compile(spec: kit.SecondaryAction)
+        Secondary: CompiledActionSpec.Compile(spec: kit.SecondaryAction),
+        Collider: FixedWorldCollider.Compile(collider: kit.Collider),
+        Attend: FixedAttendFlavor.Compile(flavor: kit.Attend)
     );
 }
 
 /// <summary>
 /// One row of the world's static scene — a shape smooth-unioned into the accumulated field, addressed by its stable
 /// <paramref name="Id"/> (its mutation address; the <c>UpsertSceneRow</c>/<c>RemoveSceneRow</c> whole-row key).
-/// Presentation-only geometry; the id carries no meaning beyond identity. The <c>$type</c> string is the JSON
+/// The geometry is PRESENTATION-ONLY, but the <paramref name="Solid"/> facet is SIM-AFFECTING when present: the analytic
+/// contact field derives a convex collider from the row's shape, so a slice of a scene row now feeds
+/// <see cref="WorldBody.Advance"/>. The id carries no meaning beyond identity. The <c>$type</c> string is the JSON
 /// discriminator, matching <see cref="WorldCamera"/>'s convention; a new row kind is a new derived record plus its
 /// <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
@@ -487,15 +656,18 @@ internal readonly record struct FixedWorldKit(
 /// <param name="Center">The shape's world-space center (its translate offset from the origin) — the position every
 /// manipulation edits.</param>
 /// <param name="Emission">The row's emission facet (a synth voice the shape itself makes — see
-/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null, so
-/// emission-free rows stay byte-identical.</param>
+/// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null.</param>
+/// <param name="Solid">The row's solidity facet (see <see cref="WorldSolid"/>) — SIM-AFFECTING: when present the analytic
+/// contact field derives a convex collider from the row's shape and bodies bump into and stand on it. <see langword="null"/>
+/// means decoration — bodies pass through it. Omitted from the wire when null.</param>
 [JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
 [JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldSceneRow(
     string Id,
     Vector3 Center,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid
 ) {
     /// <summary>A stone boulder — a sphere carrying the scene's shared <see cref="WorldScene.StoneAlbedo"/>.</summary>
     /// <param name="Id">The row's stable string id.</param>
@@ -503,7 +675,8 @@ internal abstract record WorldSceneRow(
     /// <param name="Radius">The sphere radius.</param>
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
     /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
-    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
+    /// <param name="Solid">The row's solidity facet (a sphere of <c>Radius + Margin</c>), or <see langword="null"/>.</param>
+    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null, WorldSolid? Solid = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission, Solid: Solid);
 
     /// <summary>A terrain slab — a rounded box patch (a plaza tile, a step, a wall segment) whose material is data on
     /// the row.</summary>
@@ -514,7 +687,8 @@ internal abstract record WorldSceneRow(
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
     /// <param name="Albedo">The slab's own albedo (per-row material, unlike the shared boulder stone).</param>
     /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
-    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
+    /// <param name="Solid">The row's solidity facet (a box of <c>HalfExtents + Margin</c>), or <see langword="null"/>.</param>
+    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null, WorldSolid? Solid = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission, Solid: Solid);
 
     /// <summary>Returns this row with a replaced <see cref="Center"/> — the shape-preserving move every drag commit and
     /// numeric move composes through.</summary>
@@ -528,7 +702,8 @@ internal abstract record WorldSceneRow(
 
 /// <summary>The world's static scene — a ground plane plus the shape rows. The materials are inline albedo colors (not
 /// palette indices): the frame source allocates one grass material, one per-row material (a boulder's from
-/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>.</summary>
+/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>. The scene is
+/// PRESENTATION-ONLY except for any row carrying a <see cref="WorldSolid"/> facet, which is SIM-AFFECTING (contact).</summary>
 /// <param name="GroundAlbedo">The grass ground plane's albedo.</param>
 /// <param name="StoneAlbedo">The shared albedo every boulder row renders with.</param>
 /// <param name="Rows">The scene's shape rows, emitted in order after the ground plane.</param>
@@ -577,13 +752,43 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
     public int TotalCount => (Math.Max(val1: CountX, val2: 1) * Math.Max(val1: CountZ, val2: 1));
 }
 
+/// <summary>A placement's INHABIT facet — the row's binding to live population bodies. An inhabited placement is a
+/// normal entry in the entity table: it holds a <see cref="Puck.World.Server.WorldBody"/>, integrates under the named
+/// kit, and is addressable as <see cref="WorldAnchor.Entity"/> like any avatar. Its stamp rides the body's pose instead
+/// of the row's static transform; the row's position/yaw become its SPAWN pose. Absent (null) = decoration, the
+/// unchanged furniture behaviour.</summary>
+/// <param name="Kit">The <see cref="WorldKit.Name"/> the bodies move under. Null resolves the creation's own
+/// <see cref="Puck.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
+/// inhabits the world's kit row named "swim". Neither resolving is a loud rejection naming every kit the world
+/// declares.</param>
+/// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
+/// this placement's own <c>CreationId</c>.</param>
+/// <param name="Source">The gap-filling producer the bodies wake on (Idle/Wander/Attend; Live is legal and means
+/// "nothing drives it until a principal does").</param>
+/// <param name="Count">How many bodies (1..<see cref="Puck.World.Server.WorldPopulation.MaxPopulationSimulated"/>).</param>
+/// <param name="Radius">The phyllotaxis scatter radius about the placement position; 0 stacks them.</param>
+internal sealed record WorldPlacementInhabit(
+    string? Kit,
+    string? Look,
+    Puck.World.Protocol.IntentSource Source,
+    int Count = 1,
+    float Radius = 0f
+);
+
+/// <summary>A per-instance override of one declared creation face's feed — the face twin of the emission facet's
+/// per-instance override channel.</summary>
+/// <param name="Face">The declared <see cref="Puck.Authoring.CreationFaceDocument.Name"/> to override.</param>
+/// <param name="Source">The screen source the face shows, in the existing <see cref="WorldScreenSource"/> vocabulary.</param>
+internal sealed record WorldPlacementFace(string Face, WorldScreenSource Source);
+
 /// <summary>
 /// One placement INSTANCE row — a creation asset stamped into the world by reference: transform + facets as
 /// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is
 /// ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (repeat/mirror
-/// facets are static-stamp-only and reject on an animated row). A wallpaper-pattern facet and cabinet role strings
-/// are deliberately not carried; <paramref name="Role"/> is the reserved nullable seam a future driven-body rung
-/// lands in without schema surgery.
+/// facets are static-stamp-only and reject on an animated row). A placement carrying an <paramref name="Inhabit"/>
+/// facet is a live population body rather than furniture (see <see cref="WorldPlacementInhabit"/>); its declared
+/// creation eyes derive <see cref="WorldCamera"/> feeds and its declared faces derive screens (both at the delivery
+/// boundary, never written to the document).
 /// </summary>
 /// <param name="Id">The row's stable string id (its mutation address).</param>
 /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
@@ -594,11 +799,15 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
 /// <param name="Repeat">The repeat facet, or <see langword="null"/> for a single copy.</param>
 /// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame), or
 /// <see langword="null"/> for none.</param>
-/// <param name="Role">RESERVED for the driven-body rung (null = decoration). Carried, validated as free text, not
-/// yet consumed.</param>
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Repeat"/> the emission
 /// binds to the placement ROOT only. Omitted from the wire when null.</param>
+/// <param name="Solid">The placement's solidity facet (see <see cref="WorldSolid"/>) — needs the FIELD contact provider
+/// (Arc 2); a solid placement under the analytic provider is a loud validator error. Omitted from the wire when null.</param>
+/// <param name="Inhabit">The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from
+/// the wire when null.</param>
+/// <param name="FaceSources">Per-instance overrides of the creation's declared faces (null = every face shows its
+/// declared default). Omitted from the wire when null.</param>
 internal sealed record WorldPlacement(
     string Id,
     string CreationId,
@@ -607,8 +816,10 @@ internal sealed record WorldPlacement(
     float Scale,
     WorldPlacementRepeat? Repeat = null,
     string? Mirror = null,
-    string? Role = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabit? Inhabit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null
 );
 
 /// <summary>
@@ -623,6 +834,7 @@ internal sealed record WorldPlacement(
 [JsonDerivedType(typeof(WorldScreenSource.Camera), typeDiscriminator: "camera")]
 [JsonDerivedType(typeof(WorldScreenSource.View), typeDiscriminator: "view")]
 [JsonDerivedType(typeof(WorldScreenSource.Capture), typeDiscriminator: "capture")]
+[JsonDerivedType(typeof(WorldScreenSource.Console), typeDiscriminator: "console")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldScreenSource {
     private WorldScreenSource() {
@@ -664,7 +876,40 @@ internal abstract record WorldScreenSource {
     /// <param name="Profile">This capture consumer's output extent and maximum refresh cadence.</param>
     /// <param name="MonitorIndex">The 0-based monitor to capture whole (0 = primary), or <see langword="null"/> for window mode.</param>
     internal sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldScreenSource;
+
+    /// <summary>A screen showing the DEVELOPER CONSOLE as an object in the world — the diegetic half of the control plane
+    /// the unification contract names ("the on-screen panel AND process stdin"). The frame is CPU-composed into a
+    /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
+    /// nothing about it is a render-graph node. Complementary to — never a duplicate of — <c>WorldConsoleMirror</c>,
+    /// which publishes the SAME content to the screen-space overlay. At most one <c>console</c> source may be LIVE
+    /// (declared) at a time; an unselected console entry sitting in a magazine is legal.</summary>
+    /// <param name="Rows">Console text rows the framebuffer composes, 1..120. Sizes the CPU buffer.</param>
+    /// <param name="Columns">Console text columns, 1..400.</param>
+    /// <param name="Procedural">When true the slot shows the sibling generated pattern instead of console text — carried
+    /// as a MODE of this variant rather than as a seventh union case.</param>
+    internal sealed record Console(int Rows = 24, int Columns = 64, bool Procedural = false) : WorldScreenSource;
 }
+
+/// <summary>An ordered set of sources one screen may show, plus the entry its selector starts on — the cycle primitive. A
+/// selection is a POINTER into this list; changing it never changes how many screen slots exist, so a magazine costs no
+/// render envelope. Entries are the same closed <see cref="WorldScreenSource"/> vocabulary the declared source uses, so a
+/// screen may rotate a cartridge, the webcam, and a jumbotron view through one slot.</summary>
+/// <param name="Entries">The ordered source list (at least one entry).</param>
+/// <param name="Selected">The 0-based entry the selector STARTS on (what <c>screen.select</c> advances from), not what the
+/// screen boots showing — a screen always wakes on its declared <c>Source</c> (the one-live-console ceiling depends on
+/// this). Live selection drifts from this and is folded back by <c>world.save</c> (see <see cref="WorldSessionCapture"/>).</param>
+/// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
+/// when false the selector clamps at both ends.</param>
+internal sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);
+
+/// <summary>A cable-linked group of screens whose machines advance as ONE interleaved unit. The binder steps the link,
+/// never its members individually, so the engine's deterministic interleave — not the host's frame order — decides who
+/// runs when. Every member must resolve to a machine from the SAME engine, and that engine must implement
+/// <c>IMachineLinkingEngine</c>; a link whose members do not currently satisfy that is reported dormant, never silently
+/// dropped.</summary>
+/// <param name="Name">The link's stable kebab-case name (its mutation address).</param>
+/// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
+internal sealed record WorldScreenLink(string Name, IReadOnlyList<int> Screens);
 
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
@@ -677,12 +922,21 @@ internal readonly record struct WorldFeedProfile(int Width, int Height, uint Ref
     public static WorldFeedProfile Default { get; } = new(Width: 320, Height: 240, RefreshRateHz: 30U);
 }
 
-/// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen and the
-/// activation radius.</summary>
+/// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen, the activation
+/// radius, whether engaging auto-boots the selected magazine entry, and the world-event channels a gesture drives it
+/// through. The optional members each default to the inert choice: no auto-boot and no gesture channel.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
-/// <paramref name="Engageable"/>).</param>
-internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius) {
+/// <paramref name="Engageable"/>). Validated finite and non-negative.</param>
+/// <param name="AutoInsert">When set, engaging the screen first boots the selected magazine entry (the "walk over, press
+/// the button, the screen lights" gesture), so the interaction is one act rather than an insert then an engage.</param>
+/// <param name="EngageChannel">The world-event channel whose arrival on a body engages this screen, or
+/// <see langword="null"/> (the default) for a route that does not answer gestures. THE NAME IS THE AUTHOR'S: nothing in
+/// the engine special-cases a spelling. Omitted from the wire when null.</param>
+/// <param name="CycleChannel">Same, for advancing the magazine selector. Omitted from the wire when null.</param>
+internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null) {
     /// <summary>A screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(Engageable: false, EngageRadius: 0f);
 }
@@ -706,6 +960,12 @@ internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRa
 /// <param name="Round">The corner-rounding radius.</param>
 /// <param name="Source">The signal the lit face carries.</param>
 /// <param name="Route">The engage-route policy.</param>
+/// <param name="Solid">The screen slab's solidity facet (a box collider derived from the slab's oriented frame +
+/// <c>Margin</c> by <see cref="WorldColliderSet"/>), or <see langword="null"/> for a decorative screen. Omitted from the
+/// wire when null.</param>
+/// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
+/// with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
+/// carries it for free, so no new mutation kind is needed.</param>
 internal sealed record WorldScreen(
     int Index,
     Vector3 Origin,
@@ -716,10 +976,20 @@ internal sealed record WorldScreen(
     float HalfDepth,
     float Round,
     WorldScreenSource Source,
-    WorldScreenRoute Route
+    WorldScreenRoute Route,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null
 );
 
+/// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
+/// only), and the engage/release convergence rates the ramp integrates through the shared rate accumulator.</summary>
+internal readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, FixedQ4816 EngageRate, FixedQ4816 ReleaseRate);
+
 /// <summary>The one-time fixed-point compilation of authored motion tuning. Runtime simulation reads only this form.</summary>
+/// <remarks>SIM-AFFECTING extension: <see cref="Response"/> promotes a slice of the tuning that the shaping stage of
+/// <see cref="WorldBody"/>'s grounded integrator reads. <see cref="ResponseRecencyFacts"/>/<see cref="ResponseRecencyWindows"/>
+/// are the shared recency-clock table across every row's <see cref="ActionPredicate.Recently"/> gate (the per-tick clock
+/// updater walks it), slotted by the SAME <see cref="CompiledActionSpec.FlattenPredicate"/> the lane bindings use.</remarks>
 internal readonly record struct FixedMotionTuning(
     FixedQ4816 MoveSpeed,
     FixedQ4816 TurnSpeed,
@@ -730,20 +1000,80 @@ internal readonly record struct FixedMotionTuning(
     FixedQ4816 MaxFallSpeed,
     FixedQ4816 CoyoteTime,
     FixedQ4816 JumpBufferTime,
-    FixedQ4816 JumpCutMultiplier
+    FixedQ4816 JumpCutMultiplier,
+    FixedMotionResponse[] Response,
+    ActionFact[] ResponseRecencyFacts,
+    ulong[] ResponseRecencyWindows
 ) {
+    /// <summary>The number of recency clocks the response table's Recently gates share.</summary>
+    public int RecencySlots => ResponseRecencyFacts.Length;
+
     /// <summary>Compiles the authored floating-point motion tuning to its fixed-point form.</summary>
-    public static FixedMotionTuning Compile(in MotionTuning tuning) => new(
-        MoveSpeed: FixedQ4816.FromDouble(value: tuning.MoveSpeed),
-        TurnSpeed: FixedQ4816.FromDouble(value: tuning.TurnSpeed),
-        GroundY: FixedQ4816.FromDouble(value: tuning.GroundY),
-        JumpSpeed: FixedQ4816.FromDouble(value: tuning.JumpSpeed),
-        RiseGravity: FixedQ4816.FromDouble(value: tuning.RiseGravity),
-        FallGravity: FixedQ4816.FromDouble(value: tuning.FallGravity),
-        MaxFallSpeed: FixedQ4816.FromDouble(value: tuning.MaxFallSpeed),
-        CoyoteTime: FixedQ4816.FromDouble(value: tuning.CoyoteTime),
-        JumpBufferTime: FixedQ4816.FromDouble(value: tuning.JumpBufferTime),
-        JumpCutMultiplier: FixedQ4816.FromDouble(value: tuning.JumpCutMultiplier)
+    public static FixedMotionTuning Compile(in MotionTuning tuning) {
+        var rows = tuning.Response;
+        var response = new FixedMotionResponse[rows.Count];
+        var recencyFacts = new List<ActionFact>();
+        var recencyWindows = new List<ulong>();
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var gate = new List<CompiledPredicate>();
+
+            // The response table shares ONE recency-clock table across all rows (as one lane's press/release channels
+            // share one), slotted by the same predicate flattener the action lanes use.
+            CompiledActionSpec.FlattenPredicate(predicate: rows[index].Gate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows);
+
+            response[index] = new FixedMotionResponse(
+                Gate: gate.ToArray(),
+                EngageRate: FixedQ4816.FromDouble(value: rows[index].EngageRate),
+                ReleaseRate: FixedQ4816.FromDouble(value: rows[index].ReleaseRate)
+            );
+        }
+
+        return new(
+            MoveSpeed: FixedQ4816.FromDouble(value: tuning.MoveSpeed),
+            TurnSpeed: FixedQ4816.FromDouble(value: tuning.TurnSpeed),
+            GroundY: FixedQ4816.FromDouble(value: tuning.GroundY),
+            JumpSpeed: FixedQ4816.FromDouble(value: tuning.JumpSpeed),
+            RiseGravity: FixedQ4816.FromDouble(value: tuning.RiseGravity),
+            FallGravity: FixedQ4816.FromDouble(value: tuning.FallGravity),
+            MaxFallSpeed: FixedQ4816.FromDouble(value: tuning.MaxFallSpeed),
+            CoyoteTime: FixedQ4816.FromDouble(value: tuning.CoyoteTime),
+            JumpBufferTime: FixedQ4816.FromDouble(value: tuning.JumpBufferTime),
+            JumpCutMultiplier: FixedQ4816.FromDouble(value: tuning.JumpCutMultiplier),
+            Response: response,
+            ResponseRecencyFacts: recencyFacts.ToArray(),
+            ResponseRecencyWindows: recencyWindows.ToArray()
+        );
+    }
+}
+
+/// <summary>The one-time fixed-point compilation of a kit's body volume (the vertical capsule).</summary>
+internal readonly record struct FixedWorldCollider(FixedQ4816 Radius, FixedQ4816 Height) {
+    /// <summary>Compiles an authored collider to fixed point, or <see langword="null"/> for a volumeless kit.</summary>
+    public static FixedWorldCollider? Compile(WorldCollider? collider) => ((collider is { } value)
+        ? new FixedWorldCollider(Radius: FixedQ4816.FromDouble(value: value.Radius), Height: FixedQ4816.FromDouble(value: value.Height))
+        : null);
+}
+
+/// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field
+/// and the grounded integrator. <see cref="GroundedThreshold"/> is the compiled <c>cos(maxSlopeDegrees)</c> a contact
+/// normal's up-alignment must clear to ground a body (the same test both providers use).</summary>
+internal readonly record struct FixedWorldCollision(
+    bool Enabled,
+    WorldContactProvider Provider,
+    FixedQ4816 ContactSkin,
+    int MaxIterations,
+    FixedQ4816 GroundedThreshold,
+    FixedQ4816 GradientProbe
+) {
+    /// <summary>Compiles the authored contact tuning to fixed point.</summary>
+    public static FixedWorldCollision Compile(WorldCollision collision) => new(
+        Enabled: collision.Enabled,
+        Provider: collision.Provider,
+        ContactSkin: FixedQ4816.FromDouble(value: collision.ContactSkin),
+        MaxIterations: collision.MaxIterations,
+        GroundedThreshold: FixedQ4816.FromDouble(value: Math.Cos(d: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
+        GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe)
     );
 }
 
@@ -771,39 +1101,19 @@ internal readonly record struct FixedWanderTuning(
     );
 }
 
-/// <summary>One placeable camera in the world — either a fixed look-at or an anchored mount riding a world entity's
-/// live pose. A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view
-/// offscreen.</summary>
-/// <param name="Name">The camera's stable name — the handle a View screen samples by.</param>
+/// <summary>One placeable camera in the world — WHERE it rides (<see cref="Anchor"/> + <see cref="Offset"/>) times HOW it
+/// frames (<see cref="Rig"/>), two orthogonal axes rather than one welded kind. A <see cref="WorldScreenSource.View"/>
+/// resolves the stable name and renders the resulting live view offscreen; an authored layout slot renders it into the
+/// main window. Identity, placement, framing, render target — no behaviour hides in a kind.</summary>
+/// <param name="Name">The camera's stable name — the handle a View screen / layout slot samples by.</param>
+/// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>), or <see langword="null"/> to pose directly
+/// in world space (an unanchored camera's <paramref name="Offset"/> IS its world eye position).</param>
+/// <param name="Offset">The attachment point relative to the anchor's resolved pose (anchor-local axes), or — when
+/// <paramref name="Anchor"/> is <see langword="null"/> — the eye's world position.</param>
+/// <param name="Rig">How the camera frames from that pose (see <see cref="WorldRig"/>).</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-/// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-[JsonDerivedType(typeof(WorldCamera.Fixed), typeDiscriminator: "fixed")]
-[JsonDerivedType(typeof(WorldCamera.Anchored), typeDiscriminator: "anchored")]
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians) {
-    /// <summary>A camera posed directly in world space.</summary>
-    /// <param name="Name">The camera's stable name.</param>
-    /// <param name="Position">The fixed eye position, world space.</param>
-    /// <param name="LookAt">The fixed look-at target, world space.</param>
-    /// <param name="RenderWidth">The offscreen render width in pixels.</param>
-    /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-    /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record Fixed(string Name, Vector3 Position, Vector3 LookAt, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
-        : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
-
-    /// <summary>A camera anchored to a <see cref="WorldAnchor"/> — the entity/leaf/placement pose it rides supplies
-    /// the live position and orientation; <paramref name="Offset"/> is the exact attachment point in the anchor's
-    /// local axes on top of that — an anchor can carry a camera anywhere.</summary>
-    /// <param name="Name">The camera's stable name.</param>
-    /// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>).</param>
-    /// <param name="Offset">The attachment point relative to the anchor's resolved pose, in anchor-local axes.</param>
-    /// <param name="RenderWidth">The offscreen render width in pixels.</param>
-    /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-    /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
-        : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
-}
+internal sealed record WorldCamera(string Name, WorldAnchor? Anchor, Vector3 Offset, WorldRig Rig, uint RenderWidth, uint RenderHeight);
 
 /// <summary>The built-in session census. Local players occupy the split-screen seats; network players are represented
 /// by authoritative local stand-ins until a transport supplies their intent stream.</summary>
@@ -812,7 +1122,24 @@ internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderH
 /// <param name="DefaultPeerSource">The boot intent-source template every network stand-in wakes on (<see
 /// cref="IntentSource.Wander"/> in the built-in world): the durable home for the session peer-source default the
 /// <c>world.population idle|wander</c> verb moves live and <c>world.save</c> folds back into session write-back.</param>
-internal readonly record struct WorldPopulationDefaults(int LocalPlayers, int NetworkPlayers, IntentSource DefaultPeerSource);
+/// <param name="SpawnPolicy">How simulated peers are distributed at spawn (see <see cref="WorldSpawnPolicy"/>).
+/// A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT for bodies already standing
+/// (a change re-clusters only peers spawned after it), narrated in the accept echo.</param>
+internal readonly record struct WorldPopulationDefaults(
+    int LocalPlayers,
+    int NetworkPlayers,
+    IntentSource DefaultPeerSource,
+    WorldSpawnPolicy SpawnPolicy
+) {
+    private readonly WorldSpawnPolicy m_spawnPolicy = (SpawnPolicy ?? WorldSpawnPolicy.Default);
+
+    /// <summary>How simulated peers are distributed at spawn. The absence-coalesce lives in the accessor for the same
+    /// reason <see cref="MotionTuning.Response"/>'s does.</summary>
+    public WorldSpawnPolicy SpawnPolicy {
+        get => m_spawnPolicy;
+        init => m_spawnPolicy = (value ?? WorldSpawnPolicy.Default);
+    }
+}
 internal static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
@@ -891,23 +1218,142 @@ internal sealed record WorldRenderDefaults(
 /// <param name="Position">The seat's spawn position (X/Z used; Y rides the ground plane).</param>
 internal readonly record struct WorldSpawnPoint(string Id, Vector3 Position);
 
-/// <summary>The kit-to-entity assignment policy, resolved once at construction into each entry's fixed kit index
-/// (precompute; zero steady-state cost). SIM-AFFECTING: it selects which kit — and thus which fixed-point
-/// tuning/action bindings — an entity compiles.</summary>
+/// <summary>The row-to-entity assignment policy — nothing about <see cref="Policy"/>/<see cref="Table"/> is kit-specific,
+/// so the SAME primitive distributes the kit table (a way of MOVING) and the look table (a way of LOOKING) across the
+/// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
+/// kit assignment is SIM-AFFECTING (it selects the compiled tuning/action bindings); the look assignment is
+/// PRESENTATION-ONLY (it selects the appearance row).</summary>
 /// <param name="Policy">The assignment policy: <see cref="HashPolicy"/> (the R1 low-discrepancy mapping) or
-/// <see cref="TablePolicy"/> (<c>kit = Table[index % Table.Count]</c>).</param>
-/// <param name="Table">The kit-name cycle for <see cref="TablePolicy"/> (entries resolve to kit rows at compile); empty
+/// <see cref="TablePolicy"/> (<c>row = Table[index % Table.Count]</c>).</param>
+/// <param name="Table">The row-name cycle for <see cref="TablePolicy"/> (entries resolve to rows at compile); empty
 /// and ignored under <see cref="HashPolicy"/>.</param>
-internal sealed record WorldKitAssignment(string Policy, IReadOnlyList<string> Table) {
-    /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.KitFor"/>).</summary>
+internal sealed record WorldRowAssignment(string Policy, IReadOnlyList<string> Table) {
+    private readonly IReadOnlyList<string> m_table = (Table ?? []);
+
+    /// <summary>The row-name cycle. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="MotionTuning.Response"/>'s does.</summary>
+    public IReadOnlyList<string> Table {
+        get => m_table;
+        init => m_table = (value ?? []);
+    }
+
+    /// <summary>The default policy token — the R1 low-discrepancy mapping (<see cref="WorldPopulation.RowFor"/>).</summary>
     public const string HashPolicy = "hash";
 
-    /// <summary>The table policy token — <c>kit = Table[index % Table.Count]</c>, a pure function of the stable
+    /// <summary>The table policy token — <c>row = Table[index % Table.Count]</c>, a pure function of the stable
     /// population index.</summary>
     public const string TablePolicy = "table";
 
     /// <summary>The built-in default assignment: the hash policy with an empty table.</summary>
-    public static WorldKitAssignment Hash { get; } = new WorldKitAssignment(Policy: HashPolicy, Table: []);
+    public static WorldRowAssignment Hash { get; } = new WorldRowAssignment(Policy: HashPolicy, Table: []);
+}
+
+/// <summary>Where a <see cref="WorldLook"/> resolves an entity's appearance from — a pinned catalog rig or a sculpted
+/// creation. The appearance peer of a way of MOVING: a new way of LOOKING is a row, never a new renderer.</summary>
+[JsonDerivedType(typeof(WorldLookSource.Catalog), typeDiscriminator: "catalog")]
+[JsonDerivedType(typeof(WorldLookSource.Creation), typeDiscriminator: "creation")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldLookSource {
+    private WorldLookSource() { }
+
+    /// <summary>The procedural humanoid catalog (<see cref="WorldAvatarCatalog"/>) — one look source among others,
+    /// no longer "the avatar system".</summary>
+    /// <param name="Index">The <c>0..</c><see cref="WorldPopulation.MaxPopulation"/>-1 catalog rig to pin, or
+    /// <see langword="null"/> for the index-derived pick (the pre-look behaviour every body had).</param>
+    internal sealed record Catalog(int? Index) : WorldLookSource;
+
+    /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldCreation"/> rows.</summary>
+    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve at validation).</param>
+    internal sealed record Creation(string CreationId) : WorldLookSource;
+}
+
+/// <summary>How a look animates with the body it clothes. PRESENTATION-ONLY: read by the client's stamp pool and the
+/// catalog packer, never by <c>WorldBody</c>. Catalog looks read <see cref="GaitAmplitude"/>; creation looks read
+/// <see cref="ReplayFrames"/> and <see cref="SecondsPerFrame"/>.</summary>
+/// <param name="GaitAmplitude">The catalog rig's limb-swing scale (1 = the pre-look default; 0 stills the gait).</param>
+/// <param name="ReplayFrames">Whether a creation look replays its authored timeline on the render clock.</param>
+/// <param name="SecondsPerFrame">The creation timeline cadence when <see cref="ReplayFrames"/> is set.</param>
+internal readonly record struct WorldLookMotion(float GaitAmplitude, bool ReplayFrames, float SecondsPerFrame) {
+    /// <summary>The implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
+    public static WorldLookMotion Default { get; } = new WorldLookMotion(GaitAmplitude: 1f, ReplayFrames: false, SecondsPerFrame: 0f);
+}
+
+/// <summary>One LOOK row — the appearance peer of <see cref="WorldKit"/>'s way of MOVING. Every appearance a world
+/// offers is a row of this data, never a renderer branch; <c>world.looks</c> prints these names.</summary>
+/// <param name="Name">The look's stable kebab-case name (unique within the definition), assignable by the look table.</param>
+/// <param name="Source">Where the appearance resolves from (a catalog rig or a creation).</param>
+/// <param name="Scale">The uniform render scale. Appearance ONLY — it does not resize the body's motion tuning or its
+/// collision volume.</param>
+/// <param name="Motion">How the look animates with the body (see <see cref="WorldLookMotion"/>).</param>
+internal sealed record WorldLook(string Name, WorldLookSource Source, float Scale, WorldLookMotion Motion) {
+    /// <summary>The implicit single look every body wears when a world authors no <c>looks</c> section — the
+    /// index-derived catalog pick at full gait, so an empty <c>looks</c> list is the pre-arc runtime exactly.</summary>
+    public static WorldLook Implicit { get; } = new WorldLook(Name: "catalog", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default);
+}
+
+/// <summary>How simulated peers are distributed at spawn. SIM-AFFECTING — compiled once to fixed point by
+/// <see cref="FixedSpawnPolicy.Compile"/>; the runtime never re-reads the authored floats.</summary>
+[JsonDerivedType(typeof(WorldSpawnPolicy.Phyllotaxis), typeDiscriminator: "phyllotaxis")]
+[JsonDerivedType(typeof(WorldSpawnPolicy.PointCycle), typeDiscriminator: "points")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldSpawnPolicy {
+    private WorldSpawnPolicy() { }
+
+    /// <summary>The pre-arc behaviour, made nameable: a golden-angle phyllotaxis disc.</summary>
+    /// <param name="Radius">The disc radius; <c>0</c> defers to <c>WanderTuning.SpawnRadius</c>.</param>
+    internal sealed record Phyllotaxis(float Radius) : WorldSpawnPolicy;
+
+    /// <summary>Cycle the named spawn points, scattering each peer inside <paramref name="Jitter"/> by its index's R2
+    /// low-discrepancy sample (no RNG, index-stable across rebuilds). The type is <c>PointCycle</c> (a record property
+    /// cannot share its type's name), but its wire discriminator is <c>points</c> and its list member is <c>points</c>.</summary>
+    /// <param name="Points">The spawn-point id cycle (each must resolve to a <see cref="WorldSpawnPoint"/>).</param>
+    /// <param name="Jitter">The per-peer scatter radius around the cycled point.</param>
+    internal sealed record PointCycle(IReadOnlyList<string> Points, float Jitter) : WorldSpawnPolicy;
+
+    /// <summary>The built-in default — the phyllotaxis disc at the wander tuning's spawn radius (the pre-arc behaviour).</summary>
+    public static WorldSpawnPolicy Default { get; } = new Phyllotaxis(Radius: 0f);
+}
+
+/// <summary>The one-time fixed-point compilation of a <see cref="WorldSpawnPolicy"/>. Runtime spawn seeding reads only
+/// this form (the phyllotaxis radius override in fixed point, or the resolved spawn-point positions plus jitter).</summary>
+internal readonly record struct FixedSpawnPolicy(FixedQ4816 PhyllotaxisRadius, FixedVector3[]? Points, FixedQ4816 Jitter) {
+    /// <summary>Compiles the authored spawn policy against the definition's spawn points. A <see cref="WorldSpawnPolicy.PointCycle"/>
+    /// policy resolves each named id to its position (the validator has already gated the names).</summary>
+    /// <param name="policy">The authored policy.</param>
+    /// <param name="spawnPoints">The definition's spawn points, for id resolution.</param>
+    public static FixedSpawnPolicy Compile(WorldSpawnPolicy policy, IReadOnlyList<WorldSpawnPoint> spawnPoints) {
+        switch (policy) {
+            case WorldSpawnPolicy.PointCycle points: {
+                var resolved = new FixedVector3[points.Points.Count];
+
+                for (var index = 0; (index < resolved.Length); index++) {
+                    var position = ResolveSpawnPoint(spawnPoints: spawnPoints, id: points.Points[index]);
+
+                    resolved[index] = new FixedVector3(
+                        X: FixedQ4816.FromDouble(value: position.X),
+                        Y: FixedQ4816.FromDouble(value: position.Y),
+                        Z: FixedQ4816.FromDouble(value: position.Z)
+                    );
+                }
+
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.Zero, Points: resolved, Jitter: FixedQ4816.FromDouble(value: points.Jitter));
+            }
+            case WorldSpawnPolicy.Phyllotaxis phyllotaxis:
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.FromDouble(value: phyllotaxis.Radius), Points: null, Jitter: FixedQ4816.Zero);
+            default:
+                return new FixedSpawnPolicy(PhyllotaxisRadius: FixedQ4816.Zero, Points: null, Jitter: FixedQ4816.Zero);
+        }
+    }
+
+    private static Vector3 ResolveSpawnPoint(IReadOnlyList<WorldSpawnPoint> spawnPoints, string id) {
+        foreach (var point in spawnPoints) {
+            if (string.Equals(a: point.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return point.Position;
+            }
+        }
+
+        return Vector3.Zero;
+    }
 }
 
 /// <summary>One data-side addon descriptor the world carries — a World-local row carrying Name/ModulePath/Hash/Fuel/
@@ -977,7 +1423,7 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// <param name="MinPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
 /// <param name="MaxPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's ceiling — also the worst-case
-/// scale <see cref="Client.WorldPlacementAnimator"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
+/// scale <see cref="Client.WorldStampPool"/>'s probe bound-radius reads (bound radius is spatial-cull metadata,
 /// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
 /// <param name="CandidateRadius">LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat's editor
 /// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
@@ -988,6 +1434,10 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// frame by <see cref="Client.WorldFrameSource.LayoutRegion(int, int, int, float)"/>.</param>
 /// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
+/// <param name="DerivedFaceScreens">BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation
+/// FACES (a face declared by a placement's creation, lit by a feed), registered at
+/// <c>[<see cref="Client.WorldCreationFacets.DerivedFaceBase"/>, DerivedFaceBase + this)</c>. Bounded so the range
+/// stays within the engine's screen-surface ceiling.</param>
 internal sealed record WorldAuthoringDefaults(
     int AuthoringHeadroomRows,
     int AuthoringHeadroomScreens,
@@ -998,7 +1448,8 @@ internal sealed record WorldAuthoringDefaults(
     float CandidateRadius,
     int CandidateCap,
     float WorkbenchFraction,
-    int PreviewDeadlineFrames
+    int PreviewDeadlineFrames,
+    int DerivedFaceScreens
 ) {
     /// <summary>The built-in default authoring policy.</summary>
     public static WorldAuthoringDefaults Default { get; } = new WorldAuthoringDefaults(
@@ -1011,19 +1462,93 @@ internal sealed record WorldAuthoringDefaults(
         CandidateRadius: 32f,
         CandidateCap: 16,
         WorkbenchFraction: 0.70f,
-        PreviewDeadlineFrames: 12
+        PreviewDeadlineFrames: 12,
+        DerivedFaceScreens: 4
+    );
+}
+
+/// <summary>Which graphics backend a world PREFERS. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
+/// so a shared world document is portable across an OS boundary; an explicit preference the running OS cannot satisfy
+/// degrades LOUDLY (a document author preference) or hard-exits (a CLI operator assertion) rather than silently
+/// mispresenting.</summary>
+internal enum WorldBackendPreference : byte {
+    /// <summary>Pick the OS-appropriate backend at boot — Direct3D 12 on Windows 10+, Vulkan elsewhere.</summary>
+    Auto,
+
+    /// <summary>Prefer Direct3D 12.</summary>
+    DirectX,
+
+    /// <summary>Prefer Vulkan.</summary>
+    Vulkan,
+}
+
+/// <summary>
+/// The world's HOST defaults — how the world asks to be PRESENTED, independent of what it contains. PRESENTATION-ONLY
+/// throughout (never simulation state). Two consumption classes share this one row, named per field:
+/// <list type="bullet">
+/// <item><description><b>BOOT-ONLY</b> (<see cref="Backend"/>, <see cref="Width"/>, <see cref="Height"/>,
+/// <see cref="SurfaceFormat"/>, <see cref="Fullscreen"/>, <see cref="PresentMode"/>, <see cref="ExitAfterSeconds"/>,
+/// <see cref="RayQuery"/>, <see cref="Genlock"/>): read once at composition; a live edit is journaled and validated
+/// immediately but takes effect next boot.</description></item>
+/// <item><description><b>BOOT-DEFAULT WITH A LIVE LEVER</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
+/// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on; <see cref="WorldSessionCapture"/>
+/// folds the live values back at <c>world.save</c>.</description></item>
+/// </list>
+/// <see cref="Default"/> reproduces World's current boot exactly.
+/// </summary>
+/// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable).</param>
+/// <param name="Width">The window client width in pixels.</param>
+/// <param name="Height">The window client height in pixels.</param>
+/// <param name="SurfaceFormat">The swapchain surface format (<see cref="SurfaceFormat.Unknown"/> is rejected by the validator).</param>
+/// <param name="Fullscreen">Whether the window enters borderless fullscreen when first shown.</param>
+/// <param name="PresentMode">The swapchain presentation algorithm.</param>
+/// <param name="TargetHertz">The boot present-pacing target in Hz; <c>0</c> selects automatic display pacing. The
+/// <c>world.target</c> live lever owns "now" thereafter.</param>
+/// <param name="ExitAfterSeconds">Seconds before the world auto-exits; <c>0</c> runs until the window is closed.</param>
+/// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
+/// <param name="Timing">Whether GPU per-pass timing boots armed; the <c>world.timing</c> live lever owns it thereafter.</param>
+/// <param name="Genlock">The external-clock election policy, consumed at boot by the clock registry (which tolerates an
+/// unknown source id): <see langword="null"/> for the launcher's automatic election, or a non-whitespace source id /
+/// <c>off</c>. SHAPE-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
+internal sealed record WorldHostDefaults(
+    WorldBackendPreference Backend,
+    int Width,
+    int Height,
+    SurfaceFormat SurfaceFormat,
+    bool Fullscreen,
+    PresentMode PresentMode,
+    double TargetHertz,
+    int ExitAfterSeconds,
+    bool RayQuery,
+    bool Timing,
+    string? Genlock
+) {
+    /// <summary>The built-in host defaults — reproducing World's current hardcoded boot exactly (1280×800, auto backend,
+    /// immediate present, automatic display pacing, R8G8B8A8 surface, ray-query on, timing off, no auto-exit).</summary>
+    public static WorldHostDefaults Default { get; } = new WorldHostDefaults(
+        Backend: WorldBackendPreference.Auto,
+        Width: 1280,
+        Height: 800,
+        SurfaceFormat: SurfaceFormat.R8G8B8A8Unorm,
+        Fullscreen: false,
+        PresentMode: PresentMode.Immediate,
+        TargetHertz: 0.0,
+        ExitAfterSeconds: 0,
+        RayQuery: true,
+        Timing: false,
+        Genlock: null
     );
 }
 
 /// <summary>
 /// The definition of this world — the aggregate describing what the world is, distinct from the live session state that
 /// plays in it. It gathers the static scene (<see cref="Scene"/>), the seat spawn points (<see cref="SpawnPoints"/>),
-/// the population's wander tuning (<see cref="Wander"/>), the locomotion/jump feel (<see cref="Motion"/>), and the
+/// the population's wander tuning (<see cref="Wander"/>), the motion defaults (<see cref="Motion"/>), and the
 /// render-lever defaults and quality presets (<see cref="Render"/>). Every consumer takes it by construction.
 /// </summary>
 /// <remarks>These records are serialization-friendly. <see cref="Default"/> supplies the built-in definition, and
 /// loaders can construct the same shapes from external data.</remarks>
-/// <param name="Motion">The locomotion + jump feel every <see cref="WorldBody"/> integrates under.</param>
+/// <param name="Motion">The ground plane and the profileless locomotion speeds (see <see cref="WorldMotionDefaults"/>). Jump feel is per-kit.</param>
 /// <param name="Wander">The simulated stand-ins' synthetic wander tuning.</param>
 /// <param name="Scene">The world's static scene (ground + boulders).</param>
 /// <param name="SpawnPoints">Where each local seat's avatar spawns (X/Z; Y rides the ground plane), by slot.</param>
@@ -1049,8 +1574,7 @@ internal sealed record WorldAuthoringDefaults(
 /// <see cref="WorldPlacement"/>).</param>
 /// <param name="Authoring">The editor/authoring policy row — headroom, placement
 /// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
-/// (see <see cref="WorldAuthoringDefaults"/>). <see langword="null"/> in JSON coalesces to
-/// <see cref="WorldAuthoringDefaults.Default"/> (the same absence-coalesce convention <see cref="WorldStorageDefaults"/> uses).</param>
+/// (see <see cref="WorldAuthoringDefaults"/>) — a REQUIRED section every document carries.</param>
 /// <param name="Speakers">The placeable speaker rows (default empty) — the camera family's audio sibling (see
 /// <see cref="WorldSpeaker"/>): name-keyed transducers whose feeds tap shared sources.</param>
 /// <param name="Tunes">The tune ASSET rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
@@ -1058,10 +1582,23 @@ internal sealed record WorldAuthoringDefaults(
 /// <param name="Patches">The synth-patch ASSET rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
 /// inline-canonical with pinned hashes (see <see cref="WorldPatch"/>).</param>
 /// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
-/// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
-/// <see cref="WorldAudioDefaults.Default"/>.</param>
+/// listener policy — see <see cref="WorldAudioDefaults"/>) — a REQUIRED section every document carries.</param>
+/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING.
+/// <see cref="WorldCollision.None"/> is collision OFF (the flat ground plane).</param>
+/// <param name="Host">The host-section defaults — how the world asks to be PRESENTED (window/backend/present/pacing/
+/// timing/genlock — see <see cref="WorldHostDefaults"/>). The CLI window/backend flags override it at boot (a
+/// deployment surface laid over the author's intent).</param>
+/// <param name="Views">The window-composition defaults — the seat framing every seat wakes on plus the authored named
+/// layouts (see <see cref="WorldViewDefaults"/>). An empty layout list falls the composer through to the built-in seat
+/// ladder.</param>
+/// <param name="Looks">The LOOK rows (default empty) — authored appearances the population wears, the peer of
+/// <see cref="Kits"/> (see <see cref="WorldLook"/>). Empty resolves every entity to the implicit single catalog look.</param>
+/// <param name="LookAssignment">The look→entity assignment policy, the same <see cref="WorldRowAssignment"/> primitive
+/// <see cref="Assignment"/> uses for kits.</param>
+/// <param name="Links">The cable-link rows (default empty) — groups of screens whose machines advance as one
+/// interleaved unit (see <see cref="WorldScreenLink"/>).</param>
 internal sealed record WorldDefinition(
-    MotionTuning Motion,
+    WorldMotionDefaults Motion,
     WanderTuning Wander,
     WorldScene Scene,
     IReadOnlyList<WorldSpawnPoint> SpawnPoints,
@@ -1071,7 +1608,7 @@ internal sealed record WorldDefinition(
     WorldPopulationDefaults Population,
     IReadOnlyList<WorldKit> Kits,
     string DefaultSeatKit,
-    WorldKitAssignment Assignment,
+    WorldRowAssignment Assignment,
     IReadOnlyList<WorldAddonRow> Addons,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
     WorldStorageDefaults Storage,
@@ -1081,7 +1618,15 @@ internal sealed record WorldDefinition(
     IReadOnlyList<WorldSpeaker> Speakers,
     IReadOnlyList<WorldTune> Tunes,
     IReadOnlyList<WorldPatch> Patches,
-    WorldAudioDefaults Audio
+    WorldAudioDefaults Audio,
+    WorldCollision Collision,
+    WorldHostDefaults Host,
+    WorldViewDefaults Views,
+    // An empty Looks list resolves every entity to WorldLook.Implicit (the index-derived catalog pick at full gait);
+    // NO branch special-cases "the author authored none".
+    IReadOnlyList<WorldLook> Looks,
+    WorldRowAssignment LookAssignment,
+    IReadOnlyList<WorldScreenLink> Links
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1099,7 +1644,7 @@ internal sealed record WorldDefinition(
 
     /// <summary>The built-in default world.</summary>
     public static WorldDefinition Default { get; } = new WorldDefinition(
-        Motion: MotionTuning.Default,
+        Motion: WorldMotionDefaults.Default,
         Wander: WanderTuning.Default,
         Scene: WorldScene.Default,
         // The five built-in locomotion kits. The R1-hash
@@ -1159,7 +1704,7 @@ internal sealed record WorldDefinition(
             new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 0f, y: 0f, z: 4f)),
         ],
         Render: WorldRenderDefaults.Default,
-        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxSimulated, DefaultPeerSource: IntentSource.Wander),
+        Population: new WorldPopulationDefaults(LocalPlayers: WorldPopulation.LocalSeatCount, NetworkPlayers: WorldPopulation.MaxPopulationSimulated, DefaultPeerSource: IntentSource.Wander, SpawnPolicy: WorldSpawnPolicy.Default),
         // THE PLAZA — the built-in broadcast showcase, all faces normal +Z toward a player spawned at the origin looking -Z (the
         // frame source only TRANSLATES a slab, so every screen keeps world-axis Right/Up). Two TIERS keep the sight lines
         // clean from spawn: a LOW front pair (bottoms just above the grass at y = 0.2) and a
@@ -1256,25 +1801,25 @@ internal sealed record WorldDefinition(
         // The two live world cameras: one anchored to player one's entity for the jumbotron, and one fixed high above
         // the plaza for the separate overhead monitor.
         Cameras: [
-            new WorldCamera.Anchored(
+            new WorldCamera(
                 Name: "first-person",
                 Anchor: new WorldAnchor.Entity(Index: 0),
                 Offset: WorldAvatarCatalog.EyeOffset(avatar: 0),
+                Rig: new WorldRig.FirstPerson(EyeOffset: Vector3.Zero, FocusDistance: 0f, FieldOfViewRadians: (68f * (MathF.PI / 180f))),
                 RenderWidth: 256,
-                RenderHeight: 144,
-                FieldOfViewRadians: (68f * (MathF.PI / 180f))
+                RenderHeight: 144
             ),
-            new WorldCamera.Fixed(
+            new WorldCamera(
                 Name: "overhead",
-                Position: new Vector3(x: 0f, y: 15f, z: 7f),
-                LookAt: new Vector3(x: 0f, y: 0.5f, z: -2.5f),
+                Anchor: null,
+                Offset: new Vector3(x: 0f, y: 15f, z: 7f),
+                Rig: new WorldRig.LookAt(Target: new Vector3(x: 0f, y: 0.5f, z: -2.5f), FieldOfViewRadians: (55f * (MathF.PI / 180f))),
                 RenderWidth: 256,
-                RenderHeight: 144,
-                FieldOfViewRadians: (55f * (MathF.PI / 180f))
+                RenderHeight: 144
             ),
         ],
         // The kit→entity assignment: the R1 low-discrepancy hash policy with an empty table.
-        Assignment: WorldKitAssignment.Hash,
+        Assignment: WorldRowAssignment.Hash,
         // No data-side addons in the built-in world; a deployment authors them and the addon driver mounts them as principals.
         Addons: [],
         // No per-world binding overlays in the built-in world — every seat rides the engine default (plus its profile
@@ -1294,6 +1839,14 @@ internal sealed record WorldDefinition(
         Speakers: [],
         Tunes: [],
         Patches: [],
-        Audio: WorldAudioDefaults.Default
+        Audio: WorldAudioDefaults.Default,
+        // Collision off (the flat ground plane), World's current boot for the host row, the built-in seat ladder for
+        // views, and no authored looks or cable links.
+        Collision: WorldCollision.None,
+        Host: WorldHostDefaults.Default,
+        Views: WorldViewDefaults.Default,
+        Looks: [],
+        LookAssignment: WorldRowAssignment.Hash,
+        Links: []
     );
 }

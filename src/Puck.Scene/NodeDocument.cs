@@ -6,7 +6,7 @@ namespace Puck.Scene;
 /// The composition graph's root node, authored polymorphically: the <c>$type</c> string selects which producer the
 /// run builds (the compute world compositor, or the overworld), and <c>produce</c> selects the backend
 /// it renders on. This is the BACKEND-NEUTRAL description; turning it into a concrete <c>IRenderNode</c> (resolving GPU
-/// services, applying OS/feature gates) is the GraphBuilder's job in Puck.Demo. Adding a node kind is a new derived
+/// services, applying OS/feature gates) is the host composition layer's job. Adding a node kind is a new derived
 /// record. Live cameras are per-viewport <see cref="LiveCameraSource"/> values; ray-query validation lives in
 /// <c>Puck.Post</c>.
 /// </summary>

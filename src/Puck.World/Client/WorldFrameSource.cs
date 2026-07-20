@@ -30,6 +30,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly int m_authoringHeadroomScreens;
     private readonly int m_authoringHeadroomPlacements;
     private readonly int m_maxRepeatPerSegment;
+    // BOOT-CONSUMED: the reserved derived-face screen count (WorldAuthoringDefaults.DerivedFaceScreens) — the binder's
+    // frozen derived-face slot range, re-pointed live at each delivery.
+    private readonly int m_derivedFaceScreens;
     // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
     // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
     private static readonly Vector3 s_shimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
@@ -50,7 +53,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly WorldWorkbench m_workbench;
     // The animated-placement replay pool: reconciled at the delivery boundary, ticked on the render clock,
     // packed after the avatar transforms every frame.
-    private readonly WorldPlacementAnimator m_animator;
+    private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
     private readonly WorldAudioDirector m_audio;
@@ -66,15 +69,25 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
     private readonly ISdfCameraRig[] m_cameraRigs;
+    // The window composer (layout selection + eased transitions; a shared singleton the world.view.state read also
+    // observes), the group-anchor resolver (smoothed centroids for establishing shots), and the shared live
+    // composition-override store (view.layout/view.camera). All presentation-only.
+    private readonly WorldViewComposer m_composer;
+    private readonly WorldGroupAnchors m_groupAnchors = new();
+    private readonly WorldCompositionState m_composition;
     // The per-seat editor mode: camera rig swap + the sole-editor layout policy, both read during produce.
     private readonly WorldEditorSession m_editor;
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
     // catalog, plus movement-driven gait state per avatar and the joined seats' views. Live programs address only the
     // active avatars' stable slot ranges; stale inactive slots are unreachable.
-    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount)];
+    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount)];
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
+    // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
+    // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
+    private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
+    private readonly bool[] m_rendersAsStamp = new bool[WorldPopulation.MaxPopulation];
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
@@ -110,8 +123,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
     /// per-frame snapshot publisher.</param>
     /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into.</param>
+    /// <param name="composition">The shared live composition-override store (view.layout/view.camera) the composer reads.</param>
+    /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldCompositionState composition, WorldViewComposer composer) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -125,7 +140,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: gizmos);
+        ArgumentNullException.ThrowIfNull(argument: composition);
+        ArgumentNullException.ThrowIfNull(argument: composer);
 
+        m_composition = composition;
+        m_composer = composer;
         m_gizmos = gizmos;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -150,10 +169,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_animator = animator;
         m_workbench = workbench;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            m_cameraRigs[slot] = new OrientedFollowRig();
-        }
+        RebuildSeatRigs(seatRig: m_client.Definition.Views.SeatRig);
 
         // Resolve the primer snapshot's render poses once so the initial program and camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -168,10 +184,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
         m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
         m_maxRepeatPerSegment = definition.Authoring.MaxRepeatPerSegment;
+        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
 
-        // A booted world may already stamp animated placements — register them before the first build so the initial
-        // program emits their live pool slots.
-        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
+        // A booted world may already stamp animated placements or inhabited bodies — register them before the first
+        // build so the initial program emits their live pool slots (body stamps are empty until the first snapshot).
+        RefreshBodyStamps();
+        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations, bodyStamps: m_bodyStamps);
         // The boot emitter derivation (a booted world may already author speakers/facets/sounds).
         m_audio.ReconcileSpeakers(definition: definition);
         m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements, maxRepeatPerSegment: m_maxRepeatPerSegment) + m_authoringHeadroomPlacements);
@@ -242,7 +260,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
     /// <summary>The frozen transform-slot count: every leaf in the all-128 avatar catalog plus the reserved
     /// animated-placement replay pool.</summary>
-    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount);
+    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
 
     /// <inheritdoc/>
     public void NotifyDeviceLost() => m_binder.NotifyDeviceLost();
@@ -290,17 +308,29 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             var definitionRevision = m_client.DefinitionRevision;
 
             if (definitionRevision != m_builtDefinitionRevision) {
-                m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
-                m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
-                // The animated-placement pool reconciles at the same delivery boundary: cheap pose
-                // edits write in place, creation-content changes release + recreate, removals release (symmetric).
-                m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
+                // A views-section edit recompiles each seat's chase rig from the delivered seat rig (world.view.rig live).
+                RebuildSeatRigs(seatRig: m_client.Definition.Views.SeatRig);
+                // Derive the creation facets (P5): a creation's eyes become cameras on WorldAnchor.Placement, its faces
+                // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
+                // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
+                var facets = WorldCreationFacets.Derive(definition: m_client.Definition, placements: m_client.Definition.Placements, derivedFaceBase: WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: m_derivedFaceScreens);
+
+                m_binder.ReconcileCameras(cameras: Concat(first: m_client.Definition.Cameras, second: facets.Cameras));
+                m_binder.ReconcileScreens(screens: Concat(first: m_client.Definition.Screens, second: facets.Faces));
+                // Cable links reconcile AFTER screens (a link resolves against the live slot set).
+                m_binder.ReconcileLinks(links: m_client.Definition.Links);
                 // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
-                // after the animator (placement-anchored emitters read its registrations).
+                // after the stamp pool reconcile (placement-anchored emitters read its registrations at Publish).
                 m_audio.ReconcileSpeakers(definition: m_client.Definition);
                 m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, speakers: m_client.Definition.Speakers, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
+
+            // The stamp pool reconciles on EVERY rebuild (a definition delivery OR a population/look change): animated
+            // placements root statically; the creation-stamp bodies (inhabitants + crowd creation-looks) root on live
+            // body poses, so the set follows the active-entity/look census, not just the document.
+            RefreshBodyStamps();
+            m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations, bodyStamps: m_bodyStamps);
 
             // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
             // preview at drag cadence, and release retires the overlay against the identical committed document — no
@@ -384,25 +414,39 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             }
 
             m_avatarPreviousPositions[index] = position;
+            // Resolve the entity's LOOK: a catalog rig pin, a uniform render scale, and a gait-amplitude phase scale.
+            // GaitAmplitude scales m_avatarGaitPhases (1 = the pre-look swing; 0 stills the limbs at their rest pose).
+            // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
+            // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
+            // is gone: the body shows its actual creation geometry instead.
+            var look = ResolveLook(index: index);
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,
-                rootPosition: position,
+                rootPosition: (m_rendersAsStamp[index] ? s_hiddenAvatar : position),
                 rootOrientation: m_client.Orientation(index: index),
-                gaitPhase: m_avatarGaitPhases[index],
+                gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
                 castsSoftShadow: castsSoftShadow,
-                transforms: m_transforms
+                transforms: m_transforms,
+                rig: LookRig(look: look),
+                scale: look.Scale
             );
         }
 
-        // The animated-placement pool packs after the avatar catalog (its reserved slots sit past the frozen avatar
-        // capacity); hidden slots park below the floor.
-        m_animator.PackTransforms(transforms: m_transforms);
+        // The stamp pool packs after the avatar catalog (its reserved slots sit past the frozen avatar capacity):
+        // animated placements ride their static pose, body-rooted stamps ride the client's live body pose; hidden slots
+        // park below the floor.
+        m_animator.PackTransforms(transforms: m_transforms, client: m_client);
 
         Array.Clear(array: m_seatCameraPoses);
 
         // The gizmo feed's per-frame accumulators (the composed speaker list resolves lazily on the first editing seat).
         IReadOnlyList<WorldSpeaker>? gizmoSpeakers = null;
         var gizmoSeatCount = 0;
+
+        // The roster bookkeeping pass: the seat.join cue (a roster arrival edge, layout-independent) and the ordered
+        // list of joined seat slots a composed seat slot binds against by position.
+        Span<int> joinedRosterSlots = stackalloc int[PlayerRoster.MaxSlots];
+        var joinedRosterCount = 0;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
@@ -411,19 +455,55 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            // The seat.join cue: the roster arrival edge, at the seat avatar's spawn pose.
             if (!m_seatWasJoined[slot]) {
                 m_seatWasJoined[slot] = true;
                 m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: slot));
             }
 
-            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
+            joinedRosterSlots[joinedRosterCount++] = slot;
+        }
+
+        // Compose the window: layout selection + eased transition. An empty authored layout list falls through to
+        // the built-in seat ladder.
+        m_composer.Compose(
+            joinedCount: joinedCount,
+            soleEditorIndex: soleEditorViewIndex,
+            workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction,
+            views: m_client.Definition.Views,
+            layoutOverride: m_composition.ActiveLayout,
+            cameraOverride: m_composition.SelectedCamera,
+            elapsedSeconds: m_elapsedSeconds
+        );
+
+        var transitionScale = m_composer.CurrentRenderScale;
+
+        foreach (var composed in m_composer.Slots) {
+            var region = composed.Region;
+
+            if (composed.Camera is { } cameraName) {
+                // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
+                if (ResolveNamedCamera(name: cameraName, region: region, width: width, height: height, deltaSeconds: deltaSeconds, camera: out var namedCamera)) {
+                    m_views.Add(item: new SdfViewSnapshot(Camera: namedCamera, Region: region) {
+                        RenderScale = transitionScale,
+                        UpscaleSharpness = m_settings.UpscaleSharpness,
+                    });
+                }
+
+                continue;
+            }
+
+            // A seat slot: bind the seat at this slot's order among the joined seats.
+            if ((uint)composed.SeatOrder >= (uint)joinedRosterCount) {
+                continue;
+            }
+
+            var slot = joinedRosterSlots[composed.SeatOrder];
             var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent and upsamples.
+            // any lower tier renders that view's SDF at a reduced extent and upsamples. A layout transition dips it.
             m_views.Add(item: new SdfViewSnapshot(Camera: camera, Region: region) {
-                RenderScale = m_settings.RenderScale,
+                RenderScale = (m_settings.RenderScale * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
@@ -505,18 +585,32 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_binder.RenderViews(context: in context, program: m_program, revision: m_builtRevision, transforms: m_transforms, time: m_elapsedSeconds);
     }
 
+    // The per-editing-seat gizmo budget (largechange-09): the projected speaker chips one seat contributes to the
+    // shared 192-record overlay table are capped here, nearest-to-camera first, so an author who declares a large
+    // speaker field cannot flood the table and starve the binding bar / editor HUD / toast — each of which reserves
+    // its own tail capacity, but only against a bounded gizmo writer. A dropped chip is off-screen priority (the
+    // farthest speakers), never a nearer one. Worst case: PlayerRoster.MaxSlots seats × this budget × 2 records
+    // (ring + icon) stays a documented fraction of MaxElements.
+    private const int MaxGizmoChipsPerSeat = 16;
+
     // One editing seat's gizmo set: every composed speaker row resolved to a world pose (the director's own anchor
-    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport.
-    // Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
-    // support-radius ring. Reuses the per-slot chip array (grown only when the speaker count does).
+    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport, then
+    // culled to MaxGizmoChipsPerSeat nearest the camera (largechange-09 — bounded admission into the shared overlay
+    // table). Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
+    // support-radius ring. Reuses the per-slot chip array (grown only when the budget-bounded count does).
     private OverlayGizmoSeat ComposeGizmoSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, IReadOnlyList<WorldSpeaker> speakers) {
-        if (m_gizmoChips[slot].Length < speakers.Count) {
-            m_gizmoChips[slot] = new OverlayGizmoChip[speakers.Count];
+        var budget = Math.Min(val1: speakers.Count, val2: MaxGizmoChipsPerSeat);
+
+        if (m_gizmoChips[slot].Length < budget) {
+            m_gizmoChips[slot] = new OverlayGizmoChip[budget];
         }
 
         var chips = m_gizmoChips[slot];
         var count = 0;
         var selection = m_targeting.Selected(slot: slot);
+        // The nearest-kept cull: the resolved camera-space depth of the FARTHEST kept chip and its slot, so once the
+        // budget fills a nearer speaker evicts the farthest instead of dropping. depths[i] tracks chips[i]'s depth.
+        Span<float> depths = stackalloc float[MaxGizmoChipsPerSeat];
 
         foreach (var speaker in speakers) {
             if (!m_audio.TryResolveSpeakerPose(speaker: speaker, transforms: m_transforms, position: out var world) ||
@@ -524,7 +618,31 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            chips[count++] = new OverlayGizmoChip(
+            var depth = Vector3.Dot(vector1: (world - camera.Position), vector2: camera.Forward);
+            int writeSlot;
+
+            if (count < budget) {
+                writeSlot = count++;
+            } else {
+                // Budget full: evict the farthest kept chip only when this one is nearer; otherwise drop this speaker.
+                // count stays at budget — we overwrite one slot in place.
+                var farthest = 0;
+
+                for (var i = 1; (i < budget); i++) {
+                    if (depths[i] > depths[farthest]) {
+                        farthest = i;
+                    }
+                }
+
+                if (depth >= depths[farthest]) {
+                    continue;
+                }
+
+                writeSlot = farthest;
+            }
+
+            depths[writeSlot] = depth;
+            chips[writeSlot] = new OverlayGizmoChip(
                 CenterX: px,
                 CenterY: py,
                 RingRadiusPx: ((speaker is WorldSpeaker.Bed bed) ? (bed.Radius * pixelsPerUnit) : 0f),
@@ -601,6 +719,104 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
             viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
+    }
+
+    // Recompiles every seat's chase rig from the authored seat rig (the built-in default carries OrientedFollowRig's
+    // own field defaults). Called at construction and on any views-section delivery (world.view.rig live).
+    private void RebuildSeatRigs(WorldRig seatRig) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_cameraRigs[slot] = WorldRigCompiler.Compile(rig: seatRig);
+        }
+    }
+
+    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/leaf/placement/
+    // group, or null = world), its offset, its rig, and — for a group-anchored chase — its spread pullback. Returns
+    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
+    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
+        camera = default;
+
+        WorldCamera? found = null;
+
+        foreach (var row in m_client.Definition.Cameras) {
+            if (string.Equals(a: row.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                found = row;
+
+                break;
+            }
+        }
+
+        if (found is not { } cameraRow) {
+            return false;
+        }
+
+        var (basePosition, baseOrientation, spread) = ResolveCameraAnchorPose(row: cameraRow, deltaSeconds: deltaSeconds);
+        // WHERE the eye rides: an unanchored offset IS the world eye; an anchored offset attaches in the anchor's frame.
+        var effectivePosition = ((cameraRow.Anchor is null) ? cameraRow.Offset : (basePosition + Vector3.Transform(value: cameraRow.Offset, rotation: baseOrientation)));
+        var pivotLift = ((cameraRow.Rig is WorldRig.Orbit orbit) ? orbit.PivotLift : Vector3.Zero);
+        var rig = WorldRigCompiler.Compile(rig: cameraRow.Rig);
+
+        // The establishing shot's spread-adaptive widening: scale a group-riding chase rig's eye offset by the group spread.
+        if ((cameraRow.Rig is WorldRig.Chase chase) && (chase.SpreadPullback != 0f) && (spread > 0f)) {
+            var factor = (1f + (chase.SpreadPullback * spread));
+
+            switch (rig) {
+                case OrientedFollowRig oriented:
+                    oriented.EyeOffset *= factor;
+
+                    break;
+                case FollowRig follow:
+                    follow.EyeOffset *= factor;
+
+                    break;
+            }
+        }
+
+        // A fixed rig ignores its anchor; its eye is the resolved world position (an unanchored look-at's offset).
+        if (rig is FixedRig fixedRig) {
+            fixedRig.Eye += effectivePosition;
+        }
+
+        var anchor = new SdfAnchor(Position: (effectivePosition + pivotLift), Orientation: baseOrientation);
+        var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
+
+        camera = CameraSnapshot.LookAt(
+            position: eye,
+            target: target,
+            fieldOfViewRadians: fieldOfView,
+            viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
+            viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
+        );
+
+        return true;
+    }
+
+    // The one shared anchor→pose resolver the camera path reads (P9): entity/leaf ride the live snapshot pose, a
+    // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
+    // smoothed centroid + spread, and a null anchor is the world origin. A group has no facing → identity orientation.
+    private (Vector3 Position, Quaternion Orientation, float Spread) ResolveCameraAnchorPose(WorldCamera row, float deltaSeconds) {
+        switch (row.Anchor) {
+            case WorldAnchor.Entity entity:
+                return (m_client.Position(index: entity.Index), m_client.Orientation(index: entity.Index), 0f);
+            case WorldAnchor.EntityLeaf leaf: {
+                var position = m_client.Position(index: leaf.Index);
+                var orientation = m_client.Orientation(index: leaf.Index);
+
+                if (WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role)) {
+                    position += Vector3.Transform(value: WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role), rotation: orientation);
+                }
+
+                return (position, orientation, 0f);
+            }
+            case WorldAnchor.Placement placement:
+                return (WorldAnchorGeometry.StaticPlacementPosition(definition: m_client.Definition, placementId: placement.PlacementId, shapeId: placement.ShapeId), Quaternion.Identity, 0f);
+            case WorldAnchor.Group group: {
+                var (centroid, spread) = m_groupAnchors.Resolve(key: row.Name, group: group, client: m_client, maxPopulation: WorldPopulation.MaxPopulation, deltaSeconds: deltaSeconds);
+
+                return (centroid, Quaternion.Identity, spread);
+            }
+            default:
+                return (Vector3.Zero, Quaternion.Identity, 0f);
+        }
     }
 
     // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+
@@ -822,15 +1038,112 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase, maxPlacementScale: maxPlacementScale);
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
-        // each. The probe emits every catalog range; a live build emits only active ranges without renumbering slots.
+        // each. The probe emits every catalog range at unit scale (the frozen worst case); a live build emits only
+        // active ranges, each sourcing its LOOK's pinned rig and uniform scale (both clamped so the frozen per-entity
+        // slot capacity is never exceeded — see WorldAvatarCatalog.Emit's remarks).
         WorldAvatarCatalog.Emit(
             builder: builder,
             isActive: client.IsActive,
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
-            probeWorstCase: probeWorstCase
+            probeWorstCase: probeWorstCase,
+            rigFor: (probeWorstCase ? null : index => LookRig(look: ResolveLook(index: index))),
+            scaleFor: (probeWorstCase ? null : index => ResolveLook(index: index).Scale)
         );
 
         return builder.Build();
     }
+
+    // Where a creation-stamp body's catalog avatar parks (below the floor, culled) — the body renders its creation.
+    private static readonly Vector3 s_hiddenAvatar = new(x: 0f, y: -1000f, z: 0f);
+
+    // Refresh the creation-stamp census: which active entities render their creation geometry through the stamp pool
+    // (inhabitants + crowd creation-looks) instead of a catalog avatar. Called at each rebuild.
+    private void RefreshBodyStamps() {
+        m_bodyStamps.Clear();
+        Array.Clear(array: m_rendersAsStamp);
+
+        var definition = m_client.Definition;
+
+        for (var index = 0; (index < WorldPopulation.MaxPopulation); index++) {
+            if (!m_client.IsActive(index: index) || (ResolveStampCreation(index: index, definition: definition) is not { } stamp)) {
+                continue;
+            }
+
+            m_bodyStamps.Add(item: stamp);
+            m_rendersAsStamp[index] = true;
+        }
+    }
+
+    // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
+    // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
+    // look). The uniform scale folds the placement scale and the look scale.
+    private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
+        var look = ResolveLook(index: index);
+
+        if (m_client.PlacementId(index: index) is { } placementId) {
+            if (FindPlacement(placements: definition.Placements, id: placementId) is not { } placement) {
+                return null;
+            }
+
+            var creationId = ((look.Source is WorldLookSource.Creation inhabitLook) ? inhabitLook.CreationId : placement.CreationId);
+
+            return ((WorldPlacementStamper.FindCreation(creations: definition.Creations, id: creationId) is { } creation)
+                ? new WorldStampPool.BodyStamp(BodyIndex: index, Creation: creation, Scale: (placement.Scale * look.Scale))
+                : null);
+        }
+
+        if (look.Source is WorldLookSource.Creation crowdLook) {
+            return ((WorldPlacementStamper.FindCreation(creations: definition.Creations, id: crowdLook.CreationId) is { } creation)
+                ? new WorldStampPool.BodyStamp(BodyIndex: index, Creation: creation, Scale: look.Scale)
+                : null);
+        }
+
+        return null;
+    }
+
+    private static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement> placements, string id) {
+        foreach (var placement in placements) {
+            if (string.Equals(a: placement.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
+        return null;
+    }
+
+    // Concatenate two row lists into one (document rows + derived rows) for the binder reconcile — a small allocation at
+    // the delivery boundary only, never per-frame.
+    private static IReadOnlyList<T> Concat<T>(IReadOnlyList<T> first, IReadOnlyList<T> second) {
+        if (second.Count == 0) {
+            return first;
+        }
+
+        var combined = new List<T>(capacity: (first.Count + second.Count));
+
+        combined.AddRange(collection: first);
+        combined.AddRange(collection: second);
+
+        return combined;
+    }
+
+    // The LOOK row an entity wears: the delivered look table indexed by the snapshot's per-entity look byte, or the
+    // implicit single catalog look when the world authors no `looks` section (the pre-arc runtime exactly).
+    private WorldLook ResolveLook(int index) {
+        var rows = m_client.Definition.Looks;
+
+        if (rows.Count == 0) {
+            return WorldLook.Implicit;
+        }
+
+        var lookIndex = m_client.LookIndex(index: index);
+
+        return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
+    }
+
+    // The catalog geometry-source rig for a look: a Catalog(Index) pin, or -1 (the entity's own index-derived rig) for
+    // an unpinned catalog OR a Creation look. A Creation look's body renders through the stamp pool (its catalog avatar
+    // parks below the floor via s_hiddenAvatar), so this catalog rig is reached only as the pool-pressure fallback — a
+    // body a full stamp pool starved renders as a catalog avatar rather than vanishing.
+    private static int LookRig(WorldLook look) => (look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : -1;
 }

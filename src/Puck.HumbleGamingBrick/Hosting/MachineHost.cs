@@ -19,7 +19,7 @@ namespace Puck.HumbleGamingBrick;
 /// serial link, peripherals, or audio output — a machine that steps, shows a frame, and answers a work-RAM peek.
 /// </para>
 /// </summary>
-public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScreenMachine, IAudioMachine, IFeedbackMachine, ITimeTravelMachine {
+public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScreenMachine, IAudioMachine, IFeedbackMachine, ITimeTravelMachine, IReconfigurableMachine {
     /// <summary>The machine's native framebuffer width (160).</summary>
     public const int ScreenWidth = Framebuffer.ScreenWidth;
     /// <summary>The machine's native framebuffer height (144).</summary>
@@ -27,7 +27,9 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
     /// <summary>The finite number of exact tick/input segments that may be accepted but incomplete.</summary>
     public const int DefaultMaximumPendingSteps = 8;
 
-    private readonly ConsoleModel m_model;
+    // The CURRENT model — construction-fixed at boot, then live-mutable through TryReconfigure (the dmg<->cgb<->agb
+    // device swap). The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
+    private ConsoleModel m_model;
     private readonly bool m_dmgSpeed;
     private readonly QueuedMachineWorker m_worker;
     private string? m_savePath;
@@ -147,6 +149,36 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
     /// <inheritdoc/>
     public TimeTravelStatus TimeTravelStatus =>
         m_worker.TimeTravelStatus;
+
+    /// <inheritdoc/>
+    public string Options =>
+        GamingBrickEngine.FormatOptions(model: m_model, dmgSpeed: m_dmgSpeed);
+
+    /// <inheritdoc/>
+    public bool TryReconfigure(string? options, out string reason) {
+        // Validate the options against the engine's ONE grammar before marshaling — a typo is rejected loudly here so the
+        // worker never runs a half-parsed swap. The parse also yields the model we adopt on a successful retarget so the
+        // Options readback (and world.save fold) reflect what the machine is now running.
+        ConsoleModel model;
+
+        try {
+            (model, _) = GamingBrickEngine.ParseOptions(options: options);
+        } catch (ArgumentException exception) {
+            reason = exception.Message;
+
+            return false;
+        }
+
+        var (ok, workerReason) = m_worker.Reconfigure(options: options);
+
+        if (ok) {
+            m_model = model;
+        }
+
+        reason = workerReason;
+
+        return ok;
+    }
 
     /// <inheritdoc/>
     public void FlushSave(bool force = false) =>

@@ -28,8 +28,11 @@ namespace Puck.World.Server;
 /// both reject), and (2) an incoming exclusive additionally rejects when a different principal already holds the SAME
 /// concrete subject ordinarily. An incoming exclusive <see cref="GrantSubject.All"/> is rejected outright (above). The
 /// wildcard <see cref="GrantSubject.All"/> grant is DELIBERATELY EXEMPT on the ordinary
-/// side: the permissive local defaults seed the console with <c>Drive/all</c> and seats/peers with <c>Control/all</c>,
-/// and that backdrop must never block a principal (e.g. an addon) from taking an exclusive hold on one specific body —
+/// side: the permissive local defaults seed the console with <c>Drive/all</c> and seats/peers with <c>Control/all</c>
+/// (NOT <c>Drive</c>) — so by default nothing drives an inhabited body (Arc 7) except its own producer, and possessing
+/// one is an explicit <c>world.grant &lt;principal&gt; drive body:&lt;index&gt;</c>. That is the correct default and it
+/// comes for free from the existing seed; no new grant subject or capability is added for inhabitation.
+/// This backdrop must never block a principal (e.g. an addon) from taking an exclusive hold on one specific body —
 /// so <c>world.grant addon:x drive body:n exclusive</c> succeeds even though the console holds <c>Drive/all</c>. The
 /// SEEDED per-section <c>Mutate</c> defaults get the same exemption: they are the concrete spelling of the same
 /// permissive backdrop (per-section only so one is revocable), so
@@ -86,6 +89,10 @@ internal sealed class WorldGrants {
     private void SeedDomain(WorldPrincipal principal) {
         _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false), reason: out _);
         _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Edit, Subject: GrantSubject.All, Exclusive: false), reason: out _);
+        // The shared window-composition authority — seats and the console can drive the live view.layout/view.camera
+        // overrides (peers, who get only Control/all above, do not receive this concrete grant). A director can still
+        // acquire it exclusively over this concrete subject to own the shot.
+        _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Control, Subject: GrantSubject.Composition, Exclusive: false), reason: out _);
 
         foreach (var section in Enum.GetValues<WorldSection>()) {
             var subject = GrantSubject.Section(section: section);

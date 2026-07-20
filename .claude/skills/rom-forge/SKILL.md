@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: Working on the ROM forge — src/Puck.Demo/Forge/ (the SM83 game framework in Framework/, Brickfall/, the SDF→brick bake pipeline in Bake/, Sm83Emitter, RomForge, AvatarForge, HgbImage/HgbCartridge). Use whenever forging or hand-authoring SM83 game ROMs, touching the game framework (kernel, WRAM map, saves, PRNG, input, text, OAM), the bake pipeline (palette fit, tiles, PBAK blobs), or the cart/save/title-art seams. Carries the settled cartridge, framework, and bake contracts so they aren't re-derived or accidentally forked.
+description: Working on the ROM forge — src/Puck.Demo/Forge/ (the SM83 game framework in Framework/, Brickfall/, the SDF-to-brick bake pipeline in Bake/, Sm83Emitter, RomForge, AvatarForge, HgbImage/HgbCartridge). Use whenever forging or hand-authoring SM83 game ROMs, touching the game framework (kernel, WRAM map, saves, PRNG, input, text, OAM), the bake pipeline (palette fit, tiles, PBAK blobs), or the cart/save/title-art seams. STATUS: the forge code compiles but is NOT RUNNABLE — every --forge-* command is dispatched by src/Puck.Demo/Forge/ForgeCliSeams.cs, which nothing calls since Puck.Demo composition root was deleted; porting the forge into Puck.World is Arc 8 of docs/demo-to-world-port-plan.md and has not landed. Treat this skill as the settled cartridge/framework/bake CONTRACT reference for that port, not as live verification procedure.
 ---
 
 # The ROM forge: SDF worlds and hand-authored games onto real brick hardware

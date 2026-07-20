@@ -39,7 +39,7 @@ internal interface IPointerSource {
 /// <summary>
 /// The demo-side pointer state store: implements <see cref="IPointerInputSink"/> so the launcher's window pump —
 /// engine-agnostic, knowing nothing about the demo — hands it every raw <see cref="WindowInputEvent"/> as it is
-/// dequeued (the demo contributes this as a <c>HostCapabilityContribution</c> in <see cref="DemoHost"/>, the same
+/// dequeued (the demo contributes this as a <c>HostCapabilityContribution</c> in <c>DemoHost</c>, the same
 /// seam a graphics backend uses to publish its device). Pointer BUTTONS carry no <see cref="InputSources"/>
 /// vocabulary entry — <see cref="WindowInputMapper"/> deliberately passes them through inert, because a drag needs
 /// continuous per-frame held state, not a one-shot bound command — so this store reads the raw event stream

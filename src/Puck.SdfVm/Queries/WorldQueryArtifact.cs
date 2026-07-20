@@ -1,10 +1,10 @@
 namespace Puck.SdfVm.Queries;
 
 /// <summary>
-/// Stores a resolution-quantized 2.5D heightfield and an optional blocked-cell bitmap using the
-/// <c>puck.worldquery.v1</c> schema. Coordinates and heights are raw Q48.16 values, and occupancy is bit-packed, so
-/// the artifact round-trips deterministically regardless of the floating-point geometry used to bake it. The
-/// artifact is currently an in-memory query input; persistence is the caller's responsibility.
+/// Stores a resolution-quantized 2.5D heightfield and an optional blocked-cell bitmap. Coordinates and heights are
+/// raw Q48.16 values, and occupancy is bit-packed, so the artifact round-trips deterministically regardless of the
+/// floating-point geometry used to bake it. The artifact is an in-memory query input; persistence is the caller's
+/// responsibility, and a schema token belongs to whatever serializer a caller adds.
 /// </summary>
 /// <param name="OriginXRaw">The grid's minimum-X corner, raw Q48.16.</param>
 /// <param name="OriginZRaw">The grid's minimum-Z corner, raw Q48.16.</param>
@@ -25,9 +25,6 @@ public sealed record WorldQueryArtifact(
     long[] HeightRaw,
     ulong[] Blocked
 ) {
-    /// <summary>The current artifact schema version.</summary>
-    public const string CurrentSchema = "puck.worldquery.v1";
-
     /// <summary>The sentinel <see cref="HeightRaw"/> value marking "no authored ground at this cell" — the most
     /// negative representable Q48.16 tick, unreachable by any authored terrain height.</summary>
     public const long NoHeightSentinel = long.MinValue;

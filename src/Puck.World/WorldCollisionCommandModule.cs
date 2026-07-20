@@ -1,0 +1,355 @@
+using System.Globalization;
+using System.Text.Json.Serialization.Metadata;
+using Puck.Commands;
+using Puck.Maths;
+using Puck.World.Protocol;
+using Puck.World.Server;
+
+namespace Puck.World;
+
+/// <summary>
+/// The contact/solidity verb surface — the dev reflection of Arc 1's <see cref="WorldMutation.SetCollision"/> and the
+/// solidity facets, molded over stdin through the SAME mutation messages the editor drives. Every write verb routes
+/// <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick boundary, the stdin barrier serializes a
+/// following read); <c>world.contacts</c> is an <see cref="CommandRouting.Immediate"/> read of the live definition and
+/// the body table. A SEPARATE module from <see cref="WorldMutationCommandModule"/> to keep every class under its
+/// analyzer ceilings.
+/// </summary>
+internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link) : ICommandModule {
+    /// <inheritdoc/>
+    public IEnumerable<CommandDefinition> GetCommands() {
+        yield return Row(
+            name: "world.collision",
+            description: "Replaces the whole contact-solver tuning from one inline-JSON WorldCollision {enabled, provider, contactSkin, maxIterations, maxSlopeDegrees, gradientProbe}: world.collision <json>. Applies LIVE (the collider set rebuilds next tick).",
+            info: WorldJsonContext.Default.WorldCollision,
+            toMutation: static collision => new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: collision)
+        );
+        yield return Simulation(
+            name: "world.collision.on",
+            description: "Turns collision ON (RMW over the collision section's enabled flag): world.collision.on.",
+            handler: (_, _) => SubmitCollision(edit: static collision => (collision with { Enabled = true }))
+        );
+        yield return Simulation(
+            name: "world.collision.off",
+            description: "Turns collision OFF (RMW): world.collision.off. Bodies keep their flat ground plane.",
+            handler: (_, _) => SubmitCollision(edit: static collision => (collision with { Enabled = false }))
+        );
+        yield return Simulation(
+            name: "world.collision.skin",
+            description: "Sets the contact skin (RMW): world.collision.skin <value>. The signed gap the solver keeps between a body and every surface.",
+            handler: (_, args) => Scalar(verb: "world.collision.skin", args: args, edit: static (collision, value) => (collision with { ContactSkin = value }))
+        );
+        yield return Simulation(
+            name: "world.collision.slope",
+            description: "Sets the walkable-slope limit in degrees (RMW): world.collision.slope <degrees>. The steepest surface a body still stands on; must be in (0, 90).",
+            handler: (_, args) => Scalar(verb: "world.collision.slope", args: args, edit: static (collision, value) => (collision with { MaxSlopeDegrees = value }))
+        );
+        yield return Simulation(
+            name: "world.collision.gradient",
+            description: "Sets the field-provider gradient probe step (RMW): world.collision.gradient <value> | -. '-' restores the evaluator default (0). Meaningful only under provider 'field'.",
+            handler: (_, args) => {
+                if ((args.Count == 1) && args.Is(index: 0, value: "-")) {
+                    return SubmitCollision(edit: static collision => (collision with { GradientProbe = 0f }));
+                }
+
+                return Scalar(verb: "world.collision.gradient", args: args, edit: static (collision, value) => (collision with { GradientProbe = value }));
+            }
+        );
+        yield return Simulation(
+            name: "world.collision.provider",
+            description: "Sets the contact provider (RMW): world.collision.provider <analytic|field>. analytic derives convex colliders from the document's solid rows; field compiles them into an SDF (Arc 2).",
+            handler: (_, args) => {
+                if (args.Count != 1) {
+                    return Usage(verb: "world.collision.provider", form: "<analytic|field>");
+                }
+
+                if (!Enum.TryParse<WorldContactProvider>(value: args[0].ToString(), ignoreCase: true, result: out var provider)) {
+                    return new CommandResult(Output: $"[world.collision.provider: unknown provider '{args[0].ToString()}' — analytic | field]") { IsError = true };
+                }
+
+                return SubmitCollision(edit: collision => (collision with { Provider = provider }));
+            }
+        );
+        yield return Simulation(
+            name: "world.kit.collider",
+            description: "Sets a kit's body VOLUME (RMW → UpsertKit): world.kit.collider <name> <radius> <height> | <name> none. A vertical capsule; height must be at least twice the radius. 'none' removes the volume.",
+            handler: (_, args) => {
+                if ((args.Count == 2) && args.Is(index: 1, value: "none")) {
+                    return EditKit(verb: "world.kit.collider", name: args[0].ToString(), edit: static kit => (kit with { Collider = null }));
+                }
+
+                if ((args.Count != 3) ||
+                    !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius) ||
+                    !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var height)) {
+                    return Usage(verb: "world.kit.collider", form: "<name> <radius> <height> | <name> none");
+                }
+
+                var name = args[0].ToString();
+
+                return EditKit(verb: "world.kit.collider", name: name, edit: kit => (kit with { Collider = new WorldCollider(Radius: radius, Height: height) }));
+            }
+        );
+        yield return Simulation(
+            name: "world.kit.model",
+            description: "Sets a kit's motion model (RMW → UpsertKit): world.kit.model <name> <grounded|free>.",
+            handler: (_, args) => {
+                if ((args.Count != 2) || !Enum.TryParse<MotionModel>(value: args[1].ToString(), ignoreCase: true, result: out var model)) {
+                    return Usage(verb: "world.kit.model", form: "<name> <grounded|free>");
+                }
+
+                var name = args[0].ToString();
+
+                return EditKit(verb: "world.kit.model", name: name, edit: kit => (kit with { Model = model }));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.kit.response",
+            description: "Sets a kit's velocity-response table (RMW → UpsertKit) from one inline-JSON MotionResponse array: world.kit.response <name> <json-array> | <name> none. Rows evaluate in order, first match wins; 'none' clears the table (instant snap).",
+            handler: (context, args) => {
+                if ((args.Count == 2) && args.Is(index: 1, value: "none")) {
+                    return EditKit(verb: "world.kit.response", name: args[0].ToString(), edit: static kit => (kit with { Tuning = (kit.Tuning with { Response = [] }) }));
+                }
+
+                if (args.Count < 2) {
+                    return Usage(verb: "world.kit.response", form: "<name> <json-array> | <name> none");
+                }
+
+                var raw = RawArgument(context: context, args: in args);
+                var separator = raw.AsSpan().IndexOfAny(value0: ' ', value1: '\t');
+
+                if (separator < 0) {
+                    return Usage(verb: "world.kit.response", form: "<name> <json-array> | <name> none");
+                }
+
+                var name = raw[..separator];
+                var json = raw[(separator + 1)..].Trim();
+
+                if (!WorldJsonPayload.TryParse(json: json, info: WorldJsonContext.Default.MotionResponseArray, value: out var rows, error: out var error)) {
+                    return new CommandResult(Output: $"[world.kit.response: {error}]") { IsError = true };
+                }
+
+                return EditKit(verb: "world.kit.response", name: name, edit: kit => (kit with { Tuning = (kit.Tuning with { Response = rows }) }));
+            },
+            routing: CommandRouting.Simulation
+        );
+        yield return Simulation(
+            name: "world.scene.solid",
+            description: "Marks a static-scene row SOLID or decorative (RMW → UpsertSceneRow): world.scene.solid <row-id> <margin> | <row-id> off. Solidity is DATA — the facet is the switch; 'off' drops it.",
+            handler: (_, args) => {
+                if ((args.Count == 2) && args.Is(index: 1, value: "off")) {
+                    return EditSceneRow(id: args[0].ToString(), edit: static row => (row with { Solid = null }));
+                }
+
+                if ((args.Count != 2) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var margin)) {
+                    return Usage(verb: "world.scene.solid", form: "<row-id> <margin> | <row-id> off");
+                }
+
+                var id = args[0].ToString();
+
+                return EditSceneRow(id: id, edit: row => (row with { Solid = new WorldSolid(Margin: margin) }));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.contacts",
+            description: "Reports the solidity state (Immediate read): world.contacts prints the solid-row census (spheres + boxes); world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, and grounded witness (resolved=1 when grounded, else 0).",
+            handler: (_, args) => {
+                if (args.Count == 0) {
+                    return Census();
+                }
+
+                if (!args.TryInt(index: 0, value: out var index) || (index < 1) || (index > WorldPopulation.MaxPopulation)) {
+                    return new CommandResult(Output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{WorldPopulation.MaxPopulation}]") { IsError = true };
+                }
+
+                if (server.Population.EntryBody(index: (index - 1)) is not { } body) {
+                    return new CommandResult(Output: $"[world.contacts: body {index} is inactive — see world.population]") { IsError = true };
+                }
+
+                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount}]"));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.collision.probe",
+            description: "Reads the live FIELD the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints the signed distance, material, and unit gradient (the up direction) at that point. Requires provider 'field'.",
+            handler: (_, args) => Probe(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.collision.status",
+            description: "Reports the contact-solver status (Immediate): enabled, provider, solid instruction count, field revision, contact skin, and the per-kit collider table.",
+            handler: (_, _) => Status()
+        );
+    }
+
+    // The live-field point read (world.collision.probe): sample distance/material/gradient exactly as the resolver does.
+    private CommandResult Probe(WireArgs args) {
+        if ((args.Count != 3)
+            || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var x)
+            || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var y)
+            || !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var z)) {
+            return Usage(verb: "world.collision.probe", form: "<x> <y> <z>");
+        }
+
+        if (server.SolidField is not { } field) {
+            return new CommandResult(Output: "[world.collision.probe: no field — set collision on with provider 'field']") { IsError = true };
+        }
+
+        var position = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
+
+        if (!field.Probe(position: in position, distance: out var distance, material: out var material, gradient: out var gradient)) {
+            return new CommandResult(Output: "[world.collision.probe: the field has no geometry to answer against]") { IsError = true };
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.probe: ({x:0.###}, {y:0.###}, {z:0.###}) distance={(double)distance:0.000} material={material} gradient=({(double)gradient.X:0.000}, {(double)gradient.Y:0.000}, {(double)gradient.Z:0.000})]"
+        ));
+    }
+
+    // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
+    // collider table (radius x height) so the whole grounded-contact configuration is one Immediate read.
+    private CommandResult Status() {
+        var collision = server.Definition.Collision;
+        var provider = collision.Provider.ToString().ToLowerInvariant();
+        var instructions = (server.SolidField?.InstructionCount ?? 0);
+        var colliders = new List<string>();
+
+        foreach (var kit in server.Definition.Kits) {
+            if (kit.Collider is { } collider) {
+                colliders.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{kit.Name}(r={collider.Radius:0.##} h={collider.Height:0.##})"));
+            }
+        }
+
+        var kitTable = ((colliders.Count == 0) ? "none" : string.Join(separator: ", ", values: colliders));
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.status: {(collision.Enabled ? "on" : "off")} provider={provider} instructions={instructions} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
+        ));
+    }
+
+    // The solid-row census: count the spheres (solid boulders) and boxes (solid slabs + solid screens) the analytic
+    // provider would derive from the live definition.
+    private CommandResult Census() {
+        var spheres = 0;
+        var boxes = 0;
+
+        foreach (var row in server.Definition.Scene.Rows) {
+            if (row.Solid is null) {
+                continue;
+            }
+
+            switch (row) {
+                case WorldSceneRow.Boulder:
+                    spheres++;
+
+                    break;
+                case WorldSceneRow.Slab:
+                    boxes++;
+
+                    break;
+            }
+        }
+
+        foreach (var screen in server.Definition.Screens) {
+            if (screen.Solid is not null) {
+                boxes++;
+            }
+        }
+
+        var enabled = (server.Definition.Collision.Enabled ? "on" : "off");
+
+        return new CommandResult(Output: $"[world.contacts: collision {enabled} — {spheres + boxes} solid rows ({spheres} spheres, {boxes} boxes)]");
+    }
+
+    // RMW one collision-section field into a whole-section SetCollision (the protocol stays coarse).
+    private CommandResult SubmitCollision(Func<WorldCollision, WorldCollision> edit) {
+        var current = server.Definition.Collision;
+
+        return Submit(mutation: new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: edit(arg: current)));
+    }
+
+    private CommandResult Scalar(string verb, WireArgs args, Func<WorldCollision, float, WorldCollision> edit) {
+        if ((args.Count != 1) || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, out var value)) {
+            return Usage(verb: verb, form: "<value>");
+        }
+
+        var current = server.Definition.Collision;
+
+        return Submit(mutation: new WorldMutation.SetCollision(Principal: WorldPrincipal.Console, Collision: edit(arg1: current, arg2: value)));
+    }
+
+    // RMW a whole kit row (found by name) into an UpsertKit.
+    private CommandResult EditKit(string verb, string name, Func<WorldKit, WorldKit> edit) {
+        if (FindKit(name: name) is not { } kit) {
+            return new CommandResult(Output: $"[{verb}: no kit row named '{name}']") { IsError = true };
+        }
+
+        return Submit(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: edit(arg: kit)));
+    }
+
+    // RMW a whole scene row (found by id) into an UpsertSceneRow.
+    private CommandResult EditSceneRow(string id, Func<WorldSceneRow, WorldSceneRow> edit) {
+        foreach (var row in server.Definition.Scene.Rows) {
+            if (string.Equals(a: row.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return Submit(mutation: new WorldMutation.UpsertSceneRow(Principal: WorldPrincipal.Console, Row: edit(arg: row)));
+            }
+        }
+
+        return new CommandResult(Output: $"[world.scene.solid: no scene row with id '{id}']") { IsError = true };
+    }
+
+    private WorldKit? FindKit(string name) {
+        foreach (var kit in server.Definition.Kits) {
+            if (string.Equals(a: kit.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return kit;
+            }
+        }
+
+        return null;
+    }
+
+    // A row-valued mutation verb: parse ONE inline-JSON argument from the raw line and submit the composed mutation.
+    private CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<T, WorldMutation> toMutation) {
+        return CommandDefinition.WithWireArgs(
+            name: name,
+            description: description,
+            handler: (context, args) => {
+                var raw = RawArgument(context: context, args: in args);
+
+                if (!WorldJsonPayload.TryParse(json: raw, info: info, value: out var value, error: out var error)) {
+                    return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
+                }
+
+                return Submit(mutation: toMutation(arg: value));
+            },
+            routing: CommandRouting.Simulation
+        );
+    }
+
+    private static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) {
+        return CommandDefinition.WithWireArgs(name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
+    }
+
+    private CommandResult Submit(WorldMutation mutation) {
+        link.SubmitWorldMutation(mutation: mutation);
+
+        return CommandResult.None;
+    }
+
+    private static CommandResult Usage(string verb, string form) {
+        return new CommandResult(Output: $"[{verb}: expected {form}]") {
+            IsError = true,
+        };
+    }
+
+    private static string RawArgument(CommandContext context, in WireArgs args) {
+        if (context.Text is { } text) {
+            var span = text.AsSpan().TrimStart();
+            var separator = span.IndexOfAny(value0: ' ', value1: '\t');
+
+            return ((separator < 0) ? string.Empty : span[(separator + 1)..].Trim().ToString());
+        }
+
+        return args.Tail(0);
+    }
+}

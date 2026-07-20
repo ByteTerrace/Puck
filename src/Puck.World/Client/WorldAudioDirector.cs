@@ -75,7 +75,7 @@ internal sealed class WorldAudioDirector {
     private const ulong Fnv64Prime = 1099511628211UL;
 
     private readonly WorldClient? m_client;
-    private readonly WorldPlacementAnimator? m_animator;
+    private readonly WorldStampPool? m_animator;
     private readonly WorldAudioSnapshot[] m_slabs;
     private readonly PublishBuffer<WorldAudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
@@ -119,7 +119,7 @@ internal sealed class WorldAudioDirector {
     /// emitters resolve absent (honest silence); without an animator, placements resolve through the static stamp math.</summary>
     /// <param name="client">The snapshot-fed entity view, or <see langword="null"/> headless.</param>
     /// <param name="animator">The animated-placement replay pool, or <see langword="null"/> headless.</param>
-    public WorldAudioDirector(WorldClient? client, WorldPlacementAnimator? animator) {
+    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator) {
         m_client = client;
         m_animator = animator;
         m_slabs = new WorldAudioSnapshot[SnapshotRotation];
@@ -233,6 +233,20 @@ internal sealed class WorldAudioDirector {
             // The reserved transient pool is charged against the snapshot cap: the plan may only fill what cues never need.
             if (m_plan.Count > (WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)) {
                 Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
+            }
+
+            // largechange-01: validate the WHOLE derived plan against the mixer's bounded registries at the compose
+            // boundary — the patch set (per-emitter synth voices) and the distinct external-source identities the plan
+            // taps — so an overfull registry is a loud, contained warn here rather than a silent drop the mixer only
+            // discovers row-by-row at bind time.
+            if (m_patchSet.Count > WorldAudioMixer.MaxPatches) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_patchSet.Count} derived synth patches exceed the {WorldAudioMixer.MaxPatches}-slot mixer patch table — the overflow renders silent]");
+            }
+
+            var distinctSources = CountDistinctExternalSources();
+
+            if (distinctSources > WorldAudioMixer.MaxSources) {
+                Console.Error.WriteLine(value: $"[world.audio: {distinctSources} derived machine/tune sources exceed the {WorldAudioMixer.MaxSources}-slot mixer source table — the overflow renders silent]");
             }
 
             ApplyMixerBindings();
@@ -480,7 +494,7 @@ internal sealed class WorldAudioDirector {
                         Key = key,
                         Kind = WorldAudioEmitterKind.Bed,
                         Anchor = EmitterAnchor.FixedPoint(position: bed.Center),
-                        MinRadius = FixedQ4816.FromDouble(value: (bed.InnerRadius ?? 0f)),
+                        MinRadius = FixedQ4816.FromDouble(value: bed.InnerRadius),
                         MaxRadius = FixedQ4816.FromDouble(value: bed.Radius),
                         FadeFrames = FadeFrames(seconds: (bed.FadeSeconds ?? audio.DefaultBedFadeSeconds)),
                         GainQ16 = gain,
@@ -534,7 +548,7 @@ internal sealed class WorldAudioDirector {
                 Admit(plan: new EmitterPlan {
                     Key = key,
                     Kind = WorldAudioEmitterKind.Point,
-                    Anchor = EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: sound.ShapeId, staticPosition: StaticShapePosition(placement: placement, creation: creation, shapeId: sound.ShapeId)),
+                    Anchor = EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: sound.ShapeId, staticPosition: WorldAnchorGeometry.StaticShapePosition(placement: placement, creation: creation, shapeId: sound.ShapeId)),
                     MinRadius = FixedQ4816.Zero,
                     MaxRadius = FixedQ4816.FromDouble(value: (sound.Radius ?? audio.DefaultSpeakerRadius)),
                     FadeFrames = 0,
@@ -689,7 +703,7 @@ internal sealed class WorldAudioDirector {
         WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
-        WorldMutation.UpsertCamera { Camera: WorldCamera.Fixed fixedCamera } => fixedCamera.Position,
+        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => upsert.Camera.Offset,
         _ => null,
     };
 
@@ -697,7 +711,7 @@ internal sealed class WorldAudioDirector {
     private void BuildCueTable(WorldAudioDefaults audio) {
         m_cueRows.Clear();
 
-        foreach (var cue in (audio.Cues ?? [])) {
+        foreach (var cue in audio.Cues) {
             CuePlacement placement;
             string? speakerName = null;
 
@@ -898,6 +912,21 @@ internal sealed class WorldAudioDirector {
         }
     }
 
+    // The distinct external (machine/tune) source identities the derived plan taps — the mixer binds one source slot
+    // per identity, so this is the plan's real demand on the bounded source table (largechange-01 compose-boundary
+    // validation). Synth-fed rows register a patch, not a source, so they do not count here.
+    private int CountDistinctExternalSources() {
+        var seen = new HashSet<WorldAudioSourceKey>();
+
+        foreach (var plan in m_plan) {
+            if (plan.Source.Kind is WorldAudioSourceKind.Machine or WorldAudioSourceKind.Tune) {
+                _ = seen.Add(item: plan.Source);
+            }
+        }
+
+        return seen.Count;
+    }
+
     // Drop registry rows whose key left the derived plan, so a re-authored row later re-enters from silence with a
     // fresh id rather than inheriting a stale ramp.
     private void RetireDepartedKeys() {
@@ -934,6 +963,16 @@ internal sealed class WorldAudioDirector {
         }
 
         mixer.MasterGainQ16 = MasterGainQ16;
+
+        // largechange-01 reclaim: retire patch slots whose id left the derived plan BEFORE re-registering the live set,
+        // so the bounded table is not filled by the carcasses of churned sound emitters across reconciles.
+        var livePatchIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (id, _) in m_patchSet) {
+            _ = livePatchIds.Add(item: id);
+        }
+
+        mixer.RetirePatches(live: livePatchIds);
 
         foreach (var (id, patch) in m_patchSet) {
             mixer.RegisterPatch(id: id, patch: in patch);
@@ -1022,8 +1061,9 @@ internal sealed class WorldAudioDirector {
             }
             case EmitterAnchorKind.Placement:
             default: {
-                // Animated placements ride the animator's current frame; static ones the reconcile-time stamp math.
-                if ((m_animator is { } animator) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, position: out var animated)) {
+                // Animated placements ride the stamp pool's current frame; an INHABITED placement rides its live body
+                // pose (both through TryShapePosition); a static placement uses the reconcile-time stamp math.
+                if ((m_animator is { } animator) && (m_client is { } client) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, client: client, out var animated)) {
                     position = (animated + anchor.Offset);
 
                     return true;
@@ -1092,25 +1132,25 @@ internal sealed class WorldAudioDirector {
                 continue;
             }
 
-            switch (camera) {
-                case WorldCamera.Fixed fixedCamera:
-                    return (Eye: fixedCamera.Position, Forward: (fixedCamera.LookAt - fixedCamera.Position));
-                case WorldCamera.Anchored anchored: {
-                    var plan = new EmitterPlan {
-                        Anchor = AnchorOf(anchor: anchored.Anchor, offset: anchored.Offset),
-                    };
-
-                    if (TryResolvePosition(plan: in plan, transforms: transforms, position: out var eye) && (m_client is { } client) &&
-                        (anchored.Anchor is WorldAnchor.Entity or WorldAnchor.EntityLeaf)) {
-                        var index = ((anchored.Anchor is WorldAnchor.Entity entity) ? entity.Index : ((WorldAnchor.EntityLeaf)anchored.Anchor).Index);
-
-                        // Avatar-local forward is -Z (the body convention every kit composition rides).
-                        return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: client.Orientation(index: index)));
-                    }
-
-                    return null;
-                }
+            // An unanchored look-at camera listens from its world eye toward its target; other unanchored rigs have no
+            // simple static listener pose (fall back to the listener placement).
+            if (camera.Anchor is null) {
+                return ((camera.Rig is WorldRig.LookAt look) ? (Eye: camera.Offset, Forward: (look.Target - camera.Offset)) : ((Vector3 Eye, Vector3 Forward)?)null);
             }
+
+            var plan = new EmitterPlan {
+                Anchor = AnchorOf(anchor: camera.Anchor, offset: camera.Offset),
+            };
+
+            if (TryResolvePosition(plan: in plan, transforms: transforms, position: out var eye) && (m_client is { } client) &&
+                (camera.Anchor is WorldAnchor.Entity or WorldAnchor.EntityLeaf)) {
+                var index = ((camera.Anchor is WorldAnchor.Entity entity) ? entity.Index : ((WorldAnchor.EntityLeaf)camera.Anchor).Index);
+
+                // Avatar-local forward is -Z (the body convention every kit composition rides).
+                return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: client.Orientation(index: index)));
+            }
+
+            return null;
         }
 
         return null;
@@ -1131,41 +1171,9 @@ internal sealed class WorldAudioDirector {
         _ => EmitterAnchor.FixedPoint(position: offset),
     };
 
-    // A static placement anchor's stamped position: root position, or root ∘ (scale · shape local) under the yaw
-    // rotation — the stamp math WorldPlacementStamper bakes, reduced to the anchor point.
-    private Vector3 StaticPlacementPosition(string placementId, int? shapeId) {
-        if (m_definition is not { } definition) {
-            return Vector3.Zero;
-        }
-
-        foreach (var placement in definition.Placements) {
-            if (!string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
-                continue;
-            }
-
-            var creation = WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId);
-
-            return ((creation is null) ? placement.Position : StaticShapePosition(placement: placement, creation: creation, shapeId: shapeId));
-        }
-
-        return Vector3.Zero;
-    }
-
-    private static Vector3 StaticShapePosition(WorldPlacement placement, WorldCreation creation, int? shapeId) {
-        if (shapeId is not { } targetShapeId) {
-            return placement.Position;
-        }
-
-        foreach (var shape in (creation.Document.Shapes ?? [])) {
-            if (shape.Id == targetShapeId) {
-                var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
-
-                return (placement.Position + Vector3.Transform(value: (shape.Position * placement.Scale), rotation: rotation));
-            }
-        }
-
-        return placement.Position;
-    }
+    // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read (P9).
+    private Vector3 StaticPlacementPosition(string placementId, int? shapeId) =>
+        ((m_definition is { } definition) ? WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placementId, shapeId: shapeId) : Vector3.Zero);
 
     private static WorldAudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
         WorldSpeakerSource.Machine machine => WorldAudioSourceKey.Machine(slot: machine.ScreenIndex),

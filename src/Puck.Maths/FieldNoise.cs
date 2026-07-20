@@ -111,6 +111,34 @@ public static class FieldNoise {
 
         return new(Value: accumulated);
     }
+    /// <summary>Samples the smooth noise field and its exact analytic gradient at a position, in one pass.</summary>
+    /// <param name="seed">The field seed; distinct seeds yield domain-separated, decorrelated fields.</param>
+    /// <param name="position">The position to sample; one noise unit spans one world unit.</param>
+    /// <param name="gradient">The field's rate of change per world unit along each axis.</param>
+    /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>, identical to <see cref="Sample(ulong, FixedVector3)"/>.</returns>
+    /// <remarks>The eight corner hashes — the sampler's real cost — are shared between the value and all three
+    /// partials, so this is far cheaper than differencing <see cref="Sample(ulong, FixedVector3)"/> and carries no
+    /// step-size choice. The gradient is continuous across cell boundaries because the quintic fade's derivative
+    /// vanishes at both ends. Each component lies in <c>[−3.75, 3.75]</c>.</remarks>
+    public static FixedQ4816 SampleGradient(ulong seed, FixedVector3 position, out FixedVector3 gradient) {
+        Span<long> corners = stackalloc long[8];
+
+        LoadCorners(
+            seed: seed,
+            x0: (position.X.Value >> FixedQ4816.FractionBitCount),
+            y0: (position.Y.Value >> FixedQ4816.FractionBitCount),
+            z0: (position.Z.Value >> FixedQ4816.FractionBitCount),
+            corners: corners
+        );
+
+        return new(Value: BlendCornersWithGradient(
+            corners: corners,
+            xFraction: position.X.Value & FractionMask,
+            yFraction: position.Y.Value & FractionMask,
+            zFraction: position.Z.Value & FractionMask,
+            gradient: out gradient
+        ));
+    }
     /// <summary>Samples the smooth noise field at a hierarchical world position, exact at planet scale.</summary>
     /// <param name="seed">The field seed; distinct seeds yield domain-separated, decorrelated fields.</param>
     /// <param name="position">The position to sample; one noise unit spans one world unit.</param>
@@ -167,7 +195,7 @@ public static class FieldNoise {
     // derivative continuous across cell boundaries.
     private static long FadeQ28(long t) {
         var t28 = (t << 12);
-        var inner = (((((6L * t28) * t28) >> FadeFractionBitCount) - (15L << FadeFractionBitCount)));
+        var inner = ((6L * t28) - (15L << FadeFractionBitCount));
 
         inner = (((inner * t28) >> FadeFractionBitCount) + (10L << FadeFractionBitCount));
 
@@ -175,6 +203,16 @@ public static class FieldNoise {
         var t3 = ((t2 * t28) >> FadeFractionBitCount);
 
         return ((t3 * inner) >> FadeFractionBitCount);
+    }
+    // The quintic fade's derivative 30t⁴ − 60t³ + 30t², factored as 30t²(t − 1)² to keep every intermediate positive
+    // and cancellation-free. Zero at both ends, peaking at 1.875 for t = 0.5.
+    private static long FadeDerivativeQ28(long t) {
+        var t28 = (t << 12);
+        var oneMinus = ((1L << FadeFractionBitCount) - t28);
+        var square = ((t28 * t28) >> FadeFractionBitCount);
+        var oneMinusSquare = ((oneMinus * oneMinus) >> FadeFractionBitCount);
+
+        return (30L * ((square * oneMinusSquare) >> FadeFractionBitCount));
     }
     private static long Lerp(long a, long b, long fadeQ28) =>
         (a + (((b - a) * fadeQ28) >> FadeFractionBitCount));
@@ -242,6 +280,36 @@ public static class FieldNoise {
                 yFraction: yFraction,
                 zFraction: zFraction
             );
+        }
+    }
+    // The eight lattice corners in x-major order (index = i + 2j + 4k), staged exactly as SampleLatticeTerms stages
+    // them so the gradient sampler and the value samplers agree bit for bit.
+    private static void LoadCorners(ulong seed, long x0, long y0, long z0, Span<long> corners) {
+        unchecked {
+            var xTerm0 = (((ulong)x0) * CombineX);
+            var yTerm0 = (((ulong)y0) * CombineY);
+            var zTerm0 = (((ulong)z0) * CombineZ);
+            var xTerm1 = (xTerm0 + CombineX);
+            var yTerm1 = (yTerm0 + CombineY);
+            var zTerm1 = (zTerm0 + CombineZ);
+            var seedX = Mix(value: (seed + SeedDomainX));
+            var seedY = Mix(value: (seed + SeedDomainY));
+            var seedZ = Mix(value: (seed + SeedDomainZ));
+            var xState0 = Mix(value: (seedX + xTerm0));
+            var xState1 = Mix(value: (seedX + xTerm1));
+            var xy00 = Mix(value: ((xState0 + seedY) + yTerm0));
+            var xy10 = Mix(value: ((xState1 + seedY) + yTerm0));
+            var xy01 = Mix(value: ((xState0 + seedY) + yTerm1));
+            var xy11 = Mix(value: ((xState1 + seedY) + yTerm1));
+
+            corners[0] = CornerValue(hash: Mix(value: ((xy00 + seedZ) + zTerm0)));
+            corners[1] = CornerValue(hash: Mix(value: ((xy10 + seedZ) + zTerm0)));
+            corners[2] = CornerValue(hash: Mix(value: ((xy01 + seedZ) + zTerm0)));
+            corners[3] = CornerValue(hash: Mix(value: ((xy11 + seedZ) + zTerm0)));
+            corners[4] = CornerValue(hash: Mix(value: ((xy00 + seedZ) + zTerm1)));
+            corners[5] = CornerValue(hash: Mix(value: ((xy10 + seedZ) + zTerm1)));
+            corners[6] = CornerValue(hash: Mix(value: ((xy01 + seedZ) + zTerm1)));
+            corners[7] = CornerValue(hash: Mix(value: ((xy11 + seedZ) + zTerm1)));
         }
     }
     // The hierarchical path retains the full cell-derived lattice coordinate. MixWideAxis's high component is zero
@@ -348,6 +416,48 @@ public static class FieldNoise {
             a: x01,
             b: x11,
             fadeQ28: fadeY
+        );
+
+        return Lerp(
+            a: y0Value,
+            b: y1Value,
+            fadeQ28: fadeZ
+        );
+    }
+    // The trilinear blend and its three partials share every intermediate. Differentiating the blend with respect to a
+    // faded weight replaces that axis's pair of corner lerps with their difference and leaves the other two axes
+    // untouched; the chain rule then scales by the fade's derivative. One noise unit spans one world unit, so the
+    // partial with respect to the cell fraction is already the partial with respect to the axis.
+    private static long BlendCornersWithGradient(ReadOnlySpan<long> corners, long xFraction, long yFraction, long zFraction, out FixedVector3 gradient) {
+        var fadeX = FadeQ28(t: xFraction);
+        var fadeY = FadeQ28(t: yFraction);
+        var fadeZ = FadeQ28(t: zFraction);
+        var x00 = Lerp(a: corners[0], b: corners[1], fadeQ28: fadeX);
+        var x10 = Lerp(a: corners[2], b: corners[3], fadeQ28: fadeX);
+        var x01 = Lerp(a: corners[4], b: corners[5], fadeQ28: fadeX);
+        var x11 = Lerp(a: corners[6], b: corners[7], fadeQ28: fadeX);
+        var y0Value = Lerp(a: x00, b: x10, fadeQ28: fadeY);
+        var y1Value = Lerp(a: x01, b: x11, fadeQ28: fadeY);
+
+        // ∂/∂x: the x-lerps collapse to corner differences, then blend through y and z unchanged.
+        var xSlope = Lerp(
+            a: Lerp(a: (corners[1] - corners[0]), b: (corners[3] - corners[2]), fadeQ28: fadeY),
+            b: Lerp(a: (corners[5] - corners[4]), b: (corners[7] - corners[6]), fadeQ28: fadeY),
+            fadeQ28: fadeZ
+        );
+        // ∂/∂y: the y-lerp collapses to the difference of the already-blended x pairs.
+        var ySlope = Lerp(
+            a: (x10 - x00),
+            b: (x11 - x01),
+            fadeQ28: fadeZ
+        );
+        // ∂/∂z: the outermost lerp collapses to the difference of its own operands.
+        var zSlope = (y1Value - y0Value);
+
+        gradient = new(
+            X: FixedQ4816.FromRawBits(value: ((xSlope * FadeDerivativeQ28(t: xFraction)) >> FadeFractionBitCount)),
+            Y: FixedQ4816.FromRawBits(value: ((ySlope * FadeDerivativeQ28(t: yFraction)) >> FadeFractionBitCount)),
+            Z: FixedQ4816.FromRawBits(value: ((zSlope * FadeDerivativeQ28(t: zFraction)) >> FadeFractionBitCount))
         );
 
         return Lerp(

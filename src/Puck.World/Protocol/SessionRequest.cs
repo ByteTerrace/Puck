@@ -103,6 +103,11 @@ internal abstract record WorldQuery {
 }
 
 /// <summary>The server's composed answer to a <see cref="WorldQuery"/> — the read-back string the client prints verbatim
-/// (a byte-identical echo of the authoritative pose/roster state).</summary>
+/// (a byte-identical echo of the authoritative pose/roster state), plus the verdict that says whether the answer is a
+/// read-back or a refusal.</summary>
 /// <param name="Text">The answer string.</param>
-internal readonly record struct QueryAnswer(string Text);
+/// <param name="Refused">Whether the query named a MISSING or INACTIVE subject, so the answer is a refusal rather than
+/// state. A rendering module maps this onto <c>CommandResult.IsError</c>, which is what makes the miss reach
+/// <c>wire.errors</c> on every transport — not just the loopback, where the client-side liveness guard catches it
+/// first.</param>
+internal readonly record struct QueryAnswer(string Text, bool Refused = false);

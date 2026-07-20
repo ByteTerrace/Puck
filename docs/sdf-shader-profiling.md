@@ -1,5 +1,13 @@
 # SDF shader profiling with Nsight
 
+> **STATUS (2026-07-19): CURRENT SDF reference; the launch target moved.** The
+> `sdf.bench` console-verb workloads below are the live driver. `Puck.Demo` was
+> flipped to a **library that no longer runs** at Beat B of the
+> [Demo → World port](demo-to-world-port-plan.md), so the `Puck.Demo.exe` launch
+> and the headless `--bench standard` fallback shown below are **void** —
+> substitute `src/Puck.World` as the runnable target (Arc 10 ports the headless
+> bench suite into `Puck.World`). Read the Demo invocations as historical form.
+
 Use this workflow to locate cost inside the SDF VM before changing its ISA. It
 keeps `-O3`, adds source/debug correlation only to a runnable build output, and
 does not replace the committed production SPIR-V or DXIL.

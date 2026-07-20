@@ -1,52 +1,86 @@
-using System.Text.Json;
-
 namespace Puck.World;
 
 /// <summary>The loaded world document plus its on-disk origin — the DI record <c>world.save</c> reads to learn its
 /// default target. <see cref="SourcePath"/> is <see langword="null"/> when the definition is the baked
-/// <see cref="WorldDefinition.Default"/> (no file, or a rejected file), so a bare <c>world.save</c> knows it has no
-/// target and must be given a path.</summary>
+/// <see cref="WorldDefinition.Default"/> (only ever the no-<c>--world</c>, no-shipped-asset case), so a bare
+/// <c>world.save</c> knows it has no target and must be given a path.</summary>
 /// <param name="Definition">The active world definition.</param>
-/// <param name="SourcePath">The file the definition loaded from, or <see langword="null"/> when baked/fallback.</param>
+/// <param name="SourcePath">The file the definition loaded from, or <see langword="null"/> when baked.</param>
 internal sealed record WorldDefinitionSource(WorldDefinition Definition, string? SourcePath);
 
 /// <summary>
 /// Resolves the world definition at boot: a <c>--world &lt;path&gt;</c> argument (or the checked-in
 /// <c>Assets/worlds/default.world.json</c> beside the executable), loaded through <see cref="WorldJsonContext"/>,
-/// schema-checked, and passed through <see cref="WorldDefinitionValidator"/>. ANY failure — missing file, parse error,
-/// schema mismatch, or a validation error — falls back LOUDLY to the baked <see cref="WorldDefinition.Default"/>. Boot
-/// always prints exactly one <c>[world] definition:</c> line naming the resolved path (or the baked-default reason).
+/// schema-checked, and passed through <see cref="WorldDefinitionValidator"/>.
 /// </summary>
+/// <remarks>An EXPLICIT <c>--world</c> path is an assertion: absent, unreadable, or invalid, it fails the boot with a
+/// named reason and a non-zero exit — a typo must never quietly run some other world. The in-code baked definition is a
+/// legitimate boot mode (it is what runs when no world asset is present) and so has its own EXPLICIT request, the
+/// <see cref="BakedSentinel"/> value; it is never reachable by accident. Boot prints exactly one
+/// <c>[world] definition:</c> line naming the resolved path AND which of the three origins it took.</remarks>
 internal static class WorldDefinitionLoader {
+    /// <summary>The <c>--world</c> value that requests the in-code <see cref="WorldDefinition.Default"/> outright,
+    /// rather than any file. A world document is always a <c>.json</c> path, so the bare word cannot collide with one.</summary>
+    public const string BakedSentinel = "baked";
+
     /// <summary>The default world file, resolved against <see cref="AppContext.BaseDirectory"/> when no
     /// <c>--world</c> path is supplied.</summary>
     public static readonly string DefaultRelativePath = Path.Combine(path1: "Assets", path2: "worlds", path3: "default.world.json");
 
-    /// <summary>Loads the active world definition, honoring an optional explicit path and falling back loudly to the
-    /// baked default on any failure. Prints the one-line boot origin to <see cref="Console.Error"/>.</summary>
-    /// <param name="explicitPath">The <c>--world</c> path, or <see langword="null"/>/empty for the default file.</param>
-    /// <returns>The active definition and its origin.</returns>
-    public static WorldDefinitionSource Load(string? explicitPath) {
-        var path = (string.IsNullOrWhiteSpace(value: explicitPath)
-            ? Path.Combine(path1: AppContext.BaseDirectory, path2: DefaultRelativePath)
-            : Path.GetFullPath(path: explicitPath));
+    /// <summary>Resolves the active world definition from one of three origins: the <see cref="BakedSentinel"/>, an
+    /// explicit file (a boot failure when it will not load), or the shipped default file (falling back loudly to the
+    /// baked definition when no asset is present).</summary>
+    /// <param name="explicitPath">The <c>--world</c> value — a path, <see cref="BakedSentinel"/>, or
+    /// <see langword="null"/>/empty for the shipped default file.</param>
+    /// <param name="source">The resolved definition and its origin, when this returns <see langword="true"/>.</param>
+    /// <param name="failure">The one-line boot-failure message, or empty on success.</param>
+    /// <returns><see langword="true"/> when the boot may proceed.</returns>
+    public static bool TryResolve(string? explicitPath, out WorldDefinitionSource source, out string failure) {
+        var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
 
-        if (TryLoadFile(path: path, definition: out var loaded, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"[world] definition: {path}");
+        // The in-code document, asked for by name. It is the same definition the no-asset fallback lands on, but it is
+        // REQUESTED here rather than inferred from a failure, so the boot line reads as a choice and not an accident.
+        if (explicitly && string.Equals(a: explicitPath!.Trim(), b: BakedSentinel, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            Console.Error.WriteLine(value: $"[world] definition: baked default (in-code; requested by --world {BakedSentinel})");
 
-            return new WorldDefinitionSource(Definition: loaded, SourcePath: path);
+            source = new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
+            failure = string.Empty;
+
+            return true;
         }
 
-        Console.Error.WriteLine(value: $"[world] definition: baked default ({reason})");
+        var path = (explicitly ? Path.GetFullPath(path: explicitPath!) : Path.Combine(path1: AppContext.BaseDirectory, path2: DefaultRelativePath));
 
-        return new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
+        if (TryLoadFile(path: path, definition: out var loaded, reason: out var reason)) {
+            Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly ? "--world" : "shipped default")})");
+
+            source = new WorldDefinitionSource(Definition: loaded, SourcePath: path);
+            failure = string.Empty;
+
+            return true;
+        }
+
+        if (explicitly) {
+            source = new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
+            failure = $"[world] --world {reason}";
+
+            return false;
+        }
+
+        Console.Error.WriteLine(value: $"[world] definition: baked default (in-code; no shipped default — {reason})");
+
+        source = new WorldDefinitionSource(Definition: WorldDefinition.Default, SourcePath: null);
+        failure = string.Empty;
+
+        return true;
     }
 
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
-    /// reuses so it never reimplements the deserialize → coalesce → schema-check → validate path. Read → deserialize →
-    /// coalesce absent optional sections → schema-check → validate. Any failure yields a one-line reason (line endings
-    /// collapsed) and <see langword="false"/>; a broad catch is deliberate here — a load boundary must fail safe to
-    /// the baked default, never throw out of <see cref="TryLoadFile"/>.</summary>
+    /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
+    /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:
+    /// an ABSENT file, an UNREADABLE file, and an INVALID document. An INCOMPLETE document — one missing a section the
+    /// canonical writer emits — is invalid like any other; the validator names every missing section. A broad catch is
+    /// deliberate: a load boundary must never throw out of <see cref="TryLoadFile"/>.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded definition on success; <see cref="WorldDefinition.Default"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
@@ -60,13 +94,25 @@ internal static class WorldDefinitionLoader {
             return false;
         }
 
+        string json;
+
         try {
-            var json = File.ReadAllText(path: path);
-            var parsed = Normalize(definition: (JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
-                ?? throw new InvalidOperationException(message: "document deserialized to null")));
+            json = File.ReadAllText(path: path);
+        } catch (Exception exception) {
+            reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        try {
+            if (!WorldJsonPayload.TryParse(json: json, info: WorldJsonContext.Default.WorldDefinition, value: out var parsed, error: out var parseError)) {
+                reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
+
+                return false;
+            }
 
             if (!string.Equals(a: parsed.Schema, b: WorldDefinition.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
-                reason = $"{path}: schema '{parsed.Schema ?? "(absent)"}' is not {WorldDefinition.SchemaVersion}";
+                reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: schema '{parsed.Schema ?? "(absent)"}' is not {WorldDefinition.SchemaVersion}";
 
                 return false;
             }
@@ -77,34 +123,9 @@ internal static class WorldDefinitionLoader {
 
             return true;
         } catch (Exception exception) {
-            reason = $"{path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
-    }
-
-    // Coalesce absent-in-JSON optional sections (source-gen skips a positional collection's initializer when the JSON
-    // property is absent, leaving null — the run-document doctrine's trap) so the validator and downstream consumers
-    // never dereference null. Required sections stay null → the validator reports them → loud fallback. A fully-authored
-    // document (every section present, as the canonical writer always emits) is unchanged by this pass, so load→save
-    // byte-identity holds.
-    private static WorldDefinition Normalize(WorldDefinition definition) {
-        var assignment = (definition.Assignment is { } authored
-            ? new WorldKitAssignment(Policy: authored.Policy, Table: (authored.Table ?? []))
-            : WorldKitAssignment.Hash);
-
-        return (definition with {
-            Addons = (definition.Addons ?? []),
-            Assignment = assignment,
-            Audio = (definition.Audio ?? WorldAudioDefaults.Default),
-            BindingOverlays = (definition.BindingOverlays ?? []),
-            Creations = (definition.Creations ?? []),
-            Patches = (definition.Patches ?? []),
-            Placements = (definition.Placements ?? []),
-            Speakers = (definition.Speakers ?? []),
-            Storage = (definition.Storage ?? WorldStorageDefaults.None),
-            Authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default),
-            Tunes = (definition.Tunes ?? []),
-        });
     }
 }

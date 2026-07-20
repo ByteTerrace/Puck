@@ -2,6 +2,16 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "Microsoft.CodeAnalysis.CSharp": {
+        "type": "Direct",
+        "requested": "[4.*, )",
+        "resolved": "4.14.0",
+        "contentHash": "568a6wcTivauIhbeWcCwfWwIn7UV7MeHEBvFB2uzGIpM2OhJ4eM/FZ8KS0yhPoNxnSpjGzz7x7CIjTxhslojQA==",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.Analyzers": "3.11.0",
+          "Microsoft.CodeAnalysis.Common": "[4.14.0]"
+        }
+      },
       "Microsoft.DotNet.ILCompiler": {
         "type": "Direct",
         "requested": "[10.0.10, )",
@@ -14,8 +24,103 @@
         "resolved": "10.0.10",
         "contentHash": "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg=="
       },
+      "Microsoft.CodeAnalysis.Analyzers": {
+        "type": "Transitive",
+        "resolved": "3.11.0",
+        "contentHash": "v/EW3UE8/lbEYHoC2Qq7AR/DnmvpgdtAMndfQNmpuIMx/Mto8L5JnuCfdBYtgvalQOtfNCnxFejxuRrryvUTsg=="
+      },
+      "Microsoft.CodeAnalysis.Common": {
+        "type": "Transitive",
+        "resolved": "4.14.0",
+        "contentHash": "PC3tuwZYnC+idaPuoC/AZpEdwrtX7qFpmnrfQkgobGIWiYmGi5MCRtl5mx6QrfMGQpK78X2lfIEoZDLg/qnuHg==",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.Analyzers": "3.11.0"
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "z/2xXlFw2aLGjHyEm6E0tQ+In6VfzQzTrtArbQ2c0TQE16ZbyDCMGPvaUT9I0s8rgy9sRWlU2P9waW37qV04qA=="
+      },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.10",
+        "contentHash": "6i1D6/U3i1f/PiXTt9pDvbJwdXEe0F2DZPup6BHzeIu5yPk/lkFzgtrJnPbj54JWUh8Y9vJeKG/TZIT6MkF8TA=="
+      },
+      "puck.abstractions": {
+        "type": "Project"
+      },
+      "puck.assets": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+        }
+      },
+      "puck.cameras": {
+        "type": "Project"
+      },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
+      "puck.commands": {
+        "type": "Project",
+        "dependencies": {
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.compositing": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )"
+        }
+      },
       "puck.maths": {
         "type": "Project"
+      },
+      "puck.scene": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )"
+        }
+      },
+      "puck.sdfvm": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Capture": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )",
+          "Puck.Shaders": "[1.0.0, )",
+          "Puck.Text": "[1.0.0, )"
+        }
+      },
+      "puck.shaders": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.text": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
       }
     },
     "net10.0/win-x64": {

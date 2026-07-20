@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <remarks><c>editor.enter</c>/<c>exit</c> route Simulation (they divert intent through the same tick-applied
 /// <c>SetControl</c> wire as <c>player.control</c>, and the stdin barrier then serializes a following read); the
 /// camera verbs are presentation-only and stay Immediate.</remarks>
-internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag) : ICommandModule {
+internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench) : ICommandModule {
     /// <summary>The Axis2D command the editor pages bind the LEFT stick to (+Y flies forward, +X strafes right) —
     /// routed into the editing seat's camera; not meant to be typed.</summary>
     public const string MoveCommand = "editor.stick.move";
@@ -52,42 +52,43 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly WorldEditorTargeting m_targeting = targeting;
     private readonly WorldEditorDrag m_drag = drag;
+    private readonly WorldWorkbench m_workbench = workbench;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: EnterCommand,
-            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound LT-then-RT chord or Gamepad Back / Keyboard Tab). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; LT holds the camera page, RT the select page). Exit with East / Back / Tab or editor.exit.",
+            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound Gamepad Back / Keyboard Tab — the triggers turn pages, they never enter a mode). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; the group's five ordered trigger chords select them: nothing held = resting, LT = camera, RT = select, LT-then-RT = place, RT-then-LT = the reverse page). Exit with East / Back / Tab or editor.exit.",
             handler: EnterHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: ExitCommand,
-            description: "Leaves editor mode for a seat: editor.exit [seat] (1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing.",
+            description: "Leaves editor mode for a seat: editor.exit [force] [seat] (seat 1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing. REFUSES when the seat has an open sculpt with uncommitted edits (leaving would silently discard them) — commit with editor.sculpt.commit, discard explicitly with editor.sculpt.exit, or force through with 'editor.exit force'.",
             handler: ExitHandler,
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: StatusCommand,
             description: "Echoes a seat's editor state: editor.status [seat] (1..4, default 1) — editing/not-editing, the camera mode and speed, the active binding group and page (id + label), and the editor eye. The scripted assertion point for mode and group flips.",
             handler: StatusHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: FlyCommand,
             description: "Selects the FREE-FLY editor camera for a seat (the chord twin is South on the LT camera page): editor.fly [seat]. Sticks fly (left translates along the view, right looks, shoulders rise/sink); the switch adopts the orbit's vantage seamlessly.",
             handler: (context, args) => ModeHandler(context: context, args: args, mode: EditorCameraMode.Fly, verb: FlyCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: OrbitCommand,
             description: "Selects the ORBIT editor camera for a seat (the chord twin is West on the LT camera page): editor.orbit [seat]. The left stick orbits the seat's avatar (the orbit pivot may retarget onto the current selection); the right stick's Y zooms.",
             handler: (context, args) => ModeHandler(context: context, args: args, mode: EditorCameraMode.Orbit, verb: OrbitCommand)
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.cam.speed",
             description: "Sets a seat's editor fly speed in world units per second (clamped 0.5..64; the chord twins are D-pad Up/Down speed steps): editor.cam.speed <unitsPerSecond> [seat].",
             handler: SpeedHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "editor.cam.pose",
             description: "Teleports a seat's editor camera to an explicit pose — the console twin of stick flight (forces fly mode): editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>] [seat]. Yaw 0 looks down +Z (the camera-rig convention), pitch positive looks up (clamped). Accepted shapes: 3 values (pose, level, seat 1), 4 (+seat), 5 (+yaw+pitch), 6 (+yaw+pitch+seat).",
             handler: PoseHandler
@@ -139,7 +140,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     /// <summary>Resolves the acting seat: a PRESENT trailing [seat] token (1..4) is authoritative; an absent one falls
     /// back to the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default
     /// seat 1 (<see cref="CommandContext.Slot"/> is 0 there by contract). Token PRESENCE is the discriminator, never
-    /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands trailing-args handlers a null
+    /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands wire handlers a null
     /// Parse for TYPED lines too, so a Parse-null test would silently ignore a typed seat token. Internal —
     /// <see cref="EditorSelectionCommandModule"/> shares the same convention.</summary>
     /// <param name="context">The invocation context.</param>
@@ -147,8 +148,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     /// <param name="at">The trailing seat token's index.</param>
     /// <param name="verb">The verb name for error text.</param>
     /// <returns>The resolved 0-based slot, or an error result on a malformed index (-1 slot).</returns>
-    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, string[] args, int at, string verb) {
-        if (args.Length <= at) {
+    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, in WireArgs args, int at, string verb) {
+        if (args.Count <= at) {
             return (Slot: context.Slot, Error: null);
         }
 
@@ -161,7 +162,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         return (Slot: PlayerRoster.SlotFromDisplay(number: seat), Error: null);
     }
 
-    private CommandResult EnterHandler(CommandContext context, string[] args) {
+    private CommandResult EnterHandler(CommandContext context, WireArgs args) {
         var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: EnterCommand);
 
         if (error is { } resolveError) {
@@ -180,20 +181,33 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         });
     }
 
-    private CommandResult ExitHandler(CommandContext context, string[] args) {
-        var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: ExitCommand);
+    private CommandResult ExitHandler(CommandContext context, WireArgs args) {
+        // A leading 'force' literal overrides the dirty-sculpt refusal; the seat token (if any) follows it.
+        var forced = args.Is(index: 0, value: "force");
+        var seatAt = (forced ? 1 : 0);
+
+        var (slot, error) = ResolveSlot(context: context, args: args, at: seatAt, verb: ExitCommand);
 
         if (error is { } resolveError) {
             return resolveError;
         }
 
+        // Leaving editor mode drops the seat's open sculpt bench (WorldEditorSession.Deactivate). Refuse loudly rather
+        // than discard uncommitted sculpt work by side effect — the codebase's verification culture exists to prevent
+        // exactly this silent-discard shape.
+        if (!forced && m_session.IsEditing(slot: slot) && (m_workbench.UncommittedEdits(slot: slot) > 0)) {
+            return new CommandResult(Output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has {m_workbench.UncommittedEdits(slot: slot)} uncommitted sculpt edit(s) — editor.sculpt.commit to keep, editor.sculpt.exit to discard the bench, or 'editor.exit force' to leave anyway]") {
+                IsError = true,
+            };
+        }
+
         return (m_session.Exit(slot: slot) switch {
             EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} — chase camera restored, avatar drives again]"),
-            _ => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]"),
+            _ => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]") { IsError = true },
         });
     }
 
-    private CommandResult StatusHandler(CommandContext context, string[] args) {
+    private CommandResult StatusHandler(CommandContext context, WireArgs args) {
         var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: StatusCommand);
 
         if (error is { } resolveError) {
@@ -203,8 +217,11 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         var seat = PlayerRoster.DisplayNumber(slot: slot);
 
         if (!m_session.IsEditing(slot: slot)) {
-            // The active group rides the not-editing echo too — the scripted assertion point for the exit flip.
-            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={m_seatBindings.PageView(slot: slot).Group}]");
+            // The active group AND page ride the not-editing echo too — the scripted assertion point for the exit
+            // flip and for the play group's held-chord page turns.
+            var resting = m_seatBindings.PageView(slot: slot);
+
+            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={resting.Group} page={resting.PageId} '{resting.Label ?? resting.PageId}']");
         }
 
         var view = m_seatBindings.PageView(slot: slot);
@@ -229,7 +246,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         ));
     }
 
-    private CommandResult ModeHandler(CommandContext context, string[] args, EditorCameraMode mode, string verb) {
+    private CommandResult ModeHandler(CommandContext context, WireArgs args, EditorCameraMode mode, string verb) {
         var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: verb);
 
         if (error is { } resolveError) {
@@ -245,8 +262,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         return new CommandResult(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: mode)}]");
     }
 
-    private CommandResult SpeedHandler(CommandContext context, string[] args) {
-        if (args.Length is (< 1 or > 2)) {
+    private CommandResult SpeedHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return new CommandResult(Output: "[editor.cam.speed: expected <unitsPerSecond> plus an optional seat 1..4]") {
                 IsError = true,
             };
@@ -276,15 +293,15 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         ));
     }
 
-    private CommandResult PoseHandler(CommandContext context, string[] args) {
+    private CommandResult PoseHandler(CommandContext context, WireArgs args) {
         // Shapes: 3 = <x y z>; 4 = +seat; 5 = +<yaw pitch>; 6 = +<yaw pitch> +seat.
-        if (args.Length is (< 3 or > 6)) {
+        if (args.Count is (< 3 or > 6)) {
             return new CommandResult(Output: "[editor.cam.pose: expected <x> <y> <z> [<yawDeg> <pitchDeg>] [seat]]") {
                 IsError = true,
             };
         }
 
-        var hasAngles = (args.Length >= 5);
+        var hasAngles = (args.Count >= 5);
         var seatAt = (hasAngles ? 5 : 3);
 
         if (!TryFloat(args: args, at: 0, value: out var x) ||
@@ -331,7 +348,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult MoveRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]");
+            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]") { IsError = true };
         }
 
         m_session.RouteMove(slot: context.Slot, move: context.Value.AsAxis2D);
@@ -341,7 +358,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult LookRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]");
+            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]") { IsError = true };
         }
 
         m_session.RouteLook(slot: context.Slot, look: context.Value.AsAxis2D);
@@ -351,7 +368,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult VerticalHandler(CommandContext context, bool ascend, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]");
+            return new CommandResult(Output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]") { IsError = true };
         }
 
         m_session.SetVertical(slot: context.Slot, ascend: ascend, held: (context.Phase is CommandPhase.Started or CommandPhase.Active));
@@ -361,7 +378,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult ToggleHandler(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.camera: the bound camera toggle — type editor.fly [seat] or editor.orbit [seat] instead]");
+            return new CommandResult(Output: "[editor.camera: the bound camera toggle — type editor.fly [seat] or editor.orbit [seat] instead]") { IsError = true };
         }
 
         var slot = context.Slot;
@@ -380,7 +397,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult StepHandler(CommandContext context, bool up, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: the bound speed step — type editor.cam.speed <unitsPerSecond> [seat] instead]");
+            return new CommandResult(Output: $"[{name}: the bound speed step — type editor.cam.speed <unitsPerSecond> [seat] instead]") { IsError = true };
         }
 
         var slot = context.Slot;
@@ -410,7 +427,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     // The shared FINITE parse boundary: NaN/infinity never enters camera, snap, or preview state — a
     // non-finite center would poison the SDF rebuild and a NaN pitch slides past ordinary range guards.
-    internal static bool TryFloat(string[] args, int at, out float value) {
-        return (float.TryParse(s: args[at], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
+    internal static bool TryFloat(in WireArgs args, int at, out float value) {
+        return args.TryFloat(index: at, value: out value);
     }
 }

@@ -28,6 +28,9 @@ world.spawns.set [{"id":"seat-1","position":[0,0,0]},{"id":"seat-2","position":[
 world.screen.remove 4
 world.screen.remove 3
 world.screen.set {"index":1,"origin":[3,1.2,-3],"right":[1,0,0],"up":[0,1,0],"halfWidth":1.3,"halfHeight":1,"halfDepth":0.12,"round":0.08,"source":{"$type":"testPattern","width":320,"height":240},"route":{"engageable":false,"engageRadius":0}}
+# --- Census: the DURABLE admission cap (document-only; R-C — the live count never folds into it) ---
+# Without this line the regenerated world inherits the baked default's networkPlayers 124.
+world.population.defaults 4 32
 # --- Live session levers: folded into Render / Population by world.save (§2.1 write-back) ---
 world.shadows medium
 world.ao on

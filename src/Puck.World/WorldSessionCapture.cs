@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+using Puck.Launcher;
 using Puck.Scene;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -7,43 +9,50 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live SESSION state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// live census the population verb moves (<see cref="WorldPopulation.SimulatedCount"/> /
-/// <see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a runtime <c>screen.insert</c> booted onto declared
-/// screens (<see cref="WorldScreenBinder"/>). <see cref="Capture"/> composes a snapshot definition — the live definition
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a
+/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census COUNT
+/// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately NOT folded — R-C made <c>networkPlayers</c> a durable
+/// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
+/// session-only. <see cref="Capture"/> composes a snapshot definition — the live definition
 /// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
 /// <remarks>SAVED-BYTES-ONLY (the default policy): capture composes the snapshot the writer serializes; it never mutates
 /// the in-memory definition or the journal (a save is a snapshot, not a mutation). The fold is exactly IDEMPOTENT on a
-/// freshly booted world — live session state equals the document defaults at boot — so the ouroboros gate (load→save→load
+/// freshly booted world — live session state equals the document defaults at boot — so the ouroboros round-trip (load→save→load
 /// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
 /// whether the live session has since diverged from the loaded document, reported by <c>world.status</c> at verb time.</remarks>
 internal static class WorldSessionCapture {
-    /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, live
-    /// census, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
+    /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
+    /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
-    /// and <see cref="WorldDefinition.Audio"/>'s master gain.</summary>
+    /// and <see cref="WorldDefinition.Audio"/>'s master gain. The transient census COUNT is not folded (R-C).</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table (census + peer-source default).</param>
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
+    /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: pacing);
 
         return (definition with {
             Render = CaptureRender(render: render, defaults: definition.Render),
             Population = CapturePopulation(population: population, defaults: definition.Population),
             Screens = CaptureScreens(screens: definition.Screens, binder: binder),
+            // The live cable-link set folds into the Links section (declared + runtime), so a save reproduces the groups.
+            Links = CaptureLinks(definition: definition, binder: binder),
             Creations = CaptureCreations(creations: definition.Creations),
             Tunes = CaptureTunes(tunes: definition.Tunes),
             Patches = CapturePatches(patches: definition.Patches),
             Audio = CaptureAudio(audio: audio, defaults: definition.Audio),
+            Host = CaptureHost(host: definition.Host, pacing: pacing),
         });
     }
 
@@ -108,9 +117,10 @@ internal static class WorldSessionCapture {
     /// <param name="population">The live entity table.</param>
     /// <param name="binder">The live screen binder.</param>
     /// <param name="audio">The audio director (the master-volume lever).</param>
+    /// <param name="pacing">The live present-pacing control (the <c>world.target</c> lever).</param>
     /// <returns>The drift hint token.</returns>
-    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
-        var drifted = new List<string>(capacity: 4);
+    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
+        var drifted = new List<string>(capacity: 5);
 
         if (CaptureRender(render: render, defaults: definition.Render) != definition.Render) {
             drifted.Add(item: "render");
@@ -124,8 +134,22 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "screens");
         }
 
+        // Links drift: the folded live link set differs by content from the document's rows (a runtime screen.link, an
+        // unlink, or a member-set change). A reference compare would be a false positive — CaptureLinks returns a FRESH
+        // list whenever the binder holds any link, so a purely-declared link set (which a save reproduces byte-for-byte)
+        // would otherwise report drift forever.
+        if (LinksDrifted(definition: definition, binder: binder)) {
+            drifted.Add(item: "links");
+        }
+
         if (audio.MasterVolumeLeverEngaged && (audio.EffectiveMasterVolume != definition.Audio.MasterGain)) {
             drifted.Add(item: "audio");
+        }
+
+        // The host live levers (world.target / world.timing) folded home differ from the document's host row — the same
+        // comparison a save would make, so 'host' shows exactly when a world.save would rewrite the host section.
+        if (CaptureHost(host: definition.Host, pacing: pacing) != definition.Host) {
+            drifted.Add(item: "host");
         }
 
         return ((drifted.Count == 0) ? "none" : string.Join(separator: '+', values: drifted));
@@ -148,25 +172,82 @@ internal static class WorldSessionCapture {
         MasterGain = audio.EffectiveMasterVolume,
     });
 
-    // Fold the live census: the current simulated stand-in count and the live peer-source default become the boot
-    // census. The local-seat default is document-level, not a live seating figure, so it stays as authored.
+    // Fold the two host live levers (world.target's present Hz, world.timing's armed state) into the host section; every
+    // boot-only field is preserved as authored.
+    private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
+        (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
+
+    // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
+    // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
+    // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
+    // world byte-clean through a boot-and-save round-trip even though its boot census is zero.
     private static WorldPopulationDefaults CapturePopulation(WorldPopulation population, WorldPopulationDefaults defaults) => (defaults with {
-        NetworkPlayers = population.SimulatedCount,
         DefaultPeerSource = population.DefaultPeerSource,
     });
 
-    // Fold a live machine insert on each declared screen back into that row's Machine source; a screen with no live
-    // insert keeps its declared source untouched.
+    // Fold a live machine insert on each declared screen back into that row's Machine source, and the live magazine
+    // selector back into that row's Magazine.Selected; a screen with no live insert / no magazine keeps its declared
+    // source / magazine untouched.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
 
         foreach (var screen in screens) {
-            captured.Add(item: (binder.TryReadMachineInsert(index: screen.Index, engine: out var engine, contentPath: out var contentPath, options: out var options)
+            var row = (binder.TryReadMachineInsert(index: screen.Index, engine: out var engine, contentPath: out var contentPath, options: out var options)
                 ? (screen with { Source = new WorldScreenSource.Machine(Engine: engine, ContentPath: contentPath, Options: options) })
-                : screen));
+                : screen);
+
+            if ((row.Magazine is { } magazine) && binder.TryMagazine(index: screen.Index, selected: out var selected, magazine: out _) && (selected != magazine.Selected)) {
+                row = (row with { Magazine = (magazine with { Selected = selected }) });
+            }
+
+            captured.Add(item: row);
         }
 
         return captured;
+    }
+
+    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.link.set).
+    // When the binder holds no runtime links, the document's own Links carries forward unchanged, so declared links not
+    // yet established at boot are preserved rather than dropped.
+    private static IReadOnlyList<WorldScreenLink> CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
+        var live = binder.CaptureLinks();
+
+        return ((live.Count == 0) ? definition.Links : live);
+    }
+
+    // Content-compare the folded live link set against the document's Links rows (name + ordered members), the same way
+    // ScreensDrifted compares machine sources: true exactly when a world.save would rewrite the Links section. The capture
+    // preserves declared-link order (ReconcileLinks establishes rows in declared order), so a save that reproduces the file
+    // reports no drift.
+    private static bool LinksDrifted(WorldDefinition definition, WorldScreenBinder binder) {
+        var captured = CaptureLinks(definition: definition, binder: binder);
+
+        if (ReferenceEquals(objA: captured, objB: definition.Links)) {
+            return false;
+        }
+
+        var declared = definition.Links;
+
+        if (captured.Count != declared.Count) {
+            return true;
+        }
+
+        for (var index = 0; (index < captured.Count); index++) {
+            var live = captured[index];
+            var row = declared[index];
+
+            if (!string.Equals(a: live.Name, b: row.Name, comparisonType: StringComparison.Ordinal) || (live.Screens.Count != row.Screens.Count)) {
+                return true;
+            }
+
+            for (var member = 0; (member < live.Screens.Count); member++) {
+                if (live.Screens[member] != row.Screens[member]) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
@@ -176,6 +257,11 @@ internal static class WorldSessionCapture {
                  !string.Equals(a: machine.Engine, b: engine, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.ContentPath, b: contentPath, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.Options, b: options, comparisonType: StringComparison.Ordinal))) {
+                return true;
+            }
+
+            // Selector drift: the live magazine pointer moved off the row's authored Selected.
+            if ((screen.Magazine is { } magazine) && binder.TryMagazine(index: screen.Index, selected: out var selected, magazine: out _) && (selected != magazine.Selected)) {
                 return true;
             }
         }

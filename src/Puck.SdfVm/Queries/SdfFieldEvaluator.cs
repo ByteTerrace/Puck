@@ -205,15 +205,28 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    public bool TryFieldGradient(WorldCoord3 position, out FixedVector3 gradient) {
+    public bool TryFieldGradient(WorldCoord3 position, out FixedVector3 gradient) =>
+        TryFieldGradient(position: position, epsilon: GradientEpsilon, gradient: out gradient);
+
+    /// <summary>Evaluates the field's GRADIENT at <paramref name="position"/> with a caller-chosen probe step — the
+    /// per-call peer of <see cref="TryFieldGradient(WorldCoord3, out FixedVector3)"/> for a consumer authoring geometry
+    /// at a scale the baked default probe does not suit. A non-positive <paramref name="epsilon"/> takes the evaluator's
+    /// documented default (0.01 world units); the interface method is exactly this overload at that default.</summary>
+    /// <param name="position">The world-space point to evaluate.</param>
+    /// <param name="epsilon">The finite-difference probe span in world units, or a non-positive value for the default.</param>
+    /// <param name="gradient">The unit-length gradient, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when every probe <see cref="TryDistance"/> call succeeded and the raw gradient was
+    /// non-zero.</returns>
+    public bool TryFieldGradient(WorldCoord3 position, FixedQ4816 epsilon, out FixedVector3 gradient) {
         gradient = FixedVector3.Zero;
 
+        var step = ((epsilon > FixedQ4816.Zero) ? epsilon : GradientEpsilon);
         var accumulator = FixedVector3.Zero;
 
         for (var index = 0; (index < TetrahedronOffsets.Length); index++) {
             var offset = TetrahedronOffsets[index];
 
-            if (!TryDistance(position: (position + (offset * GradientEpsilon)), distance: out var probeDistance, material: out _)) {
+            if (!TryDistance(position: (position + (offset * step)), distance: out var probeDistance, material: out _)) {
                 return false;
             }
 

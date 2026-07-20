@@ -2,14 +2,7 @@
   "motion": {
     "moveSpeed": 4,
     "turnSpeed": 2.5,
-    "groundY": 0,
-    "jumpSpeed": 5.5,
-    "riseGravity": 14,
-    "fallGravity": 23,
-    "maxFallSpeed": 20,
-    "jumpCutMultiplier": 0.45,
-    "coyoteTime": 0.09,
-    "jumpBufferTime": 0.1
+    "groundY": 0
   },
   "wander": {
     "driftSpeed": 1.5,
@@ -42,7 +35,10 @@
           -1.2,
           0.72,
           -0.3
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -53,7 +49,10 @@
           0.6,
           0.88,
           0.5
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -64,7 +63,10 @@
           1.9,
           0.48,
           -0.7
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -75,7 +77,10 @@
           -0.3,
           0.38,
           1.3
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -86,7 +91,10 @@
           2.4,
           0.62,
           0.7
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       }
     ]
   },
@@ -174,7 +182,11 @@
       },
       "route": {
         "engageable": true,
-        "engageRadius": 2.5
+        "engageRadius": 2.5,
+        "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -210,7 +222,11 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -240,7 +256,11 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -274,7 +294,11 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -306,13 +330,17 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
+      },
+      "solid": {
+        "margin": 0
       }
     }
   ],
   "cameras": [
     {
-      "$type": "anchored",
+      "name": "first-person",
       "anchor": {
         "$type": "entity",
         "index": 0
@@ -322,33 +350,48 @@
         1.4752654,
         -0.15992874
       ],
-      "name": "first-person",
+      "rig": {
+        "$type": "firstPerson",
+        "eyeOffset": [
+          0,
+          0,
+          0
+        ],
+        "focusDistance": 0,
+        "fieldOfViewRadians": 1.1868238
+      },
       "renderWidth": 256,
-      "renderHeight": 144,
-      "fieldOfViewRadians": 1.1868238
+      "renderHeight": 144
     },
     {
-      "$type": "fixed",
-      "position": [
+      "name": "overhead",
+      "anchor": null,
+      "offset": [
         0,
         15,
         7
       ],
-      "lookAt": [
-        0,
-        0.5,
-        -2.5
-      ],
-      "name": "overhead",
+      "rig": {
+        "$type": "lookAt",
+        "target": [
+          0,
+          0.5,
+          -2.5
+        ],
+        "fieldOfViewRadians": 0.9599311
+      },
       "renderWidth": 256,
-      "renderHeight": 144,
-      "fieldOfViewRadians": 0.9599311
+      "renderHeight": 144
     }
   ],
   "population": {
     "localPlayers": 4,
     "networkPlayers": 124,
-    "defaultPeerSource": "Wander"
+    "defaultPeerSource": "Wander",
+    "spawnPolicy": {
+      "$type": "phyllotaxis",
+      "radius": 0
+    }
   },
   "kits": [
     {
@@ -364,7 +407,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.62,
@@ -412,7 +456,8 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": []
       },
       "flavor": {
         "forward": 0.38,
@@ -460,7 +505,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -548,6 +616,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -563,7 +635,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -651,6 +746,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -666,7 +765,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0.88,
@@ -754,6 +876,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     }
   ],
@@ -780,7 +906,8 @@
     "candidateRadius": 32,
     "candidateCap": 16,
     "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 4
   },
   "speakers": [],
   "tunes": [],
@@ -790,7 +917,54 @@
     "defaultSpeakerRadius": 8,
     "defaultCurve": "smoothstep",
     "defaultBedFadeSeconds": 0.5,
-    "listener": "focus"
+    "listener": "focus",
+    "cues": []
   },
+  "collision": {
+    "enabled": true,
+    "provider": "Analytic",
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "backend": "auto",
+    "width": 1280,
+    "height": 800,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null
+  },
+  "views": {
+    "seatRig": {
+      "$type": "chase",
+      "eyeOffset": [
+        0,
+        2.2,
+        5
+      ],
+      "targetOffset": [
+        0,
+        1,
+        0
+      ],
+      "worldAxes": false,
+      "spreadPullback": 0,
+      "fieldOfViewRadians": 0.9599311
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "policy": "hash",
+    "table": []
+  },
+  "links": [],
   "schema": "puck.world.def.v1"
 }

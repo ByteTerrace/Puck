@@ -87,11 +87,12 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 sanity check. Do not add another `--validate-*` mode or a `Puck.Post` stage for
 game-specific behavior unless explicitly requested.
 
-The demo console is the scriptable control plane. On-screen input and process
-stdin use the same registry, and results are echoed to stdout. A typical
-headless proof pipes verbs such as `boot`, `step`, `settle`, `state`, and
-`capture` into one session. Runnable scripts live under
-`docs/examples/scripts/`.
+The console is the scriptable control plane. On-screen input and process stdin
+use the same registry; an ACCEPTED result echoes to stdout and a REFUSED one to
+stderr, so a driver merging the two streams reads submission order while still
+telling the two apart. A run that must prove no step silently no-opped ends with
+`wire.errors` and asserts `[wire.errors: 0 rejected]`. The runnable proofs live
+in `src/Puck.World/scripts/proof.cs`.
 
 Use the `review-creation` scenario for isolated creation turntables:
 
@@ -144,7 +145,7 @@ kind changes:
 3. Regenerate `schema/run.schema.json`:
 
    ```powershell
-   dotnet run --project src/Puck.Demo -c Release -- --emit-schema schema/run.schema.json
+   dotnet run -c Release tools/Tools.cs schema schema/run.schema.json
    ```
 
 4. Add or update an example.

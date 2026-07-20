@@ -12,7 +12,7 @@ namespace Puck.World;
 /// authoritative <see cref="WorldServer"/> steps (buffered protocol traffic → every body → the tick's snapshot,
 /// delivered to the client synchronously), then the client-side post-step (the screen machines, the per-tick analog
 /// clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings, WorldEditorSession editor) : IFixedStepSimulation {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings, WorldEditorSession editor, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate) : IFixedStepSimulation {
     private const ulong TimingReportInterval = 60UL;
 
     private readonly WorldServer m_server = server;
@@ -21,6 +21,8 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldAddonDriver m_addons = addons;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly WorldEditorSession m_editor = editor;
+    private readonly WorldReplayTape m_replayTape = replayTape;
+    private readonly WorldConsoleWaitGate m_waitGate = waitGate;
     private SimulationTiming m_timingWorst;
     private ulong m_timingSamples;
 
@@ -66,6 +68,16 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
 
         ElapsedTicks = context.ElapsedTicks;
         Tick = (context.Tick + 1UL);
+
+        // The console wire's tick clock: a queued script held by world.wait resumes off THIS count, so the barrier
+        // measures completed simulation ticks rather than frames or wall time.
+        m_waitGate.PublishTick(tick: Tick);
+
+        // Close this tick's captured server-input group while a recording is armed (a no-op otherwise) — the whole
+        // tick's intent/command stream has reached the loopback taps by now, so the group is complete.
+        if (m_replayTape.Mode != WorldReplayMode.Idle) {
+            m_replayTape.NoteTick();
+        }
 
         if (timingEnabled) {
             ReportTiming(sample: new SimulationTiming(

@@ -126,7 +126,16 @@ public static class LauncherServiceRegistration {
 
             return new TextCommandSource(
                 onResult: (line, result) => {
-                    if (!string.IsNullOrEmpty(value: result.Output)) {
+                    if (string.IsNullOrEmpty(value: result.Output)) {
+                        return;
+                    }
+
+                    // A REFUSED line goes to stderr; an accepted one to the buffered stdout. This is the only place a
+                    // submitted line and its verdict are both in scope, so it is where the two are separated — without
+                    // it a rejection is byte-shaped like success on the same stream and a scripted run reads green.
+                    if (result.IsError) {
+                        output.WriteErrorLine(value: result.Output);
+                    } else {
                         output.WriteLine(value: result.Output);
                     }
                 },

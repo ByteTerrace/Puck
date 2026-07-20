@@ -17,7 +17,7 @@ namespace Puck.Demo.Bench;
 
 /// <summary>
 /// Wires the engine benchmark harness to the demo AFTER the DI graph is built (the same post-hoc
-/// <see cref="IHostedService"/> pattern <see cref="OverworldControlGateInstaller"/> uses): it attaches the neutral
+/// <see cref="IHostedService"/> pattern <c>OverworldControlGateInstaller</c> uses): it attaches the neutral
 /// seams (a GPU pass-timing source, the CPU frame-timing hub, the feature-switch registry, a console line submitter),
 /// registers the §4 feature-switch ROSTER (each descriptor's delegates closing over the object that owns the lever —
 /// engines never self-register), registers the §5 standard SUITE of scenes, and consumes the headless

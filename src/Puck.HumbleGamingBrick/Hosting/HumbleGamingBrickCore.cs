@@ -125,6 +125,34 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     }
 
     /// <inheritdoc/>
+    public bool Reconfigure(string? options, out string reason) {
+        ConsoleModel model;
+
+        try {
+            (model, _) = GamingBrickEngine.ParseOptions(options: options);
+        } catch (ArgumentException exception) {
+            reason = exception.Message;
+
+            return false;
+        }
+
+        // The live device swap (dmg<->cgb<->agb): retarget the emulated hardware WITHOUT a reboot, poking the game's
+        // cached detection flag (from the recipe table, keyed by title) so a dual-mode cartridge re-renders natively.
+        // The fairness pin is construction-fixed (it sizes the tick->cycle budget for determinism), so options only
+        // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.
+        var title = m_cartridge.Header.Title;
+        var pokes = ConsoleModeRecipes.PokesFor(title: title, target: model);
+
+        m_machine.Machine.SwitchModel(model: model, pokes: pokes);
+
+        reason = ((pokes.Length > 0)
+            ? string.Empty
+            : $"no live detection recipe for '{title}'; the running game keeps its boot code path");
+
+        return true;
+    }
+
+    /// <inheritdoc/>
     public void ConfigureAudio(int sampleRate) =>
         m_audioSink.Configure(sampleRate: sampleRate);
 

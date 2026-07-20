@@ -35,7 +35,7 @@ public sealed class GamepadManager : IDisposable {
 
     private static readonly TimeSpan RescanInterval = TimeSpan.FromSeconds(value: 1.5);
     private readonly IGamepadAcquisitionSource? m_acquisitionSource;
-    private readonly IInputClock? m_clock;
+    private readonly IInputClock m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly List<IGamepadConnection> m_devices = [];
     private readonly object m_gate = new();
@@ -62,16 +62,16 @@ public sealed class GamepadManager : IDisposable {
     /// </param>
     /// <param name="clock">
     /// The shared capture clock the HID I/O loops stamp each report's arrival from (sub-frame timing authority).
-    /// Pass <see langword="null"/> to leave reports unstamped (arrival ticks zero); the snapshot capture then
-    /// falls back to a per-frame stamp.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="hidSource"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="hidSource"/> or <paramref name="clock"/> is
+    /// <see langword="null"/>.</exception>
     public GamepadManager(
         IHidDeviceSource hidSource,
+        IInputClock clock,
         IGamepadAcquisitionSource? acquisitionSource = null,
-        Action<string>? diagnostics = null,
-        IInputClock? clock = null
+        Action<string>? diagnostics = null
     ) {
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(hidSource);
 
         m_acquisitionSource = acquisitionSource;

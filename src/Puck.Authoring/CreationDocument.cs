@@ -187,8 +187,12 @@ public sealed record CreationCameraDocument(
 /// <param name="Name">The face's name (a wiring handle — <c>face</c> by default).</param>
 /// <param name="ShapeId">The shape whose surface is the screen (a <see cref="ShapeDocument.Id"/>; -1/null = the whole
 /// creation's canonical face surface, resolved by the consumer).</param>
-/// <param name="DefaultSource">The feed this face shows when nothing else is wired — a source token in the wiring
-/// grammar (<c>named:emotes</c>, <c>feed:0</c>, …; null = <c>named:emotes</c>, the emote face default).</param>
+/// <param name="DefaultSource">The feed this face shows when nothing else is wired, as a source token a CONSUMING WORLD
+/// resolves through a closed four-token map — <c>none</c> (no signal), <c>test</c> (the test pattern), and
+/// <c>camera:&lt;name&gt;</c> / <c>feed:&lt;name&gt;</c> (a View of the named camera, resolved against the placement's
+/// derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare
+/// <c>named:emotes</c>, which named a host registry no world provides) lights the no-signal card. Null = the no-signal
+/// card until a world's face override wires a feed.</param>
 public sealed record CreationFaceDocument(
     string Name,
     int? ShapeId,
@@ -228,8 +232,11 @@ public sealed record CreationSoundDocument(
 /// and normalized: a locomotion mode, the creation's declared faces (screen surfaces that show named feeds), and its
 /// declared sounds (synth voices that emit from its body).
 /// </summary>
-/// <param name="Locomotion">How the creation moves — <c>walk</c> (default), <c>swim</c> (hover-bob, a swimmer), or
-/// <c>hover</c> (float in place). Null = walk.</param>
+/// <param name="Locomotion">How the creation moves, as a free-text token a CONSUMING WORLD resolves AS A KIT NAME: a
+/// creation declaring <c>swim</c> inhabits the world's kit row named <c>swim</c> when a placement's inhabit facet omits
+/// an explicit kit (a world declaring no such kit rejects the placement loudly, naming every kit it declares). It is NOT
+/// a closed enum — the runtime answer to "how does it move" is the resolved <c>WorldKit.Model</c>, never this string
+/// parsed per frame. Null = walk.</param>
 /// <param name="Faces">The declared screen faces (null = none). A creation with a face shows a feed on its body; the
 /// face's default source is pure data, wirable to any camera feed.</param>
 /// <param name="Sounds">The declared sounds (null = none). Omitted from the wire when null, so a creation authored

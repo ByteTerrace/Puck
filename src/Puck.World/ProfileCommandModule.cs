@@ -3,7 +3,6 @@ using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
-using static Puck.Commands.CommandArgs;
 
 namespace Puck.World;
 
@@ -30,17 +29,17 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: DescribeCatalog())
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.create",
             description: "Creates a profile and persists it: profile.create <name> [#RRGGBB]. Without a color it takes the next distinct golden-ratio hue (skipping any already in the catalog). The name must be unique (case-insensitive).",
             handler: CreateHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.show",
             description: "Shows a player's profile — name, color, and every setting: profile.show [n] (optional player index 1..4, default 1).",
             handler: ShowHandler
         );
-        yield return CommandDefinition.WithTrailingArgs(
+        yield return CommandDefinition.WithWireArgs(
             name: "profile.set",
             description: "Sets a player's profile setting LIVE and persists it: profile.set <key> <value> [n] — key is speed (0.5..20), turn-speed (0.5..10), or invert-look (on/off); the optional player index is 1..4 (default 1). Echoes old → new. The change lands on the next frame with no restart.",
             handler: SetHandler,
@@ -48,61 +47,67 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
         );
     }
 
-    private CommandResult CreateHandler(CommandContext context, string[] args) {
-        if (args.Length is not (1 or 2)) {
-            return new CommandResult(Output: "[profile.create: expected a name plus an optional #RRGGBB color — profile.create <name> [#hex]]");
+    private CommandResult CreateHandler(CommandContext context, WireArgs args) {
+        if (args.Count is not (1 or 2)) {
+            return new CommandResult(Output: "[profile.create: expected a name plus an optional #RRGGBB color — profile.create <name> [#hex]]") { IsError = true };
         }
 
-        var colorHex = ((args.Length == 2) ? args[1] : NextDistinctColor());
+        var name = args[0].ToString();
+        var colorHex = ((args.Count == 2) ? args[1].ToString() : NextDistinctColor());
 
-        if (m_profiles.Create(name: args[0], colorHex: colorHex) is not { } profile) {
-            return new CommandResult(Output: $"[profile.create: a profile named '{args[0]}' already exists]");
+        if (m_profiles.Create(name: name, colorHex: colorHex) is not { } profile) {
+            return new CommandResult(Output: $"[profile.create: a profile named '{name}' already exists]") { IsError = true };
         }
 
         return new CommandResult(Output: $"[profile.create: '{profile.Name}' {profile.ColorHex}] {DescribeCatalog()}");
     }
-    private CommandResult ShowHandler(CommandContext context, string[] args) {
-        if (args.Length > 1) {
-            return new CommandResult(Output: "[profile.show: expected at most 1 value — an optional player index]");
+    private CommandResult ShowHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
+            return new CommandResult(Output: "[profile.show: expected at most 1 value — an optional player index]") { IsError = true };
         }
 
-        if (!TryResolveIndex(args: args, at: 0, index: out var index)) {
-            return new CommandResult(Output: $"[profile.show: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+        if (!TryResolveIndex(args: in args, at: 0, index: out var index)) {
+            return new CommandResult(Output: $"[profile.show: player index must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         if (m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: index)) is not { } profile) {
-            return new CommandResult(Output: $"[profile.show: player {index} is not joined — see world.players]");
+            return new CommandResult(Output: $"[profile.show: player {index} is not joined — see world.players]") { IsError = true };
         }
 
         return new CommandResult(Output: $"[profile.show: player {index} — {DescribeProfile(profile: profile)}]");
     }
-    private CommandResult SetHandler(CommandContext context, string[] args) {
-        if (args.Length is not (2 or 3)) {
-            return new CommandResult(Output: "[profile.set: expected <key> <value> plus an optional player index — key is speed, turn-speed, or invert-look]");
+    private CommandResult SetHandler(CommandContext context, WireArgs args) {
+        if (args.Count is not (2 or 3)) {
+            return new CommandResult(Output: "[profile.set: expected <key> <value> plus an optional player index — key is speed, turn-speed, or invert-look]") { IsError = true };
         }
 
-        if (!TryResolveIndex(args: args, at: 2, index: out var index)) {
-            return new CommandResult(Output: $"[profile.set: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+        if (!TryResolveIndex(args: in args, at: 2, index: out var index)) {
+            return new CommandResult(Output: $"[profile.set: player index must be an integer 1..{PlayerRoster.MaxSlots}]") { IsError = true };
         }
 
         if (m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: index)) is not { } profile) {
-            return new CommandResult(Output: $"[profile.set: player {index} is not joined — see world.players]");
+            return new CommandResult(Output: $"[profile.set: player {index} is not joined — see world.players]") { IsError = true };
         }
 
-        var key = args[0];
-        var value = args[1];
         var slot = PlayerRoster.SlotFromDisplay(number: index);
 
-        return (key.ToLowerInvariant() switch {
-            "speed" => SetFloat(profile: profile, slot: slot, key: "speed", raw: value, min: 0.5f, max: 20f, read: static p => p.MoveSpeed, build: static (p, v) => MotionOf(profile: p) with { MoveSpeed = v }, index: index),
-            "turn-speed" => SetFloat(profile: profile, slot: slot, key: "turn-speed", raw: value, min: 0.5f, max: 10f, read: static p => p.TurnSpeed, build: static (p, v) => MotionOf(profile: p) with { TurnSpeed = v }, index: index),
-            "invert-look" => SetInvert(profile: profile, slot: slot, raw: value, index: index),
-            _ => new CommandResult(Output: $"[profile.set: unknown key '{key}' — expected speed, turn-speed, or invert-look]"),
-        });
+        if (args.Is(index: 0, value: "speed")) {
+            return SetFloat(profile: profile, slot: slot, key: "speed", args: in args, min: 0.5f, max: 20f, read: static p => p.MoveSpeed, build: static (p, v) => MotionOf(profile: p) with { MoveSpeed = v }, index: index);
+        }
+
+        if (args.Is(index: 0, value: "turn-speed")) {
+            return SetFloat(profile: profile, slot: slot, key: "turn-speed", args: in args, min: 0.5f, max: 10f, read: static p => p.TurnSpeed, build: static (p, v) => MotionOf(profile: p) with { TurnSpeed = v }, index: index);
+        }
+
+        if (args.Is(index: 0, value: "invert-look")) {
+            return SetInvert(profile: profile, slot: slot, args: in args, index: index);
+        }
+
+        return new CommandResult(Output: $"[profile.set: unknown key '{args[0].ToString()}' — expected speed, turn-speed, or invert-look]") { IsError = true };
     }
-    private CommandResult SetFloat(WorldProfile profile, int slot, string key, string raw, float min, float max, Func<WorldProfile, float> read, Func<WorldProfile, float, WorldPlayerMotion> build, int index) {
-        if (!TryParseFloat(text: raw, value: out var parsed)) {
-            return new CommandResult(Output: $"[profile.set: could not parse '{raw}' as a number]");
+    private CommandResult SetFloat(WorldProfile profile, int slot, string key, in WireArgs args, float min, float max, Func<WorldProfile, float> read, Func<WorldProfile, float, WorldPlayerMotion> build, int index) {
+        if (!args.TryFloat(index: 1, value: out var parsed)) {
+            return new CommandResult(Output: $"[profile.set: could not parse '{args[1].ToString()}' as a number]") { IsError = true };
         }
 
         var clamped = Math.Clamp(value: parsed, min: min, max: max);
@@ -116,15 +121,15 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
 
         return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[profile.set: {profile.Name} {key} {old:0.##} → {clamped:0.##} (player {index})]"));
     }
-    private CommandResult SetInvert(WorldProfile profile, int slot, string raw, int index) {
+    private CommandResult SetInvert(WorldProfile profile, int slot, in WireArgs args, int index) {
         bool on;
 
-        if (string.Equals(a: raw, b: "on", comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: raw, b: "true", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (args.Is(index: 1, value: "on") || args.Is(index: 1, value: "true")) {
             on = true;
-        } else if (string.Equals(a: raw, b: "off", comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: raw, b: "false", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (args.Is(index: 1, value: "off") || args.Is(index: 1, value: "false")) {
             on = false;
         } else {
-            return new CommandResult(Output: $"[profile.set: invert-look expects on/off, got '{raw}']");
+            return new CommandResult(Output: $"[profile.set: invert-look expects on/off, got '{args[1].ToString()}']") { IsError = true };
         }
 
         var old = profile.InvertLookX;
@@ -204,6 +209,6 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
 
     // Resolve an optional trailing player index at args[at] (default player 1) through the shared world-index parser —
     // false only on a present-but-malformed or out-of-range index; an absent index yields player 1.
-    private static bool TryResolveIndex(string[] args, int at, out int index) =>
-        WorldArgs.TryParseIndex(args: args, at: at, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out index);
+    private static bool TryResolveIndex(in WireArgs args, int at, out int index) =>
+        WorldArgs.TryParseIndex(args: in args, at: at, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out index);
 }

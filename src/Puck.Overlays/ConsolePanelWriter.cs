@@ -68,14 +68,16 @@ public sealed class ConsolePanelWriter {
 
         for (var row = 0; ((row < historyRows) && ((firstShown + row) < lines.Count)); row++) {
             var line = lines[(firstShown + row)];
-            var isEcho = line.StartsWith(value: PromptPrefix, comparisonType: StringComparison.Ordinal);
+            var isEcho = line.Text.StartsWith(value: PromptPrefix, comparisonType: StringComparison.Ordinal);
 
+            // A refused row takes the same danger hue the toast channel uses for a rejection, so the panel and the toast
+            // agree on what a refusal looks like.
             builder.WriteText(
                 alpha: 1f,
                 cellHeight: cellHeight,
                 maxChars: cols,
-                role: (isEcho ? OverlayColorRole.Phosphor : OverlayColorRole.TextPrimary),
-                text: line,
+                role: (line.Refused ? OverlayColorRole.Danger : (isEcho ? OverlayColorRole.Phosphor : OverlayColorRole.TextPrimary)),
+                text: line.Text,
                 x: contentX,
                 y: (contentY + (row * cellHeight))
             );
