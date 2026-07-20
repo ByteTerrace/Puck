@@ -13,7 +13,8 @@ namespace Puck.World;
 
 /// <summary>
 /// The world's own console surface — its performance readouts (<c>world.fps</c>, <c>world.gpu</c>), the participant
-/// tables (<c>world.players</c>, <c>world.devices</c>), and the graphics options (shadows, ambient occlusion, render
+/// tables (<c>world.players</c>, <c>world.devices</c>), the declared-row tables (<c>world.screens</c>,
+/// <c>world.cameras</c>), and the graphics options (shadows, ambient occlusion, render
 /// scale, an FPS target, a quality preset) — all live console verbs, each echoing the current value when called with no
 /// argument. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>), not through an
 /// environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
@@ -421,6 +422,11 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             description: "Lists every declared diegetic screen, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), and its engage policy (engageable|fixed). No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.cameras",
+            description: "Lists every declared placeable camera, one segment each — name, anchor (entity:<index> | entityLeaf:<index>/<role> | placement:<id>[/<shape>] | group:<count|all> | none), rig kind (chase|firstPerson|orbit|lookAt|dolly), and render dimensions <width>x<height>. No argument; the camera-table twin of world.screens — the read-back proving a world.camera.set landed and that world.undo took it away. A query — its listing always echoes, even under wire.ack quiet.",
+            handler: CamerasHandler
+        );
         yield return CommandDefinition.Verb(
             name: "world.fps",
             description: "Echoes the measured frame rate over the recent window — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target. The world's reference desktop contract is 120 FPS under VRR.",
@@ -479,6 +485,59 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+
+    // The world.cameras listing: one segment per declared camera — name, the anchor it rides, the rig it frames with,
+    // and its offscreen render dimensions. Reads the LIVE definition (never the boot snapshot), so a camera mutation's
+    // new row narrates honestly. A query (not AcknowledgementOnly): its listing always surfaces.
+    private CommandResult CamerasHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return new CommandResult(Output: "[world.cameras: no arguments — lists every declared camera]") {
+                IsError = true,
+            };
+        }
+
+        var cameras = server.Definition.Cameras;
+
+        if (cameras.Count == 0) {
+            return new CommandResult(Output: "[world.cameras: none declared]");
+        }
+
+        var builder = new StringBuilder(value: "[world.cameras:");
+
+        for (var index = 0; (index < cameras.Count); index++) {
+            var camera = cameras[index];
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((index == 0) ? " " : " | ")}{camera.Name} {CameraAnchorKind(anchor: camera.Anchor)} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
+            );
+        }
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+
+    // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
+    // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
+    private static string CameraAnchorKind(WorldAnchor? anchor) {
+        return anchor switch {
+            WorldAnchor.Entity entity => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entity:{entity.Index}"),
+            WorldAnchor.EntityLeaf leaf => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entityLeaf:{leaf.Index}/{leaf.Leaf}"),
+            WorldAnchor.Placement placement => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=placement:{placement.PlacementId}{((placement.ShapeId is { } shape) ? $"/{shape}" : "")}"),
+            WorldAnchor.Group group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=group:{((group.Indices is { } indices) ? indices.Count.ToString(provider: CultureInfo.InvariantCulture) : "all")}"),
+            _ => "anchor=none",
+        };
+    }
+
+    // The rig keyword for a camera's declared framing — the same closed vocabulary as the row's $type discriminator.
+    private static string CameraRigKind(WorldRig rig) {
+        return rig switch {
+            WorldRig.Chase => "rig=chase",
+            WorldRig.FirstPerson => "rig=firstPerson",
+            WorldRig.Orbit => "rig=orbit",
+            WorldRig.LookAt => "rig=lookAt",
+            _ => "rig=dolly",
+        };
     }
 
     // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against.

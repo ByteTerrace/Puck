@@ -481,9 +481,15 @@ services.AddSingleton<WorldConsoleMirror>();
 // The mirror also observes the DISPATCH path, so a Simulation-routed verb's tick-deferred verdict — which the submit
 // callback below never sees (Submit returned None) — paints on the panel too, a refusal in the danger role.
 services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleMirror>());
+// The console's sequencing primitive: the tick barrier world.wait arms (published by WorldSimulation each step) and the
+// verb that arms it. The gate is a leaf — it depends on nothing — so the TextCommandSource factory below can hold it
+// without a cycle back through the registry.
+services.AddSingleton<WorldConsoleWaitGate>();
+services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
 services.AddSingleton(implementationFactory: static sp => {
     var mirror = sp.GetRequiredService<WorldConsoleMirror>();
     var output = sp.GetRequiredService<BufferedConsoleOutput>();
+    var waitGate = sp.GetRequiredService<WorldConsoleWaitGate>();
 
     return new TextCommandSource(
         onResult: (line, result) => {
@@ -501,7 +507,9 @@ services.AddSingleton(implementationFactory: static sp => {
             mirror.Record(line: line, result: result);
         },
         registry: sp.GetRequiredService<CommandRegistry>()
-    );
+    ) {
+        HoldGate = waitGate.IsHolding,
+    };
 });
 services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     binder: sp.GetRequiredService<WorldScreenBinder>(),
