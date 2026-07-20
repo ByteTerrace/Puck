@@ -17,18 +17,33 @@ namespace Puck.Launcher;
 /// </para>
 /// </summary>
 public sealed class BufferedConsoleOutput : IDisposable {
+    private readonly StreamWriter m_errorWriter;
     private readonly StreamWriter m_writer;
 
     /// <summary>Initializes a new instance of the <see cref="BufferedConsoleOutput"/> class over the process's raw
-    /// standard-output stream, buffered (no auto-flush) and UTF-8 without a byte-order mark.</summary>
+    /// standard-output and standard-error streams, both UTF-8 without a byte-order mark (stdout buffered, stderr
+    /// auto-flushed).</summary>
     public BufferedConsoleOutput() {
+        var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
         m_writer = new StreamWriter(
             stream: Console.OpenStandardOutput(),
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            encoding: encoding,
             bufferSize: 4096,
             leaveOpen: true
         ) {
             AutoFlush = false,
+        };
+        // Stderr gets the SAME explicit UTF-8 writer: bare Console.Error encodes through the console's default
+        // codepage, which mangles every non-ASCII char (the em dash every refusal's pointer ends with) — so a driver
+        // matching the source literal would miss on the refusal stream and hit on the success stream.
+        m_errorWriter = new StreamWriter(
+            stream: Console.OpenStandardError(),
+            encoding: encoding,
+            bufferSize: 4096,
+            leaveOpen: true
+        ) {
+            AutoFlush = true,
         };
     }
 
@@ -44,7 +59,7 @@ public sealed class BufferedConsoleOutput : IDisposable {
     /// <param name="value">The line to write.</param>
     public void WriteErrorLine(string value) {
         m_writer.Flush();
-        Console.Error.WriteLine(value: value);
+        m_errorWriter.WriteLine(value: value);
     }
 
     /// <summary>Flushes the buffered lines to standard output in one write. Called once per frame after the command
@@ -53,9 +68,10 @@ public sealed class BufferedConsoleOutput : IDisposable {
         m_writer.Flush();
     }
 
-    /// <summary>Flushes any buffered tail; the underlying standard-output stream is left open for the process.</summary>
+    /// <summary>Flushes any buffered tail; the underlying standard streams are left open for the process.</summary>
     public void Dispose() {
         m_writer.Flush();
         m_writer.Dispose();
+        m_errorWriter.Dispose();
     }
 }

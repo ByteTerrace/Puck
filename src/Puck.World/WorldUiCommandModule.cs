@@ -16,11 +16,11 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldCo
             description: "Arms a one-shot PNG capture of the next composed frame (world + overlay, via the outermost render decorator): world.screenshot <path.png>. The file lands when that frame produces; the parent directory is created here.",
             handler: (context, args) => {
                 if (args.Length == 0) {
-                    return new CommandResult(Output: "[world.screenshot: a target path is required — world.screenshot <path.png>]");
+                    return new CommandResult(Output: "[world.screenshot: a target path is required — world.screenshot <path.png>]") { IsError = true };
                 }
 
                 if (renderProbe.Render is not { } render) {
-                    return new CommandResult(Output: "[world.screenshot: the renderer is not built yet — retry after the first frame]");
+                    return new CommandResult(Output: "[world.screenshot: the renderer is not built yet — retry after the first frame]") { IsError = true };
                 }
 
                 var path = Path.GetFullPath(path: args[0]);

@@ -209,7 +209,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 var raw = RawArgument(context: context, args: args);
 
                 if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
-                    return new CommandResult(Output: $"[{name}: {error}]");
+                    return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
                 }
 
                 return Submit(mutation: toMutation(arg: value));

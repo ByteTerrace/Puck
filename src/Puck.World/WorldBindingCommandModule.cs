@@ -223,7 +223,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
 
         if (m_seatBindings.SessionRebind(slot: slot) is not { } session) {
-            return new CommandResult(Output: $"[profile.save: seat {seat} has no unsaved rebinds]");
+            return new CommandResult(Output: $"[profile.save: seat {seat} has no unsaved rebinds]") { IsError = true };
         }
 
         // Fold the session rebinds into the profile's existing binding layer (or start one), and submit the durable

@@ -69,7 +69,7 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
                         return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
                     case WorldRowAssignment.TablePolicy:
                         if (args.Length < 2) {
-                            return new CommandResult(Output: "[world.look.assign: the table policy needs at least one look name]");
+                            return new CommandResult(Output: "[world.look.assign: the table policy needs at least one look name]") { IsError = true };
                         }
 
                         return Submit(mutation: new WorldMutation.SetLookAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));

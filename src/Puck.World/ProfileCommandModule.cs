@@ -56,7 +56,7 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
         var colorHex = ((args.Length == 2) ? args[1] : NextDistinctColor());
 
         if (m_profiles.Create(name: args[0], colorHex: colorHex) is not { } profile) {
-            return new CommandResult(Output: $"[profile.create: a profile named '{args[0]}' already exists]");
+            return new CommandResult(Output: $"[profile.create: a profile named '{args[0]}' already exists]") { IsError = true };
         }
 
         return new CommandResult(Output: $"[profile.create: '{profile.Name}' {profile.ColorHex}] {DescribeCatalog()}");
@@ -124,7 +124,7 @@ internal sealed class ProfileCommandModule(WorldProfiles profiles, PlayerRoster 
         } else if (string.Equals(a: raw, b: "off", comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: raw, b: "false", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             on = false;
         } else {
-            return new CommandResult(Output: $"[profile.set: invert-look expects on/off, got '{raw}']");
+            return new CommandResult(Output: $"[profile.set: invert-look expects on/off, got '{raw}']") { IsError = true };
         }
 
         var old = profile.InvertLookX;

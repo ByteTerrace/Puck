@@ -345,7 +345,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult MoveRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]");
+            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]") { IsError = true };
         }
 
         m_session.RouteMove(slot: context.Slot, move: context.Value.AsAxis2D);
@@ -355,7 +355,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult LookRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]");
+            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]") { IsError = true };
         }
 
         m_session.RouteLook(slot: context.Slot, look: context.Value.AsAxis2D);
@@ -365,7 +365,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult VerticalHandler(CommandContext context, bool ascend, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]");
+            return new CommandResult(Output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]") { IsError = true };
         }
 
         m_session.SetVertical(slot: context.Slot, ascend: ascend, held: (context.Phase is CommandPhase.Started or CommandPhase.Active));
@@ -375,7 +375,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult ToggleHandler(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.camera: the bound camera toggle — type editor.fly [seat] or editor.orbit [seat] instead]");
+            return new CommandResult(Output: "[editor.camera: the bound camera toggle — type editor.fly [seat] or editor.orbit [seat] instead]") { IsError = true };
         }
 
         var slot = context.Slot;
@@ -394,7 +394,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult StepHandler(CommandContext context, bool up, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: the bound speed step — type editor.cam.speed <unitsPerSecond> [seat] instead]");
+            return new CommandResult(Output: $"[{name}: the bound speed step — type editor.cam.speed <unitsPerSecond> [seat] instead]") { IsError = true };
         }
 
         var slot = context.Slot;

@@ -84,7 +84,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // Lane-scoped form: world.far-field bound|shadow on|off.
                 if ((head == "BOUND") || (head == "SHADOW")) {
                     if ((args.Length < 2) || (ParseOnOff(token: args[1]) is not { } laneState)) {
-                        return new CommandResult(Output: $"[world.far-field: expected '{args[0].ToLowerInvariant()} on|off']");
+                        return new CommandResult(Output: $"[world.far-field: expected '{args[0].ToLowerInvariant()} on|off']") { IsError = true };
                     }
 
                     if (head == "BOUND") {
@@ -99,7 +99,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 // Bare form: world.far-field on|off drives BOTH lanes.
                 if (ParseOnOff(token: args[0]) is not { } bothState) {
-                    return new CommandResult(Output: $"[world.far-field: unknown '{string.Join(separator: ' ', value: args)}' — on|off|status, or bound|shadow on|off]");
+                    return new CommandResult(Output: $"[world.far-field: unknown '{string.Join(separator: ' ', value: args)}' — on|off|status, or bound|shadow on|off]") { IsError = true };
                 }
 
                 settings.FarBound = bothState;
@@ -124,7 +124,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 };
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
+                    return new CommandResult(Output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]") { IsError = true };
                 }
 
                 settings.ShadowMask = resolved;
@@ -148,7 +148,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 };
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
+                    return new CommandResult(Output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]") { IsError = true };
                 }
 
                 settings.AmbientOcclusionQuality = resolved;
@@ -172,7 +172,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 };
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
+                    return new CommandResult(Output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]") { IsError = true };
                 }
 
                 settings.ShadowMarch = resolved;
@@ -189,7 +189,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!TryParseInt(text: args[0], value: out var divisor) || (divisor < 1) || (divisor > 8)) {
-                    return new CommandResult(Output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']");
+                    return new CommandResult(Output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']") { IsError = true };
                 }
 
                 screens.SetViewRefreshDivisor(divisor: divisor);
@@ -202,7 +202,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             description: "Selects the live SDF diagnostic output for every World camera: world.debug-view [off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot]. Depth is the primary-march-only performance probe; off restores final shading.",
             handler: (_, args) => {
                 if (renderProbe.Node is not { } node) {
-                    return new CommandResult(Output: "[world.debug-view: renderer not built yet]");
+                    return new CommandResult(Output: "[world.debug-view: renderer not built yet]") { IsError = true };
                 }
 
                 if (args.Length == 0) {
@@ -210,7 +210,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if ((args.Length != 1) || !DebugViewModes.TryParse(name: args[0], mode: out var mode)) {
-                    return new CommandResult(Output: $"[world.debug-view: unknown mode '{string.Join(separator: " ", value: args)}' — {string.Join(separator: '|', value: DebugViewModes.Names)}]");
+                    return new CommandResult(Output: $"[world.debug-view: unknown mode '{string.Join(separator: " ", value: args)}' — {string.Join(separator: '|', value: DebugViewModes.Names)}]") { IsError = true };
                 }
 
                 node.DebugMode = mode;
@@ -227,7 +227,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!TryParseRenderScale(text: args[0], scale: out var scale)) {
-                    return new CommandResult(Output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
+                    return new CommandResult(Output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]") { IsError = true };
                 }
 
                 settings.RenderScale = scale;
@@ -246,7 +246,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!TryParseUpscaleSharpness(text: args[0], sharpness: out var sharpness)) {
-                    return new CommandResult(Output: $"[world.upscale-sharpness: invalid '{args[0]}' — bilinear|balanced|sharp, 0..1, or 0%..100%]");
+                    return new CommandResult(Output: $"[world.upscale-sharpness: invalid '{args[0]}' — bilinear|balanced|sharp, 0..1, or 0%..100%]") { IsError = true };
                 }
 
                 settings.UpscaleSharpness = sharpness;
@@ -347,7 +347,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     switch (token.ToUpperInvariant()) {
                         case "IDLE":
                             if (behavior is not null) {
-                                return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]");
+                                return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]") { IsError = true };
                             }
 
                             behavior = IntentSource.Idle;
@@ -355,7 +355,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                             break;
                         case "WANDER":
                             if (behavior is not null) {
-                                return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]");
+                                return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]") { IsError = true };
                             }
 
                             behavior = IntentSource.Wander;
@@ -367,7 +367,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                             }
 
                             if (count is not null) {
-                                return new CommandResult(Output: $"[world.population: count given twice — one integer 0..{WorldPopulation.MaxPopulationSimulated}]");
+                                return new CommandResult(Output: $"[world.population: count given twice — one integer 0..{WorldPopulation.MaxPopulationSimulated}]") { IsError = true };
                             }
 
                             count = parsed;

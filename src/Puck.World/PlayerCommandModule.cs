@@ -941,7 +941,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     // verbs' typed guard.
     private CommandResult PrimaryHandler(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[player.primary: a held action button, not a typed verb — use player.press primary [holdSeconds] [player] to script it]");
+            return new CommandResult(Output: "[player.primary: a held action button, not a typed verb — use player.press primary [holdSeconds] [player] to script it]") { IsError = true };
         }
 
         var slot = context.Slot;
@@ -962,7 +962,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     // same shape as PrimaryHandler over the other lane.
     private CommandResult SecondaryHandler(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[player.secondary: a held action button, not a typed verb — use player.press secondary [holdSeconds] [player] to script it]");
+            return new CommandResult(Output: "[player.secondary: a held action button, not a typed verb — use player.press secondary [holdSeconds] [player] to script it]") { IsError = true };
         }
 
         var slot = context.Slot;
@@ -1070,14 +1070,14 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         foreach (var token in args) {
             if (TryParseInt(text: token, value: out var n) && (n >= 2) && (n <= PlayerRoster.MaxSlots)) {
                 if (slotIndex >= 0) {
-                    return new CommandResult(Output: "[player.join: gave two slot numbers — expected <profile> and/or <slot 2..4>]");
+                    return new CommandResult(Output: "[player.join: gave two slot numbers — expected <profile> and/or <slot 2..4>]") { IsError = true };
                 }
 
                 slotIndex = PlayerRoster.SlotFromDisplay(number: n);
             } else if (profileName is null) {
                 profileName = token;
             } else {
-                return new CommandResult(Output: "[player.join: gave two profile names — expected <profile> and/or <slot 2..4>]");
+                return new CommandResult(Output: "[player.join: gave two profile names — expected <profile> and/or <slot 2..4>]") { IsError = true };
             }
         }
 
@@ -1089,7 +1089,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             }
 
             if (m_roster.ActiveSlotUsing(profile: profile) >= 0) {
-                return new CommandResult(Output: $"[player.join: profile '{profile.Name}' is already in use — see world.players]");
+                return new CommandResult(Output: $"[player.join: profile '{profile.Name}' is already in use — see world.players]") { IsError = true };
             }
 
             var joined = ((slotIndex >= 0) ? (m_roster.JoinActive(slot: slotIndex, profile: profile, origin: ParticipantOrigin.Script) ? slotIndex : -1) : m_roster.JoinActiveNextFree(profile: profile, origin: ParticipantOrigin.Script));
@@ -1107,7 +1107,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         if (slot < 0) {
             return ((requestedSlot >= 0)
                 ? new CommandResult(Output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: requestedSlot)} is already joined]")
-                : new CommandResult(Output: $"[player.join: the roster is full ({PlayerRoster.MaxSlots} players)]"));
+                : new CommandResult(Output: $"[player.join: the roster is full ({PlayerRoster.MaxSlots} players)]") { IsError = true });
         }
 
         var word = (active ? "joined active" : "joined pending");
@@ -1183,7 +1183,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             ConfirmOutcome.Seated when (device is { } source) => new CommandResult(Output: $"[player.confirm: {m_roster.DeviceToken(device: source)} seated with player {PlayerRoster.DisplayNumber(slot: slot)}]"),
             ConfirmOutcome.Seated => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} seated]"),
             ConfirmOutcome.AlreadyActive => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} is already active]"),
-            _ => new CommandResult(Output: $"[player.confirm: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            _ => new CommandResult(Output: $"[player.confirm: the roster is full ({PlayerRoster.MaxSlots} players)]") { IsError = true },
         });
     }
     private CommandResult CycleHandler(CommandContext context) {
@@ -1209,7 +1209,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             AssignOutcome.CreatedPending => new CommandResult(Output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {m_roster.Describe()}"),
             AssignOutcome.JoinedTeam => new CommandResult(Output: $"[{verb}: device moved to player {PlayerRoster.DisplayNumber(slot: slot)}] {m_roster.Describe()}"),
             AssignOutcome.NoOp => new CommandResult(Output: $"[{verb}: device already on player {PlayerRoster.DisplayNumber(slot: slot)}]"),
-            _ => new CommandResult(Output: $"[{verb}: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            _ => new CommandResult(Output: $"[{verb}: the roster is full ({PlayerRoster.MaxSlots} players)]") { IsError = true },
         });
     }
     private CommandResult LeaveHandler(CommandContext context, string[] args) {
@@ -1266,7 +1266,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                 // which would otherwise fall through to the Release branch and no-op. Point the scripter at the tape
                 // primitive instead of releasing an unheld axis.
                 if (context.Parse is not null) {
-                    return new CommandResult(Output: $"[{name}: a held movement key, not a typed verb — use player.run <forward> <strafe> <turn> <seconds> [player] to script motion]");
+                    return new CommandResult(Output: $"[{name}: a held movement key, not a typed verb — use player.run <forward> <strafe> <turn> <seconds> [player] to script motion]") { IsError = true };
                 }
 
                 var slot = context.Slot;

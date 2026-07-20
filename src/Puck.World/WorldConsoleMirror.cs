@@ -12,7 +12,7 @@ namespace Puck.World;
 /// <remarks>Single-threaded by contract: <see cref="Record"/> runs inside the command pump's drain and
 /// <see cref="SetVisible"/> inside a verb handler — both on the window-pump thread. Only the published immutable
 /// snapshot crosses to the render thread (through the store's lock-free buffer).</remarks>
-internal sealed class WorldConsoleMirror {
+internal sealed class WorldConsoleMirror : ICommandObserver {
     private const int MaxLines = 64;
     private const string EchoPrefix = "> ";
 
@@ -50,6 +50,26 @@ internal sealed class WorldConsoleMirror {
             foreach (var range in output.AsSpan().Split(separator: '\n')) {
                 Append(line: output[range].TrimEnd(trimChar: '\r'), refused: result.IsError);
             }
+        }
+
+        Publish();
+    }
+
+    /// <summary>Records the deferred verdict of a Simulation-routed console line — <see cref="Record"/> only ever saw
+    /// the <see cref="CommandResult.None"/> the submit returned when the line entered the tick queue, so without this
+    /// the panel showed the echoed input and never the refusal that followed a tick later.</summary>
+    /// <param name="activation">The dispatch, as seen after the handler ran on its tick.</param>
+    /// <remarks>No double render: the text path is unobserved (an Immediate verb reaches the panel through
+    /// <see cref="Record"/> alone), a physical pad activation carries no text and is skipped, and a world-mutation verb
+    /// returns no output here — its outcome arrives on the server's edit-echo tap through
+    /// <see cref="RecordEcho"/>.</remarks>
+    public void OnCommand(in CommandActivation activation) {
+        if ((activation.Text is null) || (activation.Result.Output is not { Length: > 0 } output)) {
+            return;
+        }
+
+        foreach (var range in output.AsSpan().Split(separator: '\n')) {
+            Append(line: output[range].TrimEnd(trimChar: '\r'), refused: activation.Result.IsError);
         }
 
         Publish();

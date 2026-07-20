@@ -122,7 +122,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var json = raw[(separator + 1)..].Trim();
 
                 if (!TryParseJson(json: json, info: WorldJsonContext.Default.MotionResponseArray, value: out var rows, error: out var error)) {
-                    return new CommandResult(Output: $"[world.kit.response: {error}]");
+                    return new CommandResult(Output: $"[world.kit.response: {error}]") { IsError = true };
                 }
 
                 return EditKit(verb: "world.kit.response", name: name, edit: kit => (kit with { Tuning = (kit.Tuning with { Response = rows }) }));
@@ -276,7 +276,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     // RMW a whole kit row (found by name) into an UpsertKit.
     private CommandResult EditKit(string verb, string name, Func<WorldKit, WorldKit> edit) {
         if (FindKit(name: name) is not { } kit) {
-            return new CommandResult(Output: $"[{verb}: no kit row named '{name}']");
+            return new CommandResult(Output: $"[{verb}: no kit row named '{name}']") { IsError = true };
         }
 
         return Submit(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: edit(arg: kit)));
@@ -312,7 +312,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var raw = RawArgument(context: context, args: args);
 
                 if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
-                    return new CommandResult(Output: $"[{name}: {error}]");
+                    return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
                 }
 
                 return Submit(mutation: toMutation(arg: value));

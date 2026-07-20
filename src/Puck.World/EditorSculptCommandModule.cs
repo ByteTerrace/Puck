@@ -225,7 +225,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         }
 
         if (!m_workbench.IsActive(slot: slot)) {
-            return new CommandResult(Output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no open sculpt]");
+            return new CommandResult(Output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no open sculpt]") { IsError = true };
         }
 
         var rowId = m_workbench.RowId(slot: slot);
@@ -378,7 +378,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         var applied = (redo ? model!.Redo() : model!.Undo());
 
         if (!applied) {
-            return new CommandResult(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} nothing to {(redo ? "redo" : "undo")} on the local ring]");
+            return new CommandResult(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} nothing to {(redo ? "redo" : "undo")} on the local ring]") { IsError = true };
         }
 
         return Echo(slot: slot, verb: verb, detail: $"local ring — restored ({(model.CanUndo ? "more undo available" : "at the baseline")}); world journal untouched");
@@ -416,7 +416,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
 
     private CommandResult ZoomStepHandler(CommandContext context, bool zoomIn, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: the bound zoom step — type editor.sculpt.zoom <in|out|distance> instead]");
+            return new CommandResult(Output: $"[{name}: the bound zoom step — type editor.sculpt.zoom <in|out|distance> instead]") { IsError = true };
         }
 
         var slot = context.Slot;

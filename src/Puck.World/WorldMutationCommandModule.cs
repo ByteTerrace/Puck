@@ -66,7 +66,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: WorldRowAssignment.Hash));
                     case WorldRowAssignment.TablePolicy:
                         if (args.Length < 2) {
-                            return new CommandResult(Output: "[world.kit.assign: the table policy needs at least one kit name]");
+                            return new CommandResult(Output: "[world.kit.assign: the table policy needs at least one kit name]") { IsError = true };
                         }
 
                         return Submit(mutation: new WorldMutation.SetKitAssignment(Principal: WorldPrincipal.Console, Assignment: new WorldRowAssignment(Policy: WorldRowAssignment.TablePolicy, Table: args[1..])));
@@ -371,7 +371,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var raw = RawArgument(context: context, args: args);
 
                 if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
-                    return new CommandResult(Output: $"[{name}: {error}]");
+                    return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
                 }
 
                 return Submit(mutation: toMutation(arg: value));

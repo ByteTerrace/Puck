@@ -478,6 +478,9 @@ services.AddSingleton<EditorHudStore>();
 services.AddSingleton<EditorGizmoStore>();
 services.AddSingleton<OverlayToastStore>();
 services.AddSingleton<WorldConsoleMirror>();
+// The mirror also observes the DISPATCH path, so a Simulation-routed verb's tick-deferred verdict — which the submit
+// callback below never sees (Submit returned None) — paints on the panel too, a refusal in the danger role.
+services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleMirror>());
 services.AddSingleton(implementationFactory: static sp => {
     var mirror = sp.GetRequiredService<WorldConsoleMirror>();
     var output = sp.GetRequiredService<BufferedConsoleOutput>();
