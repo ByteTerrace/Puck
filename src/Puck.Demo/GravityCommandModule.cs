@@ -91,8 +91,7 @@ internal sealed class GravityCommandModule(IRenderNode rootNode) : ICommandModul
         return $"[planet.spawn: walker seated at longitude {longitude:0.0}°, pos={FormatPosition(state: state)}]";
     }
 
-    // The live host's fixed sim tick rate (Puck.Launcher.LauncherWindowHostedService.TargetUpdateRate) — the SAME
-    // 240 Hz OverworldReplayCapture.TickSeconds already documents for a scripted/replayed run.
+    // The live host's fixed sim tick rate (Puck.Launcher.LauncherWindowHostedService.TargetUpdateRate).
     private const float LiveTicksPerSecond = 240.0f;
 
     private static readonly (string Name, Vector2 Move)[] Directions = [

@@ -433,6 +433,12 @@ services.AddSingleton(implementationInstance: RecordingDocumentLoader.Load(expli
 services.AddSingleton<RecordingTap>();
 services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
 
+// The live record/replay tape (the seed of a future Puck.Replay) — the engine snapshot recorder wired to World's real
+// per-tick CommandSnapshot stream. WorldSimulation taps it inside Step; the replay.* verb surface arms it. Immediate
+// verbs, a live non-document surface (the capture.* precedent). Constructed here so both the sim and the verbs share it.
+services.AddSingleton(implementationFactory: static sp => new WorldReplayTape(registry: () => sp.GetRequiredService<CommandRegistry>()));
+services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
+
 // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll thread),
 // the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the hosted service that
 // governs device lifetime (hotplug rescans every ~1.5 s). A new pad reserves a logical lane during capture without

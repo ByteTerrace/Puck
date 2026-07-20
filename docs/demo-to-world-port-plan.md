@@ -42,9 +42,12 @@ it compiles so the surviving pinned files build, and Arc 12 deletes it.
   Demo deletion targets because the pinned **OQ-14 survivors** (`OverworldWorld.cs`,
   `OverworldFrameSource*.cs`, `TownWorld.cs`) and the **HELD** `Museum/MuseumRenderer.cs`
   still consume them. Every carcass is named in its arc's "Demo deletion —
-  (c)-disposition" note; all of them die wholesale once **OQ-14** is decided and the
-  survivors are removed on the Demo-retirement trajectory. **This chain is pinned to
-  the still-open OQ-14.**
+  (c)-disposition" note. **OQ-14 is RESOLVED 2026-07-19** (the tape is wired into
+  World; the nine + `TickNarration` + their orphaned connectors are deleted), so the
+  OQ-14 *hold* is gone — but the survivors are NOT islands (the Arc 8/9/10 hub and
+  `RouterIntentSource` still consume them), so they stay until the Demo-retirement
+  trajectory removes those consumers. The (c)-carcasses die when THAT lands, not on
+  an OQ-14 pin.
 - **Arc 5 deferrals:** the **P7 world-event channel** seam + `ScreenEngageDirector`
   (Arc 9 inherits the decision); **console-feed live rendering** (OQ-13's
   `ConsoleFeed`/`ProceduralFeed` port — the `console` source renders the no-signal
@@ -92,17 +95,18 @@ items:
   against a ceiling of 124 — Arc 7's inhabitation has no headroom in the shipped
   world. Lowering it changes the default scene, so it is a deliberate owner call,
   left untouched here.
-- **OQ-14 / the replay tape.** The review confirmed the tape is *unwired, not
-  missing*: `SnapshotRecording`, `InputRecorder`, `ReplaySnapshotSource`, and
-  `DeterminismHarness` all sit in `Puck.Commands` below both composition roots,
-  gated bit-for-bit by Post, with zero references under `src/Puck.World`. Wiring
-  it is `Program.cs` construction — this informs OQ-14's introspection half.
+- **OQ-14 / the replay tape — DONE 2026-07-19.** The review confirmed the tape was
+  *unwired, not missing*; the owner ruled WIRE IT INTO WORLD. `WorldReplayTape` +
+  `WorldReplayCommandModule` (`replay.*` verbs) now record/replay World's real
+  per-tick `CommandSnapshot` stream; the nine + `TickNarration` + orphaned connectors
+  are deleted (`OverworldSnapshotProjection.cs` kept — live-pinned by
+  `RouterIntentSource`). Introspection (`tick.explain`/`tick.watch`) is a recorded
+  capability loss. See [OQ-14](#open-questions).
 
 **THE NEXT ACTION.** **Arc 8 Phase P1 (fork collapse)** is the plan's named
-pull-forward and the natural resumption point (it depends only on the landed teardown).
-**[OQ-14](#open-questions)** is the one owed **owner decision** — an explicit, recorded
-sitting (with OQ-17's introspection half) that unpins the entire (c)-disposition
-deletion ledger; it does not block Arc 8.
+pull-forward and the natural resumption point (it depends only on the landed
+teardown). **[OQ-14](#open-questions) is RESOLVED 2026-07-19** — no owner decision
+remains owed on the replay tape.
 
 ## How to use this document
 
@@ -2366,8 +2370,8 @@ because a `git rm` would decide a capability question by default:
 
 | Held file(s) | Question the survey answers |
 |---|---|
-| `ReplayCommandModule.cs` (144) + `TickTranscriptRecorder.cs` (114) + `TickNarration.cs` (37) + `IntrospectionCommandModule.cs` (153) | Deterministic replay and tick introspection. World's landed recording graph is **not** a successor → **OQ-14**, which the owner **deliberately deferred to this beat on 2026-07-19**. It must be closed here as an **explicit recorded decision with the owner**, carrying OQ-17's introspection half with it — not as a checklist item that resolves to deletion by default |
-| `SdfParityProducers.cs` (47) + `ParityResult.cs` (13) | Whether `Puck.Post`'s parity path consumes either shape; if so they are not Demo-only |
+| `ReplayCommandModule.cs` (144) + `TickTranscriptRecorder.cs` (114) + `TickNarration.cs` (37) + `IntrospectionCommandModule.cs` (153) | Deterministic replay and tick introspection. **RESOLVED 2026-07-19: the owner ruled WIRE THE TAPE INTO WORLD** (`WorldReplayTape` + `replay.*` verbs), making these superseded → **DELETED** (with the rest of the nine + orphaned connectors). OQ-17's introspection half rode along: `tick.explain`-style debugging is a recorded, deliberate capability loss |
+| `SdfParityProducers.cs` (47) + `ParityResult.cs` (13) | `ParityResult.cs` **DELETED 2026-07-19** as an OQ-14 orphan (only `OverworldDeterminismNode` consumed it). `SdfParityProducers.cs` never referenced it; its own Post-parity check still stands |
 | `BindingProfileDocuments.cs` + `BindingProfileDocumentStore.cs` | Whether World's layered player-document bindings cover them (recommended disposition: yes, delete) |
 
 **The R17 survey itself is Beat B's deliverable**, not a precondition someone else
@@ -2429,6 +2433,14 @@ rather than executed blindly:
    `TickNarration.cs`, held transitively — `TickTranscriptRecorder`/
    `IntrospectionCommandModule` reference it) stand, and OQ-14 + OQ-17 remain
    **OPEN, still owed an owner sitting.**
+   > **UPDATE 2026-07-19 — OQ-14/OQ-17 RESOLVED; this fact is now historical.** The
+   > owner sitting happened and ruled WIRE THE TAPE INTO WORLD. The nine +
+   > `TickNarration.cs` + the orphaned connectors (`IRosterEventSource.cs`,
+   > `RosterEvent.cs`, `ParityResult.cs`) are DELETED. **`OverworldSnapshotProjection.cs`
+   > is the one exception — KEPT**, because its `FromLane` is a live dependency of
+   > `RouterIntentSource` (← `BindingBarAdapter`), not a replay-only file. The OQ-14
+   > *hold* on `OverworldWorld.cs`/`OverworldRoom.cs`/`World/` is released, but fact 2
+   > (the Arc 8/9/10 hub consumers) still pins them, so they are NOT deleted here.
 2. **`OverworldFrameSource` is a mid-graph hub, not a top-of-tree island.** It is
    consumed as a concrete type (fields, ctor params, dictionary generics) by
    `Bench/BenchInstaller.cs` (Arc 10), `Forge/ForgeSubject.cs` +
@@ -2471,19 +2483,22 @@ pins each (survives to a later arc):**
 
 | Held-back | Pinned by |
 |---|---|
-| `OverworldFrameSource.*` (7 partials), `OverworldWorld.cs`, `OverworldRoom.cs` | fact 1 (OQ-14 held set) + fact 2 (Arc 8/9/10 hub consumers) |
+| `OverworldFrameSource.*` (7 partials), `OverworldWorld.cs`, `OverworldRoom.cs` | ~~fact 1 (OQ-14 held set)~~ RESOLVED 2026-07-19 — now **fact 2 alone** (Arc 8/9/10 hub consumers) |
 | `World/` subtree (`WorldDocument`/`WorldDocumentStore` + the rest via the surviving `OverworldFrameSource`/`OverworldRoom`), `Town/` | facts 1–2 |
 | Composition-root **helpers** `HostSettings.cs`, `GpuHostComposition.cs`, `DemoPresentation.cs`, `Configuration/` (4) | shared infra: `Bench`/`DiegeticUiInstaller` resolve `HostSettings` from DI; `Forge/ForgeHost` calls `GpuHostComposition`; `OverworldFrameSource`/`CaptureSequencer` use `Configuration.*` |
 | Satellites `DebugConsoleFormat.cs`, `BindingProfileDocuments.cs`+`.DocumentStore.cs`, `DemoActionCommandModule.cs`+`DemoCommandObserver.cs`, `SdfParityProducers.cs`, `DemoShaders.cs`, `SdfProducerServices.cs`, `DemoConsole.cs` | `AgbDebug`/`GamingBrick` (Arc 5), `BindingBar`/`Ui` (OQ-3), held `TickTranscriptRecorder` — all still standing |
 | Residue `IAddonControlHost.cs`, `OverlayPanelsFeed.cs`, `ConsoleAccentPalette.cs` | extracted `ICreatorModeHost` needs the first; `Ui/` needs the second; surviving `OverworldFrameSource` needs the third |
 | `Ui/` (6), `BindingBar/` (5), `DevConsole/` (4), `Text/` (3) | **NOT-YET-ISLAND / transitive:** `DiegeticUiInstaller`/`Director` (Arc 4) hold `BindingBar`/`DevConsole` open; `MuseumRenderer` (Arc 11, held) pins `Text/SharedGlyphAtlas`. Design successors confirmed in `Puck.Overlays` — delete when their Arc-4/11 blockers clear |
 
-**HELD per ground rules / OQ-14 (untouched save doc-comment repair):** the nine
-replay/introspection files + `TickNarration.cs`; `ConsoleFeed.cs`/`ProceduralFeed.cs`
-(Arc 5, OQ-13); `Museum/MuseumRenderer.cs` (Arc 11). Transitive pins of the held
-set also stand: `ParityResult.cs` (ctor arg of `OverworldDeterminismNode`),
-`IRosterEventSource.cs`, `RosterEvent.cs`, `ControllerPlayerRegistry.cs`,
-`OverworldInput.cs`.
+**DELETED 2026-07-19 (OQ-14 resolved — tape wired into World):** eight of the nine
+replay/introspection files + `TickNarration.cs` + the orphaned connectors
+`ParityResult.cs`, `IRosterEventSource.cs`, `RosterEvent.cs`.
+**KEPT (the nine's one exception): `OverworldSnapshotProjection.cs`** — its `FromLane`
+is a live dependency of `RouterIntentSource` (← `BindingBarAdapter`), so it is NOT a
+replay-only island; recorded held, pinned by that consumer. `ControllerPlayerRegistry.cs`
+and `OverworldInput.cs` stand (they pin/are pinned by the surviving `RouterIntentSource`).
+**Still HELD (other arcs):** `ConsoleFeed.cs`/`ProceduralFeed.cs` (Arc 5, OQ-13);
+`Museum/MuseumRenderer.cs` (Arc 11).
 
 **`(b)` — capabilities World lacks, each with an owning arc (unchanged by this
 survey):** `Audio/` (4 — cabinet chiptune output; the landed World spatial mixer
@@ -7512,17 +7527,19 @@ Beat B lands. **The whole set is now an explicit deletion table in Arc 3's Demo
 deletion section, not a recommendation**, with four holds:
 
 - `ReplayCommandModule.cs` + `TickTranscriptRecorder.cs` + `TickNarration.cs` +
-  `IntrospectionCommandModule.cs` — **OQ-14.** Checked against World's landed
-  recording graph, and it is **not** a successor: `WorldRecordingCommandModule` is
-  AV1/Opus *video* capture and `WorldSessionCapture` is live-lever-to-document
-  fold-back. Neither records or replays input or state, and no World file
-  references `CommandSnapshot` replay or a state-hash mark table. This is a
-  capability, not a satellite.
+  `IntrospectionCommandModule.cs` — **OQ-14 — RESOLVED 2026-07-19: DELETED.** The
+  owner ruled WIRE THE TAPE INTO WORLD rather than delete-with-loss: `WorldReplayTape`
+  + the `replay.*` verbs now record and replay World's real per-tick `CommandSnapshot`
+  stream, so these become superseded satellites and are deleted (with the rest of the
+  nine + the orphaned connectors). The introspection half (`tick.explain` etc.) is a
+  recorded, deliberate capability loss — see OQ-14/OQ-17.
 - `BindingProfileDocuments.cs` + `BindingProfileDocumentStore.cs` — check against
   World's layered player-document bindings. Expected disposition: superseded,
   delete.
-- `SdfParityProducers.cs` + `ParityResult.cs` — check against `Puck.Post`'s parity
-  path; if `Puck.Post` consumes either shape, they are not Demo-only.
+- `SdfParityProducers.cs` — check against `Puck.Post`'s parity path; if `Puck.Post`
+  consumes its shape, it is not Demo-only. (`ParityResult.cs` was DELETED
+  2026-07-19 as an OQ-14 orphan — its only consumer was the deleted
+  `OverworldDeterminismNode`; `SdfParityProducers` never referenced it.)
 
 ---
 
@@ -7552,12 +7569,11 @@ but its **cost is still unmeasured**, deferred to a 128-body measurement (below)
 built the `QueuedMachineWorker.Reconfigure` FIFO seam, Arc 7 reserved the derived
 face-screen key set at construction, and Arc 8's `InternalsVisibleTo` check is the
 one still owed at P1 (a five-minute grep — see OQ-9). **Scheduled forcing points:**
-OQ-3 and OQ-14/OQ-17 at **Arc 3 Beat B** (the R17 survey — Beat B EXECUTED, but
-**OQ-14/OQ-17 were deliberately deferred forward** to the recorded owner sitting,
-still owed), OQ-4 at **Arc 8's exit**, and OQ-6 at the **Arc 9 and Arc 12 reviews**.
-**OQ-14 and OQ-17 are scheduled by ruling rather than by default** — the owner
-deliberately chose the scheduled-decision option on 2026-07-19, which raises rather
-than lowers the bar (see OQ-14). **OQ-13 and OQ-16 were resolved 2026-07-19 and
+OQ-3 at **Arc 3 Beat B**, OQ-4 at **Arc 8's exit**, and OQ-6 at the **Arc 9 and Arc
+12 reviews**. **OQ-14 and OQ-17 (its introspection half) are RESOLVED 2026-07-19** —
+the owner ruled WIRE THE TAPE INTO WORLD (`WorldReplayTape` + the `replay.*` verbs),
+retiring the nine + `TickNarration`; `tick.explain`-style introspection is an
+explicit, recorded capability loss (see OQ-14 and OQ-17). **OQ-13 and OQ-16 were resolved 2026-07-19 and
 their landings are recorded below** (OQ-13's `console` variant shipped as data with
 its live feed deferred; OQ-16's `--emit-schema` relocation to `tools/` is DONE in
 Beat A).
@@ -7565,8 +7581,10 @@ Beat A).
 **OQ-10 is closed** — its subject is now the [carried tracks](#carried-tracks)
 half of this document. **OQ-16 and OQ-17 were raised by that consolidation**;
 OQ-16 was a genuine contradiction between Arc 3 and the demo-port ledger and is
-now **resolved in the ledger's favor**, while OQ-17 remains open and exists to
-prevent OQ-14 from being answered by accident.
+now **resolved in the ledger's favor**. **OQ-17 is RESOLVED 2026-07-19** in the same
+sitting as OQ-14: the tape is wired into World and the divergence-debugging
+introspection is a recorded, deliberate capability loss — the accident it existed to
+prevent did not happen.
 
 **OQ-1 — the `IContactField` + `TryUp` seam (R2). RESOLVED 2026-07-19 —
 ACCEPTED.**
@@ -7823,7 +7841,8 @@ creation-look rendering). `ConsoleFeed.cs`/`ProceduralFeed.cs` **remain in
 `src/Puck.Demo/Overworld/`**, pinned by that deferred port — Beat B's held-file
 count is unaffected because OQ-13 already moved them out of the survey.
 
-**OQ-14 — deterministic replay and tick introspection (Arc 3 Beat B, R17).** Nine
+**OQ-14 — deterministic replay and tick introspection (Arc 3 Beat B, R17).
+RESOLVED 2026-07-19 — see the ruling block below.** Nine
 files — `OverworldDeterminism.cs` (194), `OverworldReplayCapture.cs` (158),
 `OverworldRecording.cs` (99), `OverworldReplayStore.cs` (87),
 `OverworldSnapshotProjection.cs` (85), `OverworldDeterminismNode.cs` (63),
@@ -7860,16 +7879,57 @@ here. **Forcing point: Arc 3 Beat B.**
 >
 > Deferral here is a scheduling choice, not a downgrade in the standard of proof.
 
-**STATUS: STILL OPEN — the single remaining pin for the (c)-disposition deletion
-ledger.** Arc 3 Beat B executed (`686d009`), but per the owner's ruling the OQ-14
-decision was **deliberately deferred forward** rather than taken during the survey.
-Every one of Arcs 1/2/4/6/7's declined Demo excisions ((c)-dispositions) is chained
-to the **OQ-14 survivors** (`OverworldWorld.cs`, `OverworldFrameSource*.cs`,
-`TownWorld.cs`) staying pinned: the nine replay/introspection files cannot be deleted
-and the carcasses that lean on them cannot be removed until this one owner sitting
-records its outcome (with OQ-17's introspection half). It does not block Arc 8, but
-it is the owed decision that unblocks the whole deletion trajectory. See the [State
-of execution](#state-of-execution) deferral ledger.
+**RESOLVED 2026-07-19 — WIRE THE TAPE INTO WORLD (a third option between (a) and
+(b)).** The owner took the scheduled sitting and ruled: the four engine primitives
+the adversarial pass (`3827ccd`) verified — `SnapshotRecording`, `InputRecorder`,
+`ReplaySnapshotSource`, `DeterminismHarness`, all living in `Puck.Commands` BELOW
+both composition roots and bit-for-bit gated by Post — are **wired into World**,
+which unlike the demo produces a real per-tick `CommandSnapshot` stream. The wiring
+is `Program.cs` construction plus a small `WorldReplayTape` the sim taps:
+- `src/Puck.World/WorldReplayTape.cs` — the live record/replay tape (record appends
+  each real tick's snapshot; replay substitutes a saved snapshot and re-applies it
+  through the registry to re-drive the seats; a per-tick FNV state hash over the
+  population's fixed-point poses is the recording's tail hash).
+- `src/Puck.World/WorldReplayCommandModule.cs` — the `replay.record`/`replay.stop`/
+  `replay.play`/`replay.list`/`replay.status` Immediate verb surface (the
+  `capture.*` precedent for a live non-document surface).
+- `WorldSimulation.Step` taps the tape; `Program.cs` constructs both (the registry
+  is injected LAZILY via `Func<CommandRegistry>` to break the module→registry cycle).
+
+Verified by RUNNING World (DirectX) + stdin: `replay.record`→`replay.stop` persisted
+a genuine 603-tick `.puckreplay` with a final hash, `replay.list` showed it,
+`replay.play` re-drove the live session tick by tick, and the busy state rejected a
+second play loudly. Replay is not GPU-relevant, so DirectX (the default) satisfies
+the backend rule; the underlying snapshot machinery's bit-for-bit determinism stays
+gated by Post (self-referential, per the supergreen doctrine).
+
+**The nine + `TickNarration` die as SUPERSEDED.** Wiring the tape makes World the
+successor World lacked, so `OverworldDeterminism.cs`, `OverworldReplayCapture.cs`,
+`OverworldRecording.cs`, `OverworldReplayStore.cs`, `OverworldDeterminismNode.cs`,
+`IntrospectionCommandModule.cs`, `ReplayCommandModule.cs`, `TickTranscriptRecorder.cs`
+and `TickNarration.cs` are deleted, together with their now-orphaned replay-closure
+connectors `IRosterEventSource.cs`, `RosterEvent.cs`, and `ParityResult.cs` (proven
+unreferenced islands once the closure went).
+
+**One of the nine is KEPT and re-recorded as held: `OverworldSnapshotProjection.cs`.**
+It is not purely a replay file — its `FromLane` is a LIVE dependency of
+`RouterIntentSource` (itself a compile-time dependency of the live `BindingBarAdapter`),
+so deleting it breaks the Demo library build. Per the deletion-discipline escape
+hatch it stays, pinned by `RouterIntentSource ← BindingBarAdapter`.
+
+**Capability loss recorded (OQ-17's introspection half, decided the same sitting):**
+`tick.explain` / `tick.watch` / `hash.mark` / divergence-bisection introspection is
+**explicitly NOT ported** — it follows later or is dropped separately. World gains
+live record/replay (a superset of the demo's scripted-only capture); it does NOT
+gain the interactive divergence-debugging tool. That is a deliberate, recorded loss,
+not an accident.
+
+**STATUS: RESOLVED 2026-07-19.** Arc 3 Beat B executed (`686d009`); this owner
+sitting closed the one remaining pin. The `OQ-14 survivors` (`OverworldWorld.cs`,
+`OverworldFrameSource*.cs`, `OverworldRoom.cs`, `TownWorld.cs`) stay pinned by their
+OTHER consumers (the Arc 8/9/10 hub, `RouterIntentSource`) — the OQ-14 hold is gone,
+but they are not islands, so they are NOT deleted here. See the [State of
+execution](#state-of-execution) deferral ledger.
 
 **OQ-15 — does the owner ruling pin delivery order or execution order? (Arcs
 1–3.) RESOLVED 2026-07-19 — DELIVERY ORDER.**
@@ -7972,13 +8032,15 @@ and no ruling is edited. This question only forbids answering it by accident.
 **Forcing point: Arc 3 Beat B**, the same point as OQ-14, and the two are
 decided in one sitting.
 
-> **Rides along with OQ-14's deliberate deferral (owner ruling, 2026-07-19).**
-> The owner deferred OQ-14 to Beat B as a scheduled decision, and **OQ-17's
-> introspection half goes with it** — same sitting, same recorded outcome. The
-> ruling changes nothing about the three items' scopes; it pins *when* and *how
-> firmly* they are decided. `closeout-15` (the Replay Reel) and `sdf-34` remain
-> carried-track rows on their own schedules, and neither closing may be read as
-> answering OQ-14.
+> **RESOLVED 2026-07-19 with OQ-14.** The owner ruled WIRE THE TAPE INTO WORLD, and
+> **OQ-17's introspection half was decided in the same sitting**: the demonstration
+> capability is delivered live (`WorldReplayTape` + the `replay.*` verbs — a superset
+> of the demo's scripted capture), and the **introspection** capability
+> (`tick.explain`/`tick.watch`/`hash.mark`/divergence bisection) is an EXPLICIT,
+> RECORDED loss — not ported, following later or dropped separately. `closeout-15`
+> (the Replay Reel) and `sdf-34` remain carried-track rows on their own schedules;
+> the accident this question existed to prevent (closing one and calling OQ-14
+> "handled") did not occur.
 
 ---
 
@@ -8091,7 +8153,7 @@ as the immediate-action item above: this is a chartered pass, not a track.
 | **[B](#track-b--sdf-vm-render-and-perf)** | SDF VM render and perf | 39 | 11 / 21 / 7 | `docs/reviews/2026-07-16-sdf-renderer-sota-perf-plan.md`, `docs/sdf-backlog.md`, `docs/sdf-bench-notes.md` | **Arc 2** (sdf-32/33 targets move); **Arc 11** (`sdf-16` names `NestedWorldView.cs`); OQ-14 adjacency |
 | **[C](#track-c--world-native-defects)** | World-native defects | 18 | 8 / 10 / 0 | `docs/reviews/2026-07-19-large-change-set-review.md` | **Arcs 2, 3+8·P1, 6, 7** |
 | **[D](#track-d--emulator-and-fleet)** | Emulator and fleet | 11 | 5 / 3 / 3 | `docs/machine-fleet-plan.md`, `docs/agb-sota-survey.md` | none |
-| **[E](#track-e--branch-closeout-and-retired-plan-opens)** | Branch-closeout + retired-plan opens | 30 | 11 / 13 / 6 | the branch-closeout record, the replay-reel proposal, the UI/editor plan, the audio arc plan, the moldable-state plan (**all retired**; see the track) | **Arc 1** (closeout-07); OQ-14 (unresolved) |
+| **[E](#track-e--branch-closeout-and-retired-plan-opens)** | Branch-closeout + retired-plan opens | 30 | 11 / 13 / 6 | the branch-closeout record, the replay-reel proposal, the UI/editor plan, the audio arc plan, the moldable-state plan (**all retired**; see the track) | **Arc 1** (closeout-07); OQ-14 (RESOLVED 2026-07-19 — tape wired into World) |
 | **[F](#track-f--readme-embedded-work)** | README-embedded work | 13 | 5 / 7 / 1 | `src/Puck.World/README.md`, `src/Puck.Input/README.md` | **readmes-15** (redirected by R0) |
 | **[G](#track-g--port-adjacent-roadmap)** | Port-adjacent roadmap | 12 | 2 / 6 / 4 | `docs/overworld-demo-plan.md`, `docs/game-studio-plan.md`, `docs/reviews/2026-07-18-demo-port-ledger.md` | **Arc 12 doc sweep** |
 | | **total** | **140 rows / 139 distinct** | **58 / 61 / 21** | | |

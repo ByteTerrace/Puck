@@ -885,6 +885,35 @@ fixed-step loop from a tick counter instead of the presentation clock and blocks
 on the encode queue instead of dropping when it backs up (offline inverts the
 drop policy: correctness over liveness).
 
+## Deterministic replay (the input tape)
+
+Distinct from the video recording graph above: this is the **engine snapshot
+recorder** — `SnapshotRecording`/`InputRecorder`/`ReplaySnapshotSource` (in
+`Puck.Commands`, below both composition roots, bit-for-bit gated by Post) — wired
+into World's live loop through `WorldReplayTape`. Unlike the demo's scripted-only
+capture, World's shared launcher produces one real `CommandSnapshot` per fixed tick
+and hands it to `WorldSimulation.Step`, so the tape records the **actual interactive
+session**. `WorldReplayTape.Intercept` appends each tick's snapshot while recording;
+on replay it substitutes the saved snapshot and re-applies it through the registry to
+re-drive the seats (the launcher already applied the live/empty one). A per-tick FNV
+hash over the population's fixed-point poses is the recording's tail hash.
+
+| Verb (all Immediate) | Effect |
+|---|---|
+| `replay.record <name>` | Arms live recording; the next ticks append to the tape. |
+| `replay.stop` | Persists `<name>.puckreplay` (under `%LOCALAPPDATA%\Puck\World\Replays`) and echoes the path, tick count, and final state hash. |
+| `replay.play <name>` | Loads a saved tape and re-drives the running session from it, one snapshot per tick, until it runs out. |
+| `replay.list` / `replay.status` | Lists saved tapes / reports mode, active name, ticks, and last hash. |
+
+Immediate stdin verbs are not folded into the snapshot, so the `replay.*` verbs never
+record or replay themselves; physical device input and Simulation-routed world verbs
+are, so a replay reproduces the operator's driving and any world edits they made.
+World is not determinism-gated (constraint 8) — the bit-for-bit guarantee on the
+underlying snapshot machinery is Post's, self-referential; this tape is the live
+record/replay lever, the seed of a future `Puck.Replay`. **Not ported: the demo's
+`tick.explain`/`tick.watch`/`hash.mark` divergence-introspection** — a deliberate,
+recorded capability loss (OQ-14/OQ-17, 2026-07-19).
+
 ## The command wire (stdin format)
 
 The console is a hot path — a flood corpus lands tens of thousands of `player.*`
