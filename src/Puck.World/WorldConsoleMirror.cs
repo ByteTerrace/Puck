@@ -16,7 +16,7 @@ internal sealed class WorldConsoleMirror {
     private const int MaxLines = 64;
     private const string EchoPrefix = "> ";
 
-    private readonly string[] m_ring = new string[MaxLines];
+    private readonly ConsolePanelLine[] m_ring = new ConsolePanelLine[MaxLines];
     private readonly ConsolePanelStore m_store;
     private int m_count;
     private int m_head;
@@ -37,17 +37,18 @@ internal sealed class WorldConsoleMirror {
     public bool Visible => m_visible;
 
     /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
-    /// output line.</summary>
+    /// output line, each carrying the result's verdict so the panel paints a refusal as a refusal.</summary>
     /// <param name="line">The submitted command line.</param>
     /// <param name="result">The command's result.</param>
     public void Record(string line, CommandResult result) {
         ArgumentNullException.ThrowIfNull(argument: line);
 
-        Append(line: (EchoPrefix + line));
+        // The echo keeps the phosphor voice whatever the verdict; only the OUTPUT rows carry the refusal.
+        Append(line: (EchoPrefix + line), refused: false);
 
         if (result.Output is { Length: > 0 } output) {
             foreach (var range in output.AsSpan().Split(separator: '\n')) {
-                Append(line: output[range].TrimEnd(trimChar: '\r'));
+                Append(line: output[range].TrimEnd(trimChar: '\r'), refused: result.IsError);
             }
         }
 
@@ -61,8 +62,8 @@ internal sealed class WorldConsoleMirror {
         Publish();
     }
 
-    private void Append(string line) {
-        m_ring[((m_head + m_count) % MaxLines)] = line;
+    private void Append(string line, bool refused) {
+        m_ring[((m_head + m_count) % MaxLines)] = new ConsolePanelLine(Text: line, Refused: refused);
 
         if (m_count < MaxLines) {
             m_count++;
@@ -74,7 +75,7 @@ internal sealed class WorldConsoleMirror {
     // Snapshot allocation is event-scoped (per recorded exchange), never per frame — the render thread only ever
     // reads the immutable array the frame carries.
     private void Publish() {
-        var lines = new string[m_count];
+        var lines = new ConsolePanelLine[m_count];
 
         for (var index = 0; (index < m_count); index++) {
             lines[index] = m_ring[((m_head + index) % MaxLines)];
