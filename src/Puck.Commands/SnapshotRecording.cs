@@ -15,7 +15,7 @@ namespace Puck.Commands;
 /// <remarks>This is the seed of a future <c>Puck.Replay</c> project.</remarks>
 public sealed class SnapshotRecording {
     private const uint Magic = 0x504B_5253u; // "PKRS"
-    private const uint Version = 3u;
+    private const uint Version = 1u;
 
     /// <summary>The simulation seed the recorded run was created with.</summary>
     public required uint Seed { get; init; }
@@ -90,7 +90,7 @@ public sealed class SnapshotRecording {
     /// <param name="registry">The current registry the replayed entries are remapped into.</param>
     /// <returns>The deserialized recording, with entries reindexed to the current registry (any entry naming an unknown command is dropped).</returns>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The stream is not a snapshot recording or is an unsupported version.</exception>
+    /// <exception cref="InvalidDataException">The stream is not a snapshot recording, or does not carry the current format version.</exception>
     public static SnapshotRecording Read(Stream stream, CommandRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
         ArgumentNullException.ThrowIfNull(argument: stream);
@@ -100,8 +100,8 @@ public sealed class SnapshotRecording {
         var magic = reader.ReadUInt32();
         var version = reader.ReadUInt32();
 
-        if ((magic != Magic) || (version is not (1u or 2u or Version))) {
-            throw new InvalidDataException(message: "Not a snapshot recording, or an unsupported version.");
+        if ((magic != Magic) || (version != Version)) {
+            throw new InvalidDataException(message: $"Not a snapshot recording, or not version {Version} (magic 0x{magic:X8}, version {version}).");
         }
 
         var seed = reader.ReadUInt32();
@@ -128,12 +128,10 @@ public sealed class SnapshotRecording {
                 for (var entryIndex = 0; (entryIndex < entryCount); entryIndex++) {
                     var recordedId = reader.ReadUInt16();
                     var phase = ((CommandPhase)reader.ReadByte());
-                    var recordedDispatch = ((version >= 2u) ? reader.ReadBoolean() : (bool?)null);
-                    var assignedSlot = ((version >= 3u) && reader.ReadBoolean());
-                    var text = (((version >= 2u) && reader.ReadBoolean()) ? reader.ReadString() : null);
+                    var dispatch = reader.ReadBoolean();
+                    var assignedSlot = reader.ReadBoolean();
+                    var text = (reader.ReadBoolean() ? reader.ReadString() : null);
                     var value = ReadValue(reader: reader);
-                    var dispatch = (recordedDispatch ??
-                        ((phase == CommandPhase.Started) || ((phase == CommandPhase.Active) && (value.Kind != CommandValueKind.Digital))));
 
                     // Remap by name so a recording survives a rebuild that reassigns ids; an entry naming a command
                     // the current build no longer interns is dropped rather than mis-bound. Device is not restored
