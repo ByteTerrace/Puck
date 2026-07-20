@@ -43,18 +43,7 @@ internal static class WorldPlayerJson {
     /// <param name="error">The parse error, or empty on success.</param>
     /// <returns><see langword="true"/> when the payload parsed (a null payload is a valid "inherit the default").</returns>
     public static bool TryParseBindings(string payload, out BindingProfileDocument? document, out string error) {
-        document = null;
-        error = string.Empty;
-
-        try {
-            document = JsonSerializer.Deserialize<BindingProfileDocument?>(json: payload, options: Options);
-
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
+        return WorldJsonPayload.TryParseOptional(json: payload, options: Options, value: out document, error: out error);
     }
 
     /// <summary>Parses a <c>WorldPlayerIdentity</c> payload (<c>{"name":…,"color":"#RRGGBB"}</c>) for a
@@ -87,40 +76,16 @@ internal static class WorldPlayerJson {
     /// <param name="error">The parse error, or empty on success.</param>
     /// <returns><see langword="true"/> when the payload parsed to a JSON object or null.</returns>
     public static bool TryParsePreferences(string payload, out IDictionary<string, JsonElement>? preferences, out string error) {
-        preferences = null;
-        error = string.Empty;
+        var parsed = WorldJsonPayload.TryParseOptional<Dictionary<string, JsonElement>>(json: payload, options: Options, value: out var bag, error: out error);
 
-        try {
-            preferences = JsonSerializer.Deserialize<Dictionary<string, JsonElement>?>(json: payload, options: Options);
+        preferences = bag;
 
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
+        return parsed;
     }
 
     // Deserialize a required section record (identity/motion) with the shared Web options; a null result (the literal
     // "null" payload) or a JSON error is a failure, since these sections must carry a concrete value.
     private static bool TryParseRecord<T>(string payload, out T value, out string error) where T : class {
-        value = null!;
-        error = string.Empty;
-
-        try {
-            if (JsonSerializer.Deserialize<T>(json: payload, options: Options) is not { } parsed) {
-                error = "the payload was null";
-
-                return false;
-            }
-
-            value = parsed;
-
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
+        return WorldJsonPayload.TryParse(json: payload, options: Options, value: out value, error: out error);
     }
 }

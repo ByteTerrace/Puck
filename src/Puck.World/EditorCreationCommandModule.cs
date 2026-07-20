@@ -78,11 +78,12 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         CanonicalDocument<CreationDocument> canonical;
 
         try {
-            var document = (System.Text.Json.JsonSerializer.Deserialize<CreationDocument>(json: File.ReadAllText(path: path), options: DocumentJsonOptions.Shared)
-                ?? throw new DocumentValidationException(errors: [new DocumentValidationError(Path: "(root)", Message: "the file deserialized to null")], source: path));
+            if (!WorldJsonPayload.TryParse<CreationDocument>(json: File.ReadAllText(path: path), options: DocumentJsonOptions.Shared, value: out var document, error: out var parseError)) {
+                return Error(text: $"[editor.import: {path}: {parseError}]");
+            }
 
             canonical = CreationCanonicalizer.Canonicalize(document: document, source: path);
-        } catch (Exception exception) when (exception is DocumentValidationException or System.Text.Json.JsonException or IOException) {
+        } catch (Exception exception) when (exception is DocumentValidationException or IOException or UnauthorizedAccessException) {
             return Error(text: $"[editor.import: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
 

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Commands;
 using Puck.World.Client;
@@ -203,7 +202,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: (context, args) => {
                 var raw = RawArgument(context: context, args: args);
 
-                if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(json: raw, info: info, value: out var value, error: out var error)) {
                     return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
                 }
 
@@ -238,32 +237,5 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         }
 
         return args.Tail(0);
-    }
-
-    private static bool TryParseJson<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {
-        value = default!;
-
-        if (string.IsNullOrWhiteSpace(value: json)) {
-            error = "expected a compact inline-JSON argument";
-
-            return false;
-        }
-
-        try {
-            if (JsonSerializer.Deserialize(json: json, jsonTypeInfo: info) is not { } parsed) {
-                error = "the JSON parsed to null";
-
-                return false;
-            }
-
-            value = parsed;
-            error = string.Empty;
-
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
     }
 }

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Commands;
 using Puck.Maths;
@@ -125,7 +124,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var name = raw[..separator];
                 var json = raw[(separator + 1)..].Trim();
 
-                if (!TryParseJson(json: json, info: WorldJsonContext.Default.MotionResponseArray, value: out var rows, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(json: json, info: WorldJsonContext.Default.MotionResponseArray, value: out var rows, error: out var error)) {
                     return new CommandResult(Output: $"[world.kit.response: {error}]") { IsError = true };
                 }
 
@@ -317,7 +316,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             handler: (context, args) => {
                 var raw = RawArgument(context: context, args: in args);
 
-                if (!TryParseJson(json: raw, info: info, value: out var value, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(json: raw, info: info, value: out var value, error: out var error)) {
                     return new CommandResult(Output: $"[{name}: {error}]") { IsError = true };
                 }
 
@@ -352,32 +351,5 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         }
 
         return args.Tail(0);
-    }
-
-    private static bool TryParseJson<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {
-        value = default!;
-
-        if (string.IsNullOrWhiteSpace(value: json)) {
-            error = "expected a compact inline-JSON argument";
-
-            return false;
-        }
-
-        try {
-            if (JsonSerializer.Deserialize(json: json, jsonTypeInfo: info) is not { } parsed) {
-                error = "the JSON parsed to null";
-
-                return false;
-            }
-
-            value = parsed;
-            error = string.Empty;
-
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
     }
 }

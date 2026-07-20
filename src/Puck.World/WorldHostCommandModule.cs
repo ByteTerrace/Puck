@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
@@ -39,15 +38,11 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
                     return Usage(verb: "world.host.set", form: "<json>");
                 }
 
-                try {
-                    if (JsonSerializer.Deserialize(json: raw, jsonTypeInfo: WorldJsonContext.Default.WorldHostDefaults) is not { } host) {
-                        return new CommandResult(Output: "[world.host.set: the JSON parsed to null]") { IsError = true };
-                    }
-
-                    return Submit(host: host);
-                } catch (JsonException exception) {
-                    return new CommandResult(Output: $"[world.host.set: {exception.Message.ReplaceLineEndings(replacementText: " ")}]") { IsError = true };
+                if (!WorldJsonPayload.TryParse(json: raw, info: WorldJsonContext.Default.WorldHostDefaults, value: out var host, error: out var error)) {
+                    return new CommandResult(Output: $"[world.host.set: {error}]") { IsError = true };
                 }
+
+                return Submit(host: host);
             },
             routing: CommandRouting.Simulation
         );

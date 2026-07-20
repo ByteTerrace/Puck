@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -26,7 +25,7 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
             handler: (context, args) => {
                 var raw = RawArgument(context: context, args: args);
 
-                if (!TryParseJson(json: raw, info: WorldJsonContext.Default.WorldRig, value: out var rig, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(json: raw, info: WorldJsonContext.Default.WorldRig, value: out var rig, error: out var error)) {
                     return new CommandResult(Output: $"[world.view.rig: {error}]") { IsError = true };
                 }
 
@@ -41,7 +40,7 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
             handler: (context, args) => {
                 var raw = RawArgument(context: context, args: args);
 
-                if (!TryParseJson(json: raw, info: WorldJsonContext.Default.WorldViewLayout, value: out var layout, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(json: raw, info: WorldJsonContext.Default.WorldViewLayout, value: out var layout, error: out var error)) {
                     return new CommandResult(Output: $"[world.view.layout.set: {error}]") { IsError = true };
                 }
 
@@ -138,32 +137,5 @@ internal sealed class WorldViewCommandModule(WorldServer server, IServerLink lin
         }
 
         return args.Tail(0);
-    }
-
-    private static bool TryParseJson<T>(string json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, out T value, out string error) {
-        value = default!;
-
-        if (string.IsNullOrWhiteSpace(value: json)) {
-            error = "expected a compact inline-JSON argument";
-
-            return false;
-        }
-
-        try {
-            if (JsonSerializer.Deserialize(json: json, jsonTypeInfo: info) is not { } parsed) {
-                error = "the JSON parsed to null";
-
-                return false;
-            }
-
-            value = parsed;
-            error = string.Empty;
-
-            return true;
-        } catch (JsonException exception) {
-            error = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
     }
 }

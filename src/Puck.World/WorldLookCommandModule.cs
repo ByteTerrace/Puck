@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -32,15 +31,11 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
                     return Usage(verb: "world.look.set", form: "<look-json>");
                 }
 
-                try {
-                    if (JsonSerializer.Deserialize(json: raw, jsonTypeInfo: WorldJsonContext.Default.WorldLook) is not { } look) {
-                        return new CommandResult(Output: "[world.look.set: the JSON parsed to null]") { IsError = true };
-                    }
-
-                    return Submit(mutation: new WorldMutation.UpsertLook(Principal: WorldPrincipal.Console, Look: look));
-                } catch (JsonException exception) {
-                    return new CommandResult(Output: $"[world.look.set: {exception.Message.ReplaceLineEndings(replacementText: " ")}]") { IsError = true };
+                if (!WorldJsonPayload.TryParse(json: raw, info: WorldJsonContext.Default.WorldLook, value: out var look, error: out var error)) {
+                    return new CommandResult(Output: $"[world.look.set: {error}]") { IsError = true };
                 }
+
+                return Submit(mutation: new WorldMutation.UpsertLook(Principal: WorldPrincipal.Console, Look: look));
             },
             routing: CommandRouting.Simulation
         );

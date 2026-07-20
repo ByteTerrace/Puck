@@ -267,7 +267,7 @@ internal static class WorldDefinitionSerialization {
             WorldDefinitionValidator.Validate(definition: definition);
 
             return definition;
-        } catch (Exception exception) when (exception is JsonException or InvalidOperationException) {
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             throw new InvalidDataException(message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}", innerException: exception);
         }
     }

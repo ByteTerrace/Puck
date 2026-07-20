@@ -59,7 +59,9 @@ public static class RecordingDocumentSerialization {
 
         try {
             parsed = JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument);
-        } catch (JsonException exception) {
+        // A tape is a hand-editable file: polymorphic ($type) rows reject as NotSupportedException/InvalidOperationException
+        // as readily as JsonException, and none of them may escape a load seam.
+        } catch (Exception exception) when (exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException) {
             document = null;
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 
