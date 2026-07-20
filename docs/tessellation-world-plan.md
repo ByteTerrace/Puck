@@ -60,7 +60,7 @@ only editor verbs, and would `world.save` capture it?*
   (relief), `SampledRegion` + brick pool (baked heightfield / carves),
   `CellJitter` (integer-hash scatter), `RepeatPolar` (radial repeats), the
   `SymmetryPlane` / wallpaper folds. Placement patterns from
-  `GoldenQuasicrystal` / `SilverQuasicrystal` (aperiodic) or `SymmetryLattice`
+  `MetallicQuasicrystal` / `QuadraticQuasicrystal` (aperiodic) or `SymmetryLattice`
   (E₈). Each is emittable from authored data.
 
 ## The arcs (start runnable, build up)

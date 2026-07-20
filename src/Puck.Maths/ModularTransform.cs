@@ -24,7 +24,7 @@ public readonly record struct GaussReduction(ModularTransform Transform, long A,
 /// acts on the hyperbolic plane by the Möbius map <c>z ↦ (A·z + B) / (C·z + D)</c>. This is the single object beneath the
 /// library's three motions: the elliptic rotations (the sixth root of unity of <see cref="HexCoord"/>), the parabolic
 /// tick shear (the kinematics update of <see cref="LayerSequence"/>), and the hyperbolic golden inflation (the step of
-/// <see cref="GoldenQuasicrystal"/>) are the three conjugacy classes <see cref="Classify"/> distinguishes by trace.
+/// <see cref="MetallicQuasicrystal"/>) are the three conjugacy classes <see cref="Classify"/> distinguishes by trace.
 /// </summary>
 /// <remarks>
 /// The determinant one invariant makes the inverse the adjugate <c>[[D, −B], [−C, A]]</c> — exact, with no division —
@@ -32,7 +32,7 @@ public readonly record struct GaussReduction(ModularTransform Transform, long A,
 /// moves a cusp (a rational <c>p/q</c>, with <c>∞</c> written <c>1/0</c>) to another cusp, reduced to lowest terms. The one
 /// approximate seam is <see cref="Apply(FixedComplex)"/>, which realizes the Möbius map on a fixed-point interior point:
 /// the combinatorial action on cusps and forms above it is exact, only the interior evaluation rounds — the same seam
-/// convention as <see cref="GoldenQuasicrystal.Position(int, int)"/>. <see cref="GaussReduce(long, long, long)"/> reduces a
+/// convention as <see cref="MetallicQuasicrystal.Position(int, long, long)"/>. <see cref="GaussReduce(long, long, long)"/> reduces a
 /// positive-definite integer form — a point of the upper half-plane addressed by its integer minimal polynomial — into the
 /// fundamental domain, returning the exact word that takes it there.
 /// </remarks>
@@ -132,7 +132,7 @@ public readonly record struct ModularTransform
         );
     /// <summary>Applies the Möbius map to an interior point of the upper half-plane.</summary>
     /// <param name="point">The fixed-point interior point.</param>
-    /// <returns>The image <c>(A·point + B) / (C·point + D)</c>. This is the one approximate operation: the integer action on cusps and forms is exact, but this interior evaluation rounds each complex product and the final division, like <see cref="GoldenQuasicrystal.Position(int, int)"/>.</returns>
+    /// <returns>The image <c>(A·point + B) / (C·point + D)</c>. This is the one approximate operation: the integer action on cusps and forms is exact, but this interior evaluation rounds each complex product and the final division, like <see cref="MetallicQuasicrystal.Position(int, long, long)"/>.</returns>
     public FixedComplex Apply(FixedComplex point) {
         var numerator = ((FromInteger(value: A) * point) + FromInteger(value: B));
         var denominator = ((FromInteger(value: C) * point) + FromInteger(value: D));

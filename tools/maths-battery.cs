@@ -2090,149 +2090,90 @@ for (var stepQ = -80; (stepQ <= 80); ++stepQ) {
 }
 Console.WriteLine("hexcoord: 6 unit neighbours, order-6 exact 60° rotation, associative ring w^2+w+1=0, Length = graph distance, Round to nearest cell OK");
 
-// ---- GoldenQuasicrystal (exact cut-and-project Fibonacci quasicrystal) ----
-// From the origin, the chain walk must stay in the quasicrystal, invert under Previous, step by exactly φ or φ² in the
-// ring ((0,1) or (1,1)), advance monotonically, avoid the forbidden factors SS and LLL, and approach density φ.
-// Oracles: the membership test, the golden ratio, and the Fibonacci-word balance property — never the code's tables.
-if (!GoldenQuasicrystal.Contains(a: 0, b: 0)) {
-    throw new InvalidOperationException("QUASICRYSTAL ORIGIN IS NOT A MEMBER");
-}
-var qcPoint = (A: 0, B: 0);
-var qcLong = 0L;
-var qcShort = 0L;
-var qcRun = 0;
-var qcPrevLong = false;
-for (var step = 0; (step < 100_000); ++step) {
-    var isLong = GoldenQuasicrystal.StartsLongTile(a: qcPoint.A, b: qcPoint.B);
-    var next = GoldenQuasicrystal.Next(a: qcPoint.A, b: qcPoint.B);
-    var deltaA = (next.A - qcPoint.A);
-    var deltaB = (next.B - qcPoint.B);
-
-    if (!GoldenQuasicrystal.Contains(a: next.A, b: next.B)) {
-        throw new InvalidOperationException("QUASICRYSTAL WALK LEFT THE SET");
-    }
-    if (GoldenQuasicrystal.Previous(a: next.A, b: next.B) != qcPoint) {
-        throw new InvalidOperationException("QUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT");
-    }
-    if (isLong ? ((deltaA != 1) || (deltaB != 1)) : ((deltaA != 0) || (deltaB != 1))) {
-        throw new InvalidOperationException("QUASICRYSTAL STEP IS NOT PHI OR PHI-SQUARED");
-    }
-    if (GoldenQuasicrystal.Position(a: next.A, b: next.B) <= GoldenQuasicrystal.Position(a: qcPoint.A, b: qcPoint.B)) {
-        throw new InvalidOperationException("QUASICRYSTAL POSITIONS ARE NOT INCREASING");
+// ---- MetallicQuasicrystal random access (the general cut-and-project; subsumes the retired golden/silver files) ----
+// For each index n the ring-coordinate chain a + b·δₙ from the origin must stay in the set, invert under Previous, step
+// by exactly δₙ or δₙ² ((0,1) or (1,n)), advance monotonically, avoid the forbidden factors SS and Lⁿ⁺², and reach
+// density δₙ. Contains must equal the walked vertex set exactly over a coordinate box (a denser window would pass the walk
+// yet admit ghost points), and the ring-coordinate word must match the independently streamed substitution word — two
+// implementations of one tiling. Golden is n=1 (verified elsewhere to equal the former GoldenQuasicrystal coordinate for
+// coordinate) and silver is n=2.
+for (var metallicIndex = 1; (metallicIndex <= 6); ++metallicIndex) {
+    if (!MetallicQuasicrystal.Contains(n: metallicIndex, a: 0L, b: 0L)) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL ORIGIN IS NOT A MEMBER n={metallicIndex}");
     }
 
-    if (isLong) {
-        qcLong++;
-        qcRun = (((step > 0) && qcPrevLong) ? (qcRun + 1) : 1);
+    var metallicPoint = (A: 0L, B: 0L);
+    var metallicLong = 0L;
+    var metallicShort = 0L;
+    var metallicRun = 0;
+    var metallicPrevLong = false;
+    var metallicWalkWord = new bool[6000];
+    var metallicVisited = new HashSet<(long A, long B)>();
 
-        if (qcRun >= 3) { throw new InvalidOperationException("QUASICRYSTAL HAS THE FORBIDDEN FACTOR LLL"); }
-    } else {
-        qcShort++;
+    for (var step = 0; (step < metallicWalkWord.Length); ++step) {
+        metallicVisited.Add(item: metallicPoint);
 
-        if ((step > 0) && !qcPrevLong) { throw new InvalidOperationException("QUASICRYSTAL HAS THE FORBIDDEN FACTOR SS"); }
+        var isLong = MetallicQuasicrystal.StartsLongTile(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B);
+        var next = MetallicQuasicrystal.Next(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B);
 
-        qcRun = 1;
-    }
+        metallicWalkWord[step] = isLong;
 
-    qcPrevLong = isLong;
-    qcPoint = next;
-}
-var qcDensity = ((double)qcLong / qcShort);
-if (Math.Abs((qcDensity - ((1.0 + Math.Sqrt(5.0)) / 2.0))) > 0.01) {
-    throw new InvalidOperationException("QUASICRYSTAL TILE DENSITY IS NOT THE GOLDEN RATIO");
-}
-Console.WriteLine($"quasicrystal: exact Z[phi] chain, Next/Previous inverse, phi/phi-squared steps, no SS/LLL, density {qcDensity:F4} -> phi OK");
-
-// ---- SilverQuasicrystal (exact cut-and-project silver-mean quasicrystal) ----
-// The eight-fold sibling of the Fibonacci chain: points of Z[sqrt2] whose conjugate a - b*sqrt2 lands in the window
-// [0, 2), spacing the line into two tiles sqrt2 and 2 + sqrt2 in the silver ratio 1 + sqrt2, arranged as the silver-mean
-// (Pell) word. First an INDEPENDENT membership oracle -- the conjugate-in-window definition computed in floating point,
-// never SilverQuasicrystal's own integer branches -- must agree with Contains across a whole integer box. Then the chain
-// walk from the origin must stay in the set, invert under Previous, step by exactly sqrt2 or 2 + sqrt2 in the ring ((0,1)
-// or (2,1)), advance monotonically, avoid the forbidden factors SS and LLLL, and approach density 1 + sqrt2.
-if (!SilverQuasicrystal.Contains(a: 0, b: 0)) {
-    throw new InvalidOperationException("SILVERQUASICRYSTAL ORIGIN IS NOT A MEMBER");
-}
-// Independent oracle: a + b*sqrt2 is a point exactly when a is even AND its conjugate a - b*sqrt2 lies in [0, 2) -- the
-// even-a parity is the index-two sublattice the chain lives on, and the odd-a points are the interleaved companion chain.
-// Over |a|,|b| <= 400 the conjugate is never within 1e-3 of a window edge except the exact integer points (0,0) [included]
-// and (2,0) [excluded], both handled by the 2.0 boundary, so the double-plus-parity computation is a code-independent oracle.
-for (var oracleB = -400; (oracleB <= 400); ++oracleB) {
-    for (var oracleA = -400; (oracleA <= 400); ++oracleA) {
-        var conjugate = (oracleA - (oracleB * 1.4142135623730951));
-        var expected = (((oracleA & 1) == 0) && (conjugate >= 0.0) && (conjugate < 2.0));
-
-        if (SilverQuasicrystal.Contains(a: oracleA, b: oracleB) != expected) {
-            throw new InvalidOperationException("SILVERQUASICRYSTAL MEMBERSHIP DISAGREES WITH THE CUT-AND-PROJECT ORACLE");
+        if (!MetallicQuasicrystal.Contains(n: metallicIndex, a: next.A, b: next.B)) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL WALK LEFT THE SET n={metallicIndex}");
         }
-    }
-}
-var silverPoint = (A: 0, B: 0);
-var silverLong = 0L;
-var silverShort = 0L;
-var silverRun = 0;
-var silverPrevLong = false;
-for (var step = 0; (step < 100_000); ++step) {
-    var isLong = SilverQuasicrystal.StartsLongTile(a: silverPoint.A, b: silverPoint.B);
-    var next = SilverQuasicrystal.Next(a: silverPoint.A, b: silverPoint.B);
-    var deltaA = (next.A - silverPoint.A);
-    var deltaB = (next.B - silverPoint.B);
+        if (MetallicQuasicrystal.Previous(n: metallicIndex, a: next.A, b: next.B) != metallicPoint) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT n={metallicIndex}");
+        }
+        if (isLong ? (((next.A - metallicPoint.A) != 1L) || ((next.B - metallicPoint.B) != metallicIndex)) : (((next.A - metallicPoint.A) != 0L) || ((next.B - metallicPoint.B) != 1L))) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL STEP IS NOT DELTA OR DELTA-SQUARED n={metallicIndex}");
+        }
+        if (MetallicQuasicrystal.Position(n: metallicIndex, a: next.A, b: next.B) <= MetallicQuasicrystal.Position(n: metallicIndex, a: metallicPoint.A, b: metallicPoint.B)) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL POSITIONS ARE NOT INCREASING n={metallicIndex}");
+        }
 
-    if (!SilverQuasicrystal.Contains(a: next.A, b: next.B)) {
-        throw new InvalidOperationException("SILVERQUASICRYSTAL WALK LEFT THE SET");
-    }
-    if (SilverQuasicrystal.Previous(a: next.A, b: next.B) != silverPoint) {
-        throw new InvalidOperationException("SILVERQUASICRYSTAL PREVIOUS IS NOT THE INVERSE OF NEXT");
-    }
-    if (isLong ? ((deltaA != 2) || (deltaB != 1)) : ((deltaA != 0) || (deltaB != 1))) {
-        throw new InvalidOperationException("SILVERQUASICRYSTAL STEP IS NOT SQRT2 OR TWO-PLUS-SQRT2");
-    }
-    if (SilverQuasicrystal.Position(a: next.A, b: next.B) <= SilverQuasicrystal.Position(a: silverPoint.A, b: silverPoint.B)) {
-        throw new InvalidOperationException("SILVERQUASICRYSTAL POSITIONS ARE NOT INCREASING");
-    }
+        if (isLong) {
+            ++metallicLong;
+            metallicRun = (((step > 0) && metallicPrevLong) ? (metallicRun + 1) : 1);
 
-    if (isLong) {
-        silverLong++;
-        silverRun = (((step > 0) && silverPrevLong) ? (silverRun + 1) : 1);
+            if (metallicRun >= (metallicIndex + 2)) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL HAS A FORBIDDEN LONG RUN n={metallicIndex}");
+            }
+        } else {
+            ++metallicShort;
 
-        if (silverRun >= 4) { throw new InvalidOperationException("SILVERQUASICRYSTAL HAS THE FORBIDDEN FACTOR LLLL"); }
-    } else {
-        silverShort++;
+            if ((step > 0) && !metallicPrevLong) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL HAS THE FORBIDDEN FACTOR SS n={metallicIndex}");
+            }
 
-        if ((step > 0) && !silverPrevLong) { throw new InvalidOperationException("SILVERQUASICRYSTAL HAS THE FORBIDDEN FACTOR SS"); }
+            metallicRun = 0;
+        }
 
-        silverRun = 0;
+        metallicPrevLong = isLong;
+        metallicPoint = next;
     }
 
-    silverPrevLong = isLong;
-    silverPoint = next;
-}
-var silverDensity = ((double)silverLong / silverShort);
-if (Math.Abs((silverDensity - (1.0 + Math.Sqrt(2.0)))) > 0.01) {
-    throw new InvalidOperationException("SILVERQUASICRYSTAL TILE DENSITY IS NOT THE SILVER RATIO");
-}
-// The invariant that keeps Contains and the traversal ONE object: each row b holds exactly one Contains-member, and it is
-// the point the walk visits. A window that also admitted the odd-a companion chain would pass every check above yet make
-// Contains mean a denser set than Next traces -- so this is the assertion that forbids the two implementations to diverge.
-var silverRow = (A: 0, B: 0);
-for (var rowB = 0; (rowB < 4000); ++rowB) {
-    var rowLo = (((int)Math.Floor(rowB * 1.4142135623730951)) - 2);
-    var rowHi = (((int)Math.Ceiling(rowB * 1.4142135623730951)) + 3);
-    var member = int.MinValue;
+    if (Math.Abs(((double)metallicLong / metallicShort) - ((double)MetallicQuasicrystal.InflationFactor(n: metallicIndex))) > 0.02) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL DENSITY IS NOT DELTA n={metallicIndex}");
+    }
 
-    for (var rowA = rowLo; (rowA <= rowHi); ++rowA) {
-        if (SilverQuasicrystal.Contains(a: rowA, b: rowB)) {
-            if (member != int.MinValue) { throw new InvalidOperationException("SILVERQUASICRYSTAL ROW HAS TWO MEMBERS -- CONTAINS IS DENSER THAN THE WALKED CHAIN"); }
-
-            member = rowA;
+    // Contains must equal the walked set exactly over a coordinate box the walk fully covers — no ghost members admitted.
+    for (var boxA = 0L; (boxA <= 80L); ++boxA) {
+        for (var boxB = 0L; (boxB <= 80L); ++boxB) {
+            if (MetallicQuasicrystal.Contains(n: metallicIndex, a: boxA, b: boxB) != metallicVisited.Contains(item: (boxA, boxB))) {
+                throw new InvalidOperationException($"METALLIC QUASICRYSTAL CONTAINS DISAGREES WITH THE WALK n={metallicIndex} ({boxA},{boxB})");
+            }
         }
     }
 
-    if (member != silverRow.A) { throw new InvalidOperationException("SILVERQUASICRYSTAL CONTAINS DISAGREES WITH THE WALKED CHAIN"); }
+    // Two independent implementations agree: the cut-and-project walk word is a factor of the streamed substitution word.
+    var metallicStreamed = new bool[24000];
+    QuadraticQuasicrystal.Word(p: metallicIndex, q: 1L, d: (((long)metallicIndex * metallicIndex) + 4L), r: 2L, tiles: metallicStreamed);
 
-    silverRow = SilverQuasicrystal.Next(a: silverRow.A, b: silverRow.B);
+    if (!IsFactorOfWord(haystack: metallicStreamed, needle: metallicWalkWord.AsSpan(0, 1500))) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL RANDOM ACCESS != STREAMED WORD n={metallicIndex}");
+    }
 }
-Console.WriteLine($"silverquasicrystal: exact Z[sqrt2] chain, Contains == walk (one member/row), Next/Previous inverse, sqrt2/2+sqrt2 steps, no SS/LLLL, density {silverDensity:F4} -> 1+sqrt2 OK");
+Console.WriteLine("metallic quasicrystal: ring-coordinate chain n=1..6 (Contains==walk, Next/Previous inverse, delta/delta^2 steps, monotone, no SS/L^(n+2), density -> delta) == streamed word OK");
 
 // ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
 // The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
@@ -2428,6 +2369,186 @@ foreach (var continuedFractionCase in continuedFractionCases) {
     }
 }
 Console.WriteLine($"modular: 3 classes + orders {{4,6,inf}}, det-1 adjugate inverse, cusp group action, {modularReductions} Gauss reductions into F, CF periods [1]/[2] (golden/silver) + surd table OK");
+
+// ---- QuadraticInflation + MetallicQuasicrystal (the inflation lens beneath the quasicrystal chains) ----
+// The lens reads a quadratic irrational's CF period as a substitution matrix; its trace, determinant, and discriminant
+// are exact conjugacy invariants, and the Perron eigenvalue is the chain's inflation factor. Golden and silver fall out
+// as the smallest members, with discriminants 5 and 8 tying back to the golden (sqrt 5) and silver (sqrt 8) chains —
+// read from the continued fraction, not fed in.
+(long P, long Q, long D, long R, int Period, long Det, long Disc, double Factor)[] inflationCases = [
+    (1L, 1L, 5L, 2L, 1, -1L, 5L, ((1.0 + Math.Sqrt(5.0)) / 2.0)),        // golden phi
+    (1L, 1L, 2L, 1L, 1, -1L, 8L, (1.0 + Math.Sqrt(2.0))),               // silver 1 + sqrt 2
+    (0L, 1L, 2L, 1L, 1, -1L, 8L, (1.0 + Math.Sqrt(2.0))),               // sqrt 2, same geodesic as silver
+    (0L, 1L, 3L, 1L, 2, 1L, 12L, (2.0 + Math.Sqrt(3.0))),               // sqrt 3 (even period, det +1)
+    (0L, 1L, 7L, 1L, 4, 1L, 252L, (8.0 + (3.0 * Math.Sqrt(7.0)))),      // sqrt 7 (even period, det +1)
+    (0L, 1L, 13L, 1L, 5, -1L, 1300L, (18.0 + (5.0 * Math.Sqrt(13.0)))), // sqrt 13 (odd period, det -1)
+];
+foreach (var inflationCase in inflationCases) {
+    var inflation = QuadraticInflation.FromQuadraticIrrational(p: inflationCase.P, q: inflationCase.Q, d: inflationCase.D, r: inflationCase.R);
+
+    if ((inflation.PeriodLength != inflationCase.Period) || (inflation.Determinant != inflationCase.Det) || (inflation.Discriminant != inflationCase.Disc)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION INVARIANTS WRONG d={inflationCase.D}");
+    }
+
+    // Determinant is exactly (-1)^period, the geodesic is a hyperbolic translation, and its axis is unimodular.
+    if (inflation.Determinant != (((inflation.PeriodLength & 1) == 0) ? 1L : -1L)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION DETERMINANT SIGN WRONG d={inflationCase.D}");
+    }
+    if ((inflation.GeodesicClass != ModularClass.Hyperbolic) || (inflation.Axis.Classify() != ModularClass.Hyperbolic)) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION GEODESIC NOT HYPERBOLIC d={inflationCase.D}");
+    }
+    if ((inflation.Axis * inflation.Axis.Inverse) != ModularTransform.Identity) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION AXIS NOT UNIMODULAR d={inflationCase.D}");
+    }
+
+    // The exact surd (trace + sqrt disc)/2 equals the double reference and is a root of the matrix characteristic
+    // polynomial lambda^2 - trace*lambda + det; the fixed-point factor lands within the Q48.16 square-root seam.
+    var referenceFactor = ((inflation.Trace + Math.Sqrt(inflation.Discriminant)) / 2.0);
+
+    if (Math.Abs(referenceFactor - inflationCase.Factor) > 1e-9) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FACTOR REFERENCE WRONG d={inflationCase.D}");
+    }
+    if (Math.Abs(((referenceFactor * referenceFactor) - (inflation.Trace * referenceFactor)) + inflation.Determinant) > 1e-6) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FACTOR NOT A CHARACTERISTIC ROOT d={inflationCase.D}");
+    }
+    if (Math.Abs(((double)inflation.InflationFactor()) - referenceFactor) > 1e-3) {
+        throw new InvalidOperationException($"QUADRATIC INFLATION FIXED-POINT FACTOR OFF d={inflationCase.D}");
+    }
+}
+
+// Golden discriminant 5 and silver discriminant 8 are exactly the surds the golden and silver chains are built on, and
+// the two share their smallest-trace geodesics with the metallic family.
+if ((QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L) != QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L)) ||
+    (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L).Discriminant != 5L) ||
+    (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 2L, r: 1L).Discriminant != 8L)) {
+    throw new InvalidOperationException("QUADRATIC INFLATION GOLDEN/SILVER DISCRIMINANTS WRONG");
+}
+
+// MetallicQuasicrystal unifies golden (n=1) and silver (n=2) as one substitution generator: the streamed word contains
+// its own random-access walk word as a factor (same language, phase aside), long:short frequency approaches δₙ, and
+// sigma(word) reproduces the word (the fixed-point identity).
+var metallicGolden = new bool[8192];
+var metallicSilver = new bool[8192];
+MetallicQuasicrystal.Word(n: 1, tiles: metallicGolden);
+MetallicQuasicrystal.Word(n: 2, tiles: metallicSilver);
+
+var goldenFromOrigin = new bool[1500];
+var silverFromOrigin = new bool[1500];
+var goldenWalk = (A: 0L, B: 0L);
+var silverWalk = (A: 0L, B: 0L);
+for (var i = 0; (i < goldenFromOrigin.Length); ++i) {
+    goldenFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+    goldenWalk = MetallicQuasicrystal.Next(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+}
+for (var i = 0; (i < silverFromOrigin.Length); ++i) {
+    silverFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 2, a: silverWalk.A, b: silverWalk.B);
+    silverWalk = MetallicQuasicrystal.Next(n: 2, a: silverWalk.A, b: silverWalk.B);
+}
+
+if (!IsFactorOfWord(haystack: metallicGolden, needle: goldenFromOrigin) ||
+    !IsFactorOfWord(haystack: metallicSilver, needle: silverFromOrigin)) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL DOES NOT REPRODUCE THE GOLDEN/SILVER WORD");
+}
+if (IsFactorOfWord(haystack: metallicSilver, needle: goldenFromOrigin.AsSpan(0, 256))) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL SILVER GENERATOR MATCHED THE GOLDEN WORD");
+}
+
+for (var n = 1; (n <= 6); ++n) {
+    var metallicWord = new bool[20000];
+    MetallicQuasicrystal.Word(n: n, tiles: metallicWord);
+
+    var longCount = 0;
+
+    foreach (var isLong in metallicWord) { if (isLong) { ++longCount; } }
+
+    if (Math.Abs(((double)longCount / (metallicWord.Length - longCount)) - ((double)MetallicQuasicrystal.InflationFactor(n: n))) > 0.02) {
+        throw new InvalidOperationException($"METALLIC QUASICRYSTAL FREQUENCY OFF n={n}");
+    }
+
+    // sigma(word) == word: expand each tile (long -> long^n short, short -> long) and match the word in place.
+    var cursor = 0;
+
+    foreach (var isLong in metallicWord) {
+        if (cursor >= (metallicWord.Length - (n + 1))) { break; }
+
+        if (isLong) {
+            for (var repeat = 0; (repeat < n); ++repeat) {
+                if (!metallicWord[cursor++]) { throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}"); }
+            }
+
+            if (metallicWord[cursor++]) { throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}"); }
+        } else if (!metallicWord[cursor++]) {
+            throw new InvalidOperationException($"METALLIC QUASICRYSTAL NOT A FIXED POINT n={n}");
+        }
+    }
+}
+Console.WriteLine("inflation lens: golden/silver recovered (disc 5/8, hyperbolic unimodular axes), surd = characteristic root; metallic family reproduces both chains, frequency -> delta_n, sigma(word) == word OK");
+
+// Is `needle` a contiguous factor of `haystack`? A phase-independent witness that two tiling words share a language.
+static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {
+    for (var start = 0; (start <= (haystack.Length - needle.Length)); ++start) {
+        if (haystack.Slice(start, needle.Length).SequenceEqual(needle)) { return true; }
+    }
+
+    return false;
+}
+
+// ---- QuadraticQuasicrystal (the general chain: arbitrary CF period, not just metallic [n]) ----
+// The general generator streams the tiling word for any quadratic irrational. Correctness with no reference impl: the
+// word must be Sturmian — exactly k+1 distinct factors of every length k — and the tile lengths must satisfy the
+// inflation identity λ·ℓ_long = A·ℓ_long + C·ℓ_short. Golden and silver are the single-term specializations.
+(long P, long Q, long D, long R)[] quasicrystalCases = [
+    (1L, 1L, 5L, 2L), (1L, 1L, 2L, 1L), (0L, 1L, 2L, 1L), (0L, 1L, 3L, 1L), (0L, 1L, 7L, 1L), (0L, 1L, 13L, 1L), (0L, 1L, 23L, 1L),
+];
+var quasicrystalWord = new bool[200_000];
+foreach (var quasicrystalCase in quasicrystalCases) {
+    QuadraticQuasicrystal.Word(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R, tiles: quasicrystalWord);
+
+    for (var k = 1; (k <= 24); ++k) {
+        if (WordComplexity(word: quasicrystalWord, k: k) != (k + 1)) {
+            throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL NOT STURMIAN d={quasicrystalCase.D} k={k}");
+        }
+    }
+
+    // The tile lengths are the left Perron eigenvector: λ·ℓ_long must equal the length of σ(long) = A longs plus C shorts.
+    var quasicrystalInflation = QuadraticInflation.FromQuadraticIrrational(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R);
+    var quasicrystalLambda = ((quasicrystalInflation.Trace + Math.Sqrt(quasicrystalInflation.Discriminant)) / 2.0);
+    var quasicrystalLongLength = (quasicrystalInflation.C / (quasicrystalLambda - quasicrystalInflation.A));
+
+    if (Math.Abs((quasicrystalLambda * quasicrystalLongLength) - ((quasicrystalInflation.A * quasicrystalLongLength) + quasicrystalInflation.C)) > 1e-9) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL TILE LENGTH IDENTITY WRONG d={quasicrystalCase.D}");
+    }
+    if (Math.Abs(((double)QuadraticQuasicrystal.LongTileLength(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R)) - quasicrystalLongLength) > 1e-3) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL FIXED-POINT TILE LENGTH OFF d={quasicrystalCase.D}");
+    }
+}
+
+// The general generator reproduces the hand-coded golden word, and the complexity oracle has teeth (a periodic word fails).
+var generalGoldenWord = new bool[8192];
+QuadraticQuasicrystal.Word(p: 1L, q: 1L, d: 5L, r: 2L, tiles: generalGoldenWord);
+if (!IsFactorOfWord(haystack: generalGoldenWord, needle: goldenFromOrigin)) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL DOES NOT REPRODUCE THE GOLDEN WORD");
+}
+for (var i = 0; (i < quasicrystalWord.Length); ++i) { quasicrystalWord[i] = ((i % 3) == 0); }
+if (WordComplexity(word: quasicrystalWord, k: 10) == 11) {
+    throw new InvalidOperationException("WORD COMPLEXITY ORACLE HAS NO TEETH");
+}
+Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, tile-length inflation identity, reproduces golden, oracle has teeth OK");
+
+// The number of distinct length-k factors of a word: exactly k+1 for a Sturmian word, bounded for a periodic one.
+static int WordComplexity(ReadOnlySpan<bool> word, int k) {
+    var seen = new HashSet<ulong>();
+    var mask = ((k == 64) ? ~0UL : ((1UL << k) - 1UL));
+    var window = 0UL;
+
+    for (var i = 0; (i < word.Length); ++i) {
+        window = (((window << 1) | (word[i] ? 1UL : 0UL)) & mask);
+
+        if (i >= (k - 1)) { seen.Add(item: window); }
+    }
+
+    return seen.Count;
+}
 
 static Puck.Maths.FixedComplex FormRoot(long a, long b, long c) {
     // The upper-half-plane root of the positive-definite form: (-b + i*sqrt(4ac - b^2)) / (2a). Reference double build.
@@ -2962,11 +3083,11 @@ for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.HexCoord.Direct
 quatTimer.Stop();
 Console.WriteLine($"hex direction        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.GoldenQuasicrystal.Contains(a: n, b: (n / 2)) ? 1 : 0); }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= (Puck.Maths.MetallicQuasicrystal.Contains(n: 1, a: n, b: (n / 2)) ? 1 : 0); }
 quatTimer.Stop();
 Console.WriteLine($"quasicrystal contains: {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.GoldenQuasicrystal.Next(a: n, b: (n / 2)).A; }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.MetallicQuasicrystal.Next(n: 1, a: n, b: (n / 2)).A; }
 quatTimer.Stop();
 Console.WriteLine($"quasicrystal next    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 var benchModularA = ModularTransform.Create(a: 2L, b: 1L, c: 1L, d: 1L);
