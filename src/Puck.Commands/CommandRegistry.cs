@@ -66,8 +66,9 @@ public sealed class CommandRegistry : ICommandSink {
     private readonly Command m_wireAckCommand;
     // The built-in `wire.errors [reset]` verb, registered beside `help`/`wire.ack`: it reports (or clears) the count of
     // submitted lines this registry REFUSED. Every rejection — an unknown verb, a parse error, a handler's IsError
-    // result on either dispatch path, and a Simulation re-parse that failed to reach its handler — increments the same
-    // counter, so a scripted driver reads one number back instead of pattern-matching free-form error text.
+    // result on either dispatch path, a Simulation re-parse that failed to reach its handler, and a host's DEFERRED
+    // refusal reported through NoteDeferredRejection — increments the same counter, so a scripted driver reads one
+    // number back instead of pattern-matching free-form error text.
     private readonly Argument<string[]> m_wireErrorsArgument = new(name: "mode") {
         Arity = ArgumentArity.ZeroOrMore,
         Description = "reset",
@@ -132,7 +133,7 @@ public sealed class CommandRegistry : ICommandSink {
 
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, or a handler's failure result): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
+            description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, a handler's failure result, or a deferred refusal a host raised a tick after accepting the line): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
             name: "wire.errors"
         ) {
             m_wireErrorsArgument,
@@ -305,6 +306,18 @@ public sealed class CommandRegistry : ICommandSink {
         }
 
         return new CommandResult(Output: $"[wire.errors: {rejected} rejected]");
+    }
+
+    /// <summary>Counts one refusal that a submitted line's own dispatch could not report — a DEFERRED rejection, raised
+    /// after the line was accepted (a host queued the work and refused it later).</summary>
+    /// <remarks>
+    /// Call this only from a host's rejection tap, and only for an outcome no handler returned as
+    /// <see cref="CommandResult.IsError"/>: a line that fails synchronously is already counted by
+    /// <see cref="Submit"/>, so counting it here too would double-count it. The count is the one
+    /// <c>wire.errors</c> reports.
+    /// </remarks>
+    public void NoteDeferredRejection() {
+        m_rejections++;
     }
 
     // A refused submission. Counting happens once, in Submit, over every error result from either dispatch path, so

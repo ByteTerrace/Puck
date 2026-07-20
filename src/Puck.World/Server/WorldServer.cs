@@ -226,7 +226,10 @@ internal sealed class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: composition);
 
         if (!m_grants.Allows(principal: principal, capability: WorldCapability.Control, subject: GrantSubject.Composition)) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot control composition — {composition.GetType().Name} dropped]");
+            var denial = $"{principal.Describe()} cannot control composition — {composition.GetType().Name} dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
 
             return;
         }
@@ -242,7 +245,10 @@ internal sealed class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: command);
 
         if (!m_grants.Allows(principal: command.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: command.EntityIndex))) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {command.Principal.Describe()} cannot drive body:{command.EntityIndex} — {command.GetType().Name} dropped]");
+            var denial = $"{command.Principal.Describe()} cannot drive body:{command.EntityIndex} — {command.GetType().Name} dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
 
             return;
         }
@@ -537,26 +543,29 @@ internal sealed class WorldServer {
     private bool ApplyDefinition(WorldDefinition definition, WorldPrincipal principal) {
         // A whole-document swap can touch any section: the principal must hold Mutate over EVERY section.
         if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.load dropped]");
+            var denial = $"{principal.Describe()} cannot mutate every section — world.load dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.Mutation, Denied: true));
 
             return false;
         }
 
         if (!WorldDefinitionValidator.TryValidate(definition: definition, reason: out var validationReason)) {
-            Console.Error.WriteLine(value: $"[world.definition rejected: {validationReason}]");
+            RejectDefinition(reason: validationReason);
 
             return false;
         }
 
         if (!m_envelope.TryFit(candidate: definition, reason: out var capacityReason)) {
-            Console.Error.WriteLine(value: $"[world.definition rejected: {capacityReason}]");
+            RejectDefinition(reason: capacityReason);
 
             return false;
         }
 
         // A whole-document swap rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged).
         if (!TryBuildSolids(definition: definition, solids: out var swapSolids, reason: out var swapSolidReason)) {
-            Console.Error.WriteLine(value: $"[world.definition rejected: {swapSolidReason}]");
+            RejectDefinition(reason: swapSolidReason);
 
             return false;
         }
@@ -576,13 +585,17 @@ internal sealed class WorldServer {
     private bool ApplyUndo(int count, WorldPrincipal principal) {
         // Journal control is Mutate territory over every section (a replay can rebuild any).
         if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
-            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.undo dropped]");
+            var denial = $"{principal.Describe()} cannot mutate every section — world.undo dropped";
+
+            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.Mutation, Denied: true));
 
             return false;
         }
 
         if (m_journal.Count == 0) {
             Console.Error.WriteLine(value: "[world.undo: nothing to undo]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: "undo refused: nothing to undo", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
             return false;
         }
@@ -598,6 +611,7 @@ internal sealed class WorldServer {
             if (!TryCompose(current: candidate, mutation: entry.Mutation, candidate: out var next, reason: out var reason) ||
                 !WorldDefinitionValidator.TryValidate(definition: next, reason: out reason)) {
                 Console.Error.WriteLine(value: $"[world.undo: replay failed at journal entry {index} — {reason}]");
+                EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"undo replay failed at journal entry {index}: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
                 break;
             }
@@ -610,6 +624,7 @@ internal sealed class WorldServer {
         // failure stops loudly rather than installing a half-built field.
         if (!TryBuildSolids(definition: candidate, solids: out var undoSolids, reason: out var undoSolidReason)) {
             Console.Error.WriteLine(value: $"[world.undo: solid field rebuild failed — {undoSolidReason}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"undo refused: solid field rebuild failed — {undoSolidReason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
             return false;
         }
@@ -636,6 +651,12 @@ internal sealed class WorldServer {
             // re-kit a driven body). Idempotent — a no-op when the inhabited set is unchanged.
             m_population.ReconcileInhabitants(definition: definition);
         }
+    }
+
+    // A refused whole-document swap: loud, and echoed so the same tap that counts a refused mutation counts this too.
+    private void RejectDefinition(string reason) {
+        Console.Error.WriteLine(value: $"[world.definition rejected: {reason}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"definition rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
     }
 
     private void Reject(WorldMutation mutation, string reason) {

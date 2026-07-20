@@ -574,12 +574,21 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var editorWorkbench = sp.GetRequiredService<WorldWorkbench>();
     var audioDirector = sp.GetRequiredService<WorldAudioDirector>();
     var consoleMirror = sp.GetRequiredService<WorldConsoleMirror>();
+    var consoleRegistry = sp.GetRequiredService<CommandRegistry>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
         toasts.Publish(message: echo.Message, isError: echo.Rejected);
         // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
         // capacity reason too long for the toast stays readable where the operator is already looking.
         consoleMirror.RecordEcho(message: echo.Message, refused: echo.Rejected);
+
+        // A world edit is Simulation-routed: the SUBMIT succeeded (the line entered the tick queue) and the server
+        // refuses it a tick later, so the registry's own dispatch accounting cannot see it. This tap is the one place
+        // both halves meet — count the deferred refusal here so `wire.errors` reports it exactly like a synchronous
+        // one. No double count: a line refused synchronously never reaches the server and so never echoes.
+        if (echo.Rejected) {
+            consoleRegistry.NoteDeferredRejection();
+        }
 
         // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
         if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {
