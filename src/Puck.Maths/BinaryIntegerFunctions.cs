@@ -461,6 +461,24 @@ public static class BinaryIntegerFunctions {
     /// <returns><paramref name="value"/> with all bits below its least significant set bit turned on; an all-ones value when <paramref name="value"/> is zero.</returns>
     public static T FillFromLowestSetBit<T>(this T value) where T : IBinaryInteger<T> =>
         value | (value - T.One);
+    /// <summary>Reduces <paramref name="value"/> modulo <paramref name="modulus"/> with a floored quotient, so the result carries the sign of <paramref name="modulus"/> rather than of <paramref name="value"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The dividend.</param>
+    /// <param name="modulus">The divisor whose sign the result follows; for a positive <paramref name="modulus"/> the result is the non-negative remainder in <c>[0, <paramref name="modulus"/>)</c>, which is what makes this the right tool for wrapping a signed index or offset back into range.</param>
+    /// <returns>The floored remainder — the unique value congruent to <paramref name="value"/> modulo <paramref name="modulus"/> that lies on the same side of zero as <paramref name="modulus"/>. This differs from the built-in <c>%</c> only when the operands carry opposing signs.</returns>
+    /// <remarks>The correction is branchless: the built-in truncated remainder is nudged by a single conditional addition of <paramref name="modulus"/>, never the <c>((value % modulus) + modulus) % modulus</c> double reduction — which both spends a second division and can overflow its intermediate sum (for a large positive <paramref name="modulus"/> that double reduction is not merely slower but wrong). An unsigned <typeparamref name="T"/> is already non-negative, so the correction folds away to nothing there.</remarks>
+    /// <exception cref="DivideByZeroException"><paramref name="modulus"/> is zero.</exception>
+    /// <exception cref="OverflowException"><paramref name="value"/> is the signed minimum and <paramref name="modulus"/> is <c>-1</c>; the underlying remainder rejects that one pair because its quotient is unrepresentable.</exception>
+    public static T FloorModulo<T>(this T value, T modulus) where T : IBinaryInteger<T> {
+        var remainder = (value % modulus);
+
+        // The truncated remainder carries the sign of `value`; add `modulus` back exactly when the remainder is
+        // non-zero and signed opposite the modulus, landing it on the divisor's side. The addend never overflows:
+        // it only fires when the two have opposing signs, so their sum shrinks toward zero.
+        var wrap = (remainder.IsNonZero() & T.IsNegative(value: (remainder ^ modulus)).As<T>());
+
+        return (remainder + (modulus & (-wrap)));
+    }
     /// <summary>Computes the greatest common divisor of <paramref name="value"/> and <paramref name="other"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The first operand; its magnitude is used.</param>
