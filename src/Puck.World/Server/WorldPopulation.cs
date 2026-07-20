@@ -148,7 +148,7 @@ internal sealed class WorldPopulation {
 
         // Resolve the definition's kit→entity assignment policy ONCE into every entry's fixed kit index (precompute;
         // zero steady-state cost). The table policy resolves its kit-name cycle to row indices here; the hash policy
-        // keeps the R1 low-discrepancy KitFor mapping.
+        // keeps the R1 low-discrepancy RowFor mapping.
         var assignmentTable = ResolveAssignmentTable(assignment: definition.Assignment);
 
         for (var index = 0; (index < MaxPopulation); index++) {
@@ -580,7 +580,7 @@ internal sealed class WorldPopulation {
     }
 
     // The kit-row cycle a "table" assignment policy resolves to (its kit names mapped to row indices), or null under the
-    // "hash" policy (the R1 KitFor default). The validator gates the policy token and every table name at startup.
+    // "hash" policy (the R1 RowFor default). The validator gates the policy token and every table name at startup.
     private byte[]? ResolveAssignmentTable(WorldRowAssignment assignment) {
         if (!string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal)) {
             return null;

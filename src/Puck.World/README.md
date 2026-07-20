@@ -243,7 +243,7 @@ scripted `mutate-then-read` pair needs no polling.
 |---|---|
 | `world.kit.set <kit-json>` / `world.kit.remove <name>` | upsert/remove a `WorldKit` row (whole-row, keyed by name) |
 | `world.kit.default <name>` | sets `DefaultSeatKit` |
-| `world.kit.assign hash \| table <kit>…` | sets the kit→entity `WorldKitAssignment` policy |
+| `world.kit.assign hash \| table <kit>…` | sets the kit→entity `WorldRowAssignment` policy |
 | `world.kit.tune <name> <field> <value>` | console sugar: read-modify-write one `MotionTuning` field into a whole-row `UpsertKit` |
 | `world.screen.set <screen-json>` / `world.screen.remove <index>` | upsert/remove a `WorldScreen` row (keyed by index) |
 | `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); applies LIVE — a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension/kind change recreates it, a removal releases it |
@@ -1023,8 +1023,8 @@ parameterized integrators + abstract action channels; a kit row names a way of
 moving: its `MotionModel` (an engine fact selected per row), its `MotionTuning`,
 its wander-producer `WanderFlavor` (the drift/wave/bank/threshold/altitude
 constants), and its action-lane bindings (`ActionSpec` compositions). Entities are
-distributed across rows by the definition's `WorldKitAssignment` policy — `hash`
-(the default R1 low-discrepancy mapping, `WorldPopulation.KitFor`, parameterized
+distributed across rows by the definition's `WorldRowAssignment` policy — `hash`
+(the default R1 low-discrepancy mapping, `WorldPopulation.RowFor`, parameterized
 by row count) or `table` (a `kit = Table[index % Table.Count]` cycle of kit
 names, resolved to row indices once at construction); the
 `world.population` census derives its names and counts from the rows, so the

@@ -5740,6 +5740,11 @@ live; slots are free." (3) The live census count is no longer persisted by `worl
 **XL, decomposable into four independently landable phases** · lane B · needs 5 ·
 precedes 9 · **pull P1 forward beside Arc 3**
 
+> **⏳ NOT LANDED — design intent.** Every type, verb, JSON payload, and console
+> session in this section describes a surface that does not exist yet
+> (`WorldCartridgeSource`, `cart.*`). Nothing below is a runnable instruction; a
+> scripted line copied from here is refused by the current build.
+
 ### Intent
 
 An author who has sculpted something in the World editor declares **one line of
@@ -6376,6 +6381,12 @@ move claims nothing and fails constraint 1**, exemption or not.
 **L** · lane B · needs 5 (screen row) + 4 (`SelectCamera`) + 8 (intro cart) ·
 depended on by nothing
 
+> **⏳ NOT LANDED — design intent.** Every type, verb, JSON payload, and console
+> session in this section describes a surface that does not exist yet
+> (`WorldProgression`, `WorldMilestone`, `world.milestone.*`). Nothing below is a
+> runnable instruction; a scripted line copied from here is refused by the current
+> build.
+
 ### Intent
 
 An author gains the ability to say, in the world document, **"this world does not
@@ -6977,6 +6988,11 @@ and the two vocabularies are deliberate copies of the
 
 **L** · lane D · independent after Arc 3 · soft dependency on Arc 4
 
+> **⏳ NOT LANDED — design intent.** Every type, verb, JSON payload, and console
+> session in this section describes a surface that does not exist yet
+> (`WorldScenario`, `world.scenario.*`, `bench.*`). Nothing below is a runnable
+> instruction; a scripted line copied from here is refused by the current build.
+
 ### Intent
 
 An author gains a **measured scenario** as world data: a named row in their world
@@ -7422,6 +7438,9 @@ genuine design content (risks 1, 2, 5) that must be settled with real code in ha
 
 **UNKNOWN — pending survey** · lane A tail · needs Arc 4 · depended on by nothing
 
+> **⏳ NOT LANDED — design intent.** Nothing in this section is a runnable
+> instruction; a scripted line copied from here is refused by the current build.
+
 **Carved out by owner ruling, 2026-07-19 (OQ-2).** Arc 4's design listed
 `NestedWorldView` as an explicit non-port and put `Museum/MuseumRenderer.cs` in
 its deletion table with "none — owner call required" as the successor. The owner
@@ -7514,6 +7533,9 @@ an unmeasured arc becomes a schedule surprise.
 ## Arc 12 — Terminal teardown
 
 **S** · terminal by definition · `src/Puck.Demo` ceases to exist
+
+> **⏳ NOT LANDED — design intent.** The commands below are the arc's planned work,
+> not steps to run today.
 
 ### Intent
 
