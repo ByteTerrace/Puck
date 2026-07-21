@@ -11,6 +11,36 @@ public readonly record struct PolynomialContinuedFractionParameters(
     BigInteger NumeratorConstant
 );
 
+/// <summary>
+/// A finite exact certificate that a positive polynomial continued-fraction tail is the rational function
+/// <c>lambda*n+beta+c/(n+d)</c> at every positive integer index.
+/// </summary>
+/// <param name="Slope">The rational asymptotic slope <c>lambda</c>.</param>
+/// <param name="Offset">The rational affine offset <c>beta</c>.</param>
+/// <param name="Correction">The rational pole numerator <c>c</c>.</param>
+/// <param name="PoleOffset">The rational pole offset <c>d</c>.</param>
+public readonly record struct PolynomialLinearFractionalTailCertificate(
+    QuadraticSurd Slope,
+    QuadraticSurd Offset,
+    QuadraticSurd Correction,
+    QuadraticSurd PoleOffset
+) {
+    /// <summary>Evaluates the certified closed form at a positive integer index.</summary>
+    public QuadraticSurd Evaluate(BigInteger tailIndex) {
+        if (tailIndex <= BigInteger.Zero) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(tailIndex),
+                message: "the tail index must be positive"
+            );
+        }
+
+        var affine = ((Slope * QuadraticSurd.Rational(tailIndex)) + Offset);
+        return Correction == QuadraticSurd.Zero
+            ? affine
+            : (affine + (Correction / (QuadraticSurd.Rational(tailIndex) + PoleOffset)));
+    }
+}
+
 /// <summary>A certified symmetric tail interval valid from <see cref="Cutoff"/> onward.</summary>
 /// <param name="Cutoff">The first positive index covered by the certificate.</param>
 /// <param name="RadiusNumerator">The non-negative integer <c>H</c> in the radius <c>H/n</c>.</param>
@@ -108,7 +138,7 @@ public readonly record struct PolynomialBeattyShadowNormCertificate(
 /// <c>|sₙ−xₙ| ≤ H/n</c> from its cutoff onward. <see cref="AsymptoticCoefficients"/> returns exact coefficients
 /// of the full Poincaré expansion to any requested finite order.
 /// </remarks>
-public sealed class PolynomialContinuedFractionAnalysis {
+public sealed partial class PolynomialContinuedFractionAnalysis {
     internal PolynomialContinuedFractionAnalysis(
         PolynomialContinuedFractionParameters parameters,
         QuadraticSurd slope,
@@ -542,26 +572,115 @@ public sealed class PolynomialContinuedFractionAnalysis {
     }
 
     /// <summary>
-    /// Attempts to evaluate the tail through a certified non-affine rational closed form. The recognized family has
-    /// <c>q=v=0</c>, <c>r=2p+4</c>, <c>u=4p+12</c>, and
-    /// <c>s_n=(p+2)n+2-2/(n+1)</c>.
+    /// Attempts to evaluate the tail through a certified rational-function closed form. Recognition derives the only
+    /// possible denominator degrees from a quadratic equation, solves the resulting polynomial identity exactly, and
+    /// proves that the denominator has no positive-integer zero. Eventual positivity plus the recurrence then proves
+    /// positivity at every positive index, and positive-tail uniqueness identifies the closed form with the infinite
+    /// tail.
     /// </summary>
     public bool TryCertifiedRationalTail(BigInteger tailIndex, out QuadraticSurd tail) {
         ValidateTailIndex(tailIndex);
-        var p = Parameters.Linear;
-        if (Parameters.Constant.IsZero &&
-            (Parameters.NumeratorQuadratic == ((2 * p) + 4)) &&
-            (Parameters.NumeratorLinear == ((4 * p) + 12)) &&
-            Parameters.NumeratorConstant.IsZero) {
-            tail = QuadraticSurd.Rational(
-                ((((p + 2) * tailIndex) + 2) * (tailIndex + 1)) - 2,
-                tailIndex + 1
-            );
-            return true;
+        if (!TryRationalTailCertificate(out var certificate)) {
+            tail = QuadraticSurd.Zero;
+            return false;
         }
 
-        tail = QuadraticSurd.Zero;
+        tail = certificate.Evaluate(tailIndex);
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to construct a finite exact certificate for a positive rational tail of the form
+    /// <c>lambda*n+beta+c/(n+d)</c>. Recognition is complete within this linear-fractional class.
+    /// </summary>
+    public bool TryLinearFractionalTailCertificate(out PolynomialLinearFractionalTailCertificate certificate) {
+        certificate = default;
+        if (!Slope.IsRational || !Offset.IsRational) { return false; }
+        if (AffineResidual == QuadraticSurd.Zero) {
+            certificate = new PolynomialLinearFractionalTailCertificate(
+                Slope: Slope,
+                Offset: Offset,
+                Correction: QuadraticSurd.Zero,
+                PoleOffset: QuadraticSurd.Zero
+            );
+            return VerifyLinearFractionalTailCertificate(certificate);
+        }
+
+        var p = QuadraticSurd.Rational(Parameters.Linear);
+        var q = QuadraticSurd.Rational(Parameters.Constant);
+        var two = QuadraticSurd.Rational(2);
+        var twiceSlopeMinusP = ((two * Slope) - p);
+        if (twiceSlopeMinusP.Sign == 0) { return false; }
+
+        var poleOffset = (((two * Offset) + p - q) / twiceSlopeMinusP);
+        var correction = ((Slope * poleOffset) - Slope - Offset);
+        certificate = new PolynomialLinearFractionalTailCertificate(
+            Slope: Slope,
+            Offset: Offset,
+            Correction: correction,
+            PoleOffset: poleOffset
+        );
+
+        if (VerifyLinearFractionalTailCertificate(certificate)) { return true; }
+
+        certificate = default;
         return false;
+    }
+
+    /// <summary>
+    /// Independently verifies a proposed linear-fractional tail certificate against the five recurrence coefficients,
+    /// including strict positivity at every positive integer index.
+    /// </summary>
+    public bool VerifyLinearFractionalTailCertificate(PolynomialLinearFractionalTailCertificate certificate) {
+        if (!certificate.Slope.IsRational || !certificate.Offset.IsRational ||
+            !certificate.Correction.IsRational || !certificate.PoleOffset.IsRational ||
+            (certificate.Slope != Slope) || (certificate.Offset != Offset)) {
+            return false;
+        }
+
+        if (certificate.Correction == QuadraticSurd.Zero) {
+            return
+                (certificate.PoleOffset == QuadraticSurd.Zero) &&
+                (AffineResidual == QuadraticSurd.Zero) &&
+                RationalLinearFractionalTailIsPositive(
+                    slope: certificate.Slope,
+                    offset: certificate.Offset,
+                    correction: certificate.Correction,
+                    poleOffset: certificate.PoleOffset
+                );
+        }
+
+        var p = QuadraticSurd.Rational(Parameters.Linear);
+        var q = QuadraticSurd.Rational(Parameters.Constant);
+        var two = QuadraticSurd.Rational(2);
+        var twiceSlopeMinusP = ((two * certificate.Slope) - p);
+        if (
+            (certificate.PoleOffset * twiceSlopeMinusP) != ((two * certificate.Offset) + p - q) ||
+            certificate.Correction != ((certificate.Slope * certificate.PoleOffset) -
+                certificate.Slope - certificate.Offset)
+        ) {
+            return false;
+        }
+
+        var slopeGap = (certificate.Slope - p);
+        var offsetGap = (certificate.Offset - q);
+        var expectedQuadratic = (slopeGap * certificate.Slope);
+        var expectedLinear = (
+            (slopeGap * ((two * certificate.Slope) + certificate.Offset)) +
+            (certificate.Slope * (offsetGap - slopeGap))
+        );
+        var expectedConstant = ((offsetGap - slopeGap) * ((two * certificate.Slope) + certificate.Offset));
+
+        return
+            expectedQuadratic == QuadraticSurd.Rational(Parameters.NumeratorQuadratic) &&
+            expectedLinear == QuadraticSurd.Rational(Parameters.NumeratorLinear) &&
+            expectedConstant == QuadraticSurd.Rational(Parameters.NumeratorConstant) &&
+            RationalLinearFractionalTailIsPositive(
+                slope: certificate.Slope,
+                offset: certificate.Offset,
+                correction: certificate.Correction,
+                poleOffset: certificate.PoleOffset
+            );
     }
 
     /// <summary>
@@ -776,6 +895,89 @@ public sealed class PolynomialContinuedFractionAnalysis {
             );
         }
     }
+
+    /// <summary>Proves <c>lambda*n+beta+c/(n+d) &gt; 0</c> at every positive integer without scanning an unbounded prefix.</summary>
+    private static bool RationalLinearFractionalTailIsPositive(
+        QuadraticSurd slope,
+        QuadraticSurd offset,
+        QuadraticSurd correction,
+        QuadraticSurd poleOffset) {
+        // Clear the positive denominators from
+        // ((lambda*n+beta)*(n+d)+c)/(n+d). The denominator is linear with positive leading coefficient; the numerator
+        // is a convex quadratic. If the denominator changes sign inside the positive integers, strict sign agreement
+        // on the finite negative segment is determined by its endpoints, and positivity on the infinite segment is
+        // determined by the quadratic's integer vertex.
+        var denominatorScale = poleOffset.Denominator;
+        var denominatorConstant = poleOffset.RationalNumerator;
+        var numeratorQuadratic = slope;
+        var numeratorLinear = ((slope * poleOffset) + offset);
+        var numeratorConstant = ((offset * poleOffset) + correction);
+        var coefficientDenominator = LeastCommonMultiple(
+            numeratorQuadratic.Denominator,
+            LeastCommonMultiple(numeratorLinear.Denominator, numeratorConstant.Denominator)
+        );
+        var quadratic = (numeratorQuadratic.RationalNumerator *
+            (coefficientDenominator / numeratorQuadratic.Denominator));
+        var linear = (numeratorLinear.RationalNumerator *
+            (coefficientDenominator / numeratorLinear.Denominator));
+        var constant = (numeratorConstant.RationalNumerator *
+            (coefficientDenominator / numeratorConstant.Denominator));
+        var denominatorAtOne = (denominatorScale + denominatorConstant);
+
+        if (denominatorAtOne > 0) {
+            return QuadraticIsPositiveFrom(
+                quadratic: quadratic,
+                linear: linear,
+                constant: constant,
+                firstIndex: BigInteger.One
+            );
+        }
+        if (denominatorAtOne.IsZero) { return false; }
+
+        var lastNegativeIndex = BigIntegerMath.FloorDivide(
+            numerator: -denominatorConstant,
+            denominator: denominatorScale
+        );
+        if ((denominatorScale * lastNegativeIndex) + denominatorConstant == 0) { return false; }
+        if (lastNegativeIndex < BigInteger.One) { return false; }
+
+        return
+            (EvaluateQuadratic(quadratic, linear, constant, BigInteger.One) < 0) &&
+            (EvaluateQuadratic(quadratic, linear, constant, lastNegativeIndex) < 0) &&
+            QuadraticIsPositiveFrom(
+                quadratic: quadratic,
+                linear: linear,
+                constant: constant,
+                firstIndex: (lastNegativeIndex + 1)
+            );
+    }
+
+    private static bool QuadraticIsPositiveFrom(
+        BigInteger quadratic,
+        BigInteger linear,
+        BigInteger constant,
+        BigInteger firstIndex) {
+        if (quadratic <= BigInteger.Zero) { return false; }
+
+        var vertexFloor = BigIntegerMath.FloorDivide(numerator: -linear, denominator: (2 * quadratic));
+        var firstCandidate = BigInteger.Max(firstIndex, vertexFloor);
+        var secondCandidate = BigInteger.Max(firstIndex, (vertexFloor + 1));
+
+        return
+            (EvaluateQuadratic(quadratic, linear, constant, firstIndex) > 0) &&
+            (EvaluateQuadratic(quadratic, linear, constant, firstCandidate) > 0) &&
+            (EvaluateQuadratic(quadratic, linear, constant, secondCandidate) > 0);
+    }
+
+    private static BigInteger EvaluateQuadratic(
+        BigInteger quadratic,
+        BigInteger linear,
+        BigInteger constant,
+        BigInteger value) =>
+        ((quadratic * value * value) + (linear * value) + constant);
+
+    private static BigInteger LeastCommonMultiple(BigInteger left, BigInteger right) =>
+        ((left / BigInteger.GreatestCommonDivisor(left, right)) * right);
 }
 
 /// <summary>Constructs exact analyses of positive polynomial continued-fraction tails.</summary>

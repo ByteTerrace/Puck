@@ -309,7 +309,48 @@ truncated formal power series and exact quadratic-field arithmetic. It imposes
 no mathematical maximum order; time and memory grow with the requested finite
 order.
 
-## 6. Rational and real coefficients
+## 6. Arbitrary-degree rational tails
+
+Rational-function tails can be recognized without choosing a
+denominator-degree bound. Their coefficients lie in the characteristic field
+`Q(lambda)`, which is either rational or real quadratic. If `A/B` is reduced
+and `B` is monic of degree `m`, coprimality in the cleared Riccati equation
+forces
+
+\[
+ A(n+1)=B(n)C(n),\qquad
+ A(n)-(pn+q)B(n)=B(n+1)K(n),
+\]
+
+where `C` and `K` are linear and their product is the quadratic recurrence
+numerator. Matching the known asymptote fixes
+
+\[
+ C(n)=\lambda n+\beta+(m+1)\lambda,
+\quad
+ K(n)=(\lambda-p)n+\beta-q-m(\lambda-p).
+\]
+
+Thus the constant coefficient gives a quadratic equation in `m`:
+
+\[
+ (\beta+(m+1)\lambda)(\beta-q-m(\lambda-p))=v.
+\]
+
+There are at most two non-negative integer candidates. Over a genuine
+quadratic field, the surd component is linear in `m` because
+`-lambda(lambda-p)=-r`; it therefore selects at most one candidate before the
+rational component is checked. For each candidate, the remaining denominator identity is a finite exact linear system for monic
+`B`. `PolynomialRationalTailCertificate` stores the resulting coefficients;
+its verifier rechecks the identities and proves that `B` has no
+positive-integer zero. It also checks that the constant term of `C` is
+positive. If it were non-positive, the base constraint and factor identity
+would force `B(0),...,B(m+1)` to alternate signs, impossible for degree `m`.
+Eventual positivity then propagates backward through the recurrence. This
+subsumes affine and linear-fractional tails and includes families of every
+denominator degree over both coefficient fields.
+
+## 7. Rational and real coefficients
 
 The integer restriction belongs to the exact API, not to the analytic theorem.
 For rational \(p,q,r,u,v\), choose a common positive denominator \(d\) and put

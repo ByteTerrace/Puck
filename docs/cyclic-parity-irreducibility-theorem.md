@@ -174,6 +174,12 @@ the direct expanded binary rank for explicit words. For manageable alphabets
 it exhausts all odd words; for larger alphabets it traverses syndrome-matroid
 circuits and their letter transversals.
 
+That certificate checker intentionally retains its own BCL-only arithmetic
+rather than calling `OddCyclicIncidence`. The library verifier demonstrates the
+public API; the certificate verifier remains an independent implementation, so
+agreement between them is meaningful audit evidence instead of two wrappers
+around the same code.
+
 The prose theorem has no bound on \(n\). The current `UInt64` checker accepts
 odd \(n<63\) only when every irreducible factor has degree at most 31; this is
 an implementation boundary needed to keep carryless products lossless, not a

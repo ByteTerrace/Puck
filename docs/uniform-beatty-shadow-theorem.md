@@ -3,8 +3,10 @@
 ## Status
 
 **IN PROGRESS — the eventual finite-channel theorem is proved and implemented; the advertised uniform total decider
-is not. A previously proposed integer-avoidance lemma is false, and its first non-affine rational family is now
-classified and recognized exactly.**
+is not. A previously proposed integer-avoidance lemma is false. Every positive rational-function Riccati tail over
+the characteristic real quadratic field is now recognized by an arbitrary-degree exact certificate. A new
+degree-one-minimality reduction places a further non-rational subfamily in a proven decidable class, but equality for the remaining
+hypergeometric tails is still not uniform.**
 
 The implementation now proves arbitrary-order tail remainders, finite norm reduction, finite generalized-Pell orbit
 reduction, and effective sign stabilization. Thus every sufficiently large nonzero discrepancy has a finite exact
@@ -14,7 +16,7 @@ One obligation remains before the proposed theorem may be cited as stated: total
 a tail may equal an integer exactly. The generalized-Pell presentation now compiles into an explicit Ostrowski DFAO,
 the rational-slope branch compiles into a radix-2 DFAO, and both branches splice in every finitely certified prefix.
 
-The second item is not routine numerical cleanup. Degree-(2,1) polynomial continued fractions include rational-limit
+This obligation is not routine numerical cleanup. Degree-(2,1) polynomial continued fractions include rational-limit
 families and special-function values, so a blanket equality oracle risks subsuming unresolved irrationality questions.
 The API deliberately does not pretend that shrinking rational enclosures decide equality.
 
@@ -26,7 +28,7 @@ Let
   s_n=pn+q+\frac{rn^2+un+v}{s_{n+1}}
 \]
 
-be the unique everywhere-positive tail for integer parameters satisfying the positivity hypotheses checked by
+be the unique everywhere-positive tail for integer parameters with \(p\geq1\) satisfying the positivity hypotheses checked by
 `PolynomialContinuedFractionTail.Analyze`. Put
 
 \[
@@ -54,6 +56,11 @@ The target theorem has three parts.
 
 This would turn the isolated exact-floor phenomena behind metallic hiccup sequences into a decision theorem for the
 whole positive degree-\((2,1)\) polynomial-tail family.
+
+The motivating metallic slice `(p,q,r,u,v)=(k,-1,1,0,0)` is already fully
+machine-checked: `PuckMathsFormal.BDS.bds_conjecture` in
+`formal/PuckMathsFormal/PuckMathsFormal/BDS/Theorem.lean` proves its discrepancy
+is identically zero for every `k,n>=1`.
 
 ## 1. Exact affine defect
 
@@ -181,7 +188,7 @@ Let
   C=\left\lceil\frac{2|B|\sqrt D}{Z}\right\rceil.
 \]
 
-For \(n\geq1\), equations (2) and (3) therefore imply
+For \(n\geq N\), equations (2) and (3) therefore imply
 
 \[
   |J_{n,m}|\leq Z^2H(H+L+C)=:J.
@@ -383,10 +390,102 @@ as
  =2(p+2)n^2+4(p+3)n.
 \]
 
-Thus the proposed integer-avoidance lemma is false. `TryCertifiedRationalTail` now recognizes this entire family and
-lets the finite-prefix constructor decide its exact floors without refinement. The independent counterexample verifier
-checks 10,000 family members and 60,000 exact recurrence instances; the symbolic factorization above is the general
-proof. See `polynomial-tail-integer-counterexamples.md`.
+Thus the proposed integer-avoidance lemma is false. More generally, substitution of
+
+\[
+ s_n=\lambda n+\beta+\frac{c}{n+d}
+\]
+
+shows that every non-affine solution of this form must satisfy
+
+\[
+ d(2\lambda-p)=2\beta+p-q,
+ \qquad c=\lambda d-\lambda-\beta,
+\]
+
+after which the recurrence numerator must factor as
+
+\[
+ \bigl((\lambda-p)n+(\beta-q)-(\lambda-p)\bigr)
+ \bigl(\lambda n+2\lambda+\beta\bigr).
+\]
+
+These identities are also sufficient when the resulting tail is positive. Positivity reduces exactly to finitely
+many sign checks for a linear denominator and convex quadratic numerator. `TryLinearFractionalTailCertificate`
+recognizes this class, and `VerifyLinearFractionalTailCertificate` checks its coefficient identities and global
+positivity. The independent linear-fractional verifier checks
+33,956 generated families and 203,736 exact recurrence instances, including 1,805 integer first tails. The original
+counterexample verifier separately checks 10,000 family members and 60,000 recurrence instances. See
+`polynomial-tail-integer-counterexamples.md`.
+
+Hypergeometric recurrence solving exposed positive tails with polynomial
+denominators of degrees two, three, and arbitrarily higher. For a reduced
+rational tail with monic denominator `B` of degree `m`, pole cancellation
+forces
+
+\[
+ s_n=\frac{B(n-1)C(n-1)}{B(n)},\qquad
+ rn^2+un+v=C(n)K(n),
+\]
+
+where `C` and `K` are linear. Matching the affine slope and offset makes the
+constant coefficient equation quadratic in `m`, leaving at most two degrees;
+the coefficients of `B` then satisfy one exact linear system.
+`TryRationalTailCertificate` implements this arbitrary-degree recognizer over
+the full characteristic field `Q(lambda)`, while `VerifyRationalTailCertificate` independently
+checks the factorization, recurrence identity, and absence of positive-integer
+poles. The positivity verifier also checks `c0>0`; otherwise the two linear
+factors and the denominator-sign recurrence would force a degree-`m`
+polynomial to alternate sign more than `m` times. The one-family checker
+verifies degrees 0 through 32 in `(1,0,2,3m+2,0)`. A separate coefficient-box
+sweep covers 4,019,652 admissible tuples, recognizing 1,777 rational functions
+through degree 11; 532 genuinely use quadratic-field coefficients and 362 lie
+beyond the linear-fractional class.
+
+The exact Lean statements are
+`PuckMathsFormal.PolynomialTail.Rational.riccati_of_certificate`,
+`degree_equation_of_numeratorIdentity`,
+`cConstant_ne_zero`,
+`positive_everywhere_of_eventually_positive`, and
+`eventually_contracting_unique` in
+`formal/PuckMathsFormal/PuckMathsFormal/PolynomialTail/Rational.lean`.  The
+certificate algebra is polymorphic over a field, so the formal statement
+includes the quadratic coefficient field rather than only `Q`.
+
+## 7. The new degree-one minimality island
+
+There is a second, strictly larger decidable branch.  If
+
+\[
+ p^2+4r=D^2,\qquad u^2-4rv=d^2,
+\]
+
+then at any starting tail index `N` the continued fraction after subtracting
+its linear base has coefficients
+
+\[
+ \frac{(rj+\gamma_0)(j+\alpha-1)}{pj+\beta_0},
+\]
+
+with rational `alpha,beta0,gamma0`.  This is precisely the continued fraction
+associated by Pincherle's theorem to a degree-one second-order holonomic
+recurrence whose characteristic roots are the two distinct rational roots of
+`X^2-pX-r`.
+
+Kenison, Klurman, Lefaucheux, Luca, Moree, Ouaknine, Sertöz, Whiteland, and Worrell
+proved in 2026 that minimality is decidable for this class, using effective
+relation algorithms for E-functions and 1-periods.  Consequently
+`s_N=M` is decidable here even when the tail is not a rational function.
+`TryDegreeOneMinimalityReduction` constructs the exact recurrence and target
+initial ratio; `VerifyDegreeOneMinimalityReduction` rechecks the shifted
+factorization.  The independent verifier covers 21,315 accepted reductions
+and 85,260 shifted identities.  The algebraic reduction is formalized by
+`shifted_numerator_factorization`, `shifted_base`, and
+`rational_characteristic_roots` in
+`PolynomialTail/MinimalityReduction.lean`.  The local toolkit does not yet
+implement the paper's E-function/1-period engines, so it constructs a complete
+input to the published decision procedure rather than pretending numerical
+quadrature is that procedure.
 
 The broader equality obstruction remains: this family does not prove that every integer hit is a rational Riccati
 solution of classifiable form. Positive degree-(2,1) continued fractions are hypergeometric ratios, and recent
@@ -396,8 +495,11 @@ The strongest realized statement is consequently:
 
 > For every admissible parameter tuple, eventual identity is decidable. In the irrational-slope case the discrepancy
 > has an effectively constructible Ostrowski DFAO beyond an explicit cutoff and its sign on every channel is decidable
-> at order at most two; in the rational-slope case it has an eventual radix-2 DFAO. Whenever the finite prefix contains
-> no unresolved exact integer hit, these machines extend effectively to a total DFAO and decide all-index identity.
+> at order at most two; in the rational-slope case it has an eventual radix-2 DFAO. Exact-affine and
+> arbitrary-degree rational-function tails are decided outright, and double-square instances reduce to an
+> unconditional published minimality decision procedure. Whenever every other finite-prefix comparison
+> avoids an unresolved exact integer hit, these machines extend effectively to a total DFAO and decide all-index
+> identity.
 
 There is also an unconditional, but nonuniform, corollary: every discrepancy sequence in the family *is* Ostrowski
 automatic (or positional automatic in the square case), because a finite modification of an automatic sequence is
@@ -416,7 +518,12 @@ dotnet run tools/polynomial-tail-asymptotic-certificate-verifier.cs
 dotnet run tools/quadratic-beatty-shadow-channel-verifier.cs -c Release
 dotnet run tools/quadratic-beatty-shadow-decision-verifier.cs
 dotnet run tools/ostrowski-pell-channel-verifier.cs
+dotnet run tools/polynomial-tail-linear-fractional-verifier.cs
+dotnet run tools/polynomial-tail-rational-verifier.cs
+dotnet run tools/polynomial-tail-rational-box-verifier.cs -- 12 24
+dotnet run tools/polynomial-tail-minimality-reduction-verifier.cs
 dotnet run tools/polynomial-tail-integer-counterexample-verifier.cs
+cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 ```
 
 ## References
@@ -427,3 +534,5 @@ dotnet run tools/polynomial-tail-integer-counterexample-verifier.cs
 - L. Schaeffer, J. Shallit, and S. Zorcic, [Beatty Sequences for a Quadratic Irrational: Decidability and Applications](https://arxiv.org/abs/2402.08331).
 - K.-W. Chen and C.-H. Liu, [Continued Fractions with Quadratic Numerators via the Bauer--Muir Transform](https://doi.org/10.3390/math13152332).
 - G. Kenison et al., [On Positivity and Minimality for Second-Order Holonomic Sequences](https://doi.org/10.4230/LIPIcs.MFCS.2021.67).
+- G. Kenison et al., [On the Positivity Problem for Second-Order Holonomic Sequences](https://georgekenison.github.io/uploads/papers/holonomic_positivity26.pdf), 2026.
+- E. C. Sertöz, J. Ouaknine, and J. Worrell, [Computing transcendence and linear relations of 1-periods](https://arxiv.org/abs/2505.20397), 2025.
