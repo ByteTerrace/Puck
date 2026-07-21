@@ -32,6 +32,7 @@ including the exact-law boundary imposed by per-operation rounding.
 | `UFixedQ0032` | `readonly record struct` | UQ0.32 fraction — a real number in `[0, 1)` stored in 32 bits. |
 | `FixedQ4816` | `readonly record struct` | SIGNED Q48.16 fixed-point (two's-complement) — the signed companion to `UFixedQ4816`, implementing the complete .NET `INumber<T>` + `ISignedNumber<T>` surface, with deterministic `Sqrt`/`Atan2`/`Sin`/`Cos`/`SinCos`/`Log2`/`Exp2`/`Pow` (pure-integer table/polynomial kernels, each within ~0.65 ULP where absolute ULPs are representable; the square root's hardware seed is settled to the exact integer floor); the raw-bits carrier for every fixed-point value crossing a deterministic-simulation boundary (e.g. the `Puck.Scripting` WASM addon ABI). `SinCos` inverts `Atan2`; `Exp2` inverts `Log2`; `Pow` computes whole-number exponents by exact squaring. The everyday helpers round it out: `Abs`/`Sign`/`CopySign`, `Min`/`Max`/`Clamp`, `Floor`/`Ceiling`/`Round`/`Truncate`/`Fractional`, and `Lerp` (endpoint-exact linear interpolation). |
 | `FixedRateAccumulator` / `FixedVector3RateAccumulator` | `struct` | Exact-tick integration of Q48.16 per-second rates. Division remainders carry across fixed updates, so 120 integrations of one unit/second over 1/120 second total exactly one represented unit instead of repeating a rounded step. Use the same primitive for acceleration → velocity and velocity → position; its remainder fields are authoritative snapshot/hash state. |
+| `DiscreteMeasure` | `readonly record struct` | An exact integer-valued measure on integer intervals: `Cumulative(n) = floor(rate*n + offset)`, and any range receives the difference of its two boundaries. One neutral object covers balanced jobs-per-frame, clock/sample conversion, quotas, pacing, density, and 1D point sets. It is stateless and randomly seekable; adjacent ranges compose exactly; rational rates are periodic, while quadratic-surd rates are exactly aperiodic. `LowerBound`/`IndexContaining` provide direct inverse lookup without scanning. |
 | `FixedVector2` / `FixedVector3` | `readonly record struct` | 2D/3D vectors of `FixedQ4816` components — deterministic, bit-identical world-space math; `Dot`, `Wedge`/`Cross`, complex/quaternion products, and rotations widen every product and round once per result component. `FixedVector3.Normalize` is scale-free; `Length`/`LengthSquared` saturate only when the nonnegative result cannot fit, while `TryLength`/`TryLengthSquared` expose that boundary. |
 | `FixedQuaternion` | `readonly record struct` | Deterministic 3D rotation: `FromAxisAngle` (fixed-point SinCos), full-width fused Hamilton `*` and `Rotate`, `Slerp` (shortest-arc, nlerp guard), exact-denominator `Inverse`, and scale-free `FromTo`/`Normalize`. Norm properties saturate with `TryLength` variants for explicit overflow. Implements the applicable generic-math operator interfaces, so it composes with `FixedDual<T>`. |
 | `FixedComplex` | `readonly record struct` | Deterministic 2D rotation (the yaw-plane analog of the quaternion): `FromAngle`, full-width fused `*`/`Rotate`, full-range exact-rounding division, scale-free `FromTo`/`Normalize`, and full-width saturating `Magnitude`/`MagnitudeSquared` with explicit `TryMagnitude` variants. |
@@ -189,6 +190,43 @@ its `TicksPerSecond` in deterministic snapshots and state hashes, restore them t
 when that quantity is teleported, assigned, or clamped. Keep one accumulator per independently
 integrated scalar or vector; its denominator is fixed at construction. A default-initialized
 accumulator (denominator zero) throws from `Integrate`.
+
+### Measuring discrete rates without carried state
+
+`DiscreteMeasure` assigns indivisible output units to integer input intervals by
+flooring one exact affine rate at their boundaries. It is the stateless counterpart
+to a rate accumulator: any index or range can be answered directly, and splitting or
+joining a range never changes its total.
+
+```csharp
+// Four jobs every three input intervals: 1, 1, 2, 1, 1, 2, ...
+var jobs = DiscreteMeasure.Rational(numerator: 4, denominator: 3);
+var thisFrame = jobs.AmountAt(index: frame);
+var wholeShot = jobs.Map(start: firstFrame, length: frameCount);
+
+// 48 kHz audio against 60000/1001 Hz video: 800/801 samples per frame, exactly.
+var samples = DiscreteMeasure.Rational(
+    numerator: (48_000 * 1_001),
+    denominator: 60_000
+);
+var sampleRange = samples.Map(start: firstVideoFrame, length: videoFrameCount);
+
+// The inverse-golden rate yields an exact, seekable aperiodic zero/one allocation.
+var aperiodic = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Create(-1, 1, 5, 2),
+    offset: QuadraticSurd.Zero
+);
+var nextOccupied = aperiodic.NextNonemptyIndex(start: cursor);
+```
+
+`Cumulative` is the boundary function; `AmountAt` measures one unit interval;
+`AmountOver`/`Map` use a start and length, while `AmountBetween`/`MapBetween` use two
+boundaries. `Translate` moves the allocation origin exactly. `LowerBound` inverts cumulative
+amounts, while `IndexContaining` maps an output index back to the input interval that owns it.
+Offsets are normalized modulo one, selecting a different allocation origin without
+changing the rate. Rational rates expose their exact period; irrational quadratic
+rates remain exact and aperiodic rather than being approximated by a long rational
+cycle.
 
 ---
 

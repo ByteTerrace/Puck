@@ -27,6 +27,76 @@ public readonly record struct PolynomialTailIntervalCertificate(
     BigInteger ResidualMagnitudeCeiling
 );
 
+/// <summary>A certified arbitrary-order asymptotic interval for a positive polynomial continued-fraction tail.</summary>
+/// <param name="Order">
+/// The positive integer <c>m</c> for which the radius is <c>H/n^m</c>; the center uses
+/// <c>lambda*n+c_0+...+c_(m-1)/n^(m-1)</c>.
+/// </param>
+/// <param name="Cutoff">The first positive index covered by the certificate.</param>
+/// <param name="RadiusNumerator">The non-negative integer <c>H</c> in the radius <c>H/n^m</c>.</param>
+/// <param name="CenterSlopeLowerNumerator">The numerator of the strict rational lower bound <c>L1</c>.</param>
+/// <param name="PositiveTrapSlopeNumerator">The numerator of the positive-trap lower bound <c>L2&lt;L1</c>.</param>
+/// <param name="SlopeLowerDenominator">The shared positive denominator of <c>L1</c> and <c>L2</c>.</param>
+/// <param name="ResidualMagnitudeCeiling">
+/// An integer <c>M</c> such that the recurrence residual at the truncated center has magnitude at most
+/// <c>M/n^m</c>.
+/// </param>
+public readonly record struct PolynomialTailAsymptoticCertificate(
+    int Order,
+    BigInteger Cutoff,
+    BigInteger RadiusNumerator,
+    BigInteger CenterSlopeLowerNumerator,
+    BigInteger PositiveTrapSlopeNumerator,
+    BigInteger SlopeLowerDenominator,
+    BigInteger ResidualMagnitudeCeiling
+);
+
+/// <summary>
+/// A finite quadratic-norm envelope for every integer boundary that a polynomial continued-fraction tail can cross.
+/// </summary>
+/// <param name="Cutoff">The first tail index covered by the underlying interval certificate.</param>
+/// <param name="RadiusNumerator">The integer <c>H</c> in <c>|s_n-(lambda*n+beta)| &lt;= H/n</c>.</param>
+/// <param name="Radicand">The common quadratic-field radicand.</param>
+/// <param name="CommonDenominator">The positive integer <c>Z</c> clearing the denominators of both <c>lambda</c> and <c>beta</c>.</param>
+/// <param name="SlopeRationalNumerator">The integer <c>P</c> in <c>lambda=(P+Q*sqrt(D))/Z</c>.</param>
+/// <param name="SlopeSurdNumerator">The integer <c>Q</c> in <c>lambda=(P+Q*sqrt(D))/Z</c>.</param>
+/// <param name="OffsetRationalNumerator">The integer <c>R</c> in <c>beta=(R+S*sqrt(D))/Z</c>.</param>
+/// <param name="OffsetSurdNumerator">The integer <c>S</c> in <c>beta=(R+S*sqrt(D))/Z</c>.</param>
+/// <param name="NormMagnitudeBound">
+/// An integer <c>J</c> such that every integer <c>m</c> lying between the tail and its affine center at an index
+/// <c>n &gt;= Cutoff</c> has <c>|(Zm-X_n)^2-DY_n^2| &lt;= J</c>, where
+/// <c>X_n=P*n+R</c> and <c>Y_n=Q*n+S</c>.
+/// </param>
+public readonly record struct PolynomialBeattyShadowNormCertificate(
+    BigInteger Cutoff,
+    BigInteger RadiusNumerator,
+    BigInteger Radicand,
+    BigInteger CommonDenominator,
+    BigInteger SlopeRationalNumerator,
+    BigInteger SlopeSurdNumerator,
+    BigInteger OffsetRationalNumerator,
+    BigInteger OffsetSurdNumerator,
+    BigInteger NormMagnitudeBound
+) {
+    /// <summary>Returns the cleared field norm of <c>boundary-(lambda*n+beta)</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tailIndex"/> is not positive.</exception>
+    public BigInteger CandidateNorm(BigInteger tailIndex, BigInteger boundary) {
+        if (tailIndex <= BigInteger.Zero) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(tailIndex),
+                message: "the tail index must be positive"
+            );
+        }
+
+        var centerRationalNumerator = ((SlopeRationalNumerator * tailIndex) + OffsetRationalNumerator);
+        var centerSurdNumerator = ((SlopeSurdNumerator * tailIndex) + OffsetSurdNumerator);
+        var rationalDifference = ((CommonDenominator * boundary) - centerRationalNumerator);
+
+        return ((rationalDifference * rationalDifference) -
+            (Radicand * centerSurdNumerator * centerSurdNumerator));
+    }
+}
+
 /// <summary>
 /// Exact analysis of a positive polynomial continued-fraction tail
 /// <c>sₙ = p·n + q + (r·n² + u·n + v)/sₙ₊₁</c>.
@@ -62,6 +132,60 @@ public sealed class PolynomialContinuedFractionAnalysis {
     public QuadraticSurd AffineResidual { get; }
     /// <summary>Gets the constructive <c>|sₙ−xₙ| ≤ H/n</c> certificate.</summary>
     public PolynomialTailIntervalCertificate IntervalCertificate { get; }
+
+    /// <summary>
+    /// Returns an exact finite norm envelope containing every integer boundary that can separate the tail from its
+    /// affine center beyond the certified cutoff.
+    /// </summary>
+    /// <remarks>
+    /// Write <c>lambda=(P+Q*sqrt(D))/Z</c> and <c>beta=(R+S*sqrt(D))/Z</c>. If an integer <c>m</c> lies between
+    /// <c>s_n</c> and <c>lambda*n+beta</c>, the interval certificate gives
+    /// <c>|m-(lambda*n+beta)| &lt;= H/n</c>. Multiplication by the conjugate difference therefore bounds the cleared
+    /// norm <c>(Zm-Pn-R)^2-D(Qn+S)^2</c> independently of <c>n</c>. Thus all possible discrepancies reduce to
+    /// finitely many generalized Pell equations, the arithmetic bridge to an Ostrowski decision procedure.
+    /// </remarks>
+    public PolynomialBeattyShadowNormCertificate BeattyShadowNormCertificate() {
+        var slopeDenominator = Slope.Denominator;
+        var offsetDenominator = Offset.Denominator;
+        var denominatorDivisor = BigInteger.GreatestCommonDivisor(slopeDenominator, offsetDenominator);
+        var commonDenominator = ((slopeDenominator / denominatorDivisor) * offsetDenominator);
+        var slopeScale = (commonDenominator / slopeDenominator);
+        var offsetScale = (commonDenominator / offsetDenominator);
+        var slopeRationalNumerator = (Slope.RationalNumerator * slopeScale);
+        var slopeSurdNumerator = (Slope.SurdNumerator * slopeScale);
+        var offsetRationalNumerator = (Offset.RationalNumerator * offsetScale);
+        var offsetSurdNumerator = (Offset.SurdNumerator * offsetScale);
+        var radicand = BigInteger.Max(Slope.Radicand, Offset.Radicand);
+        var conjugateSlopeMagnitudeCeiling = QuadraticSurd.Create(
+            rationalNumerator: BigInteger.Zero,
+            surdNumerator: (2 * BigInteger.Abs(slopeSurdNumerator)),
+            radicand: radicand,
+            denominator: commonDenominator
+        ).Ceiling();
+        var conjugateOffsetMagnitudeCeiling = QuadraticSurd.Create(
+            rationalNumerator: BigInteger.Zero,
+            surdNumerator: (2 * BigInteger.Abs(offsetSurdNumerator)),
+            radicand: radicand,
+            denominator: commonDenominator
+        ).Ceiling();
+        var radius = IntervalCertificate.RadiusNumerator;
+        var normMagnitudeBound = (
+            commonDenominator * commonDenominator * radius *
+            (radius + conjugateSlopeMagnitudeCeiling + conjugateOffsetMagnitudeCeiling)
+        );
+
+        return new PolynomialBeattyShadowNormCertificate(
+            Cutoff: IntervalCertificate.Cutoff,
+            RadiusNumerator: radius,
+            Radicand: radicand,
+            CommonDenominator: commonDenominator,
+            SlopeRationalNumerator: slopeRationalNumerator,
+            SlopeSurdNumerator: slopeSurdNumerator,
+            OffsetRationalNumerator: offsetRationalNumerator,
+            OffsetSurdNumerator: offsetSurdNumerator,
+            NormMagnitudeBound: normMagnitudeBound
+        );
+    }
 
     /// <summary>Rechecks the finite exact inequalities that imply the interval is positive and invariant for every covered index.</summary>
     public bool VerifyIntervalCertificate() {
@@ -230,6 +354,405 @@ public sealed class PolynomialContinuedFractionAnalysis {
         }
 
         return coefficients;
+    }
+
+    /// <summary>
+    /// Constructs a finite exact proof of the order-<paramref name="termCount"/> expansion, with an explicit
+    /// <c>H/n^termCount</c> remainder valid at every index beyond the returned cutoff.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="termCount"/> is not positive.</exception>
+    public PolynomialTailAsymptoticCertificate AsymptoticIntervalCertificate(int termCount) {
+        if (termCount <= 0) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(termCount),
+                message: "the certified asymptotic term count must be positive"
+            );
+        }
+
+        var coefficients = AsymptoticCoefficients(termCount: termCount);
+        var residualPolynomial = TruncatedCenterResidualPolynomial(coefficients: coefficients);
+        if (PolynomialDegree(polynomial: residualPolynomial) >= termCount) {
+            throw new InvalidOperationException(
+                message: "the formal coefficients did not cancel the required recurrence-residual orders"
+            );
+        }
+
+        ChooseSlopeBounds(
+            numeratorQuadratic: Parameters.NumeratorQuadratic,
+            out var scale,
+            out var lowerOneNumerator,
+            out var lowerTwoNumerator
+        );
+
+        var lowerOne = QuadraticSurd.Rational(lowerOneNumerator, scale);
+        var residualCoefficientMagnitude = PolynomialCoefficientMagnitude(polynomial: residualPolynomial);
+        var residualMagnitudeCeiling = (residualCoefficientMagnitude / lowerOne).Ceiling();
+        var centerCorrectionMagnitude = coefficients
+            .Aggregate(QuadraticSurd.Zero, (sum, coefficient) => sum + coefficient.Abs());
+        var positiveLinear = BigInteger.Max(BigInteger.Zero, Parameters.NumeratorLinear);
+        var positiveConstant = BigInteger.Max(BigInteger.Zero, Parameters.NumeratorConstant);
+        var cutoff = BigInteger.One;
+
+        while (true) {
+            var successor = (cutoff + 1);
+            var successorSquared = (successor * successor);
+
+            // z_t/t >= lambda-sum(|c_j|)/t for t>=1.
+            var centerSlopeLower = (Slope -
+                (centerCorrectionMagnitude / QuadraticSurd.Rational(successor)));
+            if (centerSlopeLower > lowerOne) {
+                var wNumerator = ((Parameters.NumeratorQuadratic * successorSquared) +
+                    (positiveLinear * successor) + positiveConstant);
+                var contractionGap = ((successorSquared * lowerOneNumerator * lowerTwoNumerator) -
+                    (wNumerator * scale * scale));
+
+                if (contractionGap > 0) {
+                    var radius = BigIntegerMath.CeilingDivide(
+                        numerator: (residualMagnitudeCeiling * successorSquared *
+                            lowerOneNumerator * lowerTwoNumerator),
+                        denominator: contractionGap
+                    );
+                    var successorPower = BigInteger.Pow(successor, checked(termCount + 1));
+
+                    if ((radius * scale) <=
+                        ((lowerOneNumerator - lowerTwoNumerator) * successorPower)) {
+                        var certificate = new PolynomialTailAsymptoticCertificate(
+                            Order: termCount,
+                            Cutoff: cutoff,
+                            RadiusNumerator: radius,
+                            CenterSlopeLowerNumerator: lowerOneNumerator,
+                            PositiveTrapSlopeNumerator: lowerTwoNumerator,
+                            SlopeLowerDenominator: scale,
+                            ResidualMagnitudeCeiling: residualMagnitudeCeiling
+                        );
+
+                        if (!VerifyAsymptoticIntervalCertificate(certificate: certificate)) {
+                            throw new InvalidOperationException(
+                                message: "the constructed arbitrary-order asymptotic certificate did not verify"
+                            );
+                        }
+
+                        return certificate;
+                    }
+                }
+            }
+
+            cutoff *= 2;
+        }
+    }
+
+    /// <summary>Rechecks all finite exact inequalities in an arbitrary-order asymptotic certificate.</summary>
+    public bool VerifyAsymptoticIntervalCertificate(PolynomialTailAsymptoticCertificate certificate) {
+        if ((certificate.Order <= 0) || (certificate.Cutoff < 1) ||
+            (certificate.RadiusNumerator < 0) ||
+            (certificate.PositiveTrapSlopeNumerator <= 0) ||
+            (certificate.CenterSlopeLowerNumerator <= certificate.PositiveTrapSlopeNumerator) ||
+            (certificate.SlopeLowerDenominator <= 0) ||
+            (certificate.ResidualMagnitudeCeiling < 0)) {
+            return false;
+        }
+
+        var coefficients = AsymptoticCoefficients(termCount: certificate.Order);
+        var residualPolynomial = TruncatedCenterResidualPolynomial(coefficients: coefficients);
+        if (PolynomialDegree(polynomial: residualPolynomial) >= certificate.Order) { return false; }
+
+        var scale = certificate.SlopeLowerDenominator;
+        var lowerOneNumerator = certificate.CenterSlopeLowerNumerator;
+        var lowerTwoNumerator = certificate.PositiveTrapSlopeNumerator;
+        var lowerOne = QuadraticSurd.Rational(lowerOneNumerator, scale);
+        var lowerTwo = QuadraticSurd.Rational(lowerTwoNumerator, scale);
+        if ((lowerTwo >= lowerOne) || (lowerOne >= Slope) ||
+            ((lowerOne * lowerTwo) <= QuadraticSurd.Rational(Parameters.NumeratorQuadratic))) {
+            return false;
+        }
+
+        var residualCoefficientMagnitude = PolynomialCoefficientMagnitude(polynomial: residualPolynomial);
+        if (QuadraticSurd.Rational(certificate.ResidualMagnitudeCeiling) <
+            (residualCoefficientMagnitude / lowerOne)) {
+            return false;
+        }
+
+        var centerCorrectionMagnitude = coefficients
+            .Aggregate(QuadraticSurd.Zero, (sum, coefficient) => sum + coefficient.Abs());
+        var successor = (certificate.Cutoff + 1);
+        if ((Slope - (centerCorrectionMagnitude / QuadraticSurd.Rational(successor))) <= lowerOne) {
+            return false;
+        }
+
+        var successorSquared = (successor * successor);
+        var positiveLinear = BigInteger.Max(BigInteger.Zero, Parameters.NumeratorLinear);
+        var positiveConstant = BigInteger.Max(BigInteger.Zero, Parameters.NumeratorConstant);
+        var wNumerator = ((Parameters.NumeratorQuadratic * successorSquared) +
+            (positiveLinear * successor) + positiveConstant);
+        var contractionGap = ((successorSquared * lowerOneNumerator * lowerTwoNumerator) -
+            (wNumerator * scale * scale));
+        if (contractionGap <= 0) { return false; }
+
+        var requiredRadiusNumerator = (certificate.ResidualMagnitudeCeiling * successorSquared *
+            lowerOneNumerator * lowerTwoNumerator);
+        if ((certificate.RadiusNumerator * contractionGap) < requiredRadiusNumerator) { return false; }
+
+        var successorPower = BigInteger.Pow(successor, checked(certificate.Order + 1));
+        return ((certificate.RadiusNumerator * scale) <=
+            ((lowerOneNumerator - lowerTwoNumerator) * successorPower));
+    }
+
+    /// <summary>Returns the exact center of the requested finite asymptotic expansion.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The index is not positive or the term count is negative.</exception>
+    public QuadraticSurd AsymptoticCenter(BigInteger tailIndex, int termCount) {
+        ValidateTailIndex(tailIndex: tailIndex);
+        var coefficients = AsymptoticCoefficients(termCount: termCount);
+        var center = (Slope * QuadraticSurd.Rational(tailIndex));
+        var denominatorPower = BigInteger.One;
+
+        for (var index = 0; (index < coefficients.Count); ++index) {
+            if (index > 0) { denominatorPower *= tailIndex; }
+            center += (coefficients[index] / QuadraticSurd.Rational(denominatorPower));
+        }
+
+        return center;
+    }
+
+    /// <summary>Returns the certified arbitrary-order interval associated with <paramref name="certificate"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tailIndex"/> precedes the certificate cutoff.</exception>
+    /// <exception cref="ArgumentException">The certificate does not verify for this analysis.</exception>
+    public (QuadraticSurd Lower, QuadraticSurd Upper) CertifiedAsymptoticInterval(
+        BigInteger tailIndex,
+        PolynomialTailAsymptoticCertificate certificate) {
+        if (!VerifyAsymptoticIntervalCertificate(certificate: certificate)) {
+            throw new ArgumentException(
+                message: "the asymptotic certificate does not verify for this analysis",
+                paramName: nameof(certificate)
+            );
+        }
+        if (tailIndex < certificate.Cutoff) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(tailIndex),
+                message: "the tail index precedes the certified asymptotic interval"
+            );
+        }
+
+        var center = AsymptoticCenter(tailIndex: tailIndex, termCount: certificate.Order);
+        var radius = QuadraticSurd.Rational(
+            numerator: certificate.RadiusNumerator,
+            denominator: BigInteger.Pow(tailIndex, certificate.Order)
+        );
+
+        return (center - radius, center + radius);
+    }
+
+    /// <summary>
+    /// Attempts to evaluate the tail through a certified non-affine rational closed form. The recognized family has
+    /// <c>q=v=0</c>, <c>r=2p+4</c>, <c>u=4p+12</c>, and
+    /// <c>s_n=(p+2)n+2-2/(n+1)</c>.
+    /// </summary>
+    public bool TryCertifiedRationalTail(BigInteger tailIndex, out QuadraticSurd tail) {
+        ValidateTailIndex(tailIndex);
+        var p = Parameters.Linear;
+        if (Parameters.Constant.IsZero &&
+            (Parameters.NumeratorQuadratic == ((2 * p) + 4)) &&
+            (Parameters.NumeratorLinear == ((4 * p) + 12)) &&
+            Parameters.NumeratorConstant.IsZero) {
+            tail = QuadraticSurd.Rational(
+                ((((p + 2) * tailIndex) + 2) * (tailIndex + 1)) - 2,
+                tailIndex + 1
+            );
+            return true;
+        }
+
+        tail = QuadraticSurd.Zero;
+        return false;
+    }
+
+    /// <summary>
+    /// Attempts to decide the exact floor of one finite tail by propagating certified far-tail intervals backward.
+    /// Failure after the requested rounds means only that the remaining interval straddles an integer; it never guesses
+    /// whether the tail equals that boundary.
+    /// </summary>
+    public bool TryCertifiedFloor(
+        BigInteger tailIndex,
+        int refinementRounds,
+        out BigInteger floor) {
+        ValidateTailIndex(tailIndex);
+        ArgumentOutOfRangeException.ThrowIfNegative(refinementRounds);
+
+        if (TryCertifiedRationalTail(tailIndex, out var rationalTail)) {
+            floor = rationalTail.Floor();
+            return true;
+        }
+
+        if (AffineResidual == QuadraticSurd.Zero) {
+            floor = AffineCenter(tailIndex).Floor();
+            return true;
+        }
+
+        var farIndex = BigInteger.Max(tailIndex, IntervalCertificate.Cutoff);
+        for (var round = 0; round <= refinementRounds; ++round) {
+            var interval = CertifiedInterval(farIndex);
+            var lower = interval.Lower;
+            var upper = interval.Upper;
+
+            for (var index = (farIndex - 1); index >= tailIndex; --index) {
+                var nextLower = Map(index, upper);
+                var nextUpper = Map(index, lower);
+                lower = nextLower;
+                upper = nextUpper;
+            }
+
+            var lowerFloor = lower.Floor();
+            if (lowerFloor == upper.Floor()) {
+                floor = lowerFloor;
+                return true;
+            }
+
+            var distance = BigInteger.Max(BigInteger.One, (farIndex - tailIndex + 1));
+            farIndex = (tailIndex + (2 * distance));
+            farIndex = BigInteger.Max(farIndex, IntervalCertificate.Cutoff);
+        }
+
+        floor = BigInteger.Zero;
+        return false;
+    }
+
+    private QuadraticSurd[] TruncatedCenterResidualPolynomial(IReadOnlyList<QuadraticSurd> coefficients) {
+        var order = coefficients.Count;
+        var denominatorPower = (order - 1);
+        var centerNumerator = new QuadraticSurd[order + 1];
+        Array.Fill(centerNumerator, QuadraticSurd.Zero);
+        centerNumerator[order] = Slope;
+
+        for (var index = 0; (index < order); ++index) {
+            centerNumerator[order - 1 - index] = coefficients[index];
+        }
+
+        var successorCenterNumerator = ShiftPolynomial(centerNumerator, BigInteger.One);
+        var baseNumerator = new QuadraticSurd[order + 1];
+        Array.Fill(baseNumerator, QuadraticSurd.Zero);
+        baseNumerator[denominatorPower] = QuadraticSurd.Rational(Parameters.Constant);
+        baseNumerator[denominatorPower + 1] = QuadraticSurd.Rational(Parameters.Linear);
+        baseNumerator = AddPolynomials(baseNumerator, ScalePolynomial(centerNumerator, -QuadraticSurd.One));
+
+        var firstProduct = MultiplyPolynomials(baseNumerator, successorCenterNumerator);
+        var numeratorPolynomial = new[] {
+            QuadraticSurd.Rational(Parameters.NumeratorConstant),
+            QuadraticSurd.Rational(Parameters.NumeratorLinear),
+            QuadraticSurd.Rational(Parameters.NumeratorQuadratic)
+        };
+        var shiftedNumerator = ShiftPolynomialByDegree(numeratorPolynomial, denominatorPower);
+        var successorPowerPolynomial = new QuadraticSurd[denominatorPower + 1];
+
+        for (var degree = 0; (degree <= denominatorPower); ++degree) {
+            successorPowerPolynomial[degree] = QuadraticSurd.Rational(
+                BinomialCoefficient(denominatorPower, degree)
+            );
+        }
+
+        return TrimPolynomial(AddPolynomials(
+            firstProduct,
+            MultiplyPolynomials(shiftedNumerator, successorPowerPolynomial)
+        ));
+    }
+
+    private void ChooseSlopeBounds(
+        BigInteger numeratorQuadratic,
+        out BigInteger scale,
+        out BigInteger lowerOneNumerator,
+        out BigInteger lowerTwoNumerator) {
+        var precisionBits = 8;
+
+        while (true) {
+            scale = (BigInteger.One << precisionBits);
+            var scaledFloor = (Slope * QuadraticSurd.Rational(scale)).Floor();
+            lowerOneNumerator = (scaledFloor - 1);
+            lowerTwoNumerator = (scaledFloor - 2);
+
+            if ((lowerTwoNumerator > 0) &&
+                ((lowerOneNumerator * lowerTwoNumerator) >
+                    (numeratorQuadratic * scale * scale))) {
+                return;
+            }
+
+            precisionBits = checked(precisionBits * 2);
+        }
+    }
+
+    private static QuadraticSurd PolynomialCoefficientMagnitude(QuadraticSurd[] polynomial) =>
+        polynomial.Aggregate(QuadraticSurd.Zero, (sum, coefficient) => sum + coefficient.Abs());
+
+    private static int PolynomialDegree(QuadraticSurd[] polynomial) {
+        for (var degree = (polynomial.Length - 1); (degree >= 0); --degree) {
+            if (polynomial[degree] != QuadraticSurd.Zero) { return degree; }
+        }
+
+        return -1;
+    }
+
+    private static QuadraticSurd[] AddPolynomials(QuadraticSurd[] left, QuadraticSurd[] right) {
+        var result = new QuadraticSurd[Math.Max(left.Length, right.Length)];
+        Array.Fill(result, QuadraticSurd.Zero);
+
+        for (var index = 0; (index < left.Length); ++index) { result[index] += left[index]; }
+        for (var index = 0; (index < right.Length); ++index) { result[index] += right[index]; }
+
+        return TrimPolynomial(result);
+    }
+
+    private static QuadraticSurd[] ScalePolynomial(QuadraticSurd[] polynomial, QuadraticSurd scale) =>
+        polynomial.Select(coefficient => coefficient * scale).ToArray();
+
+    private static QuadraticSurd[] MultiplyPolynomials(QuadraticSurd[] left, QuadraticSurd[] right) {
+        var result = new QuadraticSurd[left.Length + right.Length - 1];
+        Array.Fill(result, QuadraticSurd.Zero);
+
+        for (var leftDegree = 0; (leftDegree < left.Length); ++leftDegree) {
+            for (var rightDegree = 0; (rightDegree < right.Length); ++rightDegree) {
+                result[leftDegree + rightDegree] += (left[leftDegree] * right[rightDegree]);
+            }
+        }
+
+        return TrimPolynomial(result);
+    }
+
+    private static QuadraticSurd[] ShiftPolynomial(QuadraticSurd[] polynomial, BigInteger shift) {
+        var result = new QuadraticSurd[polynomial.Length];
+        Array.Fill(result, QuadraticSurd.Zero);
+
+        for (var sourceDegree = 0; (sourceDegree < polynomial.Length); ++sourceDegree) {
+            var shiftPower = BigInteger.One;
+
+            for (var targetDegree = sourceDegree; (targetDegree >= 0); --targetDegree) {
+                result[targetDegree] += (polynomial[sourceDegree] * QuadraticSurd.Rational(
+                    BinomialCoefficient(sourceDegree, targetDegree) * shiftPower
+                ));
+                shiftPower *= shift;
+            }
+        }
+
+        return TrimPolynomial(result);
+    }
+
+    private static QuadraticSurd[] ShiftPolynomialByDegree(QuadraticSurd[] polynomial, int degree) {
+        var result = new QuadraticSurd[polynomial.Length + degree];
+        Array.Fill(result, QuadraticSurd.Zero);
+        Array.Copy(polynomial, 0, result, degree, polynomial.Length);
+        return result;
+    }
+
+    private static QuadraticSurd[] TrimPolynomial(QuadraticSurd[] polynomial) {
+        var degree = PolynomialDegree(polynomial);
+        return degree < 0 ? [QuadraticSurd.Zero] : polynomial[..(degree + 1)];
+    }
+
+    private static BigInteger BinomialCoefficient(int upper, int lower) {
+        if ((lower < 0) || (lower > upper)) { return BigInteger.Zero; }
+        lower = Math.Min(lower, upper - lower);
+        var result = BigInteger.One;
+
+        for (var index = 1; (index <= lower); ++index) {
+            result = ((result * (upper - lower + index)) / index);
+        }
+
+        return result;
     }
 
     private static BigInteger NegativeBinomialCoefficient(int power, int degree) {

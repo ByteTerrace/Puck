@@ -3,12 +3,12 @@
 ## The theorem
 
 Let a finite ray--basis incidence configuration admit a cyclic automorphism
-(g) of odd order (n). Assume every ray and basis under consideration lies
-in a free (C_n=\langle g\rangle)-orbit. Choose (k) complete basis orbits,
-where (k) is odd, and let (r) be the number of ray orbits.
+\(g\) of odd order \(n\). Assume every ray and basis under consideration lies
+in a free \(C_n=\langle g\rangle\)-orbit. Choose \(k\) complete basis orbits,
+where \(k\) is odd, and let \(r\) be the number of ray orbits.
 
 After choosing one representative in every orbit, the incidence map is an
-(r\times k) matrix
+\(r\times k\) matrix
 
 \[
 P(t)\in\operatorname{Mat}_{r\times k}
@@ -76,7 +76,7 @@ parity-complement lemma is exposed as a geometry-independent Lean theorem in
 It proves the equivalence of items 1 and 2.
 
 The nullity formula now proves item 3: total nullity is one exactly when the
-(t+1\) component has nullity one and every other component has nullity zero.
+\(t+1\) component has nullity one and every other component has nullity zero.
 Finally, over the field \(K_f\), an \(r\times k\) matrix has rank below \(k\)
 exactly when all its maximal minors vanish. This is equivalent to \(f\)
 dividing every lifted minor. Square-freeness then proves item 4.
@@ -117,14 +117,32 @@ actions require permutation modules induced from stabilizers rather than free
 copies of \(R\). Both are natural extensions, but neither is silently covered
 by the theorem above.
 
+## Formal status
+
+Lean checks the geometry-independent combinatorial bridge
+
+\[
+\text{irreducible parity proof}
+\quad\Longleftrightarrow\quad
+\dim_{\mathbf F_2}\ker\widetilde P=1
+\]
+
+in
+[`CyclicParity/Irreducibility.lean`](../formal/PuckMathsFormal/PuckMathsFormal/CyclicParity/Irreducibility.lean).
+The E8 application additionally has a reflected Lean proof of its concrete
+3,569,146 count. The general square-free CRT decomposition and maximal-minor
+criterion are proved above on paper and exercised by independent exact
+checkers, but have not yet been mechanized in Lean. A claim that the entire
+general theorem is already Lean-certified would therefore be too strong.
+
 ## Application ledger
 
 | Configuration | Cyclic order | Status |
 |---|---:|---|
 | E8/Gosset \(4_{21}\) rays | 15 | Flagship recovered through the generic checker: 3,569,146 irreducible five-letter proofs. |
 | 600-cell rays | 15 | Independently reconstructed and exhaustively verified: 2 irreducible words among 8 parity words. |
-| 120-cell rays | 15 | Application in progress. |
-| Additional odd-cyclic configuration | — | New-result search in progress. |
+| 120-cell rays | 15 | Independently reconstructed; 308,440 irreducible words exhaustively classified, resolving the published low-weight gap. |
+| \(D_8\) root-polytope rays | 7 | New control result: its complete \(56_{15}-105_8\) hypergraph has no parity proof; a seven-ray global coloring proves the stronger statement. |
 
 ## Reproduction interface
 
@@ -136,11 +154,19 @@ the direct expanded binary rank for explicit words. For manageable alphabets
 it exhausts all odd words; for larger alphabets it traverses syndrome-matroid
 circuits and their letter transversals.
 
+The prose theorem has no bound on \(n\). The current `UInt64` checker accepts
+odd \(n<63\) only when every irreducible factor has degree at most 31; this is
+an implementation boundary needed to keep carryless products lossless, not a
+mathematical restriction. Certificates write \(t^n+1\), which equals
+\(t^n-1\) in characteristic two.
+
 The same program recovers both completed applications:
 
 ```text
 dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-incidence-verifier.cs -- --certificate docs/certificates/e8-odd-cyclic-incidence.json
 dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-incidence-verifier.cs -- --certificate docs/certificates/600-cell-c15-parity.json --enumerate
+dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-incidence-verifier.cs -- --certificate docs/certificates/120-cell-c15-parity.json
+dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-incidence-verifier.cs -- --certificate docs/certificates/odd-cyclic-d8-c7.json --enumerate
 ```
 
 The E8 certificate deliberately references the independently reconstructed
