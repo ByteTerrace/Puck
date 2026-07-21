@@ -2550,6 +2550,36 @@ if ((QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L) != Q
     throw new InvalidOperationException("QUADRATIC INFLATION GOLDEN/SILVER DISCRIMINANTS WRONG");
 }
 
+// The general positive polynomial tail analyzer subsumes the analytic half of the metallic BDS family, but also handles
+// regimes r>>p^2 where a crude one-step lower bound cannot establish contraction. Its returned witness is exactly
+// recheckable, and the formal-series solver has no fixed order ceiling.
+var goldenPolynomialTail = MetallicPolynomialContinuedFraction.Analyze(metallicIndex: BigInteger.One);
+if ((goldenPolynomialTail.Slope != QuadraticSurd.Create(1, 1, 5, 2)) ||
+    (goldenPolynomialTail.Offset != QuadraticSurd.Create(-5, -3, 5, 10)) ||
+    !goldenPolynomialTail.VerifyIntervalCertificate()) {
+    throw new InvalidOperationException("GENERAL POLYNOMIAL TAIL GOLDEN SPECIALIZATION WRONG");
+}
+var goldenAsymptotics = goldenPolynomialTail.AsymptoticCoefficients(termCount: 16);
+if ((goldenAsymptotics.Count != 16) || (goldenAsymptotics[0] != goldenPolynomialTail.Offset)) {
+    throw new InvalidOperationException("GENERAL POLYNOMIAL TAIL ASYMPTOTIC SERIES WRONG");
+}
+var widePolynomialTail = PolynomialContinuedFractionTail.Analyze(
+    linear: 1,
+    constant: 0,
+    numeratorQuadratic: 100,
+    numeratorLinear: -3,
+    numeratorConstant: 7
+);
+if (!widePolynomialTail.VerifyIntervalCertificate() ||
+    (widePolynomialTail.CertifiedInterval(widePolynomialTail.IntervalCertificate.Cutoff).Lower.Sign <= 0)) {
+    throw new InvalidOperationException("GENERAL POLYNOMIAL TAIL WIDE-CONTRACTION CERTIFICATE WRONG");
+}
+ExpectArgumentOutOfRange(parameterName: "constant", operation: () =>
+    PolynomialContinuedFractionTail.Analyze(1, -2, 1, 0, 0));
+ExpectArgumentOutOfRange(parameterName: "numeratorConstant", operation: () =>
+    PolynomialContinuedFractionTail.Analyze(1, 0, 1, 0, -2));
+Console.WriteLine("polynomial continued-fraction tails: positive-family existence/uniqueness certificate, exact golden affine model, wide r>>p^2 trap, and 16 exact asymptotic terms OK");
+
 // MetallicQuasicrystal unifies golden (n=1) and silver (n=2) as one substitution generator: the streamed word contains
 // its own random-access walk word as a factor (same language, phase aside), long:short frequency approaches δₙ, and
 // sigma(word) reproduces the word (the fixed-point identity).

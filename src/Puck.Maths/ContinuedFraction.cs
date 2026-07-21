@@ -75,7 +75,7 @@ public static class ContinuedFraction {
             stateQ *= magnitude;
         }
 
-        var root = SquareRoot(value: stateN);
+        var root = BigIntegerMath.SquareRoot(value: stateN);
         var seen = new Dictionary<(BigInteger P, BigInteger Q), int>();
 
         while (true) {
@@ -98,8 +98,8 @@ public static class ContinuedFraction {
             // Floor of (P + √N) / Q: for a positive denominator the numerator floors with ⌊√N⌋; for a negative one the surd
             // sits just below ⌊√N⌋ + 1, which is the bound that floors correctly once the sign flips the inequality.
             var quotient = ((0 < stateQ)
-                ? FloorDivide(numerator: (stateP + root), denominator: stateQ)
-                : FloorDivide(numerator: ((stateP + root) + BigInteger.One), denominator: stateQ));
+                ? BigIntegerMath.FloorDivide(numerator: (stateP + root), denominator: stateQ)
+                : BigIntegerMath.FloorDivide(numerator: ((stateP + root) + BigInteger.One), denominator: stateQ));
 
             seen.Add(key: (stateP, stateQ), value: count);
             terms[count] = checked((long)quotient);
@@ -111,26 +111,4 @@ public static class ContinuedFraction {
         }
     }
 
-    /// <summary>Returns the floor square root of a non-negative arbitrary-width integer.</summary>
-    private static BigInteger SquareRoot(BigInteger value) {
-        if (value.IsZero) { return BigInteger.Zero; }
-
-        // This power of two is strictly above √value. Newton descent remains above the root and terminates when the
-        // next estimate can no longer decrease, at which point the current integer is floor(√value).
-        var estimate = (BigInteger.One << checked((int)((value.GetBitLength() + 1L) / 2L)));
-
-        while (true) {
-            var next = ((estimate + (value / estimate)) >> 1);
-
-            if (next >= estimate) { return estimate; }
-
-            estimate = next;
-        }
-    }
-    private static BigInteger FloorDivide(BigInteger numerator, BigInteger denominator) {
-        var quotient = (numerator / denominator);
-        var remainder = (numerator - (quotient * denominator));
-
-        return (quotient - (((remainder != BigInteger.Zero) && (remainder.Sign != denominator.Sign)) ? BigInteger.One : BigInteger.Zero));
-    }
 }
