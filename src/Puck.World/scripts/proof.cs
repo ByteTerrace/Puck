@@ -260,6 +260,41 @@
 //       networkPlayers admission cap stays durable (R-C: a census raise is transient, never folded); (d) the third fold dimension positively — a
 //       runtime screen.insert of a real ROM makes world.status name the 'screens' drift and world.save fold the live
 //       machine into that screen row's Machine source. Expo's own ouroboros is covered by worlddoc.
+//   replay [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The deterministic-replay proof (the replay.* family). Two sessions, each PINNING its stage first — census 0 and
+//       seat 1 alone, so the live world is still AT its definition boot image and a boot-anchored capture is possible.
+//       Session A asserts: (a) an idle boot-anchored capture MATCHes and replay.status counts the ticks accumulating;
+//       (b) a DRIVEN boot-anchored capture (a 1-second forward tape, then two seconds of settling so the sampled tail
+//       is a resting pose) MATCHes, its body displacement measured on player.where, and its tail hash DIFFERS from the
+//       idle one — an offline drive that dropped the recorded stream could not have produced both; (c) the documented
+//       fidelity boundary: a MID-SESSION capture honestly MISMATCHes, with its recorded side still the live tail the
+//       driven round left (the mismatch is the boot-image start, not a re-drive compared against itself); (d) THE
+//       DISCRIMINATION — a tape doctored by one flipped byte (byte 8, the low byte of the stored reference hash)
+//       MISMATCHes beside a byte-for-byte control copy that MATCHes, both re-drives recomputing the SAME replayed
+//       tail; (e) FOUR structurally broken tapes (not a recording, a two-byte stub, a retired shape, and doctored
+//       length prefixes) plus one absent name are each named and refused AND THE HOST STILL ANSWERS — the exit-82
+//       crash's regression test; (f) the tape lifecycle off replay.list (a cancelled recording leaves no file) plus
+//       the busy/not-recording/path-escaping-name refusals. Session B re-runs session A's identical prefix in a FRESH
+//       process, and the two live tail hashes must be BIT-IDENTICAL — the determinism claim itself, asserted as a
+//       number two processes independently sampled, never against a stored baseline (R18).
+//   screen-sources [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The rest of the screen.* family — what the screens proof (insert/eject/peek/state around one cartridge) leaves
+//       untouched. One pinned session asserts: (a) SOURCE BINDING measured on the slot, never on the setter's echo —
+//       screen.eject refuses a slot with no live producer and succeeds after screen.desktop and screen.capture bind
+//       one (the webcam is driven too, its outcome NAMED and its settle count following the branch actually taken,
+//       since a machine may have no camera); (b) THE MAGAZINE authored as data (a whole-row world.screen.set = exactly
+//       one journal entry) then driven — screen.state's entry=N/M moves next/prev/absolute and WRAPS, and the selected
+//       source is really APPLIED (the `none` entry drops the slot to unbound, the wrapped-to view binds it again), with
+//       an out-of-range entry and a magazineless screen refused and the selector unmoved; (c) THE ONE-LIVE-CONSOLE
+//       CEILING — a second declared console source is rejected naming both indices, the journal unchanged; (d) THE
+//       LIVE DEVICE SWAP — screen.options walks a RUNNING machine dmg->cgb->agb, proven on the machine's own options
+//       read-back AND on the cartridge's work-RAM liveness counter still advancing across each swap (no reboot, no
+//       lost progress), with an unknown token refused and the running model untouched; (e) THE CABLE GROUP — a link
+//       over two running machines is recorded DORMANT with today's exact reason (the queued gaming-brick host has no
+//       live-link path; the reason is asserted verbatim so the day it lands this check demands the live half),
+//       membership carried in screen.state on both members, unlink severing it, and the four link refusals
+//       (already-linked member, duplicate member, one-member arity, absent group). The cartridge is proof-authored
+//       (ScreensProof's joypad-echo ROM) — no ROM ships with the world.
 //   wire [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The console-wire contract proof — the three things every OTHER suite silently rests on, run in one
 //       --world baked session (the in-code document declares no solidity, so the scripted run lane is clear
@@ -339,9 +374,11 @@ static class ProofApp {
                 "sculpt" => SculptProof.RunSculpt(opts: opts),
                 "audio" => AudioProof.RunAudio(opts: opts),
                 "collision" => CollisionProof.RunCollision(opts: opts),
+                "replay" => ReplayProof.RunReplay(opts: opts),
+                "screen-sources" => ScreenSourcesProof.RunScreenSources(opts: opts),
                 "wire" => WireProof.RunWire(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|population|sculpt|audio|collision|wire)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|screen-sources|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|population|sculpt|audio|collision|replay|wire)"),
             });
         }
         catch (ArgException ex) {
@@ -395,6 +432,8 @@ static class ProofApp {
         Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  collision [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  replay [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  screen-sources [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  wire [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
@@ -11226,5 +11265,776 @@ static class WireProof {
 
     static string Fmt(double? value) {
         return ((value is { } v) ? v.ToString(format: "0.000", provider: ProofApp.Inv) : "(?)");
+    }
+}
+
+// ============================================================================================
+// REPLAY — the deterministic-replay proof: the `replay.*` control plane driven end to end.
+// The determinism claim is asserted as a NUMBER that two separate processes must agree on (the
+// live tail pose hash), never as a narration string, and every verdict is proven to
+// DISCRIMINATE: a driven capture's tail differs from an idle one's, a tape doctored by one
+// flipped byte MISMATCHes beside an undoctored control that MATCHes, a mid-session capture
+// honestly MISMATCHes, and four structurally broken tapes are each named and refused with the
+// host still answering afterwards. Session machinery is ComposedShotKit's.
+// ============================================================================================
+static class ReplayProof {
+    // [replay.stop: wrote <path> | 605 ticks | MATCH live tail=0x… — …]
+    // [replay.stop: wrote <path> | 240 ticks | MISMATCH live tail=0x… replayed=0x… — …]
+    static readonly Regex StopEcho = new(options: RegexOptions.Compiled,
+        pattern: @"\[replay\.stop: wrote (.+?) \| (\d+) ticks \| (MATCH|MISMATCH) live tail=0x([0-9A-F]{16})(?: replayed=0x([0-9A-F]{16}))?");
+    static readonly Regex VerifyMatchEcho = new(options: RegexOptions.Compiled,
+        pattern: @"\[replay\.verify: MATCH '([^']+)' \| (\d+) ticks \| hash=0x([0-9A-F]{16})\]");
+    static readonly Regex VerifyMismatchEcho = new(options: RegexOptions.Compiled,
+        pattern: @"\[replay\.verify: MISMATCH '([^']+)' \| (\d+) ticks \| recorded=0x([0-9A-F]{16}) replayed=0x([0-9A-F]{16})\]");
+    static readonly Regex RecordingStatusEcho = new(options: RegexOptions.Compiled,
+        pattern: @"\[replay\.status: recording '([^']+)' \| (\d+) ticks captured\]");
+
+    // The tape names this proof owns. Every one is deleted in the finally — the Replays directory is the user's real
+    // local store (there is no override path), so the proof never leaves its litter behind.
+    const string IdleTape = "proofidle";
+    const string DrivenTape = "proofdriven";
+    const string RerunTape = "proofrerun";
+    const string MidTape = "proofmid";
+    const string ControlTape = "proofcontrol";
+    const string DoctoredTape = "proofdoctored";
+    const string CancelTape = "proofcancelled";
+    const string JunkTape = "proofjunk";
+    const string TruncatedTape = "prooftruncated";
+    const string RetiredTape = "proofretired";
+    const string OversizedTape = "proofoversized";
+
+    // The recorded spans, in fixed 240 Hz ticks. The driven span holds a 1-second tape and then waits TWO more
+    // seconds: the tail hash is sampled at the last recorded tick, so it is only run-to-run stable once the body has
+    // come to rest (a hash sampled mid-motion is a function of how many ticks the pipe happened to deliver).
+    const int IdleSpanTicks = 240;
+    const int DriveLeadTicks = 60;
+    const int DriveSettleTicks = 480;
+    const int MidSpanTicks = 240;
+    // u — the displacement the 1-second forward tape must produce. The body is otherwise motionless (census 0), so a
+    // capture that recorded nothing cannot fake it.
+    const double DriveDisplacement = 1.0;
+
+    public static int RunReplay(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        var passed = true;
+
+        try {
+            Console.WriteLine(value: "[proof] === replay (a): capture, re-verify, doctor, and survive a broken tape ===");
+
+            var (sessionPassed, drivenHash) = RunSessionA(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            passed &= sessionPassed;
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === replay (b): THE DETERMINISM CLAIM — a second process, the same input, the same tail ===");
+
+            var (rerunPassed, rerunHash) = RunSessionB(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            passed &= rerunPassed;
+            // The claim itself: same document + same input -> bit-identical simulation state on every run. Two
+            // independent processes each sampled their own LIVE tail; nothing is compared against a stored baseline.
+            passed &= ComposedShotKit.Check(name: "tail-hash-identical-across-runs",
+                ok: ((drivenHash is { } first) && (rerunHash is { } second) && (first == second)),
+                detail: $"run A 0x{Hex(value: drivenHash)} vs run B 0x{Hex(value: rerunHash)}");
+        }
+        finally {
+            foreach (var name in new[] { IdleTape, DrivenTape, RerunTape, MidTape, ControlTape, DoctoredTape, CancelTape, JunkTape, TruncatedTape, RetiredTape, OversizedTape }) {
+                ComposedShotKit.TryDelete(path: TapePath(name: name));
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] replay proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // ----- (a) the driven session ------------------------------------------------------------
+
+    static (bool Passed, ulong? DrivenHash) RunSessionA(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", "baked"]);
+        var process = ctx.Process;
+        var passed = true;
+        ulong? drivenHash = null;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return (Passed: false, DrivenHash: null);
+            }
+
+            passed &= PinStage(ctx: ctx);
+
+            var (capturePassed, idleHash, driven) = RunCaptureRounds(ctx: ctx, drivenTape: DrivenTape);
+
+            passed &= capturePassed;
+            drivenHash = driven;
+            // The re-drive really consumes the recorded stream: an idle span and a driven span from the SAME boot
+            // image settle on DIFFERENT tails, so a capture that dropped its input could not have MATCHed above.
+            passed &= ComposedShotKit.Check(name: "driven-tail-differs-from-idle-tail",
+                ok: ((idleHash is { } idle) && (driven is { } moved) && (idle != moved)),
+                detail: $"idle 0x{Hex(value: idleHash)} vs driven 0x{Hex(value: driven)}");
+            passed &= RunMidSessionRound(ctx: ctx, drivenHash: driven);
+            passed &= RunDoctoredRound(ctx: ctx, drivenHash: driven);
+            passed &= RunCorruptRound(ctx: ctx);
+            passed &= RunTapeLifecycleRound(ctx: ctx);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return (Passed: passed, DrivenHash: drivenHash);
+    }
+
+    // ----- (b) the identical second run ------------------------------------------------------
+
+    static (bool Passed, ulong? DrivenHash) RunSessionB(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", "baked"]);
+        var process = ctx.Process;
+        var passed = true;
+        ulong? drivenHash = null;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return (Passed: false, DrivenHash: null);
+            }
+
+            passed &= PinStage(ctx: ctx);
+
+            var (capturePassed, _, driven) = RunCaptureRounds(ctx: ctx, drivenTape: RerunTape);
+
+            passed &= capturePassed;
+            drivenHash = driven;
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "rerun-no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return (Passed: passed, DrivenHash: drivenHash);
+    }
+
+    // PIN the stage before a single hash is read. A boot-anchored capture is only possible while the live world is
+    // still AT its definition boot image, so the census is pinned to 0 (nothing autonomous may move) and seat 1 is
+    // left alone (a dev-machine pad auto-seats extra players, and a seat that joins mid-recording changes the
+    // captured starting state). Both sessions run this identical prefix — the determinism comparison is only a
+    // comparison if the two runs start from the same pinned stage.
+    static bool PinStage(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+        for (var seat = 2; (seat <= 4); seat++) {
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+        }
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0 idle", expect: "[world.population: 0 network-human stand-ins active", name: "pin-population-zero");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.stop 1", expect: "[player.stop:", name: "pin-body-at-rest");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.wait {IdleSpanTicks}", expect: "[world.wait:", name: "pin-settle");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.status", expect: "[replay.status: idle]", name: "tape-starts-idle");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "pin-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // The two boot-anchored captures, in this order: an IDLE span (the boot image driven by nothing) and then a
+    // DRIVEN span (a 1-second forward tape). The idle span leaves the world exactly where it found it, so the second
+    // capture is still boot-anchored — and the two tails must differ.
+    static (bool Passed, ulong? IdleHash, ulong? DrivenHash) RunCaptureRounds(ComposedShotKit.Ctx ctx, string drivenTape) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.record {IdleTape}", expect: $"recording '{IdleTape}'", name: "idle-record-arms");
+
+        ComposedShotKit.Send(ctx: ctx, line: $"world.wait {IdleSpanTicks}");
+
+        // The tape is ACCUMULATING, read off replay.status rather than assumed from the arming echo.
+        var statusLine = SendAwait(ctx: ctx, line: "replay.status", pattern: RecordingStatusEcho);
+        var capturedTicks = ((statusLine is null) ? -1 : int.Parse(s: RecordingStatusEcho.Match(input: statusLine).Groups[2].ValueSpan, provider: ProofApp.Inv));
+
+        passed &= ComposedShotKit.Check(name: "status-counts-captured-ticks", ok: (capturedTicks >= IdleSpanTicks),
+            detail: $"{capturedTicks} tick(s) captured after a {IdleSpanTicks}-tick span");
+
+        var idle = ReadStop(ctx: ctx, name: "idle-capture-is-boot-anchored-match", wantMatch: true);
+
+        passed &= idle.Passed;
+
+        var before = ReadWhereZ(ctx: ctx);
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.record {drivenTape}", expect: $"recording '{drivenTape}'", name: "driven-record-arms");
+
+        ComposedShotKit.Send(ctx: ctx, line: $"world.wait {DriveLeadTicks}");
+        ComposedShotKit.Send(ctx: ctx, line: "player.run 1 0 0 1 1");
+        ComposedShotKit.Send(ctx: ctx, line: $"world.wait {DriveSettleTicks}");
+
+        var after = ReadWhereZ(ctx: ctx);
+
+        // The premise of the whole round: the recorded span actually MOVED the body. Without it the driven tail could
+        // equal the idle tail for an honest reason and the discrimination below would be vacuous.
+        passed &= ComposedShotKit.Check(name: "driven-span-moved-the-body",
+            ok: ((before is { } start) && (after is { } end) && (Math.Abs(value: (end - start)) > DriveDisplacement)),
+            detail: $"z {Fmt(value: before)} -> {Fmt(value: after)} (want > {DriveDisplacement.ToString(format: "0.0", provider: ProofApp.Inv)} u)");
+
+        var driven = ReadStop(ctx: ctx, name: "driven-capture-is-boot-anchored-match", wantMatch: true);
+
+        passed &= driven.Passed;
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "capture-round-refused-nothing", expected: 0);
+
+        return (Passed: passed, IdleHash: idle.Recorded, DrivenHash: driven.Recorded);
+    }
+
+    // THE DOCUMENTED FIDELITY BOUNDARY, asserted rather than papered over: a capture armed after the session has
+    // already moved off its boot image re-drives its stream faithfully but from the boot image, so the verdict is
+    // MISMATCH. Its recorded side must still be the LIVE tail the driven round left behind — the mismatch is the
+    // starting state, not a second re-drive compared against itself.
+    static bool RunMidSessionRound(ComposedShotKit.Ctx ctx, ulong? drivenHash) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.record {MidTape}", expect: $"recording '{MidTape}'", name: "mid-session-record-arms");
+
+        ComposedShotKit.Send(ctx: ctx, line: $"world.wait {MidSpanTicks}");
+
+        var mid = ReadStop(ctx: ctx, name: "mid-session-capture-mismatches", wantMatch: false);
+
+        passed &= mid.Passed;
+        passed &= ComposedShotKit.Check(name: "mid-session-recorded-side-is-the-live-tail",
+            ok: ((mid.Recorded is { } recorded) && (drivenHash is { } driven) && (recorded == driven) && (mid.Replayed is { } replayed) && (replayed != recorded)),
+            detail: $"recorded 0x{Hex(value: mid.Recorded)} (driven tail 0x{Hex(value: drivenHash)}) vs replayed 0x{Hex(value: mid.Replayed)}");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "mid-session-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // THE DISCRIMINATION. One flipped byte in the stored reference hash — byte 8, the little-endian low byte of
+    // RecordedTailHash — must turn MATCH into a loud MISMATCH, beside a byte-for-byte control copy of the same tape
+    // that still MATCHes. Both re-drives recompute the SAME replayed tail, so the only thing separating the two
+    // verdicts is the comparison the verb performs: a verify that stopped comparing passes neither pair.
+    static bool RunDoctoredRound(ComposedShotKit.Ctx ctx, ulong? drivenHash) {
+        var source = TapePath(name: DrivenTape);
+
+        if (!File.Exists(path: source)) {
+            return ComposedShotKit.Check(name: "doctored-round-source-tape", ok: false, detail: $"{source} was never written");
+        }
+
+        var bytes = File.ReadAllBytes(path: source);
+
+        File.WriteAllBytes(path: TapePath(name: ControlTape), bytes: bytes);
+
+        bytes[8] ^= 0xFF;
+
+        File.WriteAllBytes(path: TapePath(name: DoctoredTape), bytes: bytes);
+
+        var control = ReadVerify(ctx: ctx, tape: ControlTape, name: "undoctored-control-verifies-match", wantMatch: true);
+        var doctored = ReadVerify(ctx: ctx, tape: DoctoredTape, name: "doctored-tape-verifies-mismatch", wantMatch: false);
+        var passed = (control.Passed && doctored.Passed);
+
+        passed &= ComposedShotKit.Check(name: "doctored-differs-only-in-the-stored-reference",
+            ok: ((drivenHash is { } driven) && (control.Recorded == driven) && (doctored.Replayed == driven) && (doctored.Recorded == (driven ^ 0xFFUL))),
+            detail: $"control 0x{Hex(value: control.Recorded)} | doctored recorded 0x{Hex(value: doctored.Recorded)} replayed 0x{Hex(value: doctored.Replayed)}");
+        // The doctored verify is the round's ONE deliberate refusal (a MISMATCH marks IsError).
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "doctored-round-refused-only-its-one", expected: 1);
+
+        return passed;
+    }
+
+    // THE HOST MUST SURVIVE. Four structurally broken tapes and one absent name are fed to `replay.verify`: a file
+    // that is not a recording, a two-byte stub, a retired shape (the right magic, a version this build does not
+    // speak), and a well-headed file whose length prefixes are garbage — the shape that used to size an allocation
+    // from a doctored count and take the process down with it. Each must be NAMED and refused, and the session must
+    // still answer afterwards.
+    static bool RunCorruptRound(ComposedShotKit.Ctx ctx) {
+        File.WriteAllBytes(path: TapePath(name: JunkTape), bytes: Encoding.UTF8.GetBytes(s: new string(c: 'x', count: 512)));
+        File.WriteAllBytes(path: TapePath(name: TruncatedTape), bytes: [0x50, 0x4B]);
+        File.WriteAllBytes(path: TapePath(name: RetiredTape), bytes: [.. Header(version: 0u), .. new byte[64]]);
+        File.WriteAllBytes(path: TapePath(name: OversizedTape), bytes: [.. Header(version: 1u), .. Enumerable.Repeat(element: (byte)0xFF, count: 80)]);
+
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.verify {JunkTape}", expect: $"[replay.verify: '{JunkTape}' is unreadable/corrupt", name: "not-a-recording-is-refused");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.verify {TruncatedTape}", expect: $"[replay.verify: '{TruncatedTape}' is unreadable/corrupt", name: "truncated-tape-is-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.verify {RetiredTape}", expect: $"[replay.verify: '{RetiredTape}' is unreadable/corrupt", name: "retired-shape-is-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.verify {OversizedTape}", expect: $"[replay.verify: '{OversizedTape}' is unreadable/corrupt", name: "doctored-length-prefix-is-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.verify nosuchtapehere", expect: "no replay named 'nosuchtapehere'", name: "absent-tape-is-refused");
+        // LIVENESS, not narration: two further reads must come back. A host taken down by one of the four tapes above
+        // answers nothing here, and the deadline turns the crash into a failing check instead of a silent green run.
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.status", expect: "[replay.status: idle]", name: "host-survives-broken-tapes");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "schema puck.world.def.v1", name: "world-still-answers-after-broken-tapes");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "corrupt-round-refused-only-its-five", expected: 5);
+
+        return passed;
+    }
+
+    // The tape lifecycle read off `replay.list` (state), not off the verbs' own echoes: a cancelled recording leaves
+    // NOTHING behind, and the three persisted tapes are all listed. Plus the three misuse refusals — a second
+    // record while one is running, a stop with nothing running, and a name that would escape the Replays directory.
+    static bool RunTapeLifecycleRound(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.record {CancelTape}", expect: $"recording '{CancelTape}'", name: "cancel-round-arms");
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 60");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"replay.record {IdleTape}", expect: "[replay.record: busy", name: "second-record-while-recording-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.cancel", expect: $"dropped '{CancelTape}'", name: "cancel-drops-the-recording");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.stop", expect: "[replay.stop: not recording]", name: "stop-while-idle-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "replay.verify ../escape", expect: "[replay.verify: name must be non-empty", name: "path-escaping-name-refused");
+
+        var listing = SendAwait(ctx: ctx, line: "replay.list", pattern: new Regex(pattern: @"\[replay\.list: ", options: RegexOptions.Compiled));
+
+        passed &= ComposedShotKit.Check(name: "list-holds-the-persisted-tapes-and-not-the-cancelled-one",
+            ok: ((listing is not null) && listing.Contains(value: IdleTape) && listing.Contains(value: DrivenTape) && listing.Contains(value: MidTape) && !listing.Contains(value: CancelTape)),
+            detail: (listing?.Trim() ?? "(no '[replay.list: …]' echo)"));
+        passed &= ComposedShotKit.Check(name: "cancelled-tape-wrote-no-file", ok: !File.Exists(path: TapePath(name: CancelTape)),
+            detail: TapePath(name: CancelTape));
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "lifecycle-round-refused-only-its-three", expected: 3);
+
+        return passed;
+    }
+
+    // ----- reads -----------------------------------------------------------------------------
+
+    static (bool Passed, ulong? Recorded, ulong? Replayed) ReadStop(ComposedShotKit.Ctx ctx, string name, bool wantMatch) {
+        var line = SendAwait(ctx: ctx, line: "replay.stop", pattern: StopEcho, deadlineSeconds: 60.0);
+
+        if (line is null) {
+            return (Passed: ComposedShotKit.Check(name: name, ok: false, detail: "(no '[replay.stop: …]' echo)"), Recorded: null, Replayed: null);
+        }
+
+        var match = StopEcho.Match(input: line);
+        var verdict = match.Groups[3].Value;
+        var recorded = ulong.Parse(s: match.Groups[4].ValueSpan, style: NumberStyles.HexNumber, provider: ProofApp.Inv);
+        var replayed = (match.Groups[5].Success ? ulong.Parse(s: match.Groups[5].ValueSpan, style: NumberStyles.HexNumber, provider: ProofApp.Inv) : recorded);
+        var ok = (verdict == (wantMatch ? "MATCH" : "MISMATCH"));
+
+        return (Passed: ComposedShotKit.Check(name: name, ok: ok, detail: $"{match.Groups[2].Value} ticks | {verdict} recorded 0x{recorded:X16} replayed 0x{replayed:X16}"), Recorded: recorded, Replayed: replayed);
+    }
+
+    static (bool Passed, ulong? Recorded, ulong? Replayed) ReadVerify(ComposedShotKit.Ctx ctx, string tape, string name, bool wantMatch) {
+        var pattern = (wantMatch ? VerifyMatchEcho : VerifyMismatchEcho);
+        var line = SendAwait(ctx: ctx, line: $"replay.verify {tape}", pattern: pattern, deadlineSeconds: 60.0);
+
+        if (line is null) {
+            return (Passed: ComposedShotKit.Check(name: name, ok: false, detail: $"(no '[replay.verify: {(wantMatch ? "MATCH" : "MISMATCH")} '{tape}' …]' echo)"), Recorded: null, Replayed: null);
+        }
+
+        var match = pattern.Match(input: line);
+        var recorded = ulong.Parse(s: match.Groups[3].ValueSpan, style: NumberStyles.HexNumber, provider: ProofApp.Inv);
+        var replayed = (wantMatch ? recorded : ulong.Parse(s: match.Groups[4].ValueSpan, style: NumberStyles.HexNumber, provider: ProofApp.Inv));
+
+        return (Passed: ComposedShotKit.Check(name: name, ok: true, detail: line.Trim()), Recorded: recorded, Replayed: replayed);
+    }
+
+    static double? ReadWhereZ(ComposedShotKit.Ctx ctx) {
+        var line = SendAwait(ctx: ctx, line: "player.where 1", pattern: ProofApp.WhereEcho);
+
+        return ((line is null) ? null : double.Parse(s: ProofApp.WhereEcho.Match(input: line).Groups[4].ValueSpan, provider: ProofApp.Inv));
+    }
+
+    static string? SendAwait(ComposedShotKit.Ctx ctx, string line, Regex pattern, double deadlineSeconds = 20.0) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => pattern.IsMatch(input: candidate), deadlineSeconds: deadlineSeconds);
+    }
+
+    // ----- the store -------------------------------------------------------------------------
+
+    // WorldReplayTape.Directory()'s twin — there is no CLI override for the replay store, so the proof resolves the
+    // same real path the host writes to and cleans up exactly the names it owns.
+    static string TapePath(string name) {
+        var directory = Path.Combine(path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), path2: "Puck", path3: "World", path4: "Replays");
+
+        return Path.Combine(path1: directory, path2: (name + ".puckreplay"));
+    }
+
+    // The .puckreplay header: the "PKRP" magic plus a version word.
+    static byte[] Header(uint version) {
+        var header = new byte[8];
+
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: header.AsSpan(start: 0, length: 4), value: 0x504B_5250u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: header.AsSpan(start: 4, length: 4), value: version);
+
+        return header;
+    }
+
+    static string Hex(ulong? value) {
+        return ((value is { } resolved) ? resolved.ToString(format: "X16", provider: ProofApp.Inv) : "????????????????");
+    }
+
+    static string Fmt(double? value) {
+        return ((value is { } resolved) ? resolved.ToString(format: "0.00", provider: ProofApp.Inv) : "(?)");
+    }
+}
+
+// ============================================================================================
+// SCREEN-SOURCES — the rest of the `screen.*` family: the source-binding verbs (capture,
+// desktop, camera), the magazine selector, the live device swap, and the cable-link group.
+// `ScreensProof` covers insert/eject/peek/state around one booted cartridge; this suite covers
+// what that one leaves untouched, and every claim is read back off STATE — an ejectable slot,
+// the selector `screen.state` reports, the bound/unbound flag the selected source actually
+// moves, the machine's own options read-back, the emulated counter still advancing across a
+// device swap, and the link membership `screen.state` carries.
+// ============================================================================================
+static class ScreenSourcesProof {
+    static readonly Regex StateEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.state: (\d+) (.+?)\]");
+    static readonly Regex PeekEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.peek: (\d+) 0x([0-9A-Fa-f]+)=0x([0-9A-Fa-f]+)\]");
+    static readonly Regex OptionsEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.options: (\d+) '([^']*)'\]");
+    static readonly Regex DirtyEcho = new(options: RegexOptions.Compiled, pattern: @"dirty (\d+) ");
+
+    // The joypad-echo ROM's liveness counter (ScreensProof's cartridge, reused — the proof owns its own content; no
+    // cartridge ships with the world).
+    const int CounterAddr = 0xC001;
+    // The screens the baked default declares: 0 a view (the machine bay), 1 a window capture, 2 the jumbotron view,
+    // 3 the webcam, 4 the unconfigured native AGB.
+    const int BayScreen = 0;
+    const int CaptureScreen = 1;
+    const int CameraScreen = 3;
+    const int MagazineEntries = 3;
+
+    // Screen 0's row, re-authored with a three-entry magazine: a bound view, a second bound view, and `none` (the
+    // engine's procedural no-signal fallback — the entry whose selection is visible as an UNBOUND slot).
+    // Screen 0's row, re-authored with a three-entry magazine whose middle entry is a CARTRIDGE: selecting it must
+    // boot a real machine onto the slot (a state read no echo can fake), and selecting past it must clear it again.
+    static string MagazineRow(string romPath) {
+        var escaped = romPath.Replace(oldValue: "\\", newValue: "\\\\", comparisonType: StringComparison.Ordinal);
+
+        return "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08," +
+            "\"source\":{\"$type\":\"view\",\"cameraName\":\"overhead\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}," +
+            "\"magazine\":{\"entries\":[{\"$type\":\"view\",\"cameraName\":\"overhead\"}," +
+            $"{{\"$type\":\"machine\",\"engine\":\"gaming-brick\",\"contentPath\":\"{escaped}\",\"options\":\"dmg\"}}," +
+            "{\"$type\":\"none\"}],\"selected\":0,\"wrap\":true}}";
+    }
+    const string ConsoleOnCamera = "world.screen.set {\"index\":3,\"origin\":[-4.4,3.6,-6.5],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.6,\"halfHeight\":1.2,\"halfDepth\":0.14,\"round\":0.1,\"source\":{\"$type\":\"console\",\"rows\":24,\"columns\":64,\"procedural\":false},\"route\":{\"engageable\":false,\"engageRadius\":0}}";
+    const string ConsoleOnCapture = "world.screen.set {\"index\":1,\"origin\":[3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"console\",\"rows\":24,\"columns\":64,\"procedural\":false},\"route\":{\"engageable\":false,\"engageRadius\":0}}";
+
+    public static int RunScreenSources(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 300, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        var romPath = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-screen-sources-{Environment.ProcessId}.gb");
+
+        File.WriteAllBytes(bytes: ScreensProof.BuildJoypadEchoRom(), path: romPath);
+        Console.WriteLine(value: $"[proof] joypad-echo ROM written: {romPath}");
+
+        bool passed;
+
+        try {
+            passed = RunSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, romPath: romPath);
+        }
+        finally {
+            ComposedShotKit.TryDelete(path: romPath);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] screen-sources proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string romPath) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", "baked"]);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= PinStage(ctx: ctx);
+            passed &= RunSourceRound(ctx: ctx);
+            passed &= RunMagazineRound(ctx: ctx, romPath: romPath);
+            passed &= RunConsoleCeilingRound(ctx: ctx);
+            passed &= RunDeviceSwapRound(ctx: ctx, romPath: romPath);
+            passed &= RunLinkRound(ctx: ctx, romPath: romPath);
+            passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "no-silent-rejections", expected: 0);
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // PIN the stage: seat 1 alone (a dev-machine pad auto-seats extra players and an engaged seat shows up in
+    // screen.state) and an empty census (nothing autonomous behind the slabs). Nothing below reads a boot value.
+    static bool PinStage(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+        for (var seat = 2; (seat <= 4); seat++) {
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+        }
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0 idle", expect: "[world.population: 0 network-human stand-ins active", name: "pin-population-zero");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "screen.links", expect: "[screen.links: none]", name: "pin-no-links");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "pin-round-refused-nothing", expected: 0);
+
+        return passed;
+    }
+
+    // SOURCE BINDING, measured on the slot rather than on the setter's own echo: `screen.eject` refuses a slot with no
+    // live producer and succeeds on one that has it, so a bind that stopped binding is caught by the eject that
+    // follows it — the verbs' success lines cannot cover for each other.
+    static bool RunSourceRound(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.eject {BayScreen}", expect: $"[screen.eject: screen {BayScreen} has no source to eject]", name: "declared-view-is-not-a-live-producer");
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.desktop {BayScreen} 0", expect: $"screen {BayScreen} capturing monitor 0", name: "desktop-binds-the-primary-monitor");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.eject {BayScreen}", expect: $"[screen.eject: screen {BayScreen} ejected]", name: "desktop-capture-was-live-and-ejects");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.capture {BayScreen} Puck: World", expect: $"screen {BayScreen} capturing 'Puck: World'", name: "capture-binds-a-window-title-with-spaces");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.eject {BayScreen}", expect: $"[screen.eject: screen {BayScreen} ejected]", name: "window-capture-was-live-and-ejects");
+
+        // The webcam is the one source kind the environment can withhold. The verb is driven either way and its
+        // outcome is NAMED: a bind must then be ejectable (the same state read as above), and a machine with no camera
+        // must produce the loud device fault. The settle count follows the branch actually taken — never a count that
+        // absorbs both.
+        var cameraLine = SendAwait(ctx: ctx, line: $"screen.camera {CameraScreen}", pattern: new Regex(pattern: @"\[screen\.camera: ", options: RegexOptions.Compiled));
+        var cameraBound = ((cameraLine is not null) && cameraLine.Contains(value: "showing the webcam"));
+
+        passed &= ComposedShotKit.Check(name: "camera-binds-or-names-its-device-fault", ok: (cameraLine is not null), detail: (cameraLine?.Trim() ?? "(no '[screen.camera: …]' echo)"));
+
+        if (cameraBound) {
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.eject {CameraScreen}", expect: $"[screen.eject: screen {CameraScreen} ejected]", name: "webcam-feed-was-live-and-ejects");
+        } else {
+            Console.WriteLine(value: "[proof]   note: no camera device on this machine — the webcam bind is reported, not asserted.");
+        }
+
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "source-round-refused-only-its-own", expected: (cameraBound ? 1 : 2));
+
+        return passed;
+    }
+
+    // THE MAGAZINE: authored as data (a whole-row `world.screen.set` carries it), then driven. The selector's movement
+    // is read off `screen.state`'s entry=N/M — and the SELECTED SOURCE IS APPLIED, witnessed by the slot's bound flag
+    // dropping to unbound on the `none` entry and coming back on the wrapped-to view. A selector that moved a pointer
+    // and applied nothing passes the entry read and fails the bound read.
+    static bool RunMagazineRound(ComposedShotKit.Ctx ctx, string romPath) {
+        var dirtyBefore = ReadDirty(ctx: ctx);
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: MagazineRow(romPath: romPath), expect: "[world.mutation: UpsertScreen", name: "magazine-row-applies");
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 60");
+
+        var dirtyAfter = ReadDirty(ctx: ctx);
+
+        passed &= ComposedShotKit.Check(name: "magazine-row-is-exactly-one-journal-entry",
+            ok: ((dirtyBefore is { } before) && (dirtyAfter is { } after) && (after == (before + 1))),
+            detail: $"dirty {Fmt(value: dirtyBefore)} -> {Fmt(value: dirtyAfter)}");
+        passed &= CheckState(ctx: ctx, name: "magazine-selector-starts-at-entry-zero", index: BayScreen, want: $"entry=0/{MagazineEntries}");
+        passed &= CheckState(ctx: ctx, name: "magazine-screen-starts-machineless", index: BayScreen, want: "empty");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen}", expect: $"entry 0/{MagazineEntries} (unchanged)", name: "bare-select-echoes-without-moving");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} next", expect: $"{BayScreen} entry 1/{MagazineEntries}", name: "select-next-applies-the-cartridge-entry");
+        passed &= CheckState(ctx: ctx, name: "selector-moved-to-entry-one", index: BayScreen, want: $"entry=1/{MagazineEntries}");
+
+        // THE SELECTED SOURCE IS REALLY APPLIED, not merely pointed at: the cartridge entry BOOTS A MACHINE onto the
+        // slot (screen.state flips empty -> assigned, bound, stepping frames) and moving past it clears the machine
+        // again. A selector that moved its pointer and applied nothing never reaches either state.
+        passed &= PollState(ctx: ctx, name: "cartridge-entry-boots-a-machine", index: BayScreen,
+            predicate: body => (body.Contains(value: "assigned gaming-brick") && body.Contains(value: "bound")));
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} next", expect: $"{BayScreen} entry 2/{MagazineEntries}", name: "select-next-applies-the-none-entry");
+        passed &= PollState(ctx: ctx, name: "none-entry-clears-the-machine", index: BayScreen,
+            predicate: body => (body.Contains(value: "empty") && body.Contains(value: $"entry=2/{MagazineEntries}")));
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} next", expect: "showing camera 'overhead'", name: "select-next-wraps-past-the-last-entry");
+        passed &= CheckState(ctx: ctx, name: "wrapped-selector-is-back-at-entry-zero", index: BayScreen, want: $"entry=0/{MagazineEntries}");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} prev", expect: $"{BayScreen} entry 2/{MagazineEntries}", name: "select-prev-wraps-backwards");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} 0", expect: "showing camera 'overhead'", name: "select-takes-an-absolute-entry");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {BayScreen} 7", expect: $"[screen.select: entry 7 is outside 0..{(MagazineEntries - 1)}]", name: "out-of-range-entry-refused");
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 60");
+
+        passed &= CheckState(ctx: ctx, name: "refused-entry-left-the-selector-alone", index: BayScreen, want: $"entry=0/{MagazineEntries}");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.select {CaptureScreen} next", expect: $"[screen.select: screen {CaptureScreen} has no magazine]", name: "magazineless-screen-refused");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "magazine-round-refused-only-its-two", expected: 2);
+
+        return passed;
+    }
+
+    // THE ONE-LIVE-CONSOLE CEILING: the console feed owns a single upload surface, so a SECOND declared console source
+    // is a validator error naming both indices — and the document must be left exactly as it was.
+    static bool RunConsoleCeilingRound(ComposedShotKit.Ctx ctx) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: ConsoleOnCamera, expect: "[world.mutation: UpsertScreen", name: "first-console-source-accepted");
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 60");
+
+        var dirtyBefore = ReadDirty(ctx: ctx);
+
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: ConsoleOnCapture, expect: "at most one screen may declare a console source, but screens 1 and 3 both do", name: "second-console-source-rejected-naming-both");
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.wait 60");
+
+        var dirtyAfter = ReadDirty(ctx: ctx);
+
+        passed &= ComposedShotKit.Check(name: "rejected-console-row-left-the-journal-alone",
+            ok: ((dirtyBefore is { } before) && (dirtyAfter is { } after) && (after == before)),
+            detail: $"dirty {Fmt(value: dirtyBefore)} -> {Fmt(value: dirtyAfter)}");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "console-ceiling-round-refused-only-its-one", expected: 1);
+
+        return passed;
+    }
+
+    // THE LIVE DEVICE SWAP — `screen.options` retargets a RUNNING machine across the engine's dmg|cgb|agb vocabulary
+    // with no reboot. Proven on the machine's own state, not on the swap's echo: the options read-back reports the new
+    // model, and the cartridge's work-RAM liveness counter keeps ADVANCING across each swap (a swap that killed or
+    // re-booted the machine freezes it). A rejected options string must leave the running model untouched.
+    static bool RunDeviceSwapRound(ComposedShotKit.Ctx ctx, string romPath) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.insert {BayScreen} {romPath} gaming-brick", expect: "booted", name: "cartridge-boots-on-the-bay-screen", deadlineSeconds: 30.0);
+
+        passed &= PollState(ctx: ctx, name: "machine-is-assigned-and-bound", index: BayScreen, predicate: body => (body.Contains(value: "assigned") && body.Contains(value: "bound")));
+        passed &= CheckOptions(ctx: ctx, name: "machine-boots-on-dmg", want: "dmg");
+        passed &= CheckCounterAdvances(ctx: ctx, name: "counter-advances-before-any-swap");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.options {BayScreen} cgb", expect: "'dmg' -> 'cgb' reconfigured", name: "dmg-to-cgb-swap-applies");
+        passed &= CheckOptions(ctx: ctx, name: "machine-reads-back-cgb", want: "cgb");
+        passed &= CheckCounterAdvances(ctx: ctx, name: "counter-advances-across-the-cgb-swap");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.options {BayScreen} agb", expect: "'cgb' -> 'agb' reconfigured", name: "cgb-to-agb-swap-applies");
+        passed &= CheckOptions(ctx: ctx, name: "machine-reads-back-agb", want: "agb");
+        passed &= CheckCounterAdvances(ctx: ctx, name: "counter-advances-across-the-agb-swap");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.options {BayScreen} kinescope", expect: "unknown gaming-brick option 'kinescope'", name: "unknown-model-token-refused");
+        passed &= CheckOptions(ctx: ctx, name: "refused-swap-left-the-machine-on-agb", want: "agb");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.options {CaptureScreen}", expect: $"screen {CaptureScreen} has no reconfigurable machine", name: "machineless-screen-has-no-options");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "device-swap-round-refused-only-its-two", expected: 2);
+
+        return passed;
+    }
+
+    // THE CABLE GROUP. Today's honest ceiling is pinned by name: the queued gaming-brick host has no live-link path, so
+    // a group over two RUNNING machines is recorded DORMANT with that exact reason. Membership is still real — both
+    // members carry link=<name> in screen.state — and unlink severs it. The dormant reason is asserted verbatim on
+    // purpose: the day live linking lands, this check fails and demands the live half be proven here.
+    static bool RunLinkRound(ComposedShotKit.Ctx ctx, string romPath) {
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.insert {CaptureScreen} {romPath} gaming-brick", expect: "booted", name: "second-cartridge-boots", deadlineSeconds: 30.0);
+
+        passed &= PollState(ctx: ctx, name: "second-machine-is-assigned", index: CaptureScreen, predicate: body => body.Contains(value: "assigned"));
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.link pair {BayScreen} {CaptureScreen}",
+            expect: "pair 0+1 dormant (live cable linking of running gaming-brick machines is not yet wired for the queued host)", name: "link-over-two-machines-is-recorded-dormant");
+        passed &= CheckState(ctx: ctx, name: "first-member-carries-the-link", index: BayScreen, want: "link=pair");
+        passed &= CheckState(ctx: ctx, name: "second-member-carries-the-link", index: CaptureScreen, want: "link=pair");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "screen.links", expect: "pair 0+1 dormant", name: "links-query-lists-the-group");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.link other {CaptureScreen} {CameraScreen}", expect: $"screen {CaptureScreen} is already in link 'pair'", name: "member-cannot-join-a-second-link");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.link twice {CameraScreen} {CameraScreen}", expect: $"screen {CameraScreen} is named twice in link 'twice'", name: "duplicate-member-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.link solo {BayScreen}", expect: "[screen.link: expected <name> <index> <index>", name: "one-member-link-refused");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "screen.unlink pair", expect: "link 'pair' severed", name: "unlink-severs-the-group");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "screen.links", expect: "[screen.links: none]", name: "severed-group-leaves-no-link");
+        passed &= CheckStateLacks(ctx: ctx, name: "severed-member-drops-its-link", index: BayScreen, unwanted: "link=");
+        passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "screen.unlink pair", expect: "[screen.unlink: no link 'pair']", name: "unlink-of-an-absent-group-refused");
+        passed &= ComposedShotKit.SettleWireErrors(ctx: ctx, name: "link-round-refused-only-its-four", expected: 4);
+
+        return passed;
+    }
+
+    // ----- reads -----------------------------------------------------------------------------
+
+    static bool CheckState(ComposedShotKit.Ctx ctx, string name, int index, string want) {
+        var line = SendAwait(ctx: ctx, line: $"screen.state {index}", pattern: StateEcho);
+
+        return ComposedShotKit.Check(name: name, ok: ((line is not null) && line.Contains(value: want)), detail: $"{(line?.Trim() ?? "(no '[screen.state: …]' echo)")} — want '{want}'");
+    }
+
+    static bool CheckStateLacks(ComposedShotKit.Ctx ctx, string name, int index, string unwanted) {
+        var line = SendAwait(ctx: ctx, line: $"screen.state {index}", pattern: StateEcho);
+
+        return ComposedShotKit.Check(name: name, ok: ((line is not null) && !line.Contains(value: unwanted)), detail: $"{(line?.Trim() ?? "(no '[screen.state: …]' echo)")} — want no '{unwanted}'");
+    }
+
+    static bool PollState(ComposedShotKit.Ctx ctx, string name, int index, Func<string, bool> predicate) {
+        string? last = null;
+
+        for (var attempt = 0; (attempt < 30); attempt++) {
+            last = SendAwait(ctx: ctx, line: $"screen.state {index}", pattern: StateEcho, deadlineSeconds: 5.0);
+
+            if ((last is not null) && predicate(arg: StateEcho.Match(input: last).Groups[2].Value)) {
+                return ComposedShotKit.Check(name: name, ok: true, detail: last.Trim());
+            }
+
+            Thread.Sleep(millisecondsTimeout: 200);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: (last?.Trim() ?? "(no '[screen.state: …]' echo)"));
+    }
+
+    static bool CheckOptions(ComposedShotKit.Ctx ctx, string name, string want) {
+        var line = SendAwait(ctx: ctx, line: $"screen.options {BayScreen}", pattern: OptionsEcho);
+        var actual = ((line is null) ? null : OptionsEcho.Match(input: line).Groups[2].Value);
+
+        return ComposedShotKit.Check(name: name, ok: (actual == want), detail: $"machine reads '{actual ?? "?"}' (want '{want}')");
+    }
+
+    // LIVENESS on the emulated machine itself: the cartridge bumps a work-RAM counter every loop, so a value that
+    // moves proves the machine is still stepping. A frozen counter is what a device swap that dropped the machine
+    // looks like.
+    static bool CheckCounterAdvances(ComposedShotKit.Ctx ctx, string name) {
+        var first = ReadPeek(ctx: ctx);
+
+        for (var attempt = 0; (attempt < 40); attempt++) {
+            var next = ReadPeek(ctx: ctx);
+
+            if ((first is { } start) && (next is { } now) && (now != start)) {
+                return ComposedShotKit.Check(name: name, ok: true, detail: $"0x{CounterAddr:X4} {start:X2} -> {now:X2}");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: $"0x{CounterAddr:X4} held at {((first is { } held) ? held.ToString(format: "X2", provider: ProofApp.Inv) : "?")} — the machine is not stepping");
+    }
+
+    static int? ReadPeek(ComposedShotKit.Ctx ctx) {
+        var line = SendAwait(ctx: ctx, line: $"screen.peek {BayScreen} 0x{CounterAddr:X4}", pattern: PeekEcho, deadlineSeconds: 5.0);
+
+        return ((line is null) ? null : int.Parse(s: PeekEcho.Match(input: line).Groups[3].ValueSpan, style: NumberStyles.HexNumber, provider: ProofApp.Inv));
+    }
+
+    static int? ReadDirty(ComposedShotKit.Ctx ctx) {
+        var line = SendAwait(ctx: ctx, line: "world.status", pattern: DirtyEcho);
+
+        return ((line is null) ? null : int.Parse(s: DirtyEcho.Match(input: line).Groups[1].ValueSpan, provider: ProofApp.Inv));
+    }
+
+    static string? SendAwait(ComposedShotKit.Ctx ctx, string line, Regex pattern, double deadlineSeconds = 20.0) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => pattern.IsMatch(input: candidate), deadlineSeconds: deadlineSeconds);
+    }
+
+    static string Fmt(int? value) {
+        return ((value is { } resolved) ? resolved.ToString(provider: ProofApp.Inv) : "(?)");
     }
 }

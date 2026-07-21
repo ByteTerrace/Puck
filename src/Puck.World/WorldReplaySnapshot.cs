@@ -208,14 +208,14 @@ internal sealed class WorldReplaySnapshot {
         }
 
         var recordedTailHash = reader.ReadUInt64();
-        var definitionLength = reader.ReadInt32();
+        var definitionLength = ReadCount(reader: reader, minimumBytesEach: 1, what: "definition");
         var definitionJson = reader.ReadBytes(count: definitionLength);
 
         if (definitionJson.Length != definitionLength) {
             throw new InvalidDataException(message: "Truncated .puckreplay recording (definition).");
         }
 
-        var seatCount = reader.ReadInt32();
+        var seatCount = ReadCount(reader: reader, minimumBytesEach: 5, what: "seat");
         var seats = new List<WorldReplaySeat>(capacity: seatCount);
 
         for (var index = 0; (index < seatCount); index++) {
@@ -225,18 +225,18 @@ internal sealed class WorldReplaySnapshot {
             seats.Add(item: new WorldReplaySeat(Slot: slot, ProfileName: profileName));
         }
 
-        var tickCount = reader.ReadInt32();
+        var tickCount = ReadCount(reader: reader, minimumBytesEach: 8, what: "tick");
         var ticks = new List<WorldReplayTickInput>(capacity: tickCount);
 
         for (var index = 0; (index < tickCount); index++) {
-            var commandCount = reader.ReadInt32();
+            var commandCount = ReadCount(reader: reader, minimumBytesEach: 11, what: "command");
             var commands = new List<WorldCommand>(capacity: commandCount);
 
             for (var command = 0; (command < commandCount); command++) {
                 commands.Add(item: ReadCommand(reader: reader));
             }
 
-            var intentCount = reader.ReadInt32();
+            var intentCount = ReadCount(reader: reader, minimumBytesEach: 60, what: "intent");
             var intents = new List<IntentSubmission>(capacity: intentCount);
 
             for (var intent = 0; (intent < intentCount); intent++) {
@@ -252,6 +252,27 @@ internal sealed class WorldReplaySnapshot {
             Seats = seats,
             Ticks = ticks,
         };
+    }
+
+    // Every length prefix in a tape is UNTRUSTED — a doctored or truncated file reaches this reader through
+    // `replay.verify <name>`, so a count is validated against the bytes actually left in the stream BEFORE it sizes an
+    // allocation. Without it a negative count throws ArgumentOutOfRangeException and an absurd one throws
+    // OutOfMemoryException, neither of which the verb's catch list covers: the tape kills the host instead of being
+    // named and refused.
+    private static int ReadCount(BinaryReader reader, int minimumBytesEach, string what) {
+        var count = reader.ReadInt32();
+
+        if (count < 0) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay recording ({what} count {count} is negative).");
+        }
+
+        var stream = reader.BaseStream;
+
+        if (stream.CanSeek && (((long)count * minimumBytesEach) > (stream.Length - stream.Position))) {
+            throw new InvalidDataException(message: $"Truncated .puckreplay recording ({what} count {count} exceeds the bytes remaining).");
+        }
+
+        return count;
     }
 
     private static void WriteIntent(BinaryWriter writer, in IntentSubmission submission) {

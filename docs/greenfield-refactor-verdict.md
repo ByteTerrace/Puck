@@ -1,9 +1,10 @@
 # Greenfield standard — the open register
 
-**The codebase does not meet the greenfield standard: version drift and read-side tolerance
-are clean, every subcommand passes, and the newest features now have checks that were PROVED
-to fail when broken — but a zero-consumer 71 704-LOC `src/Puck.Demo` fork still ships and
-most of the verification surface still cannot fail when the product breaks.**
+**The codebase does not meet the greenfield standard: all twenty-one driving subcommands pass
+on a confirmed Release build and the newest `replay`/`screen-sources` checks were
+independently re-falsified — but `run --headless` misses its 60 FPS floor, a zero-consumer
+71 704-LOC `src/Puck.Demo` fork still ships, and most of the verification surface still cannot
+fail when the product breaks.**
 
 Two structural items stand between the codebase and the standard:
 
@@ -11,11 +12,13 @@ Two structural items stand between the codebase and the standard:
    work, blocked behind Arcs 8–11. Not residue — do not delete ahead of those arcs.
 2. **A verification surface that mostly does not discriminate.** Every driven proof session
    now settles `wire.errors` against its own deliberate refusals, but whole landed verb
-   families (`replay.*`, `screen.*`, `world.view.*`, the whole-row `.set` upserts, 36 of 55
+   families (`world.view.*`, the twelve whole-row `.set`/`load` mutation verbs, 36 of 55
    `editor.sculpt.*`) still have zero scripted call sites.
 
-**Do first:** V-1 and V-6 (the `replay.*` and `screen.*` families) — the largest remaining
-blind spots.
+**Do first:** V-10 and V-14 — twelve mutation verbs (including `world.load`, the read
+counterpart of the heavily-proven `world.save`) and eight `player.*` verbs, each re-confirmed
+at zero call sites on this build; then V-11, the one landed check that still passes against a
+stalled encoder.
 
 This document is a live register of what is **owed**. Closed work does not belong in it —
 closure lives in `git log`. Every entry is anchored to `file:line` and is re-checkable by
@@ -85,6 +88,21 @@ Two rules follow from the sharpest of those breaks, and they are the standard fo
   including `host-process-alive`. A malformed-input suite that never asserts host liveness at
   the wire afterwards cannot tell a refusal from a crash.
 
+Three further breaks were taken against the newest suites by a reviewer who did not write
+them, each a single line in product code, each rebuilt to a confirmed `Build succeeded`, run,
+and restored (`git status` clean afterwards):
+
+- `WorldReplayTape.Verify`'s comparison forced to `Match: true` → `doctored-tape-verifies-mismatch`,
+  `doctored-differs-only-in-the-stored-reference`, and the round's `expected: 1` settle all red.
+- `WorldScreenBinder.TrySelect`'s `ApplySource` call replaced by a fabricated success message
+  → **only** `cartridge-entry-boots-a-machine` red. `select-next-applies-the-cartridge-entry`,
+  `selector-moved-to-entry-one`, `none-entry-clears-the-machine`, and
+  `select-next-wraps-past-the-last-entry` all still PASSED against a selector that applied
+  nothing. The echo checks are not the coverage; the `screen.state` read-back is.
+- `WorldDefinitionValidator`'s one-live-console ceiling widened past reach →
+  `second-console-source-rejected-naming-both`, `rejected-console-row-left-the-journal-alone`
+  (`dirty 2 -> 3`), and the round's `expected: 1` settle all red.
+
 The reference implementations for new checks are `CollisionProof` (every claim on a pose or a
 counter, per-round `SettleWireErrors` with exact expected counts, terminal `expected: 0`) and
 `GrantsProof` (pose deltas against `MovedEpsilon`/`FrozenEpsilon` with an ambient-drift null
@@ -96,7 +114,14 @@ refusal), and a deferred rejection raised a tick after the line was accepted. Re
 transcript for the registry's `[wire.reject:` sigil sees only the first two, so no check may
 derive the count that way. Every driven session settles it per round against an exact expected
 count and ends at `expected: 0`; `ProofApp.Guarded` now fails any driven session that ended
-without settling, so a new suite cannot quietly skip the obligation.
+without settling, so a new suite cannot quietly skip the obligation. Verified end to end:
+injecting `world.kit.default nosuchkit` into `MutateProof`'s round turned the suite red at
+both settles (`1 rejected, want 0`, then `2 rejected, want 1`) **and** at the `Guarded`
+ledger — while the transcript carried **zero** `[wire.reject:` lines and no visible refusal
+echo at all. The count is read from `CommandRegistry.ApplyWireErrors`, which reports
+`m_rejections` — incremented in `Submit` over every `IsError` result, in
+`ApplySubmittedSimulation` for the snapshot-routed path, and in `NoteDeferredRejection` for a
+host's late refusal. Nothing is derived from the log.
 
 ---
 
@@ -104,7 +129,14 @@ without settling, so a new suite cannot quietly skip the obligation.
 
 ## Failing now
 
-Nothing. All nineteen driving subcommands pass on a confirmed Release build.
+All twenty-one driving subcommands (`screens` … `wire`) pass on a confirmed Release build.
+`proof.cs -- run --headless` does not: the expo corpus closes at `avg=72.3 worst=48.0`
+against its `--min-fps 60` floor, and pass 1's `finale` sweep lands 66/75 entities inside the
+±0.12 u / ±1° tableau band. Neither is a coverage hole — the FPS assertion is the register's
+only live performance gate and it is doing its job. **Owed:** decide whether the floor or the
+world is wrong (`docs/reviews/2026-07-16-sdf-renderer-sota-perf-plan.md` owns the render side), and
+whether the nine-entity tableau drift is band width or a real reconcile miss. Re-measure
+before planning against it.
 
 ## Structural — Arc 12's scheduled work, blocked behind Arcs 8–11
 
@@ -117,15 +149,14 @@ Nothing. All nineteen driving subcommands pass on a confirmed Release build.
 
 | # | Size | Where | What is wrong / what closes it |
 |---|---|---|---|
-| V-1 | L | `WorldReplayCommandModule.cs:23,28,33,38,43,48`, wired `Program.cs:446` | All six `replay.*` verbs have **zero** call sites. The only evidence they work is four hand-run results recorded under **"Deterministic replay — ruling R-A"** in `docs/demo-to-world-port-plan.md` — no scripted check re-runs them. Determinism is a core product claim; a regression in tape capture, boot-image rehydration, or tail-hash comparison ships silently. **Close:** a new `replay` subcommand with a doctored-tape negative control. |
-| V-6 | L | `ScreenCommandModule.cs:51,56,61,66,76,81,86,91,96` | Nine `screen.*` verbs with zero call sites, including `screen.options` (the live dmg↔cgb↔agb device swap — a headline capability) and the whole `screen.link`/`unlink`/`links` cable group. `ScreensProof` covers only `insert`/`eject`/`peek`/`state`. |
 | V-5 | M | `proof.cs` (`EditorCamerasProof`) | The DOCUMENT side is read off the `world.cameras` table, so an add/undo is measured on state rather than narration. The RENDER side is not: the reconcile claims (`"pose updated live"`, `"showing camera 'birdseye'"`, `"recreated live (WxH)"`) and `world.view-refresh`'s count are still narration strings, and nothing measures a pixel or a produced-frame counter — in the one suite whose subject is *only* observable in pixels. |
 | V-7 | M | `proof.cs:7368` (`flyDiff > 8.0`), `proof.cs:7489` (`seamDiff > 8.0`) | `EditorModeProof` uses two absolute pixel floors with **no control pair** and never zeroes the census, over a band the autonomous crowd occupies and moves through between shots. Its two relative checks are anchored to `flyDiff`, so noise inflating it loosens them too. Every other pixel suite bounds a control pair and requires `> 4×` noise. |
 | V-8 | M | `EditorSculptStyleCommandModule.cs:64,84,89,94,99,104,109`, `EditorSculptShapeCommandModule.cs:96,116`, `EditorSculptRigCommandModule.cs:65,105`, `EditorSculptCommandModule.cs:91,106` | **55** `editor.sculpt.*` verbs are registered and **19** are driven; two whole modules are unexercised — even though `SculptProof` is otherwise the strongest suite in the file. |
 | V-9 | M | `WorldViewCommandModule.cs:24,39,52,63,76,89` | The entire `world.view.*` family (six verbs) is unexercised; `proof.cs` touches only `world.view-refresh`. |
-| V-10 | M | `WorldMutationCommandModule.cs:29,46,119,125,153,182,188,209,221,289`; `WorldHostCommandModule.cs:33`; `WorldCollisionCommandModule.cs:39` | The whole-row `.set` upsert verbs and their parser are never driven — only the field-level twins are. `world.load`, the read counterpart of the heavily-proven `world.save`, is completely untested. |
+| V-10 | M | `WorldMutationCommandModule.cs:29,46,119,125,153,182,188,209,221,289`; `WorldHostCommandModule.cs:33`; `WorldCollisionCommandModule.cs:39` | Twelve mutation verbs with zero call sites, re-confirmed by grep on this build: `world.kit.set`, `world.kit.default`, `world.link.set`, `world.link.remove`, `world.scene.set`, `world.motion.set`, `world.wander.set`, `world.render.defaults`, `world.addon.remove`, `world.load`, `world.host.set`, `world.collision.skin` — only their field-level twins are driven. `world.screen.set` is no longer among them (`ScreenSourcesProof` authors a whole row through it and reads the journal delta back), which is the shape the rest want. `world.load`, the read counterpart of the heavily-proven `world.save`, is completely untested. |
 | V-11 | M | `proof.cs:6500` and the `MiniEbml` walker | `RecordProof` cannot distinguish a stalled encoder from a real capture: it asserts `bytes.Length > 8000` plus EBML docType and track *presence*. `MiniEbml` parses no clusters, no timecodes, no frame count, so a capture that writes headers and delivers one frame passes everything. It fails only when the container is malformed — not when the feature breaks. |
 | V-14 | M | `PlayerCommandModule.cs:187,192,258,271,272,273,274,275` | Eight `player.*` verbs with zero call sites, including the four directional twins, `player.sticks` (the analog lanes the tape/corpus system rests on), and `player.assign`/`player.profile` (the seat↔profile binding `BindingsProof` and `StorageProof` both depend on indirectly and never call). |
+| V-15 | S | `ScreenCommandModule.cs:70` | `screen.view` — the jumbotron-recursion verb, the one member of the nine-verb `screen.*` family `ScreenSourcesProof` did not pick up. `EditorCamerasProof` drives `world.view-refresh` and the screen rows' declared `view` source, but nothing ever sends `screen.view <index> <cameraName>`, so the live re-source-to-a-camera path and its two refusals (undeclared screen, unknown camera) are unexercised. One round in `RunSourceRound`, read back off `screen.state`, closes it. |
 | V-13 | S | `proof.cs:221` header claim; `EditorSpeakerCommandModule.cs:33,46,54` | `editor.speaker.move`/`channel`/`radius` are never sent, yet the header advertises "the `editor.speaker.*` numeric twins". Adding the three `Mutate` lines reshuffles the dirty counts of every subsequent assertion in the block. Either land the verbs and re-baseline the block, or shrink the header claim. |
 
 ## Validators that accept what they cannot render
