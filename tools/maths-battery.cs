@@ -379,17 +379,172 @@ if (!sparseCompiled.TryLowerBound(amount: 1L, index: out var sparseBoundary) ||
     throw new InvalidOperationException("COMPILED DISCRETE MEASURE BOUNDED INVERSE EDGE MISMATCH");
 }
 
-if (inverseGolden.TryCompileInt64(compiled: out _, failure: out var irrationalRateFailure) ||
-    (irrationalRateFailure != DiscreteMeasureCompilationFailure.IrrationalRate)) {
-    throw new InvalidOperationException("QUADRATIC RATE COMPILED WITHOUT A PROVEN BACKEND");
+if (!inverseGolden.TryCompileInt64(compiled: out var compiledInverseGolden,
+        failure: out var irrationalRateFailure) ||
+    (irrationalRateFailure != DiscreteMeasureCompilationFailure.None) ||
+    !compiledInverseGolden.IsQuadratic || compiledInverseGolden.IsPeriodic) {
+    throw new InvalidOperationException("FULL-WIDTH GOLDEN RATE DID NOT COMPILE");
+}
+foreach (var goldenIndex in new long[] {
+    long.MinValue, long.MinValue + 1, -1_000_000, -1, 0, 1, 1_000_000, long.MaxValue - 1, long.MaxValue
+}) {
+    if (compiledInverseGolden.AmountAt(goldenIndex) != inverseGolden.AmountAt(goldenIndex)) {
+        throw new InvalidOperationException($"FULL-WIDTH GOLDEN UNIT MISMATCH AT {goldenIndex}");
+    }
+    var exactCumulative = inverseGolden.Cumulative(goldenIndex);
+    var expectedFits = exactCumulative >= long.MinValue && exactCumulative <= long.MaxValue;
+    var actualFits = compiledInverseGolden.TryCumulative(goldenIndex, out var actualCumulative);
+    if ((actualFits != expectedFits) || (actualFits && actualCumulative != exactCumulative)) {
+        throw new InvalidOperationException($"FULL-WIDTH GOLDEN CUMULATIVE MISMATCH AT {goldenIndex}");
+    }
 }
 var irrationalOffsetMeasure = DiscreteMeasure.Create(
     rate: QuadraticSurd.Rational(numerator: 1, denominator: 2),
     offset: QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 2, denominator: 1)
 );
-if (irrationalOffsetMeasure.TryCompileInt64(compiled: out _, failure: out var irrationalOffsetFailure) ||
-    (irrationalOffsetFailure != DiscreteMeasureCompilationFailure.IrrationalOffset)) {
-    throw new InvalidOperationException("QUADRATIC OFFSET COMPILED WITHOUT A PROVEN BACKEND");
+if (!irrationalOffsetMeasure.TryCompileInt64(compiled: out var compiledIrrationalOffset,
+        failure: out var irrationalOffsetFailure) ||
+    (irrationalOffsetFailure != DiscreteMeasureCompilationFailure.None) ||
+    !compiledIrrationalOffset.IsPeriodic || (compiledIrrationalOffset.Period != 2)) {
+    throw new InvalidOperationException("BOUNDED QUADRATIC OFFSET DID NOT COMPILE");
+}
+
+var zeroWithIrrationalOffset = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Zero,
+    offset: QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 2, denominator: 1)
+).CompileInt64();
+var zeroQuadraticLowerBoundThrew = false;
+try {
+    _ = zeroWithIrrationalOffset.LowerBound(amount: 0L);
+} catch (InvalidOperationException) {
+    zeroQuadraticLowerBoundThrew = true;
+}
+if (!zeroWithIrrationalOffset.IsQuadratic || !zeroWithIrrationalOffset.IsPeriodic ||
+    (zeroWithIrrationalOffset.Period != 1L) || (zeroWithIrrationalOffset.AmountAt(long.MinValue) != 0L) ||
+    zeroWithIrrationalOffset.TryLowerBound(amount: 0L, index: out _) ||
+    zeroWithIrrationalOffset.TryIndexContaining(outputIndex: 0L, inputIndex: out _) ||
+    !zeroQuadraticLowerBoundThrew) {
+    throw new InvalidOperationException("COMPILED ZERO RATE WITH IRRATIONAL OFFSET MISMATCH");
+}
+
+var silverMeasure = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 2, denominator: 1),
+    offset: QuadraticSurd.Create(rationalNumerator: -1, surdNumerator: 1, radicand: 2, denominator: 1)
+);
+if (!silverMeasure.TryCompileInt64(compiled: out var compiledSilver,
+        failure: out var silverFailure) ||
+    (silverFailure != DiscreteMeasureCompilationFailure.None) || compiledSilver.IsPeriodic) {
+    throw new InvalidOperationException("BOUNDED SILVER MEASURE DID NOT COMPILE");
+}
+foreach (var silverIndex in new long[] {
+    long.MinValue, long.MinValue + 1, -1_000_000, -1, 0, 1, 1_000_000, long.MaxValue - 1, long.MaxValue
+}) {
+    var expectedAmount = silverMeasure.AmountAt(silverIndex);
+    if (!compiledSilver.TryAmountAt(silverIndex, out var actualAmount) || actualAmount != expectedAmount) {
+        throw new InvalidOperationException($"BOUNDED SILVER UNIT MISMATCH AT {silverIndex}");
+    }
+    var expectedCumulative = silverMeasure.Cumulative(silverIndex);
+    var expectedFits = expectedCumulative >= long.MinValue && expectedCumulative <= long.MaxValue;
+    var actualFits = compiledSilver.TryCumulative(silverIndex, out var actualCumulative);
+    if ((actualFits != expectedFits) || (actualFits && actualCumulative != expectedCumulative)) {
+        throw new InvalidOperationException($"BOUNDED SILVER CUMULATIVE MISMATCH AT {silverIndex}");
+    }
+}
+for (var outputIndex = -1_000L; outputIndex <= 1_000L; ++outputIndex) {
+    if (!compiledSilver.TryLowerBound(outputIndex, out var lower) ||
+        lower != silverMeasure.LowerBound(outputIndex) ||
+        !compiledSilver.TryIndexContaining(outputIndex, out var containing) ||
+        containing != silverMeasure.IndexContaining(outputIndex)) {
+        throw new InvalidOperationException($"BOUNDED SILVER INVERSE MISMATCH AT {outputIndex}");
+    }
+}
+for (var sample = 0; sample < 10_000; ++sample) {
+    var silverIndex = measureRng.NextInt64(-1_000_000, 1_000_001);
+    if ((compiledSilver.Cumulative(silverIndex) != silverMeasure.Cumulative(silverIndex)) ||
+        (compiledSilver.AmountAt(silverIndex) != silverMeasure.AmountAt(silverIndex))) {
+        throw new InvalidOperationException("BOUNDED SILVER RANDOM ORACLE MISMATCH");
+    }
+}
+var conjugateSilverMeasure = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Create(rationalNumerator: 2, surdNumerator: -1, radicand: 2, denominator: 1),
+    offset: QuadraticSurd.Create(rationalNumerator: -1, surdNumerator: 1, radicand: 2, denominator: 1)
+);
+if (!conjugateSilverMeasure.TryCompileInt64(out var compiledConjugateSilver, out var conjugateFailure) ||
+    (conjugateFailure != DiscreteMeasureCompilationFailure.None)) {
+    throw new InvalidOperationException($"CONJUGATE SILVER MEASURE FAILED TO COMPILE: {conjugateFailure}");
+}
+foreach (var index in new long[] {
+    long.MinValue, long.MinValue + 1, -1_000_000, -1, 0, 1, 1_000_000, long.MaxValue - 1, long.MaxValue
+}) {
+    if ((compiledConjugateSilver.Cumulative(index) != conjugateSilverMeasure.Cumulative(index)) ||
+        (compiledConjugateSilver.AmountAt(index) != conjugateSilverMeasure.AmountAt(index))) {
+        throw new InvalidOperationException($"CONJUGATE SILVER MISMATCH AT {index}");
+    }
+}
+for (var sample = 0; sample < 2_000; ++sample) {
+    var radicand = measureRng.Next(2, 100);
+    var radicandRoot = (int)Math.Sqrt(radicand);
+    if ((radicandRoot * radicandRoot) == radicand) { --sample; continue; }
+    var denominator = measureRng.Next(1, 9);
+    var exactQuadratic = DiscreteMeasure.Create(
+        rate: QuadraticSurd.Create(
+            rationalNumerator: measureRng.Next(0, 9),
+            surdNumerator: 1,
+            radicand: radicand,
+            denominator: denominator
+        ),
+        offset: QuadraticSurd.Create(
+            rationalNumerator: measureRng.Next(-16, 17),
+            surdNumerator: measureRng.Next(-1, 2),
+            radicand: radicand,
+            denominator: denominator
+        )
+    );
+    if (!exactQuadratic.TryCompileInt64(out var boundedQuadratic, out var boundedQuadraticFailure)) {
+        throw new InvalidOperationException($"BOUNDED QUADRATIC SAMPLE FAILED TO COMPILE: {boundedQuadraticFailure}");
+    }
+    var index = measureRng.NextInt64(-1_000_000, 1_000_001);
+    if ((boundedQuadratic.Cumulative(index) != exactQuadratic.Cumulative(index)) ||
+        (boundedQuadratic.AmountAt(index) != exactQuadratic.AmountAt(index))) {
+        throw new InvalidOperationException("BOUNDED QUADRATIC RANDOM ORACLE MISMATCH");
+    }
+}
+// Exercise the two-limb path rather than merely values whose complete radicand still fits UInt128. At the signed-long
+// endpoints these square-root operands occupy roughly 190 bits, while the arbitrary-precision measure remains the
+// independent specification.
+foreach (var radicand in new ulong[] {
+    ulong.MaxValue,
+    ulong.MaxValue - 2UL,
+    ((ulong)uint.MaxValue * uint.MaxValue) - 1UL,
+    ((ulong)uint.MaxValue * uint.MaxValue) + 1UL,
+    (1UL << 63) + 159UL,
+    (ulong)long.MaxValue
+}) {
+    var wideQuadratic = DiscreteMeasure.Create(
+        rate: QuadraticSurd.Create(
+            rationalNumerator: 0,
+            surdNumerator: 1,
+            radicand: radicand,
+            denominator: 1
+        ),
+        offset: QuadraticSurd.Zero
+    );
+    if (!wideQuadratic.TryCompileInt64(out var compiledWideQuadratic, out var wideFailure)) {
+        throw new InvalidOperationException($"WIDE-RADICAND QUADRATIC FAILED TO COMPILE: {wideFailure}");
+    }
+    foreach (var index in new long[] {
+        long.MinValue, long.MinValue + 1, -1_000_000, -1, 0, 1, 1_000_000, long.MaxValue - 1, long.MaxValue
+    }) {
+        if (compiledWideQuadratic.AmountAt(index) != wideQuadratic.AmountAt(index)) {
+            throw new InvalidOperationException($"WIDE-RADICAND QUADRATIC UNIT MISMATCH AT d={radicand}, n={index}");
+        }
+        var exactCumulative = wideQuadratic.Cumulative(index);
+        var expectedFits = exactCumulative >= long.MinValue && exactCumulative <= long.MaxValue;
+        var actualFits = compiledWideQuadratic.TryCumulative(index, out var actualCumulative);
+        if ((actualFits != expectedFits) || (actualFits && actualCumulative != exactCumulative)) {
+            throw new InvalidOperationException($"WIDE-RADICAND QUADRATIC CUMULATIVE MISMATCH AT d={radicand}, n={index}");
+        }
+    }
 }
 var oversizedMeasure = DiscreteMeasure.Rational(
     numerator: ((BigInteger)long.MaxValue + BigInteger.One),
@@ -413,14 +568,20 @@ if (!defaultCompiledThrew) {
 var allocationProbe = audioPerVideoFrame.CompileInt64();
 var allocationSink = 0L;
 for (var index = 0L; (index < 1_000L); ++index) { allocationSink ^= allocationProbe.AmountAt(index: index); }
+for (var index = 0L; (index < 1_000L); ++index) { allocationSink ^= compiledSilver.AmountAt(index: index); }
+for (var index = 0L; (index < 1_000L); ++index) { allocationSink ^= compiledInverseGolden.AmountAt(index: index); }
 var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-for (var index = 0L; (index < 100_000L); ++index) { allocationSink ^= allocationProbe.AmountAt(index: index); }
+for (var index = 0L; (index < 100_000L); ++index) {
+    allocationSink ^= allocationProbe.AmountAt(index: index);
+    allocationSink ^= compiledSilver.AmountAt(index: index);
+    allocationSink ^= compiledInverseGolden.AmountAt(index: index);
+}
 var allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
 if (allocatedAfter != allocatedBefore) {
     throw new InvalidOperationException("COMPILED DISCRETE MEASURE QUERY ALLOCATED");
 }
 
-Console.WriteLine($"discrete measure: cadence/domain map, exact range additivity, inverse lookup, normalized origin, rational period, quadratic aperiodicity; compiled rational full-width edges + 100k allocation-free queries OK ({allocationSink})");
+Console.WriteLine($"discrete measure: cadence/domain map, exact range additivity, inverse lookup, normalized origin, rational period, quadratic aperiodicity; compiled rational + bounded quadratic full-width edges and allocation-free queries OK ({allocationSink})");
 
 var edges = new List<long> {
     0L, 1L, -1L, 2L, -2L, 3L, -3L, 0x7FFFL, -0x7FFFL, 0x8000L, -0x8000L, 0x8001L, -0x8001L,
@@ -2914,6 +3075,33 @@ static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needl
 var quasicrystalWord = new bool[200_000];
 foreach (var quasicrystalCase in quasicrystalCases) {
     QuadraticQuasicrystal.Word(p: quasicrystalCase.P, q: quasicrystalCase.Q, d: quasicrystalCase.D, r: quasicrystalCase.R, tiles: quasicrystalWord);
+    var quasicrystalIndex = QuadraticQuasicrystal.Compile(
+        p: quasicrystalCase.P,
+        q: quasicrystalCase.Q,
+        d: quasicrystalCase.D,
+        r: quasicrystalCase.R
+    );
+    var streamedLongCount = BigInteger.Zero;
+    var exactPosition = QuadraticSurd.Zero;
+    for (var index = 0; index < 4096; ++index) {
+        if ((quasicrystalIndex.TileAt(index) != quasicrystalWord[index]) ||
+            (quasicrystalIndex.CountLongTiles(index) != streamedLongCount) ||
+            (quasicrystalIndex.PositionAt(index) != exactPosition)) {
+            throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL RANDOM ACCESS WRONG d={quasicrystalCase.D} index={index}");
+        }
+        if (quasicrystalWord[index]) {
+            ++streamedLongCount;
+            exactPosition += quasicrystalIndex.ExactLongTileLength;
+        } else {
+            exactPosition += QuadraticSurd.One;
+        }
+    }
+    var remoteIndex = (BigInteger.One << 512) + 12345;
+    var remoteLongs = quasicrystalIndex.CountLongTiles(remoteIndex);
+    var remoteAdvance = quasicrystalIndex.CountLongTiles(remoteIndex + 1) - remoteLongs;
+    if (remoteAdvance != (quasicrystalIndex.TileAt(remoteIndex) ? BigInteger.One : BigInteger.Zero)) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL REMOTE PREFIX IDENTITY WRONG d={quasicrystalCase.D}");
+    }
 
     for (var k = 1; (k <= 24); ++k) {
         if (WordComplexity(word: quasicrystalWord, k: k) != (k + 1)) {
@@ -2944,7 +3132,7 @@ for (var i = 0; (i < quasicrystalWord.Length); ++i) { quasicrystalWord[i] = ((i 
 if (WordComplexity(word: quasicrystalWord, k: 10) == 11) {
     throw new InvalidOperationException("WORD COMPLEXITY ORACLE HAS NO TEETH");
 }
-Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, tile-length inflation identity, reproduces golden, oracle has teeth OK");
+Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, exact 2^512 random access/counts, tile-length inflation identity, reproduces golden, oracle has teeth OK");
 
 // Contract and scale regressions outside the ordinary small-period table. Empty outputs still validate; a period longer
 // than the former 128-term scratch buffer streams correctly; and a huge one-term quotient neither allocates its complete
@@ -2952,6 +3140,15 @@ Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, t
 ExpectArgumentOutOfRange(parameterName: "d", operation: () => QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 4L, r: 1L, tiles: []));
 var quadraticLongPeriodWord = new bool[512];
 QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 9949L, r: 1L, tiles: quadraticLongPeriodWord); // period length 217
+var quadraticLongPeriodIndex = QuadraticQuasicrystal.Compile(p: 0L, q: 1L, d: 9949L, r: 1L);
+if (quadraticLongPeriodIndex.PeriodLength != 217) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL LONG-PERIOD INDEX LOST THE PERIOD");
+}
+for (var index = 0; index < quadraticLongPeriodWord.Length; ++index) {
+    if (quadraticLongPeriodIndex.TileAt(index) != quadraticLongPeriodWord[index]) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL LONG-PERIOD RANDOM ACCESS WRONG index={index}");
+    }
+}
 for (var k = 1; (k <= 12); ++k) {
     if (WordComplexity(word: quadraticLongPeriodWord, k: k) != (k + 1)) {
         throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL LONG-PERIOD WORD NOT STURMIAN k={k}");
@@ -3307,7 +3504,8 @@ sink ^= Bench("sqrt large           ", opsSqrtLarge, opsSqrtLarge, static (a, _)
 sink ^= Bench("atan2                ", opsA, opsB, static (a, b) => FixedQ4816.Atan2(y: new(Value: a), x: new(Value: b)).Value, 5_000);
 sink ^= Bench("sincos               ", opsA, opsB, static (a, _) => FixedQ4816.SinCos(angle: new(Value: a)).Sin.Value, 5_000);
 var compiledMeasureBench = DiscreteMeasure.Rational(numerator: 4_004, denominator: 5).CompileInt64();
-sink ^= Bench("discrete measure64   ", opsA, opsB, (a, _) => compiledMeasureBench.AmountAt(index: a), 5_000);
+sink ^= Bench("measure64 rational  ", opsA, opsB, (a, _) => compiledMeasureBench.AmountAt(index: a), 5_000);
+sink ^= Bench("measure64 quadratic ", opsA, opsB, (a, _) => compiledInverseGolden.AmountAt(index: a), 500);
 var benchRng = Pcg32XshRr.Create(state: 1UL, stream: 1UL);
 var pcgSink = 0UL;
 var pcgTimer = Stopwatch.StartNew();

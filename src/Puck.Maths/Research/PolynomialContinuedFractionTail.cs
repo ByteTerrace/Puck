@@ -150,6 +150,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         Offset = offset;
         AffineResidual = affineResidual;
         IntervalCertificate = intervalCertificate;
+        rationalTailCertificate = new Lazy<PolynomialRationalTailCertificate?>(
+            RecognizeRationalTailCertificate,
+            isThreadSafe: true
+        );
     }
 
     /// <summary>Gets the recurrence coefficients.</summary>

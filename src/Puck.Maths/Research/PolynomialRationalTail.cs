@@ -1,9 +1,10 @@
+using System.Collections.ObjectModel;
 using System.Numerics;
 
 namespace Puck.Maths;
 
 /// <summary>
-/// A finite exact certificate for an arbitrary-degree rational polynomial continued-fraction tail.
+/// A finite exact certificate for a rational polynomial continued-fraction tail with a polynomial denominator.
 /// </summary>
 /// <remarks>
 /// If <c>B</c> is the monic polynomial whose ascending coefficients are stored in
@@ -12,6 +13,7 @@ namespace Puck.Maths;
 /// </remarks>
 public sealed class PolynomialRationalTailCertificate {
     private readonly QuadraticSurd[] denominatorCoefficients;
+    private readonly ReadOnlyCollection<QuadraticSurd> denominatorCoefficientView;
 
     public PolynomialRationalTailCertificate(
         QuadraticSurd slope,
@@ -19,6 +21,7 @@ public sealed class PolynomialRationalTailCertificate {
         IEnumerable<QuadraticSurd> denominatorCoefficients) {
         ArgumentNullException.ThrowIfNull(denominatorCoefficients);
         this.denominatorCoefficients = denominatorCoefficients.ToArray();
+        denominatorCoefficientView = Array.AsReadOnly(this.denominatorCoefficients);
         Slope = slope;
         Offset = offset;
     }
@@ -28,7 +31,7 @@ public sealed class PolynomialRationalTailCertificate {
     /// <summary>Gets the exact affine offset in the characteristic field.</summary>
     public QuadraticSurd Offset { get; }
     /// <summary>Gets the denominator coefficients in ascending degree order.</summary>
-    public IReadOnlyList<QuadraticSurd> DenominatorCoefficients => denominatorCoefficients;
+    public IReadOnlyList<QuadraticSurd> DenominatorCoefficients => denominatorCoefficientView;
     /// <summary>Gets the degree of the monic denominator.</summary>
     public int DenominatorDegree => (denominatorCoefficients.Length - 1);
 
@@ -67,37 +70,60 @@ public sealed class PolynomialRationalTailCertificate {
 
 public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>
+    /// The largest denominator degree accepted by the dense exact recognizer. This bounds its quadratic storage and
+    /// cubic Gaussian-elimination work; certificates above the bound are rejected rather than risking process-wide
+    /// resource exhaustion.
+    /// </summary>
+    public const int MaximumRationalTailDenominatorDegree = 128;
+
+    /// <summary>
+    /// The largest finite positive-index prefix scanned by the exact pole check. A candidate requiring a longer scan is
+    /// conservatively left unrecognized so adversarial coefficient magnitudes cannot turn verification into work
+    /// proportional to their numeric value.
+    /// </summary>
+    public const int MaximumRationalTailPoleChecks = 1_000_000;
+
+    private readonly Lazy<PolynomialRationalTailCertificate?> rationalTailCertificate;
+
+    /// <summary>
     /// Attempts to construct a complete finite certificate for a positive rational-function tail. For a reduced
     /// rational solution, pole cancellation forces a monic denominator <c>B</c> and linear factors <c>C,K</c> with
     /// <c>s_n=B(n-1)C(n-1)/B(n)</c> and <c>r*n^2+u*n+v=C(n)K(n)</c>. Asymptotics leave at most two possible degrees
     /// for <c>B</c>; each remaining polynomial identity is solved by exact Gaussian elimination in
-    /// <c>Q(lambda)</c>.
+    /// <c>Q(lambda)</c>. The current dense solver admits degrees through
+    /// <see cref="MaximumRationalTailDenominatorDegree"/> and rejects larger candidates without allocating them.
     /// </summary>
     public bool TryRationalTailCertificate(out PolynomialRationalTailCertificate certificate) {
-        certificate = null!;
-        foreach (var degree in RationalDenominatorDegreeCandidates()) {
+        var recognized = rationalTailCertificate.Value;
+        certificate = recognized!;
+        return recognized is not null;
+    }
+
+    private PolynomialRationalTailCertificate? RecognizeRationalTailCertificate() {
+        foreach (var degree in RationalDenominatorDegreeCandidates(MaximumRationalTailDenominatorDegree)) {
             var denominator = SolveMonicDenominator(degree);
             if (denominator is null) { continue; }
 
             var candidate = new PolynomialRationalTailCertificate(Slope, Offset, denominator);
             if (VerifyRationalTailCertificate(candidate)) {
-                certificate = candidate;
-                return true;
+                return candidate;
             }
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>
     /// Independently verifies the factorization identity, recurrence coefficients, absence of positive-integer poles,
-    /// and eventual positivity for an arbitrary-degree rational-tail certificate.
+    /// and eventual positivity for a bounded-degree rational-tail certificate.
     /// </summary>
     public bool VerifyRationalTailCertificate(PolynomialRationalTailCertificate certificate) {
         ArgumentNullException.ThrowIfNull(certificate);
         var coefficients = certificate.DenominatorCoefficients;
         if ((certificate.Slope != Slope) || (certificate.Offset != Offset) ||
             (coefficients.Count == 0) ||
+            (coefficients.Count > (MaximumRationalTailDenominatorDegree + 1)) ||
+            !coefficients.All(BelongsToCharacteristicField) ||
             (coefficients[^1] != QuadraticSurd.One)) {
             return false;
         }
@@ -138,7 +164,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         return MonicPolynomialHasNoPositiveIntegerZero(coefficients);
     }
 
-    private IReadOnlyList<int> RationalDenominatorDegreeCandidates() {
+    private IReadOnlyList<int> RationalDenominatorDegreeCandidates(int maximumDegree) {
         var p = QuadraticSurd.Rational(Parameters.Linear);
         var q = QuadraticSurd.Rational(Parameters.Constant);
         var v = QuadraticSurd.Rational(Parameters.NumeratorConstant);
@@ -166,7 +192,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             var numerator = (-constantSurd * linear.Denominator);
             var denominator = (linearSurd * constant.Denominator);
             var candidate = BigInteger.DivRem(numerator, denominator, out var remainder);
-            if (!remainder.IsZero || candidate < BigInteger.Zero || candidate > int.MaxValue) { return []; }
+            if (!remainder.IsZero || candidate < BigInteger.Zero || candidate > maximumDegree) { return []; }
             var degree = (int)candidate;
             var value = ((quadratic * QuadraticSurd.Rational(degree * (BigInteger)degree)) +
                 (linear * QuadraticSurd.Rational(degree)) + constant);
@@ -196,10 +222,16 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         void AddRoot(BigInteger numerator) {
             var denominator = (2 * a);
             var quotient = BigInteger.DivRem(numerator, denominator, out var remainder);
-            if (!remainder.IsZero || (quotient < BigInteger.Zero) || (quotient > int.MaxValue)) { return; }
+            if (!remainder.IsZero || (quotient < BigInteger.Zero) || (quotient > maximumDegree)) { return; }
             var degree = (int)quotient;
             if (!result.Contains(degree)) { result.Add(degree); }
         }
+    }
+
+    private bool BelongsToCharacteristicField(QuadraticSurd value) {
+        if (value.IsRational) { return true; }
+        if (!Slope.IsRational) { return value.Radicand == Slope.Radicand; }
+        return !Offset.IsRational && (value.Radicand == Offset.Radicand);
     }
 
     private QuadraticSurd[]? SolveMonicDenominator(int degree) {
@@ -310,6 +342,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             var translated = TranslatePolynomial(polynomial, cutoff);
             if ((translated[0].Sign > 0) && translated.All(coefficient => coefficient.Sign >= 0)) { break; }
             cutoff = cutoff.IsZero ? BigInteger.One : (2 * cutoff);
+            if (cutoff > MaximumRationalTailPoleChecks) { return false; }
         }
 
         for (var index = BigInteger.One; index < cutoff; ++index) {

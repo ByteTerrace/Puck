@@ -3,10 +3,11 @@
 ## Status
 
 **IN PROGRESS — the eventual finite-channel theorem is proved and implemented; the advertised uniform total decider
-is not. A previously proposed integer-avoidance lemma is false. Every positive rational-function Riccati tail over
-the characteristic real quadratic field is now recognized by an arbitrary-degree exact certificate. A new
-degree-one-minimality reduction places a further non-rational subfamily in a proven decidable class, but equality for the remaining
-hypergeometric tails is still not uniform.**
+is not. A previously proposed integer-avoidance lemma is false. Positive rational-function Riccati tails over
+the characteristic real quadratic field now have a structurally complete arbitrary-degree certificate, and the dense
+executable recognizer accepts denominator degrees through its explicit resource ceiling of 128. A new
+degree-one reduction and its aligned 1-period extension place further non-rational subfamilies in proven decidable
+classes, but equality for the remaining hypergeometric tails is still not uniform.**
 
 The implementation now proves arbitrary-order tail remainders, finite norm reduction, finite generalized-Pell orbit
 reduction, and effective sign stabilization. Thus every sufficiently large nonzero discrepancy has a finite exact
@@ -431,8 +432,9 @@ forces
 where `C` and `K` are linear. Matching the affine slope and offset makes the
 constant coefficient equation quadratic in `m`, leaving at most two degrees;
 the coefficients of `B` then satisfy one exact linear system.
-`TryRationalTailCertificate` implements this arbitrary-degree recognizer over
-the full characteristic field `Q(lambda)`, while `VerifyRationalTailCertificate` independently
+`TryRationalTailCertificate` implements this recognizer over the full
+characteristic field `Q(lambda)` through denominator degree 128, while
+`VerifyRationalTailCertificate` independently
 checks the factorization, recurrence identity, and absence of positive-integer
 poles. The positivity verifier also checks `c0>0`; otherwise the two linear
 factors and the denominator-sign recurrence would force a degree-`m`
@@ -452,7 +454,7 @@ The exact Lean statements are
 certificate algebra is polymorphic over a field, so the formal statement
 includes the quadratic coefficient field rather than only `Q`.
 
-## 7. The new degree-one minimality island
+## 7. The degree-one and 1-period islands
 
 There is a second, strictly larger decidable branch.  If
 
@@ -476,16 +478,184 @@ Kenison, Klurman, Lefaucheux, Luca, Moree, Ouaknine, Sertöz, Whiteland, and Wor
 proved in 2026 that minimality is decidable for this class, using effective
 relation algorithms for E-functions and 1-periods.  Consequently
 `s_N=M` is decidable here even when the tail is not a rational function.
-`TryDegreeOneMinimalityReduction` constructs the exact recurrence and target
-initial ratio; `VerifyDegreeOneMinimalityReduction` rechecks the shifted
+`TryDegreeOneMinimalityReduction` constructs the exact recurrence and the
+equivalence-scaled Pincherle data `u_-1=alpha`, `u_0=A_N-M`, so that the
+normalized target is `(M-A_N)/alpha`; `VerifyDegreeOneMinimalityReduction` rechecks the shifted
 factorization.  The independent verifier covers 21,315 accepted reductions
 and 85,260 shifted identities.  The algebraic reduction is formalized by
 `shifted_numerator_factorization`, `shifted_base`, and
-`rational_characteristic_roots` in
+`rational_characteristic_roots`, `equivalence_scale_step`, and
+`pincherle_scaled_initial_ratio` in
 `PolynomialTail/MinimalityReduction.lean`.  The local toolkit does not yet
 implement the paper's E-function/1-period engines, so it constructs a complete
 input to the published decision procedure rather than pretending numerical
 quadrature is that procedure.
+
+The rational-characteristic hypothesis is not the end of this reduction. If
+the numerator discriminant is square and
+
+\[
+ p(u-r)=2rq,
+\]
+
+then the transformed Gauss hypergeometric parameters simplify, independently
+of the starting index, to
+
+\[
+ a=\frac{d+r}{2r},\qquad
+ b=N-1+\frac{u+d}{2r},\qquad
+ c=N+\frac{u-r}{2r}.
+\]
+
+They are rational even when `p^2+4r` is not square. The argument `x` is then
+quadratic algebraic rather than rational, but Euler's integrand is still an
+algebraic function over algebraic data and hence a 1-period. The effective
+1-period relation algorithm therefore still decides the equality.
+This branch is exact for the direct Gauss representation, not merely a
+convenient sufficient family: if `ell` is the non-dominant characteristic root,
+
+\[
+ a=\frac{d+r}{2r}+\frac{p(u-r)-2rq}{2r(\ell-\lambda)}.
+\]
+
+For nonsquare `p^2+4r`, the alignment residual is therefore the sole irrational
+component of `a`; it vanishes if and only if the Gauss parameters are rational.
+`TryOnePeriodEqualityReduction` recognizes this enlarged branch, computes the
+least even shift that makes both Euler endpoint exponents positive, and
+verifies the transformation exactly. A direct equivalence calculation gives
+the prefactor `mu/alpha`: multiplying all partial denominators by `delta` and
+all partial numerators by `delta^2` scales the fraction by `delta`. The current
+2026 draft prints `mu^2/alpha` in equations (10)--(11); the verifier guards
+against that extra power by comparing the corrected hypergeometric quotient to
+100,000-level continued-fraction convergents. Its independent box verifier accepts 22,649
+instances: 21,315 with rational characteristic roots and 1,334 new aligned
+irrational-characteristic cases; 21,640 are not rational-function tails. The
+parameter collapse is formalized by `aligned_hypergeometric_parameter` and
+`aligned_remaining_parameters`; the exact decomposition is formalized by
+`hypergeometric_parameter_decomposition`, while the corrected prefactor is formalized by
+`equivalence_prefactor_one_power`, in `PolynomialTail/MinimalityReduction.lean`.
+
+## 8. Integer equality as integer-orbit positivity
+
+There is a useful exact reformulation of the remaining obstruction. Write
+`A_n=pn+q`, `B_n=rn^2+un+v`, and suppose `s_1=A_1+d` is an integer candidate.
+Set
+
+\[
+ P_2=1,\qquad P_3=d,\qquad
+ P_{n+2}=B_{n-1}P_n-A_nP_{n+1}.
+\]
+
+Then
+
+\[
+ s_n=\frac{B_{n-1}P_n}{P_{n+1}}
+\]
+
+satisfies the Riccati recurrence wherever the denominators are nonzero. Since
+`B_n>0`, the candidate is the unique positive tail exactly when this integer
+orbit remains positive forever. The bridge is machine-checked by
+`initial_riccati_step`, `riccati_of_cleared_orbit`,
+`positive_ratio_of_positive_orbit`, and
+`positive_orbit_successor_of_positive_ratio` in
+`PolynomialTail/IntegerOrbit.lean`.
+
+This reformulation makes searches much cheaper and identifies the precise new
+theorem one would need: positivity is decidable for this restricted integral
+degree-(2,1) recurrence, or every positive instance has a hypergeometric
+solution. A targeted aligned-irrational search checked 2,261,907 tuples and
+2,575,816 integer starts through depth 10,000 and found no survivor at all.
+The longest false start did not become non-positive until `P_146`, so a fixed
+handful of inequalities would not explain the data. This is evidence for
+rigidity, not a replacement for the missing proof.
+
+There is an equivalent differential-equation view. Put `Q_j=P_(j+2)` and let
+
+\[
+ F(z)=\sum_{j\geq0}Q_j\frac{z^j}{j!}.
+\]
+
+Coefficient extraction from the integer recurrence gives the exact Fuchsian
+equation
+
+\[
+ (1+pz-rz^2)F''=
+ ((3r+u)z-(2p+q))F'+(r+u+v)F.                 \tag{12}
+\]
+
+The nonzero local exponent at the nearer finite singularity has the
+decomposition
+
+\[
+ -\frac{r+u}{2r}+
+ \frac{p(u-r)-2rq}{2r\sqrt{p^2+4r}},           \tag{13}
+\]
+
+and the discriminant of the indicial polynomial at infinity is
+
+\[
+ u^2-4rv.                                      \tag{14}
+\]
+
+Consequently the one-period reduction found above is maximal in a structural
+sense: its double-square or square-numerator-plus-alignment hypotheses are
+exactly the conditions under which all local exponent differences of (12) are
+rational. Outside this locus the obstruction is no longer merely a missing
+continued-fraction normalization; the associated hypergeometric equation has
+an algebraic irrational local exponent, so its Euler solutions are not
+ordinary 1-periods. These identities are machine-checked in
+`PolynomialTail/GeneratingFunction.lean`.
+
+This also gives a new arithmetic obstruction. For an exact integer equality,
+the positive orbit is the minimal factorial-growth solution, so the
+coefficients `Q_n/n!` of `F` are exponentially bounded. Let
+
+\[
+ E_N=\operatorname{lcm}_{0\leq n\leq N}
+      \operatorname{denominator}\!\left(\frac{Q_n}{n!}\right).
+\]
+
+If `E_N <= C^N` for some constant `C`, then `F` meets the arithmetic,
+growth, and holonomy conditions for a G-function. The
+André--Chudnovsky--Katz quasi-unipotent-monodromy theorem then forces every
+local exponent occurring in `F` to be rational. Equations (13)--(14) imply the
+following dichotomy:
+
+> Any integer equality outside
+> `u^2-4rv=square` together with
+> (`p^2+4r=square` or `p(u-r)=2rq`) must have superexponential EGF common
+> denominators: for every `C>1`, `E_N>C^N` for arbitrarily large `N`.
+
+This does not yet exclude such an orbit, but it replaces an unrestricted
+special-function equality by a concrete p-adic denominator-growth obligation.
+The self-contained exact search
+`tools/polynomial-tail-egf-arithmetic-search.py` tested 1,457,835 integer starts
+through depth 500. All 358 survivors had square characteristic discriminant
+and rational hypergeometric successive-term ratios; 356 ratios were affine and
+the remaining two were degree-(2,1). None lay in the new superexponential
+branch. Their largest measured common-denominator size was 493 bits at depth
+500, consistent with exponential rather than factorial growth. This is
+evidence for the dichotomy's useful side, not a proof that the other side is
+empty.
+
+The denominator condition is not automatic for an integral recurrence. For
+example, continuing the integral orbit for `(p,q,r,u,v,d)=(1,0,1,0,1,1)` even
+after its first sign failure gives a common-denominator size of 3,397 bits by
+index 499, with the ratio `log2(E_N)/N` still increasing. In contrast, the
+aligned long false start `(1,0,176,176,44,14)` has only 710 bits at the same
+index. Thus the arithmetic experiment distinguishes the rational-exponent
+locus, but a new theorem would still be needed to show that *positivity* rules
+out the superexponential behavior.
+
+This is exactly the exceptional case left by the latest general sign theory.
+Hagihara and Kawamura classify every possible ultimate sign of a second-order
+holonomic sequence and give a partial algorithm that halts on almost every
+initial value, but explicitly reduce the remaining unstable line to the
+Minimality Problem, whose decidability they state is unknown. An exact
+integer-tail equality puts the cleared orbit on that minimal line. Therefore
+neither their sign classification nor the new EGF reformulation supplies the
+missing equality oracle; they identify the same obstruction from complementary
+directions.
 
 The broader equality obstruction remains: this family does not prove that every integer hit is a rational Riccati
 solution of classifiable form. Positive degree-(2,1) continued fractions are hypergeometric ratios, and recent
@@ -496,8 +666,10 @@ The strongest realized statement is consequently:
 > For every admissible parameter tuple, eventual identity is decidable. In the irrational-slope case the discrepancy
 > has an effectively constructible Ostrowski DFAO beyond an explicit cutoff and its sign on every channel is decidable
 > at order at most two; in the rational-slope case it has an eventual radix-2 DFAO. Exact-affine and
-> arbitrary-degree rational-function tails are decided outright, and double-square instances reduce to an
-> unconditional published minimality decision procedure. Whenever every other finite-prefix comparison
+> rational-function tails have a complete finite certificate scheme (with the dense executable recognizer bounded at
+> denominator degree 128), double-square instances reduce to an
+> unconditional published minimality decision procedure, and the aligned square-numerator branch reduces to
+> effective 1-period equality. Whenever every other finite-prefix comparison
 > avoids an unresolved exact integer hit, these machines extend effectively to a total DFAO and decide all-index
 > identity.
 
@@ -522,6 +694,9 @@ dotnet run tools/polynomial-tail-linear-fractional-verifier.cs
 dotnet run tools/polynomial-tail-rational-verifier.cs
 dotnet run tools/polynomial-tail-rational-box-verifier.cs -- 12 24
 dotnet run tools/polynomial-tail-minimality-reduction-verifier.cs
+dotnet run tools/polynomial-tail-one-period-reduction-verifier.cs
+dotnet run tools/polynomial-tail-aligned-period-orbit-search.cs -- 200 300 600 10000
+python tools/polynomial-tail-egf-arithmetic-search.py 8 20 500
 dotnet run tools/polynomial-tail-integer-counterexample-verifier.cs
 cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 ```
@@ -536,3 +711,5 @@ cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 - G. Kenison et al., [On Positivity and Minimality for Second-Order Holonomic Sequences](https://doi.org/10.4230/LIPIcs.MFCS.2021.67).
 - G. Kenison et al., [On the Positivity Problem for Second-Order Holonomic Sequences](https://georgekenison.github.io/uploads/papers/holonomic_positivity26.pdf), 2026.
 - E. C. Sertöz, J. Ouaknine, and J. Worrell, [Computing transcendence and linear relations of 1-periods](https://arxiv.org/abs/2505.20397), 2025.
+- S. Garoufalidis, [G-functions and multisum versus holonomic sequences](https://arxiv.org/abs/0708.4354), especially the G-function denominator criterion and rational local-exponent theorem.
+- F. Hagihara and A. Kawamura, [The Ultimate Signs of Second-Order Holonomic Sequences](https://doi.org/10.4230/LIPIcs.ICALP.2025.159), 2025; the exceptional unstable line reduces to the open Minimality Problem.

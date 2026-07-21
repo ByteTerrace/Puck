@@ -31,6 +31,10 @@ namespace Puck.Maths;
 /// the one approximate seam, matching <see cref="MetallicQuasicrystal.Position(int, long, long)"/>; the word above it is exact combinatorics.
 /// </remarks>
 public static class QuadraticQuasicrystal {
+    /// <summary>Compiles an exact logarithmic-time random-access index for the periodic-tail representative.</summary>
+    public static QuadraticQuasicrystalIndex Compile(long p, long q, long d, long r) =>
+        new(p, q, d, r);
+
     /// <summary>Fills a leading run of the periodic-tail representative for <c>(p + q·√d) / r</c>: the fixed point of the substitution its repeating continued-fraction block composes.</summary>
     /// <param name="p">The rational part of the numerator.</param>
     /// <param name="q">The coefficient of the surd; it must be positive.</param>

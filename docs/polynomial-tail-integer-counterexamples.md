@@ -145,7 +145,7 @@ the two formal poles force (4), and three consecutive samples force the numerato
 theorems certify the displayed counterexample family’s positivity, non-affineness, and integer hit at the first
 positive index.
 
-## Complete arbitrary-degree rational recognition
+## Complete arbitrary-degree rational classification
 
 The linear-fractional ansatz is not the end of the rational branch. Let
 `s=A/B` be any reduced rational-function solution, normalize `B` to be monic,
@@ -206,6 +206,9 @@ backward through the finite prefix.
 `TryRationalTailCertificate` implements (8)--(9) using exact Gaussian
 elimination in `Q(lambda)`. When `lambda` is irrational, the surd component of
 (8) is linear in `m` and selects the possible integer degree exactly.
+The dense executable solver deliberately caps accepted denominator degree at
+128 to bound its quadratic storage and cubic elimination cost; the
+classification and finite certificate scheme themselves have no degree bound.
 `VerifyRationalTailCertificate` independently rechecks (6), (9), the necessary
 `c0>0` condition, and the finite no-pole certificate. The exact checker exercises the infinite
 family
@@ -232,8 +235,10 @@ coefficients and 362 beyond the linear-fractional API.
 
 ## Consequence for the uniform Beatty-shadow theorem
 
-The finite-prefix strategy now handles every positive rational-function tail,
-not only the displayed counterexample or the linear-fractional class. A
+The finite-prefix strategy has a finite certificate for every positive
+rational-function tail, not only the displayed counterexample or the
+linear-fractional class. The current dense recognizer constructs those
+certificates through degree 128. A
 complete total decider would still need to decide integer equality for the
 remaining non-rational hypergeometric tails. The general PCF equality problem
 is not supplied by rational-solution recognition, so no such claim is made

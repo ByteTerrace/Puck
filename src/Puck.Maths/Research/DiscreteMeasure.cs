@@ -114,8 +114,9 @@ public readonly record struct DiscreteMeasure {
     /// <param name="failure">The exact reason compilation was unavailable.</param>
     /// <returns><see langword="true"/> when every required rational coefficient fits the bounded representation.</returns>
     /// <remarks>
-    /// The current compiled backend accepts rational rates and offsets. Quadratic measures remain available through
-    /// this unbounded type until a separately proven bounded quadratic rank/select compiler exists.
+    /// The compiler accepts every bounded rational measure and real-quadratic measures whose cleared coefficients prove
+    /// that the exact signed-long core domain fits the <see cref="Int128"/> root and two-limb <see cref="UInt128"/>
+    /// floor kernel. Wider quadratic measures remain available through this unbounded type.
     /// </remarks>
     public bool TryCompileInt64(
         out CompiledDiscreteMeasure64 compiled,
@@ -127,8 +128,7 @@ public readonly record struct DiscreteMeasure {
         TryCompileInt64(compiled: out compiled, failure: out _);
 
     /// <summary>Compiles this measure into its allocation-free signed-64-bit execution form.</summary>
-    /// <exception cref="NotSupportedException">The rate or offset is irrational.</exception>
-    /// <exception cref="OverflowException">A required normalized coefficient exceeds signed 64-bit storage.</exception>
+    /// <exception cref="OverflowException">A required normalized coefficient or quadratic core-domain radicand exceeds the bounded representation.</exception>
     public CompiledDiscreteMeasure64 CompileInt64() {
         if (TryCompileInt64(compiled: out var compiled, failure: out var failure)) {
             return compiled;
@@ -136,9 +136,9 @@ public readonly record struct DiscreteMeasure {
 
         return failure switch {
             DiscreteMeasureCompilationFailure.IrrationalRate =>
-                throw new NotSupportedException(message: "the bounded compiler does not yet support irrational rates"),
+                throw new OverflowException(message: "the irrational rate exceeds the bounded quadratic floor envelope"),
             DiscreteMeasureCompilationFailure.IrrationalOffset =>
-                throw new NotSupportedException(message: "the bounded compiler does not yet support irrational offsets"),
+                throw new OverflowException(message: "the irrational offset exceeds the bounded quadratic floor envelope"),
             DiscreteMeasureCompilationFailure.CoefficientOutOfRange =>
                 throw new OverflowException(message: "a normalized measure coefficient exceeds signed 64-bit storage"),
             _ => throw new InvalidOperationException(message: "the discrete-measure compiler failed without a reason"),

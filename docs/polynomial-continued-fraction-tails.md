@@ -350,6 +350,43 @@ Eventual positivity then propagates backward through the recurrence. This
 subsumes affine and linear-fractional tails and includes families of every
 denominator degree over both coefficient fields.
 
+### Period-reducible non-rational tails
+
+If `u^2-4rv` is a square, the quadratic numerator factors over `Q` and the
+continued fraction is equivalent to a degree-one holonomic recurrence. The
+former `TryDegreeOneMinimalityReduction` recognizes the case where
+`p^2+4r` is also square, giving the rational characteristic roots covered by
+the 2026 minimality theorem.
+
+`TryOnePeriodEqualityReduction` is strictly broader. When
+`p(u-r)=2rq`, its transformed Gauss parameters are
+
+\[
+a=\frac{d+r}{2r},\qquad
+b=N-1+\frac{u+d}{2r},\qquad
+c=N+\frac{u-r}{2r}.
+\]
+
+They remain rational even if the characteristic roots are irrational; only
+the hypergeometric argument becomes quadratic algebraic. Euler's integral is
+therefore still a 1-period, so the effective relation algorithm decides an
+exact integer-tail equality. The API also returns the least even shift making
+both Euler endpoint exponents positive. It therefore returns a complete exact
+reduction but does not reimplement the external 1-period algorithm. Its
+hypergeometric target uses the directly derived prefactor `mu/alpha`; an
+independent convergent-versus-series regression test detects an erroneous extra
+power of `mu` in that normalization.
+
+The alignment condition is also necessary for rational Gauss parameters in the
+nonsquare-characteristic case. Writing `ell` for the other characteristic root,
+
+\[
+a=\frac{d+r}{2r}+\frac{p(u-r)-2rq}{2r(\ell-\lambda)}.
+\]
+
+Thus the residual in the second numerator is exactly the irrational component,
+not a heuristic discovered only from examples.
+
 ## 7. Rational and real coefficients
 
 The integer restriction belongs to the exact API, not to the analytic theorem.
@@ -403,6 +440,9 @@ independently by:
 ~~~text
 dotnet run -c Release tools/polynomial-continued-fraction-verifier.cs
 dotnet run -c Release tools/maths-battery.cs
+dotnet run tools/polynomial-tail-rational-verifier.cs -c Release
+dotnet run tools/polynomial-tail-one-period-reduction-verifier.cs -c Release
+cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 ~~~
 
 The dedicated verifier covers 29,040 accepted/rejected small-coefficient
