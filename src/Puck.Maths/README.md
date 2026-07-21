@@ -33,6 +33,7 @@ including the exact-law boundary imposed by per-operation rounding.
 | `FixedQ4816` | `readonly record struct` | SIGNED Q48.16 fixed-point (two's-complement) — the signed companion to `UFixedQ4816`, implementing the complete .NET `INumber<T>` + `ISignedNumber<T>` surface, with deterministic `Sqrt`/`Atan2`/`Sin`/`Cos`/`SinCos`/`Log2`/`Exp2`/`Pow` (pure-integer table/polynomial kernels, each within ~0.65 ULP where absolute ULPs are representable; the square root's hardware seed is settled to the exact integer floor); the raw-bits carrier for every fixed-point value crossing a deterministic-simulation boundary (e.g. the `Puck.Scripting` WASM addon ABI). `SinCos` inverts `Atan2`; `Exp2` inverts `Log2`; `Pow` computes whole-number exponents by exact squaring. The everyday helpers round it out: `Abs`/`Sign`/`CopySign`, `Min`/`Max`/`Clamp`, `Floor`/`Ceiling`/`Round`/`Truncate`/`Fractional`, and `Lerp` (endpoint-exact linear interpolation). |
 | `FixedRateAccumulator` / `FixedVector3RateAccumulator` | `struct` | Exact-tick integration of Q48.16 per-second rates. Division remainders carry across fixed updates, so 120 integrations of one unit/second over 1/120 second total exactly one represented unit instead of repeating a rounded step. Use the same primitive for acceleration → velocity and velocity → position; its remainder fields are authoritative snapshot/hash state. |
 | `DiscreteMeasure` | `readonly record struct` | An exact integer-valued measure on integer intervals: `Cumulative(n) = floor(rate*n + offset)`, and any range receives the difference of its two boundaries. One neutral object covers balanced jobs-per-frame, clock/sample conversion, quotas, pacing, density, and 1D point sets. It is stateless and randomly seekable; adjacent ranges compose exactly; rational rates are periodic, while quadratic-surd rates are exactly aperiodic. `LowerBound`/`IndexContaining` provide direct inverse lookup without scanning. |
+| `CompiledDiscreteMeasure64` | `readonly record struct` | The allocation-free signed-64-bit execution form produced by `DiscreteMeasure.TryCompileInt64`. Its rational kernel stores two reduced fractions, uses only `long` plus `Int128` intermediates, handles `AmountAt(long.MaxValue)` without wrapping its exclusive boundary, computes ranges directly even when cumulative endpoints overflow, and exposes bounded `Try` forms for every fallible query. Irrational compilation rejects explicitly until a proven bounded quadratic rank/select backend exists. |
 | `FixedVector2` / `FixedVector3` | `readonly record struct` | 2D/3D vectors of `FixedQ4816` components — deterministic, bit-identical world-space math; `Dot`, `Wedge`/`Cross`, complex/quaternion products, and rotations widen every product and round once per result component. `FixedVector3.Normalize` is scale-free; `Length`/`LengthSquared` saturate only when the nonnegative result cannot fit, while `TryLength`/`TryLengthSquared` expose that boundary. |
 | `FixedQuaternion` | `readonly record struct` | Deterministic 3D rotation: `FromAxisAngle` (fixed-point SinCos), full-width fused Hamilton `*` and `Rotate`, `Slerp` (shortest-arc, nlerp guard), exact-denominator `Inverse`, and scale-free `FromTo`/`Normalize`. Norm properties saturate with `TryLength` variants for explicit overflow. Implements the applicable generic-math operator interfaces, so it composes with `FixedDual<T>`. |
 | `FixedComplex` | `readonly record struct` | Deterministic 2D rotation (the yaw-plane analog of the quaternion): `FromAngle`, full-width fused `*`/`Rotate`, full-range exact-rounding division, scale-free `FromTo`/`Normalize`, and full-width saturating `Magnitude`/`MagnitudeSquared` with explicit `TryMagnitude` variants. |
@@ -49,7 +50,9 @@ including the exact-law boundary imposed by per-operation rounding.
 | `LowDiscrepancy` | `static` | Deterministic even-coverage sequences: `R1` (golden ratio) and `R2` (plastic number) map an index to `[0, 1)` points that cover without clumping — placement, spawn scatter, stratified sampling. One multiply per component; the 64-bit wrap performs the mod-1. |
 | `LayerSequence` | `readonly record struct` | Layered index spaces (the generalized figurate numbers): a `Seed`-sized core wrapped by layers that start at `Start` and grow by `Step`, with **constant-time** index→layer lookup by inverting the quadratic prefix sum in pure integer arithmetic — no walking, no floating point. A negative `Step` bounds the space; `Project` saturates against that horizon with linear-overflow and square-root-depth excess channels. |
 | `CyclicRotation` | `static` | Deterministic, perfectly looping rotation driven by a tick: four planes turning at speeds {1, 7, 11, 13} in 12° steps, resyncing to the identity every 30 ticks. Rotations are `FixedComplex` read from a baked table of the 30th roots of unity, indexed by `tick mod 30` and never accumulated, so the loop closes bit-exactly with no drift on any backend. For looping deterministic animation: SDF spins, light-phase cycles, colour wheels. (Mathematically, the Coxeter element of E₈ — see `SymmetryLattice`.) |
-| `SymmetryLattice` | `static` | A fixed, maximally symmetric set of 240 nodes in 8D (the root system of E₈), addressed by index. `Reflect` composes to the whole symmetry group W(E₈) (order 696,729,600); `Cycle` is the order-30 element `CyclicRotation` drives, cutting the nodes into `Ring`s of thirty; `Project` lays them on a plane as eight rings whose radii pair off by the golden ratio (the 600-cell inside E₈). Generated by reflection closure in exact integer arithmetic. |
+| `SymmetryLattice` | `static` | A fixed, maximally symmetric set of 240 nodes in 8D (the root system of E₈), addressed by index. `Reflect` composes to the whole symmetry group W(E₈) (order 696,729,600); `Cycle` is the order-30 element `CyclicRotation` drives, cutting the nodes into `Ring`s of thirty; `Antipode`, `CanonicalRay`, and `AreOrthogonal` expose the exact 120-ray incidence seam; `RayCycleFactors` gives the five binary factors for the induced order-15 action; `Project` lays the roots on the Coxeter plane. |
+| `BinaryPolynomial` | `readonly record struct` | A packed polynomial over `GF(2)`: exact XOR addition, checked carryless multiplication, remainder, GCD, irreducibility, and automatic factorization of `tⁿ+1` for odd `n ≤ 31`. It is the finite-field/modulus carrier beneath cyclic-incidence analysis and is independently useful for binary codes and CRC-style recurrences. |
+| `OddCyclicIncidence` / `OddCyclicWordAnalysis` | `sealed class` | Geometry-neutral exact analysis of any free odd-cyclic binary incidence system. A compact letter×ray-orbit polynomial table yields `t=1` syndromes, the syndrome-matroid circuit filter, ranks over every CRT field, exact expanded nullity, and parity-proof irreducibility. Optional direct expansion recomputes the large binary rank and fails if it disagrees with the CRT sum, making the theorem executable as a per-word certificate. |
 | `HilbertCurve` | `static` | The Hilbert space-filling curve: an exact bijection between a 1D distance and a 2D grid point (`Encode`/`Decode`) that preserves locality — consecutive distances are always grid neighbours, unlike Morton/Z-order (`BitwisePair`), which jumps at power-of-two seams. For cache-coherent chunk/tile ordering, spatial hashing, texture swizzling. `order` in `[1, 31]`. |
 | `HexCoord` | `readonly record struct` | An exact hexagonal grid coordinate — the Eisenstein integer `Q + R·ω`. Because it is a genuine number ring, a 60° rotation is an exact integer multiply (`RotatedLeft`/`RotatedRight`, order 6) with no drift, unlike `FixedComplex`; `Length` (hex-grid distance), the six neighbours (`Direction`/`Neighbor`), the ring product `*` (rotation composed with scaling), and `Round` (fractional position → nearest cell, deterministic `FixedQ4816`) are all exact. For deterministic hex-grid games. |
 | `ModularTransform` | `readonly record struct` | An exact element of the modular group — a 2×2 integer matrix of determinant one — acting on the hyperbolic plane by `z ↦ (A·z + B)/(C·z + D)`. The one object beneath the library's three motions: `Classify` sorts it by trace into the elliptic rotations (the sixth root of unity of `HexCoord`), the parabolic tick shear (the kinematics step of `LayerSequence`), and the hyperbolic golden inflation (the step of `MetallicQuasicrystal`). Composition is matrix product; `Inverse` is the adjugate, no division; `Apply` moves a cusp (rational `p/q`, with `∞ = 1/0`) exactly and an interior `FixedComplex` point at the one rounding seam; `GaussReduce` carries a positive-definite form into the fundamental domain by an exact word in `S` and `T`, terminating because the leading coefficient is a strictly decreasing positive integer. |
@@ -61,6 +64,63 @@ including the exact-law boundary imposed by per-operation rounding.
 | `MetallicQuasicrystal` | `static` | The metallic-mean quasicrystals `δₙ = (n + √(n²+4))/2` for any index — golden is `n = 1` (the Fibonacci chain), silver is `n = 2` (the Pell chain). `Word` streams the tiling; `Contains`/`StartsLongTile`/`Next`/`Previous`/`Position` address points by ring coordinate `a + b·δₙ` in O(1), the membership-and-traversal surface generalized from the retired hand-coded golden and silver chains — `n = 1` reproduces the former golden chain coordinate for coordinate. Exact integer arithmetic above one fixed-point seam, so it never drifts. |
 | `MetallicPolynomialContinuedFraction` | `static` | Exact random access to the metallic polynomial continued fraction: `TailFloor(k, n)` evaluates `⌊sₙ⌋`, where `sₙ = k·n−1+n²/sₙ₊₁`, directly from its proved quadratic-irrational formula. It uses arbitrary-width integer arithmetic and an integer square root instead of a truncation depth or floating-point tolerance; differences of consecutive floors give its associated integer sequence. |
 | `SecureRandom` | `static` | Uniform, unbiased, cryptographically secure unsigned draws — NOT for simulation (deliberately non-reproducible); use `Pcg32XshRr` there. |
+
+### Odd-cyclic incidence and executable CRT evidence
+
+`Puck.Maths.Research.OddCyclicIncidence` accepts the mathematical boundary
+rather than a particular polytope: an odd cycle order, a number of ray/object
+orbits, and one packed incidence polynomial per letter×ray-orbit pair. Bit
+`p` means that the chosen context-orbit generator contains the object at phase
+`p`. The class verifies or derives the irreducible factors of `tⁿ+1`, derives
+all syndromes, and applies the square-free polynomial Chinese remainder
+theorem.
+
+```csharp
+using Puck.Maths.Research;
+
+// One C3 context orbit. Its generator meets its only ray orbit at phases 0
+// and 1, so its incidence polynomial is 1+t (binary 011).
+var incidence = new OddCyclicIncidence(
+    cycleOrder: 3,
+    rayOrbitCount: 1,
+    letterCount: 1,
+    columns: [0b011UL]);
+
+var result = incidence.Analyze(
+    selectedLetters: [0],
+    verifyExpandedMatrix: true);
+
+// True: every expanded ray occurs evenly, the total selection is odd, and
+// the all-contexts relation is the kernel's only nonzero relation.
+bool irreducible = result.IsIrreducible;
+
+// The fast CRT computation and independently expanded GF(2) matrix agree.
+bool theoremCheck = result.CrtMatchesExpanded is true;
+```
+
+For production enumeration, call `Analyze(..., verifyExpandedMatrix: false)`:
+only the small finite-field ranks are computed. Turn direct verification on
+for certificates, tests, or sampled audit words. `IsSyndromeCircuit` is the
+cheap first filter; if it fails, the word cannot be irreducible and no
+extension-field ranks are needed.
+
+The implementation scope is deliberately explicit:
+
+- the cycle order must be odd and below 63;
+- automatic factorization is available through order 31;
+- larger orders accept caller-supplied factors, which are rechecked for exact
+  product, irreducibility, and pairwise coprimality;
+- the action must be free and inputs must represent complete cyclic orbits;
+- this is binary incidence algebra, not a general real-valued geometry solver.
+
+The focused public-API verifier factors every odd order through 31, exercises
+a caller-factored order-61 system, compares CRT and direct expanded nullities
+across deterministic generated systems, and replays all eight 600-cell words
+plus nine 120-cell examples:
+
+```text
+dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-maths-verifier.cs
+```
 
 > `BinaryIntegerConstants<T>` is an internal helper (width, log2-width, the constants
 > 9 and 10 for an arbitrary `T`) and is not part of the public surface.
@@ -227,6 +287,29 @@ Offsets are normalized modulo one, selecting a different allocation origin witho
 changing the rate. Rational rates expose their exact period; irrational quadratic
 rates remain exact and aperiodic rather than being approximated by a long rational
 cycle.
+
+For a hot rational path, compile once and retain the bounded value:
+
+```csharp
+if (!samples.TryCompileInt64(out var runtime, out var failure))
+    throw new InvalidOperationException($"measure compilation failed: {failure}");
+
+long count = runtime.AmountAt(index: videoFrame);
+if (runtime.TryMap(start: firstVideoFrame, length: frameCount,
+                   mappedStart: out var firstSample, mappedLength: out var sampleCount))
+{
+    // No BigInteger and no allocation occurred in the query.
+}
+```
+
+Compilation currently accepts rational rates and rational offsets whose normalized
+components fit `long`. Runtime multiplication, floor division, offset carry, and
+exclusive range boundaries use `Int128`; results remain `long` and report overflow
+through `Try...`. `LowerBound` and `IndexContaining` use a fixed maximum of 64 monotone
+boundary probes. Quadratic measures deliberately stay on `DiscreteMeasure`: the existing
+Ostrowski discrepancy automata are not yet general allocation-free rank/select programs
+for arbitrary offsets, so the compiler refuses that case instead of silently
+approximating it.
 
 ---
 

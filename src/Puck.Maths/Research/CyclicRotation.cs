@@ -1,4 +1,4 @@
-namespace Puck.Maths;
+namespace Puck.Maths.Research;
 
 /// <summary>
 /// A deterministic, perfectly looping rotation driven by a tick: four rotation planes that each return to the identity

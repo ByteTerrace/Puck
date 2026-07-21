@@ -1,4 +1,4 @@
-namespace Puck.Maths;
+namespace Puck.Maths.Research;
 
 /// <summary>
 /// A fixed, maximally symmetric arrangement of 240 nodes in eight dimensions, with the reflections that permute them,
@@ -26,6 +26,10 @@ public static class SymmetryLattice {
     public const int RingCount = 8;
     /// <summary>The size of every cycle orbit — equal to <see cref="CyclicRotation.Period"/>, the order of the cycle.</summary>
     public const int RingSize = 30;
+    /// <summary>The number of antipodal ray pairs.</summary>
+    public const int RayCount = (NodeCount / 2);
+    /// <summary>The order induced by <see cref="Cycle(int)"/> after antipodal nodes are identified as rays.</summary>
+    public const int RayCycleOrder = (RingSize / 2);
 
     // The eight seed nodes (the E₈ simple roots), each scaled by two so its half-integer coordinates are integers in [-2, 2].
     private static readonly sbyte[][] SeedNodes = [
@@ -49,6 +53,7 @@ public static class SymmetryLattice {
     private static readonly int[] CycleMap;
     private static readonly int[] RingMap;
     private static readonly FixedVector2[] Projection;
+    private static readonly BinaryPolynomial[] RayCycleFactorStorage = BinaryPolynomial.FactorOddCycle(cycleOrder: RayCycleOrder);
 
     static SymmetryLattice() {
         var nodes = new sbyte[NodeCount][];
@@ -170,6 +175,36 @@ public static class SymmetryLattice {
 
         return ReflectMap[((node * NodeCount) + mirror)];
     }
+    /// <summary>Returns the antipodal node, which represents the same unoriented ray.</summary>
+    /// <param name="node">The node in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <returns>The node opposite <paramref name="node"/>.</returns>
+    public static int Antipode(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return ReflectMap[((node * NodeCount) + node)];
+    }
+    /// <summary>Returns the smaller node index in an antipodal ray pair, providing a stable ray key.</summary>
+    /// <param name="node">Either node representing the ray.</param>
+    /// <returns>The canonical node index of the unoriented ray.</returns>
+    public static int CanonicalRay(int node) {
+        var antipode = Antipode(node: node);
+
+        return Math.Min(node, antipode);
+    }
+    /// <summary>Tests exact E₈ orthogonality through the reflection action.</summary>
+    /// <param name="first">The first node.</param>
+    /// <param name="second">The second node.</param>
+    /// <returns><see langword="true"/> exactly when the roots, and therefore their rays, are orthogonal.</returns>
+    public static bool AreOrthogonal(int first, int second) {
+        ValidateNode(node: first, paramName: nameof(first));
+        ValidateNode(node: second, paramName: nameof(second));
+
+        return (ReflectMap[((first * NodeCount) + second)] == first);
+    }
+    /// <summary>
+    /// Gets the verified factors of <c>t^15 + 1</c> governing the order-15 action induced on antipodal E₈ rays.
+    /// </summary>
+    public static ReadOnlyMemory<BinaryPolynomial> RayCycleFactors => RayCycleFactorStorage;
     /// <summary>Advances a node one step around its ring — the order-30 cycle whose planes are <see cref="CyclicRotation"/>.</summary>
     /// <param name="node">The node to advance, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The index of the next node in the same ring; returning to the start after <see cref="RingSize"/> steps.</returns>

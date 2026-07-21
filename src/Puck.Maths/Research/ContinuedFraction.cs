@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace Puck.Maths;
+namespace Puck.Maths.Research;
 
 /// <summary>
 /// The continued-fraction expansion of an exact quadratic irrational, computed in pure integer arithmetic. By Lagrange's

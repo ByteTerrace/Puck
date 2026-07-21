@@ -18,6 +18,9 @@
 //   - modular-group determinant/adjugate-inverse/associativity, trace classification, cusp action vs BigInteger
 //     rationals, Gauss reduction into the fundamental domain (contravariant form action + discriminant + idempotence),
 //     and quadratic-surd continued-fraction periods (golden [1], silver [2]) with convergents approaching the value
+//   - discrete affine-floor measures across rational cadence/domain maps and quadratic aperiodic allocations, including
+//     exact range additivity, normalized origins, direct inverse lookup, and randomized signed-index brackets; the
+//     rational compiled kernel is checked against that oracle across full-width edges, bounded inverses, and allocation
 //   - quaternion/complex/rigid-transform/dual accuracy against mathematical references, incl. the
 //     exp/log bridges (bivector at the quaternion level, screw at the rigid level) and the FromTo shortest-arc
 //     constructors at both planar and spatial level; vector2 wedge/dot bit-identity against an independent
@@ -33,6 +36,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using Puck.Maths;
+using Puck.Maths.Research;
 
 // ---- constants (BigInteger, 100-digit pi) ----
 var piDigits = "31415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679";
@@ -187,6 +191,236 @@ if (FixedVector3RateAccumulator.FromRemainders(1L, -1L, 2L, 3L).TicksPerSecond !
 }
 
 Console.WriteLine("rate integration M4: denominator bound at construction, default-struct throws, FromRemainder round-trips denominator, spurious-delta closed OK");
+
+// One affine floor measure is the common object beneath cadence, exact domain conversion, quota allocation, and the
+// quadratic aperiodic words. Boundary differences must telescope exactly; inverse lookup must bracket every output
+// index; and rational/quadratic construction must preserve the periodic/aperiodic distinction without approximation.
+var fourThirds = DiscreteMeasure.Rational(numerator: 4, denominator: 3);
+var fourThirdsExpected = new BigInteger[] { 1, 1, 2, 1, 1, 2, 1, 1, 2 };
+for (var index = 0; (index < fourThirdsExpected.Length); ++index) {
+    if (fourThirds.AmountAt(index: index) != fourThirdsExpected[index]) {
+        throw new InvalidOperationException("DISCRETE MEASURE 4/3 CADENCE MISMATCH");
+    }
+}
+if (!fourThirds.IsPeriodic || (fourThirds.Period != 3) ||
+    (fourThirds.MinimumAmount != 1) || (fourThirds.MaximumAmount != 2)) {
+    throw new InvalidOperationException("DISCRETE MEASURE RATIONAL METADATA MISMATCH");
+}
+
+var audioPerVideoFrame = DiscreteMeasure.Rational(numerator: (48_000 * 1_001), denominator: 60_000);
+var audioExpected = new BigInteger[] { 800, 801, 801, 801, 801, 800, 801, 801, 801, 801 };
+for (var index = 0; (index < audioExpected.Length); ++index) {
+    if (audioPerVideoFrame.AmountAt(index: index) != audioExpected[index]) {
+        throw new InvalidOperationException("DISCRETE MEASURE CLOCK CONVERSION MISMATCH");
+    }
+}
+if (audioPerVideoFrame.AmountOver(start: 0, length: 5) != 4_004) {
+    throw new InvalidOperationException("DISCRETE MEASURE CLOCK BLOCK CONSERVATION MISMATCH");
+}
+
+var normalizedOffset = DiscreteMeasure.Rational(
+    numerator: 2,
+    denominator: 5,
+    offsetNumerator: 7,
+    offsetDenominator: 3
+);
+if (normalizedOffset.Offset != QuadraticSurd.Rational(numerator: 1, denominator: 3)) {
+    throw new InvalidOperationException("DISCRETE MEASURE OFFSET NORMALIZATION MISMATCH");
+}
+
+var measureRng = new Random(20260721);
+for (var sample = 0; (sample < 100_000); ++sample) {
+    var numerator = measureRng.Next(minValue: 0, maxValue: 2_001);
+    var denominator = measureRng.Next(minValue: 1, maxValue: 257);
+    var offsetNumerator = measureRng.Next(minValue: -1_000, maxValue: 1_001);
+    var offsetDenominator = measureRng.Next(minValue: 1, maxValue: 257);
+    var measure = DiscreteMeasure.Rational(numerator, denominator, offsetNumerator, offsetDenominator);
+    if (!measure.TryCompileInt64(compiled: out var compiledMeasure, failure: out var compileFailure) ||
+        (compileFailure != DiscreteMeasureCompilationFailure.None)) {
+        throw new InvalidOperationException("BOUNDED DISCRETE MEASURE RATIONAL COMPILATION FAILED");
+    }
+    var start = measureRng.NextInt64(minValue: -100_000L, maxValue: 100_001L);
+    var leftLength = measureRng.NextInt64(minValue: 0L, maxValue: 1_001L);
+    var rightLength = measureRng.NextInt64(minValue: 0L, maxValue: 1_001L);
+    var left = measure.AmountOver(start: start, length: leftLength);
+    var right = measure.AmountOver(start: (start + leftLength), length: rightLength);
+    var whole = measure.AmountOver(start: start, length: (leftLength + rightLength));
+    var mapped = measure.Map(start: start, length: (leftLength + rightLength));
+    var end = (start + leftLength + rightLength);
+
+    if ((left + right) != whole) {
+        throw new InvalidOperationException("DISCRETE MEASURE RANGE ADDITIVITY MISMATCH");
+    }
+    if ((measure.AmountBetween(start: start, end: end) != whole) ||
+        (measure.MapBetween(start: start, end: end) != mapped)) {
+        throw new InvalidOperationException("DISCRETE MEASURE ENDPOINT RANGE MISMATCH");
+    }
+    if ((mapped.Start != measure.Cumulative(index: start)) || (mapped.Length != whole)) {
+        throw new InvalidOperationException("DISCRETE MEASURE RANGE MAP MISMATCH");
+    }
+    if ((measure.AmountAt(index: start) < measure.MinimumAmount) ||
+        (measure.AmountAt(index: start) > measure.MaximumAmount)) {
+        throw new InvalidOperationException("DISCRETE MEASURE UNIT BOUND MISMATCH");
+    }
+    if ((compiledMeasure.Cumulative(index: start) != measure.Cumulative(index: start)) ||
+        (compiledMeasure.AmountAt(index: start) != measure.AmountAt(index: start)) ||
+        (compiledMeasure.AmountOver(start: start, length: (leftLength + rightLength)) != whole) ||
+        (compiledMeasure.AmountBetween(start: start, end: end) != whole)) {
+        throw new InvalidOperationException("COMPILED DISCRETE MEASURE ORACLE MISMATCH");
+    }
+    var compiledMap = compiledMeasure.Map(start: start, length: (leftLength + rightLength));
+    if ((compiledMap.Start != mapped.Start) || (compiledMap.Length != mapped.Length)) {
+        throw new InvalidOperationException("COMPILED DISCRETE MEASURE MAP MISMATCH");
+    }
+
+    if (numerator > 0) {
+        var outputIndex = measureRng.NextInt64(minValue: -100_000L, maxValue: 100_001L);
+        var containing = measure.IndexContaining(outputIndex: outputIndex);
+        if ((measure.Cumulative(index: containing) > outputIndex) ||
+            (measure.Cumulative(index: (containing + 1)) <= outputIndex)) {
+            throw new InvalidOperationException("DISCRETE MEASURE INVERSE BRACKET MISMATCH");
+        }
+
+        var next = measure.NextNonemptyIndex(start: start);
+        if ((next < start) || (measure.AmountAt(index: next) <= 0)) {
+            throw new InvalidOperationException("DISCRETE MEASURE NEXT NONEMPTY MISMATCH");
+        }
+        for (var empty = start; (empty < next); ++empty) {
+            if (measure.AmountAt(index: empty) != 0) {
+                throw new InvalidOperationException("DISCRETE MEASURE NEXT NONEMPTY SKIPPED WORK");
+            }
+        }
+
+        if (!compiledMeasure.TryLowerBound(amount: outputIndex, index: out var compiledLower) ||
+            (compiledLower != measure.LowerBound(amount: outputIndex)) ||
+            !compiledMeasure.TryIndexContaining(outputIndex: outputIndex, inputIndex: out var compiledContaining) ||
+            (compiledContaining != containing)) {
+            throw new InvalidOperationException("COMPILED DISCRETE MEASURE INVERSE MISMATCH");
+        }
+    }
+
+    var translation = measureRng.NextInt64(minValue: -1_000L, maxValue: 1_001L);
+    var translated = measure.Translate(distance: translation);
+    if (translated.AmountAt(index: start) != measure.AmountAt(index: (start + translation))) {
+        throw new InvalidOperationException("DISCRETE MEASURE TRANSLATION MISMATCH");
+    }
+}
+
+var inverseGolden = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Create(rationalNumerator: -1, surdNumerator: 1, radicand: 5, denominator: 2),
+    offset: QuadraticSurd.Zero
+);
+var inverseGoldenExpected = new BigInteger[] { 0, 1, 0, 1, 1, 0, 1, 0, 1, 1 };
+for (var index = 0; (index < inverseGoldenExpected.Length); ++index) {
+    if (inverseGolden.AmountAt(index: index) != inverseGoldenExpected[index]) {
+        throw new InvalidOperationException("DISCRETE MEASURE QUADRATIC WORD MISMATCH");
+    }
+}
+if (inverseGolden.IsPeriodic || (inverseGolden.Period is not null) ||
+    (inverseGolden.MinimumAmount != 0) || (inverseGolden.MaximumAmount != 1)) {
+    throw new InvalidOperationException("DISCRETE MEASURE QUADRATIC METADATA MISMATCH");
+}
+for (var outputIndex = -1_000; (outputIndex <= 1_000); ++outputIndex) {
+    var containing = inverseGolden.IndexContaining(outputIndex: outputIndex);
+    if ((inverseGolden.Cumulative(index: containing) > outputIndex) ||
+        (inverseGolden.Cumulative(index: (containing + 1)) <= outputIndex)) {
+        throw new InvalidOperationException("DISCRETE MEASURE QUADRATIC INVERSE MISMATCH");
+    }
+}
+
+var zeroInverseThrew = false;
+try {
+    _ = new DiscreteMeasure().LowerBound(amount: 1);
+} catch (InvalidOperationException) {
+    zeroInverseThrew = true;
+}
+if (!zeroInverseThrew) {
+    throw new InvalidOperationException("ZERO DISCRETE MEASURE INVERSE DID NOT THROW");
+}
+
+var negativeRateThrew = false;
+try {
+    _ = DiscreteMeasure.Rational(numerator: -1, denominator: 2);
+} catch (ArgumentOutOfRangeException) {
+    negativeRateThrew = true;
+}
+if (!negativeRateThrew) {
+    throw new InvalidOperationException("NEGATIVE DISCRETE MEASURE RATE DID NOT THROW");
+}
+
+// The compiled form must keep its advertised bounded edges honest: full-width unit lookup includes long.MaxValue's
+// exclusive boundary in Int128; direct range amounts can succeed when cumulative endpoints do not fit long; and every
+// unsupported/unrepresentable source reports the exact compilation failure instead of falling back to BigInteger.
+var maximumRate = DiscreteMeasure.Rational(numerator: long.MaxValue, denominator: 1).CompileInt64();
+if ((maximumRate.AmountAt(index: long.MinValue) != long.MaxValue) ||
+    (maximumRate.AmountAt(index: long.MaxValue) != long.MaxValue) ||
+    maximumRate.TryCumulative(index: 2L, cumulative: out _) ||
+    !maximumRate.TryAmountOver(start: 2L, length: 1L, amount: out var maximumRangeAmount) ||
+    (maximumRangeAmount != long.MaxValue) ||
+    maximumRate.TryMap(start: 2L, length: 1L, mappedStart: out _, mappedLength: out _)) {
+    throw new InvalidOperationException("COMPILED DISCRETE MEASURE FULL-WIDTH EDGE MISMATCH");
+}
+
+var alternatingOverflowRate = DiscreteMeasure.Rational(
+    numerator: ((BigInteger.One << 64) - BigInteger.One),
+    denominator: 2
+).CompileInt64();
+if ((alternatingOverflowRate.AmountAt(index: 0L) != long.MaxValue) ||
+    alternatingOverflowRate.TryAmountAt(index: 1L, amount: out _)) {
+    throw new InvalidOperationException("COMPILED DISCRETE MEASURE UNIT OVERFLOW NOT REPORTED");
+}
+
+var sparseCompiled = DiscreteMeasure.Rational(numerator: 1, denominator: long.MaxValue).CompileInt64();
+if (!sparseCompiled.TryLowerBound(amount: 1L, index: out var sparseBoundary) ||
+    (sparseBoundary != long.MaxValue) ||
+    !sparseCompiled.TryIndexContaining(outputIndex: 0L, inputIndex: out var sparseOwner) ||
+    (sparseOwner != (long.MaxValue - 1L)) ||
+    sparseCompiled.TryIndexContaining(outputIndex: 1L, inputIndex: out _)) {
+    throw new InvalidOperationException("COMPILED DISCRETE MEASURE BOUNDED INVERSE EDGE MISMATCH");
+}
+
+if (inverseGolden.TryCompileInt64(compiled: out _, failure: out var irrationalRateFailure) ||
+    (irrationalRateFailure != DiscreteMeasureCompilationFailure.IrrationalRate)) {
+    throw new InvalidOperationException("QUADRATIC RATE COMPILED WITHOUT A PROVEN BACKEND");
+}
+var irrationalOffsetMeasure = DiscreteMeasure.Create(
+    rate: QuadraticSurd.Rational(numerator: 1, denominator: 2),
+    offset: QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 2, denominator: 1)
+);
+if (irrationalOffsetMeasure.TryCompileInt64(compiled: out _, failure: out var irrationalOffsetFailure) ||
+    (irrationalOffsetFailure != DiscreteMeasureCompilationFailure.IrrationalOffset)) {
+    throw new InvalidOperationException("QUADRATIC OFFSET COMPILED WITHOUT A PROVEN BACKEND");
+}
+var oversizedMeasure = DiscreteMeasure.Rational(
+    numerator: ((BigInteger)long.MaxValue + BigInteger.One),
+    denominator: 1
+);
+if (oversizedMeasure.TryCompileInt64(compiled: out _, failure: out var oversizedFailure) ||
+    (oversizedFailure != DiscreteMeasureCompilationFailure.CoefficientOutOfRange)) {
+    throw new InvalidOperationException("OVERSIZED DISCRETE MEASURE COEFFICIENT COMPILED");
+}
+
+var defaultCompiledThrew = false;
+try {
+    _ = new CompiledDiscreteMeasure64().AmountAt(index: 0L);
+} catch (InvalidOperationException) {
+    defaultCompiledThrew = true;
+}
+if (!defaultCompiledThrew) {
+    throw new InvalidOperationException("DEFAULT COMPILED DISCRETE MEASURE DID NOT THROW");
+}
+
+var allocationProbe = audioPerVideoFrame.CompileInt64();
+var allocationSink = 0L;
+for (var index = 0L; (index < 1_000L); ++index) { allocationSink ^= allocationProbe.AmountAt(index: index); }
+var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+for (var index = 0L; (index < 100_000L); ++index) { allocationSink ^= allocationProbe.AmountAt(index: index); }
+var allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+if (allocatedAfter != allocatedBefore) {
+    throw new InvalidOperationException("COMPILED DISCRETE MEASURE QUERY ALLOCATED");
+}
+
+Console.WriteLine($"discrete measure: cadence/domain map, exact range additivity, inverse lookup, normalized origin, rational period, quadratic aperiodicity; compiled rational full-width edges + 100k allocation-free queries OK ({allocationSink})");
 
 var edges = new List<long> {
     0L, 1L, -1L, 2L, -2L, 3L, -3L, 0x7FFFL, -0x7FFFL, 0x8000L, -0x8000L, 0x8001L, -0x8001L,
@@ -1818,8 +2052,8 @@ Console.WriteLine("complex/rigid: gates + sclerp endpoints OK");
 int[] cyclicSpeeds = [1, 7, 11, 13];
 var cyclicMaxRotorUlp = 0L;
 var cyclicProbe = new FixedVector2(X: FixedQ4816.FromInteger(value: 1L), Y: FixedQ4816.FromInteger(value: 3L));
-for (var plane = 0; (plane < Puck.Maths.CyclicRotation.PlaneCount); ++plane) {
-    if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: 1L) != cyclicSpeeds[plane]) {
+for (var plane = 0; (plane < CyclicRotation.PlaneCount); ++plane) {
+    if (CyclicRotation.Step(plane: plane, tick: 1L) != cyclicSpeeds[plane]) {
         throw new InvalidOperationException("CYCLIC ROTATION PLANE SPEED IS WRONG");
     }
 
@@ -1827,22 +2061,22 @@ for (var plane = 0; (plane < Puck.Maths.CyclicRotation.PlaneCount); ++plane) {
         var phase = ((int)(((tick % 30L) + 30L) % 30L));
         var expectedStep = ((cyclicSpeeds[plane] * phase) % 30);
 
-        if (Puck.Maths.CyclicRotation.Step(plane: plane, tick: tick) != expectedStep) {
+        if (CyclicRotation.Step(plane: plane, tick: tick) != expectedStep) {
             throw new InvalidOperationException("CYCLIC ROTATION STEP DISAGREES WITH RESIDUE ORACLE");
         }
-        if (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != Puck.Maths.CyclicRotation.At(plane: plane, tick: (tick + 30L))) {
+        if (CyclicRotation.At(plane: plane, tick: tick) != CyclicRotation.At(plane: plane, tick: (tick + 30L))) {
             throw new InvalidOperationException("CYCLIC ROTATION CYCLE DID NOT CLOSE EXACTLY AT PERIOD");
         }
-        if ((phase == 0) && (Puck.Maths.CyclicRotation.At(plane: plane, tick: tick) != FixedComplex.MultiplicativeIdentity)) {
+        if ((phase == 0) && (CyclicRotation.At(plane: plane, tick: tick) != FixedComplex.MultiplicativeIdentity)) {
             throw new InvalidOperationException("CYCLIC ROTATION DID NOT RETURN TO IDENTITY AT A MULTIPLE OF PERIOD");
         }
-        if (Puck.Maths.CyclicRotation.Rotate(plane: plane, tick: tick, vector: cyclicProbe) != Puck.Maths.CyclicRotation.At(plane: plane, tick: tick).Rotate(vector: cyclicProbe)) {
+        if (CyclicRotation.Rotate(plane: plane, tick: tick, vector: cyclicProbe) != CyclicRotation.At(plane: plane, tick: tick).Rotate(vector: cyclicProbe)) {
             throw new InvalidOperationException("CYCLIC ROTATION ROTATE DISAGREES WITH ITS ROTATION");
         }
     }
 }
 for (var step = 0; (step < 30); ++step) {
-    var rotation = Puck.Maths.CyclicRotation.At(plane: 0, tick: step);   // plane 0 turns one step per tick
+    var rotation = CyclicRotation.At(plane: 0, tick: step);   // plane 0 turns one step per tick
     var expectedCos = ((long)Math.Round((Math.Cos(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
     var expectedSin = ((long)Math.Round((Math.Sin(((2.0 * Math.PI * step) / 30.0)) * 65536.0)));
 
@@ -1859,8 +2093,18 @@ Console.WriteLine($"cyclic rotation: exact 30-tick loop + identity resync, {{1,7
 // rings of thirty (== CyclicRotation's period), and the projection must resolve those rings with radii in four
 // golden-ratio pairs, one cycle step turning a node a twelfth of a turn. Oracles: exact index arithmetic and
 // independent double geometry, never the implementation's own tables.
-if (SymmetryLattice.RingSize != Puck.Maths.CyclicRotation.Period) {
+if (SymmetryLattice.RingSize != CyclicRotation.Period) {
     throw new InvalidOperationException("SYMMETRY LATTICE RING SIZE IS NOT THE CYCLIC ROTATION PERIOD");
+}
+if ((SymmetryLattice.RayCount != 120) || (SymmetryLattice.RayCycleOrder != 15)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE RAY QUOTIENT CONTRACT CHANGED");
+}
+var latticeRayFactorProduct = SymmetryLattice.RayCycleFactors.ToArray().Aggregate(
+    seed: new BinaryPolynomial(bits: 1UL),
+    func: (product, factor) => (product * factor)
+);
+if (latticeRayFactorProduct.Bits != ((1UL << SymmetryLattice.RayCycleOrder) | 1UL)) {
+    throw new InvalidOperationException("SYMMETRY LATTICE RAY-CYCLE FACTORIZATION CHANGED");
 }
 foreach (var invalidNode in new[] { -1, SymmetryLattice.NodeCount, 268_435_456 }) {
     ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Reflect(node: invalidNode, mirror: 0));
@@ -1868,6 +2112,10 @@ foreach (var invalidNode in new[] { -1, SymmetryLattice.NodeCount, 268_435_456 }
     ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Cycle(node: invalidNode));
     ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Ring(node: invalidNode));
     ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Project(node: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Antipode(node: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.CanonicalRay(node: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "first", operation: () => SymmetryLattice.AreOrthogonal(first: invalidNode, second: 0));
+    ExpectArgumentOutOfRange(parameterName: "second", operation: () => SymmetryLattice.AreOrthogonal(first: 0, second: invalidNode));
 }
 var latticeRingSizes = new int[SymmetryLattice.RingCount];
 var latticeReached = new bool[SymmetryLattice.NodeCount];
@@ -1883,6 +2131,9 @@ for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
         if (SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: node, mirror: mirror), mirror: mirror) != node) {
             throw new InvalidOperationException("SYMMETRY LATTICE REFLECTION IS NOT AN INVOLUTION");
         }
+        if (SymmetryLattice.AreOrthogonal(first: node, second: mirror) != (SymmetryLattice.Reflect(node: node, mirror: mirror) == node)) {
+            throw new InvalidOperationException("SYMMETRY LATTICE ORTHOGONALITY DISAGREES WITH REFLECTION");
+        }
     }
 
     // Every E8 exponent is odd, so the fifteenth power of this Coxeter element is central inversion. Reflecting a root
@@ -1891,6 +2142,10 @@ for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
     for (var step = 0; (step < (SymmetryLattice.RingSize / 2)); ++step) { latticeOpposite = SymmetryLattice.Cycle(node: latticeOpposite); }
     if (latticeOpposite != SymmetryLattice.Reflect(node: node, mirror: node)) {
         throw new InvalidOperationException("SYMMETRY LATTICE COXETER HALF-CYCLE IS NOT CENTRAL INVERSION");
+    }
+    if ((SymmetryLattice.Antipode(node: node) != latticeOpposite) ||
+        (SymmetryLattice.CanonicalRay(node: node) != SymmetryLattice.CanonicalRay(node: latticeOpposite))) {
+        throw new InvalidOperationException("SYMMETRY LATTICE ANTIPODAL RAY QUOTIENT CHANGED");
     }
 }
 for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
@@ -3051,6 +3306,8 @@ sink ^= Bench("sqrt small           ", opsSqrtSmall, opsSqrtSmall, static (a, _)
 sink ^= Bench("sqrt large           ", opsSqrtLarge, opsSqrtLarge, static (a, _) => FixedQ4816.Sqrt(value: FixedQ4816.FromRawBits(value: a)).Value, 3_000);
 sink ^= Bench("atan2                ", opsA, opsB, static (a, b) => FixedQ4816.Atan2(y: new(Value: a), x: new(Value: b)).Value, 5_000);
 sink ^= Bench("sincos               ", opsA, opsB, static (a, _) => FixedQ4816.SinCos(angle: new(Value: a)).Sin.Value, 5_000);
+var compiledMeasureBench = DiscreteMeasure.Rational(numerator: 4_004, denominator: 5).CompileInt64();
+sink ^= Bench("discrete measure64   ", opsA, opsB, (a, _) => compiledMeasureBench.AmountAt(index: a), 5_000);
 var benchRng = Pcg32XshRr.Create(state: 1UL, stream: 1UL);
 var pcgSink = 0UL;
 var pcgTimer = Stopwatch.StartNew();
@@ -3225,27 +3482,27 @@ quatTimer.Stop();
 Console.WriteLine($"dual multiply        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 var benchCyclicV2 = new FixedVector2(X: FixedQ4816.One, Y: FixedQ4816.FromInteger(value: 3L));
 quatTimer.Restart();
-for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Step(plane: (n & 3), tick: n); }
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= CyclicRotation.Step(plane: (n & 3), tick: n); }
 quatTimer.Stop();
 Console.WriteLine($"cyclic step          : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.At(plane: (n & 3), tick: n).Real.Value; }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= CyclicRotation.At(plane: (n & 3), tick: n).Real.Value; }
 quatTimer.Stop();
 Console.WriteLine($"cyclic at            : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 20_000_000); n++) { quatSink ^= Puck.Maths.CyclicRotation.Rotate(plane: (n & 3), tick: n, vector: benchCyclicV2).X.Value; }
+for (var n = 0; (n < 20_000_000); n++) { quatSink ^= CyclicRotation.Rotate(plane: (n & 3), tick: n, vector: benchCyclicV2).X.Value; }
 quatTimer.Stop();
 Console.WriteLine($"cyclic rotate        : {(quatTimer.Elapsed.TotalNanoseconds / 20_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Reflect(node: (n % 240), mirror: ((n * 7) % 240)); }
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= SymmetryLattice.Reflect(node: (n % 240), mirror: ((n * 7) % 240)); }
 quatTimer.Stop();
 Console.WriteLine($"lattice reflect      : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 100_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Cycle(node: (n % 240)); }
+for (var n = 0; (n < 100_000_000); n++) { quatSink ^= SymmetryLattice.Cycle(node: (n % 240)); }
 quatTimer.Stop();
 Console.WriteLine($"lattice cycle        : {(quatTimer.Elapsed.TotalNanoseconds / 100_000_000d),8:F2} ns/op");
 quatTimer.Restart();
-for (var n = 0; (n < 50_000_000); n++) { quatSink ^= Puck.Maths.SymmetryLattice.Project(node: (n % 240)).X.Value; }
+for (var n = 0; (n < 50_000_000); n++) { quatSink ^= SymmetryLattice.Project(node: (n % 240)).X.Value; }
 quatTimer.Stop();
 Console.WriteLine($"lattice project      : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
 quatTimer.Restart();

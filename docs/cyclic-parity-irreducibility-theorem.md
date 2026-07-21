@@ -146,6 +146,26 @@ general theorem is already Lean-certified would therefore be too strong.
 
 ## Reproduction interface
 
+The reusable C# surface is
+[`OddCyclicIncidence.cs`](../src/Puck.Maths/Research/OddCyclicIncidence.cs), backed by
+[`BinaryPolynomial.cs`](../src/Puck.Maths/Research/BinaryPolynomial.cs). `Analyze`
+returns the syndrome condition, one rank and nullity contribution per
+irreducible factor, total binary nullity, and irreducibility. With
+`verifyExpandedMatrix: true`, it also constructs the full binary incidence
+matrix and throws if its directly measured nullity differs from the CRT sum.
+That mode is an executable, instance-level demonstration of the theorem's
+central decomposition; normal enumeration leaves it off and uses the much
+smaller component matrices.
+
+The targeted public-API verifier checks every automatically supported odd
+factorization, a caller-factored \(C_{61}\) case, hundreds of deterministic
+generated words, two transparent \(C_3\) examples, all eight 600-cell proof
+words, and nine 120-cell examples:
+
+```text
+dotnet run -c Release -p:NuGetAudit=false tools/odd-cyclic-maths-verifier.cs
+```
+
 [`odd-cyclic-incidence-verifier.cs`](../tools/odd-cyclic-incidence-verifier.cs)
 consumes the geometry-neutral `puck.odd-cyclic-incidence.v1` certificate
 format. It verifies the proposed irreducible factorization, derives syndromes,

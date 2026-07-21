@@ -1,3 +1,5 @@
+using Puck.Maths.Research;
+
 namespace Puck.Maths;
 
 /// <summary>

@@ -107,6 +107,44 @@ public readonly record struct DiscreteMeasure {
             offset: QuadraticSurd.Rational(numerator: offsetNumerator, denominator: offsetDenominator)
         );
 
+    /// <summary>
+    /// Attempts to compile this exact measure into its allocation-free signed-64-bit execution form.
+    /// </summary>
+    /// <param name="compiled">The compiled measure on success; otherwise the invalid default value.</param>
+    /// <param name="failure">The exact reason compilation was unavailable.</param>
+    /// <returns><see langword="true"/> when every required rational coefficient fits the bounded representation.</returns>
+    /// <remarks>
+    /// The current compiled backend accepts rational rates and offsets. Quadratic measures remain available through
+    /// this unbounded type until a separately proven bounded quadratic rank/select compiler exists.
+    /// </remarks>
+    public bool TryCompileInt64(
+        out CompiledDiscreteMeasure64 compiled,
+        out DiscreteMeasureCompilationFailure failure) =>
+        CompiledDiscreteMeasure64.TryCompile(source: this, compiled: out compiled, failure: out failure);
+
+    /// <summary>Attempts to compile this measure, discarding the failure detail.</summary>
+    public bool TryCompileInt64(out CompiledDiscreteMeasure64 compiled) =>
+        TryCompileInt64(compiled: out compiled, failure: out _);
+
+    /// <summary>Compiles this measure into its allocation-free signed-64-bit execution form.</summary>
+    /// <exception cref="NotSupportedException">The rate or offset is irrational.</exception>
+    /// <exception cref="OverflowException">A required normalized coefficient exceeds signed 64-bit storage.</exception>
+    public CompiledDiscreteMeasure64 CompileInt64() {
+        if (TryCompileInt64(compiled: out var compiled, failure: out var failure)) {
+            return compiled;
+        }
+
+        return failure switch {
+            DiscreteMeasureCompilationFailure.IrrationalRate =>
+                throw new NotSupportedException(message: "the bounded compiler does not yet support irrational rates"),
+            DiscreteMeasureCompilationFailure.IrrationalOffset =>
+                throw new NotSupportedException(message: "the bounded compiler does not yet support irrational offsets"),
+            DiscreteMeasureCompilationFailure.CoefficientOutOfRange =>
+                throw new OverflowException(message: "a normalized measure coefficient exceeds signed 64-bit storage"),
+            _ => throw new InvalidOperationException(message: "the discrete-measure compiler failed without a reason"),
+        };
+    }
+
     /// <summary>Returns the signed cumulative amount at boundary <paramref name="index"/>: <c>floor(r*index + o)</c>.</summary>
     /// <remarks><c>Cumulative(0)</c> is always zero because <see cref="Offset"/> is normalized into <c>[0, 1)</c>.</remarks>
     public BigInteger Cumulative(BigInteger index) =>
