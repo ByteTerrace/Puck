@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 
 namespace Puck.Maths.Research;
@@ -184,8 +185,14 @@ public sealed class AutomaticCyclicIncidence {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         if (BinaryGrayBitCount > 0) {
             var toggle = checked((int)(BigInteger.TrailingZeroCount(index + BigInteger.One) % BinaryGrayBitCount));
-            return (BigInteger.One << toggle);
+            var selection = (BigInteger.One << toggle);
+            Debug.Assert(selection == SelectionAtAutomaton(index), "the Gray fast path disagrees with its DFAO");
+            return selection;
         }
+        return SelectionAtAutomaton(index);
+    }
+
+    private BigInteger SelectionAtAutomaton(BigInteger index) {
         var state = Selector.StartState;
 
         if (Numeration == AutomaticCyclicNumeration.Positional) {

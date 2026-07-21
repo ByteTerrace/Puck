@@ -3069,6 +3069,25 @@ static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needl
 // The general generator streams the tiling word for any quadratic irrational. Correctness with no reference impl: the
 // word must be Sturmian — exactly k+1 distinct factors of every length k — and the tile lengths must satisfy the
 // inflation identity λ·ℓ_long = A·ℓ_long + C·ℓ_short. Golden and silver are the single-term specializations.
+var nonCanonicalSilver = QuadraticSurd.Create(2, 1, 8, 2);
+var canonicalSilver = QuadraticSurd.Create(1, 1, 2, 1);
+var equivalentSurds = new HashSet<QuadraticSurd> { nonCanonicalSilver, canonicalSilver };
+var sortableEquivalentSurds = new List<QuadraticSurd> { nonCanonicalSilver, canonicalSilver };
+sortableEquivalentSurds.Sort();
+if ((nonCanonicalSilver != canonicalSilver) ||
+    (nonCanonicalSilver.CompareTo(canonicalSilver) != 0) ||
+    (nonCanonicalSilver.GetHashCode() != canonicalSilver.GetHashCode()) ||
+    (equivalentSurds.Count != 1) ||
+    ((nonCanonicalSilver + canonicalSilver) != (QuadraticSurd.Rational(2) * canonicalSilver))) {
+    throw new InvalidOperationException("QUADRATIC SURD SQUARE-EQUIVALENT REPRESENTATIONS DISAGREE");
+}
+var silverIndex = QuadraticQuasicrystal.Compile(1, 1, 2, 1);
+if ((silverIndex.ExactLongTileLength != canonicalSilver) ||
+    (silverIndex.PositionAt(4096) !=
+        (QuadraticSurd.Rational(4096 - silverIndex.CountLongTiles(4096)) +
+            (QuadraticSurd.Rational(silverIndex.CountLongTiles(4096)) * canonicalSilver)))) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL INDEPENDENT SURD IDENTITY WRONG");
+}
 (long P, long Q, long D, long R)[] quasicrystalCases = [
     (1L, 1L, 5L, 2L), (1L, 1L, 2L, 1L), (0L, 1L, 2L, 1L), (0L, 1L, 3L, 1L), (0L, 1L, 7L, 1L), (0L, 1L, 13L, 1L), (0L, 1L, 23L, 1L),
 ];

@@ -5,7 +5,8 @@ namespace Puck.Maths;
 /// <summary>An exact real number <c>(a + b·√d) / c</c> in a real quadratic field.</summary>
 /// <remarks>
 /// The denominator is normalized positive and common integer factors are removed. A square radicand is collapsed to a
-/// rational value. Arithmetic is exact; operations between irrational values require the same radicand.
+/// rational value. Arithmetic, equality, ordering, and hashing identify square-equivalent radicands without factoring
+/// arbitrary-width integers; for example, <c>√8</c> and <c>2√2</c> interoperate exactly.
 /// </remarks>
 public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<QuadraticSurd> {
     private readonly BigInteger m_denominator;
@@ -146,17 +147,43 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
     public int CompareTo(QuadraticSurd other) => (this - other).Sign;
 
     /// <inheritdoc />
-    public bool Equals(QuadraticSurd other) =>
-        (RationalNumerator == other.RationalNumerator) &&
-        (SurdNumerator == other.SurdNumerator) &&
-        (Radicand == other.Radicand) &&
-        (Denominator == other.Denominator);
+    public bool Equals(QuadraticSurd other) {
+        if ((RationalNumerator * other.Denominator) != (other.RationalNumerator * Denominator)) {
+            return false;
+        }
+        if (IsRational || other.IsRational) { return IsRational && other.IsRational; }
+
+        var leftCoefficient = (SurdNumerator * other.Denominator);
+        var rightCoefficient = (other.SurdNumerator * Denominator);
+        return (leftCoefficient.Sign == rightCoefficient.Sign) &&
+            ((leftCoefficient * leftCoefficient * Radicand) ==
+                (rightCoefficient * rightCoefficient * other.Radicand));
+    }
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => (obj is QuadraticSurd other) && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(RationalNumerator, SurdNumerator, Radicand, Denominator);
+    public override int GetHashCode() {
+        var rationalDivisor = BigInteger.GreatestCommonDivisor(BigInteger.Abs(RationalNumerator), Denominator);
+        var rationalNumerator = (RationalNumerator / rationalDivisor);
+        var rationalDenominator = (Denominator / rationalDivisor);
+        if (IsRational) { return HashCode.Combine(rationalNumerator, rationalDenominator); }
+
+        var irrationalSquareNumerator = (SurdNumerator * SurdNumerator * Radicand);
+        var irrationalSquareDenominator = (Denominator * Denominator);
+        var irrationalDivisor = BigInteger.GreatestCommonDivisor(
+            irrationalSquareNumerator,
+            irrationalSquareDenominator
+        );
+        return HashCode.Combine(
+            rationalNumerator,
+            rationalDenominator,
+            SurdNumerator.Sign,
+            irrationalSquareNumerator / irrationalDivisor,
+            irrationalSquareDenominator / irrationalDivisor
+        );
+    }
 
     /// <inheritdoc />
     public override string ToString() => IsRational
@@ -165,12 +192,13 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
 
     /// <summary>Adds two values in the same real quadratic field.</summary>
     public static QuadraticSurd operator +(QuadraticSurd left, QuadraticSurd right) {
-        var radicand = CommonRadicand(left: left, right: right);
+        var common = CommonRadicalParts(left: left, right: right);
 
         return Create(
             rationalNumerator: ((left.RationalNumerator * right.Denominator) + (right.RationalNumerator * left.Denominator)),
-            surdNumerator: ((left.SurdNumerator * right.Denominator) + (right.SurdNumerator * left.Denominator)),
-            radicand: radicand,
+            surdNumerator: ((common.LeftSurdNumerator * right.Denominator) +
+                (common.RightSurdNumerator * left.Denominator)),
+            radicand: common.Radicand,
             denominator: (left.Denominator * right.Denominator)
         );
     }
@@ -183,14 +211,14 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
 
     /// <summary>Multiplies two values in the same real quadratic field.</summary>
     public static QuadraticSurd operator *(QuadraticSurd left, QuadraticSurd right) {
-        var radicand = CommonRadicand(left: left, right: right);
+        var common = CommonRadicalParts(left: left, right: right);
 
         return Create(
             rationalNumerator: ((left.RationalNumerator * right.RationalNumerator) +
-                (left.SurdNumerator * right.SurdNumerator * radicand)),
-            surdNumerator: ((left.RationalNumerator * right.SurdNumerator) +
-                (left.SurdNumerator * right.RationalNumerator)),
-            radicand: radicand,
+                (common.LeftSurdNumerator * common.RightSurdNumerator * common.Radicand)),
+            surdNumerator: ((left.RationalNumerator * common.RightSurdNumerator) +
+                (common.LeftSurdNumerator * right.RationalNumerator)),
+            radicand: common.Radicand,
             denominator: (left.Denominator * right.Denominator)
         );
     }
@@ -199,16 +227,16 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
     public static QuadraticSurd operator /(QuadraticSurd left, QuadraticSurd right) {
         if (right.Sign == 0) { throw new DivideByZeroException(); }
 
-        var radicand = CommonRadicand(left: left, right: right);
+        var common = CommonRadicalParts(left: left, right: right);
         var norm = ((right.RationalNumerator * right.RationalNumerator) -
-            (right.SurdNumerator * right.SurdNumerator * radicand));
+            (common.RightSurdNumerator * common.RightSurdNumerator * common.Radicand));
 
         return Create(
             rationalNumerator: (right.Denominator * ((left.RationalNumerator * right.RationalNumerator) -
-                (left.SurdNumerator * right.SurdNumerator * radicand))),
-            surdNumerator: (right.Denominator * ((left.SurdNumerator * right.RationalNumerator) -
-                (left.RationalNumerator * right.SurdNumerator))),
-            radicand: radicand,
+                (common.LeftSurdNumerator * common.RightSurdNumerator * common.Radicand))),
+            surdNumerator: (right.Denominator * ((common.LeftSurdNumerator * right.RationalNumerator) -
+                (left.RationalNumerator * common.RightSurdNumerator))),
+            radicand: common.Radicand,
             denominator: (left.Denominator * norm)
         );
     }
@@ -226,9 +254,27 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
     /// <summary>Tests exact inequality.</summary>
     public static bool operator !=(QuadraticSurd left, QuadraticSurd right) => !left.Equals(right);
 
-    private static BigInteger CommonRadicand(QuadraticSurd left, QuadraticSurd right) {
-        if (left.IsRational) { return right.Radicand; }
-        if (right.IsRational || (left.Radicand == right.Radicand)) { return left.Radicand; }
+    private static (BigInteger Radicand, BigInteger LeftSurdNumerator, BigInteger RightSurdNumerator)
+        CommonRadicalParts(QuadraticSurd left, QuadraticSurd right) {
+        if (left.IsRational) { return (right.Radicand, BigInteger.Zero, right.SurdNumerator); }
+        if (right.IsRational) { return (left.Radicand, left.SurdNumerator, BigInteger.Zero); }
+        if (left.Radicand == right.Radicand) {
+            return (left.Radicand, left.SurdNumerator, right.SurdNumerator);
+        }
+
+        var commonRadicand = BigInteger.GreatestCommonDivisor(left.Radicand, right.Radicand);
+        var leftScaleSquared = (left.Radicand / commonRadicand);
+        var rightScaleSquared = (right.Radicand / commonRadicand);
+        var leftScale = BigIntegerMath.SquareRoot(leftScaleSquared);
+        var rightScale = BigIntegerMath.SquareRoot(rightScaleSquared);
+        if (((leftScale * leftScale) == leftScaleSquared) &&
+            ((rightScale * rightScale) == rightScaleSquared)) {
+            return (
+                commonRadicand,
+                left.SurdNumerator * leftScale,
+                right.SurdNumerator * rightScale
+            );
+        }
 
         throw new ArgumentException(message: "quadratic-surd operands must belong to the same field");
     }

@@ -11,7 +11,12 @@ classes, but equality for the remaining hypergeometric tails is still not unifor
 
 The implementation now proves arbitrary-order tail remainders, finite norm reduction, finite generalized-Pell orbit
 reduction, and effective sign stabilization. Thus every sufficiently large nonzero discrepancy has a finite exact
-channel presentation, and the toolkit decides whether the discrepancy is eventually identically zero.
+channel presentation, and the toolkit decides whether the discrepancy is eventually identically zero.  The same
+presentation now gives the effective bound `#{n <= N : d_n != 0}=O(log N)` for every irrational-slope instance.
+On the unresolved integer-orbit side, exact prime-power profiling has isolated a finite-field monodromy criterion:
+both its determinant and trace halves now have direct finite-field proofs.  They imply unconditional
+superexponential EGF-denominator growth whenever the numerator discriminant is not a rational square, leaving only
+the square-numerator, nonsquare-characteristic, nonaligned hypergeometric branch outside the certified locus.
 
 One obligation remains before the proposed theorem may be cited as stated: totalize the finite-prefix comparison when
 a tail may equal an integer exactly. The generalized-Pell presentation now compiles into an explicit Ostrowski DFAO,
@@ -344,6 +349,37 @@ channel unit and the continued-fraction period unit are commensurable in the ran
 linear offsets are normalized by the finite addition transducer. Soundness does not rely on that termination argument;
 every returned pattern carries the direct recurrence certificate above.
 
+### Effective sparsity of the irrational discrepancy support
+
+The finite-channel statement has a quantitative consequence that does not
+need the unresolved finite-prefix equality oracle.  On one active channel let
+
+\[
+ \varepsilon=U+V\sqrt D>1
+\]
+
+be its positive period unit.  If its Pell point has second coordinate `Y_k`,
+then `Y_(k+2)=2U Y_(k+1)-Y_k`, while decoding gives
+
+\[
+ n_k=\frac{Y_k-S}{Q}
+\]
+
+for fixed integers `S,Q`.  On the positive branch this yields
+`n_k=Theta(epsilon^k)`.  Each channel therefore contributes only `O(log N)`
+indices through `N`, with constants effectively recoverable from its exact
+Pell data.  There are finitely many active channels, so in the irrational-slope
+case
+
+\[
+ \#\{n\le N:d_n\ne0\}=O(\log N). \tag{S}
+\]
+
+In particular the discrepancy support has natural density zero.  Every
+individual channel has exponentially spaced indices.  The finitely many
+unknown prefix outputs cannot change (S), so this conclusion is unconditional
+even before the total automaton has been effectively spliced.
+
 ## 6. Why the total identity decider remains open
 
 For each of the finitely many \(n<N_*\), positive finite truncations give nested exact rational enclosures for \(s_n\).
@@ -647,6 +683,233 @@ index. Thus the arithmetic experiment distinguishes the rational-exponent
 locus, but a new theorem would still be needed to show that *positivity* rules
 out the superexponential behavior.
 
+The new exact prime-power profiler
+`tools/polynomial-tail-padic-sieve.py` computes the exponent
+
+\[
+ e_\ell(N)=\max_{0\le n\le N}
+   \max(0,v_\ell(n!)-v_\ell(Q_n))
+\]
+
+from the recurrence modulo `ell^v_ell(N!)`, without factoring the
+factorial-sized orbit values.  It also closes the finite state orbit
+`(n mod ell,Q_n mod ell,Q_(n+1) mod ell)`.  If its eventual cycle contains a
+nonzero `Q_n mod ell`, such a nonzero residue recurs with bounded gaps.
+Legendre's formula then gives the rigorous finite-prime certificate
+
+\[
+ \liminf_{N\to\infty}\frac{\log E_N}{N}
+ \geq \sum_{\ell\in S}\frac{\log\ell}{\ell-1}. \tag{P}
+\]
+
+for every finite set `S` of those primes.  Thus increasing finite residue
+searches produce certified lower bounds rather than a fitted growth curve.
+The same tool multiplies one complete coefficient period into a two-by-two
+matrix over `F_ell`.  That monodromy kills every initial orbit precisely when
+its trace and determinant vanish.
+
+The observed criterion in fact admits a direct proof.  If
+
+\[
+ T_n=\begin{pmatrix}0&1\\B(n+1)&-A(n+2)\end{pmatrix},\qquad
+ M_\ell=T_{\ell-1}\cdots T_0,
+\]
+
+then
+
+\[
+ \det M_\ell=(-1)^\ell\prod_{x\in\mathbf F_\ell}B(x).
+\]
+
+At an odd prime not dividing `2r`, this determinant vanishes exactly when the
+numerator discriminant `u^2-4rv` is a square modulo `ell`.  Exclude the primes
+dividing the characteristic discriminant as well.  There is a stronger closed
+trace formula.  Put
+
+\[
+ R=p(u-r)-2rq,qquad \Delta_c=p^2+4r,qquad h=(\ell-1)/2.
+\]
+
+Then, for every odd prime `ell` not dividing `r Delta_c`,
+
+\[
+ \boxed{\operatorname{tr}M_\ell=
+ \frac{R}{2r}\left(1-\Delta_c^h\right)}. \tag{T}
+\]
+
+Here is a direct proof on the determinant-zero locus.  When `B` has distinct
+roots `a,b`, put
+`d=b-a` in `{1,...,ell-1}`.  The singular transfer at `a` has rank one:
+
+\[
+ T_{a-1}=c_a e_2^t,
+ \qquad c_a=(1,-A(a+1))^t.
+\]
+
+Cyclically cutting the product at the two singular transfers therefore gives
+
+\[
+ \operatorname{tr}M_\ell=H(a,b)H(b,a), \tag{T0}
+\]
+
+where `H(a,b)` is the second coordinate obtained by propagating `c_a` from
+`a` to `b`.  This connection coefficient also has an elementary determinant
+form.  Write `q_a=pa+q`, let
+
+\[
+ C=\begin{pmatrix}0&r\\1&p\end{pmatrix},
+\]
+
+and let `rho_(d-1)` be its induced action on `Sym^(d-1)`.  The continuant
+recurrence for the connection is exactly the leading-principal-minor
+recurrence of
+
+\[
+ L_d=(p+q_a)I+\rho_{d-1}(C).
+\]
+
+Hence `H(a,b)=(-1)^d det(L_d)`.  If `lambda_-,lambda_+` are the roots of
+`x^2-px-r`, then
+
+\[
+ H(a,b)=(-1)^d\prod_{j=0}^{d-1}
+ \left(p+q_a+(d-1-j)\lambda_-+j\lambda_+\right). \tag{T1}
+\]
+
+The reverse connection has length `ell-d` and `q_b=q_a+pd`.  If
+`delta=lambda_+-lambda_-` and
+`c=q_a+d lambda_-+lambda_+`, the two products in (T1) combine to give
+
+\[
+ \operatorname{tr}M_\ell
+ =-\prod_{j\in\mathbf F_\ell}(c+j\delta)
+ =c\delta^{\ell-1}-c^\ell. \tag{T2}
+\]
+
+If `Delta_c` splits, `c,delta` lie in `F_ell`, so (T2) is zero.  If it is
+nonsplit, Frobenius interchanges `lambda_-` and `lambda_+`; hence
+`delta^(ell-1)=-1`, and (T2) reduces to
+
+\[
+ -(c+c^\ell)
+ =-\bigl(2q+p(a+b+1)\bigr)
+ =R/r.
+\]
+
+Euler's criterion now gives (T) whenever `B` splits.  To remove that apparently
+extraneous assumption, hold `p,q,r,u` fixed and view the cyclic continuant
+`tr M_ell` as a polynomial in `v`.  A matching on the odd `ell`-cycle uses at
+most `h` quadratic entries.  The coefficient of `v^h` is the sum of the one
+remaining linear entry over all cyclic positions, hence is zero in `F_ell`.
+The degree is therefore less than `h`.  As `v` ranges, the condition that
+`u^2-4rv` be a nonzero square supplies exactly `h` distinct values, on all of
+which (T) was just proved.  Polynomial interpolation proves (T) for every
+`v`.
+
+In particular, after also excluding the numerator discriminant, determinant
+and trace together give the exact operator-level criterion
+
+\[
+ \operatorname{tr}M_\ell=0
+ \quad\Longleftrightarrow\quad
+ p(u-r)-2rq=0\pmod\ell
+ \quad\text{or}\quad
+ p^2+4r\text{ is a square modulo }\ell. \tag{T3}
+\]
+
+At depth 500, primes through 31 already certify base-two rates `3.144300` for
+the long outside-locus escape `(1,0,8,11,3,3)` and `3.776906` for the generic
+outside-locus orbit `(1,0,1,0,1,1)`.  The factorial, rational-ratio, and aligned
+controls have no bad prime through 31.  An independent local-exponent sweep of
+45,762 unramified parameter/prime instances found exact agreement between
+nilpotence of this monodromy and the finite-field analogue of the EGF locus:
+the numerator discriminant splits, and either the characteristic discriminant
+splits or the alignment residual vanishes.  The sweep now independently
+checks the determinant formula, connection factorization, and closed trace
+formula used in the proof.  A second exhaustive sweep checks all 17,068
+coefficient tuples modulo 3, 5, and 7, including nonsplit and ramified
+numerators, with zero trace-formula mismatches.  There were 737 instances in the reverse
+initial-value test where a nonsplit, nonnilpotent full operator nevertheless
+had one special initial orbit die modulo that particular prime.  Consequently
+the operator-level modular pattern agrees perfectly with the EGF geometry,
+while particular-solution accidents still prevent it from replacing the
+minimal-solution analysis.
+
+Those accidents nevertheless have an exact description.  Cayley--Hamilton
+gives `M_ell^2=(tr M_ell)M_ell` whenever its determinant is zero.  If the trace
+also vanishes, every state dies within two coefficient periods.  If the trace
+is nonzero, a particular state dies eventually if and only if it already lies
+in `ker M_ell`, in which case it dies after one period.  For the cleared tail
+the test is simply
+
+\[
+ M_\ell(1,d)^t=0\pmod\ell. \tag{K}
+\]
+
+The sweep checks (K) against every one of the 737 exceptional cycles with zero
+mismatches.  Thus the remaining arithmetic question is whether the positive
+minimal initial state can satisfy (K) for enough primes without coming from a
+certified rational or hypergeometric tail.
+
+There is no such particular-state exception when the numerator discriminant
+is nonsquare over `Q`.  Let `Delta_B=u^2-4rv` be a nonzero nonsquare integer.
+For every unramified prime inert in `Q(sqrt(Delta_B))`, the determinant product
+above is nonzero, so `M_ell` is invertible.  Since the initial state `(1,d)` is
+nonzero modulo every prime, its residue orbit cannot become zero.  Every such
+prime is therefore a bad prime in (P), independently of `d`.  Inert primes
+have positive density, and the corresponding Mertens sum diverges:
+
+\[
+ \sum_{\substack{\ell\le x\\(\Delta_B/\ell)=-1}}
+   \frac{\log\ell}{\ell-1}\longrightarrow\infty.
+\]
+
+Applying (P) to successively larger finite subsets proves the unconditional
+superexponential-denominator theorem
+
+\[
+ \boxed{\Delta_B\notin\mathbf Q^{\,2}
+ \quad\Longrightarrow\quad
+ \lim_{N\to\infty}\frac{\log E_N}{N}=+\infty} . \tag{SE}
+\]
+
+This holds for every initial increment, without positivity.  It completely
+settles the denominator-growth question off the square-numerator locus.  The
+only outside-rational-exponent branch on which kernel accidents can matter is
+therefore
+
+\[
+ \Delta_B\in\mathbf Q^{\,2},\qquad
+ \Delta_c\notin\mathbf Q^{\,2},\qquad R\ne0. \tag{E}
+\]
+
+The determinant and state-dynamics parts of this argument are now
+machine-checked in
+`formal/PuckMathsFormal/PuckMathsFormal/PolynomialTail/FiniteFieldMonodromy.lean`:
+`det_monodromy_eq_zero_iff_discriminant_square` proves the discriminant locus,
+and `two_periods_kill_of_trace_det_zero` proves the two-period nilpotence
+claim.  The file contains no `sorry`; it also checks the trace formula
+exhaustively over `F_3`.  The uniform cyclic-continuant evaluation (T), though
+proved above and independently verified by the exact sweeps, remains the sole
+part of this modular theorem not yet internalized in Lean.
+
+The 2025 global-boundedness algorithm for degree-one second-order recurrences
+does apply near the gauged recurrence used in the one-period reduction, but it
+does not decide (E).  It classifies algebraic or globally bounded solution
+lines under additional hypotheses.  Exact tail equality instead selects the
+minimal analytic solution, whose gauged coefficients need not be globally
+bounded; the paper explicitly leaves the general nonzero exponential-factor
+case open.  Thus this recent result validates the reduction but does not turn
+minimality into an equality oracle.
+
+This is the recurrence-side form of *factorial reduction*.  Recent
+continued-fraction searches report it as a rare lower-dimensional phenomenon
+and explicitly use it as a conjectural discovery heuristic.  Here the EGF
+calculation explains why its occurrence is controlled by rational local
+exponents.  What is still missing is the converse implication specific to the
+positive minimal orbit: positivity would have to force factorial reduction,
+or otherwise rule out the infinitely accumulating bad-prime certificates.
+
 This is exactly the exceptional case left by the latest general sign theory.
 Hagihara and Kawamura classify every possible ultimate sign of a second-order
 holonomic sequence and give a partial algorithm that halts on almost every
@@ -697,6 +960,7 @@ dotnet run tools/polynomial-tail-minimality-reduction-verifier.cs
 dotnet run tools/polynomial-tail-one-period-reduction-verifier.cs
 dotnet run tools/polynomial-tail-aligned-period-orbit-search.cs -- 200 300 600 10000
 python tools/polynomial-tail-egf-arithmetic-search.py 8 20 500
+python tools/polynomial-tail-padic-sieve.py 500 --cycle-prime-bound 31 --verify --sweep
 dotnet run tools/polynomial-tail-integer-counterexample-verifier.cs
 cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 ```
@@ -712,4 +976,7 @@ cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 - G. Kenison et al., [On the Positivity Problem for Second-Order Holonomic Sequences](https://georgekenison.github.io/uploads/papers/holonomic_positivity26.pdf), 2026.
 - E. C. Sertöz, J. Ouaknine, and J. Worrell, [Computing transcendence and linear relations of 1-periods](https://arxiv.org/abs/2505.20397), 2025.
 - S. Garoufalidis, [G-functions and multisum versus holonomic sequences](https://arxiv.org/abs/0708.4354), especially the G-function denominator criterion and rational local-exponent theorem.
+- Y. André, [Arithmetic Gevrey series and transcendence: a survey](https://www.numdam.org/item/JTNB_2003__15_1_1_0/), for the arithmetic-Gevrey denominator condition and Fourier--Laplace duality.
+- R. Elimelech et al., [Algorithm-assisted discovery of an intrinsic order among mathematical constants](https://arxiv.org/abs/2308.11829), for factorial reduction in polynomial continued fractions and its status as a conjectural search principle.
+- A. Matveeva, [On the integrality of some P-recursive sequences](https://arxiv.org/abs/2511.02121), for the recent global-boundedness algorithm for restricted degree-one second-order recurrences and its remaining general case.
 - F. Hagihara and A. Kawamura, [The Ultimate Signs of Second-Order Holonomic Sequences](https://doi.org/10.4230/LIPIcs.ICALP.2025.159), 2025; the exceptional unstable line reduces to the open Minimality Problem.

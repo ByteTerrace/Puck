@@ -76,7 +76,7 @@ construction directly. `PrefixSelection` evaluates the same transition
 without materializing all reachable states, which avoids exponential output
 state spaces.
 
-## The Gray-orbit corollary
+## Gray-orbit remark
 
 There is a canonical selector that toggles letter
 
@@ -106,7 +106,8 @@ are exactly the `2^L` subsets of the letter set, each once. Consequently:
 > in that interval is exactly the total number of irreducible relations in the
 > system.
 
-For the 120-cell complete-C15-orbit system, `L=45`. Its first
+This is the defining subset-enumeration property of reflected Gray code, not a
+new counting method. For the 120-cell complete-C15-orbit system, `L=45`. Its first
 `2^45 = 35,184,372,088,832` Gray prefixes therefore contain exactly the
 independently certified **308,440** irreducible complete-orbit proofs. This is
 not a classification of arbitrary subsets of the 675 individual bases.
@@ -153,6 +154,15 @@ Run the 120-cell application:
 ```text
 dotnet run -c Release --no-restore tools/automatic-120-cell-explorer.cs
 ```
+
+## Formalization status
+
+`AutomaticCyclicIncidence.lean` currently formalizes the compiler step's two
+projection equations and the exact unnormalized and normalized state-count
+bounds. It does **not** yet formalize the semantic prefix invariant, the five
+regular-language consequences, this Gray-code remark, or either polytope
+classification count. Those results presently rely on the written proof and
+the independently checked C# constructions.
 
 ## Novelty boundary
 

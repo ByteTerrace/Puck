@@ -1,16 +1,23 @@
-# Fibonacci-coloring equality infinitely often
+# Fibonacci-coloring equality infinitely often — conditional reduction
 
 ## Status
 
-This note proves that the Fibonacci-coloring upper bound is attained for
-infinitely many even alphabet sizes.  The decisive new ingredient is the
-three-cell return-lattice estimate in Lemma 4.2: every coloring of a Sturmian
-directive that is not eventually Fibonacci has determinant-normalized excess
-at least \(8/3\).  Lemma 4.0 reduces an arbitrary balanced word to a uniformly
-recurrent one without increasing its asymptotic critical exponent, and Lemma
-4.5 proves the formerly quoted symmetric Fibonacci value.  Density of
-favorable powers of two and the constant-gap period bounds then give Theorem
-5.1.
+This note records a conditional route showing that the Fibonacci-coloring
+upper bound is attained for infinitely many even alphabet sizes. The exact
+golden arithmetic, return-coordinate reductions, concrete lower witnesses,
+maximal-right-return mechanical estimate, and
+`FibonacciRichPeriodClassification` are now kernel-checked. In particular,
+the Lean development proves the exact asymptotic critical exponent of the
+Fibonacci ruler construction without a combinatorial assumption.
+
+Theorem 5.1 as a statement about the infimum over *all* balanced words is not
+yet unconditional in Lean: the development does not formalize the full
+minimal-subshift reduction and Hubert classification/converse needed to pass
+from an arbitrary balanced word to this Fibonacci return analysis.
+
+The three-cell return-lattice calculations below describe the remaining
+general-balanced-word converse. Prose lemmas depending on the unformalized
+Hubert reduction must not yet be read as kernel-closed results.
 
 The notation follows Dvořáková and Pelantová,
 [*An upper bound on asymptotic repetition threshold of balanced sequences via

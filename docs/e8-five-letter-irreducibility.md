@@ -360,7 +360,8 @@ the two reciprocal degree-four factors. On the letters it has 25 fixed points
 and 55 transposed pairs, so the reciprocal symmetry holds separately within
 every one of the 168 circuits.
 
-Inclusion--exclusion now gives the promised number transparently:
+For readability, the exact failure-mask table can be summarized by its
+inclusion--exclusion layers:
 
 \[
 \begin{aligned}
@@ -375,20 +376,20 @@ N_{\rm irr}
 \]
 
 The four correction terms are respectively the sums of the one-factor,
-two-factor, three-factor, and four-factor intersections in the table.
-
-This identity isolates the irreducible count's genuinely E8-specific content.
-Bucket sizes alone determine 4,194,800, but not the intersection table: for
+two-factor, three-factor, and four-factor intersections in the table. This is
+an accounting restatement of that table, not independent corroboration: the
+alternating sum telescopes to its zero-failure bucket for any failure-mask
+distribution. Bucket sizes alone determine 4,194,800, but not the intersection table: for
 example, circuits with 12,096 transversals realize six different irreducible
 counts. Those differences come from the relative positions of the evaluated
 orbit columns over \(\mathbf F_4\) and the three copies of \(\mathbf F_{16}\).
 They are exact finite-field statistics of the pinned
 [`OrbitData.lean`](../formal/PuckMathsFormal/PuckMathsFormal/E8/OrbitData.lean),
-and their weighted inclusion--exclusion total is independently certified by
-the ordered counts in
+The zero-failure count is recomputed from the orbit table by
 [`e8-crt-circuit-count.json`](certificates/e8-crt-circuit-count.json), the
 standalone [`e8-crt-circuit-verifier.cs`](../tools/e8-crt-circuit-verifier.cs),
-and the reflected Lean count. They are not inferred from bucket
+and the reflected Lean count. The JSON's own ordered counts are certificate
+data, not an independent recount. These values are not inferred from bucket
 multiplicities, a random-rank heuristic, or an independence assumption.
 
 ## Full E8 normalizer
@@ -526,7 +527,8 @@ transversals, and recovers the same 3,569,146 count. Its small adapter is
 derives the syndrome circuits and finite-field columns from the explicit
 135-by-8 orbit-polynomial table. Eight independently compiled reflected range
 theorems combine to prove
-`e8_fiveLetter_irreducible_count : irreducibleCircuitCount = 3_569_146`.
+`e8_fiveLetter_reflectedFullRank_count : fiveCircuits.size = 168 ∧
+irreducibleCircuitCount = 3_569_146`.
 The companion theorem checks the 4,194,800-transversal universe.
 
 ## Certificate
