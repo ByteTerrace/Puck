@@ -4,8 +4,9 @@ namespace Puck.Maths;
 /// The inflation lens of a quadratic irrational: the exact substitution matrix beneath its aperiodic order, read straight
 /// from its continued-fraction period. By Lagrange's theorem the expansion of a quadratic irrational is eventually periodic
 /// (<see cref="ContinuedFraction"/>), and the product of the period's partial quotients as the integer matrices
-/// <c>[[aᵢ, 1], [1, 0]]</c> is a hyperbolic element of the modular group — one representative of the closed geodesic the
-/// period codes. Its trace and Perron eigenvalue are the two invariants that drive the cut-and-project chains: the golden
+/// <c>[[aᵢ, 1], [1, 0]]</c> gives one matrix representative of the closed geodesic the period codes; an odd-length
+/// product has determinant minus one, so <see cref="Axis"/> squares it to obtain the orientation-preserving modular
+/// element. Its trace and Perron eigenvalue are the two invariants that drive the cut-and-project chains: the golden
 /// period <c>[1]</c> gives the matrix <c>[[1, 1], [1, 0]]</c> and the inflation factor <c>φ</c> of
 /// the golden case of <see cref="MetallicQuasicrystal"/>, and the silver period <c>[2]</c> gives <c>[[2, 1], [1, 0]]</c> and
 /// the factor <c>1 + √2</c> of its silver case — the two smallest-trace members of one infinite family, now addressed
@@ -13,8 +14,9 @@ namespace Puck.Maths;
 /// </summary>
 /// <remarks>
 /// The four entries <see cref="A"/>, <see cref="B"/>, <see cref="C"/>, <see cref="D"/> are the non-negative substitution
-/// matrix <c>M = ∏ [[aᵢ, 1], [1, 0]]</c> over the period block; its <see cref="Determinant"/> is <c>(−1)^period</c> and its
-/// <see cref="Trace"/> exceeds two, so the motion is always <see cref="ModularClass.Hyperbolic"/>. The period is canonical
+/// matrix <c>M = ∏ [[aᵢ, 1], [1, 0]]</c> over the period block; its <see cref="Determinant"/> is <c>(−1)^period</c>.
+/// Its Perron eigenvalue exceeds one, while the orientation-preserving motion exposed by <see cref="Axis"/> is always
+/// <see cref="ModularClass.Hyperbolic"/>. The period is canonical
 /// only up to cyclic rotation, so the specific entries are one representative — but the trace, the determinant, the
 /// discriminant, and hence the inflation factor are conjugacy invariants, identical for every rotation. <see cref="Axis"/>
 /// lifts the representative to the orientation-preserving <see cref="ModularTransform"/> whose axis is the geodesic (the
@@ -80,15 +82,28 @@ public readonly record struct QuadraticInflation {
     /// <exception cref="OverflowException">A partial-quotient product exceeds <see cref="long"/> — the period is too long for the width.</exception>
     public static QuadraticInflation FromQuadraticIrrational(long p, long q, long d, long r) {
         Span<long> terms = stackalloc long[128];
-        var written = ContinuedFraction.Expand(
-            p: p,
-            q: q,
-            d: d,
-            r: r,
-            terms: terms,
-            periodStart: out var periodStart,
-            periodLength: out var periodLength
-        );
+        int periodStart;
+        int periodLength;
+
+        while (true) {
+            try {
+                _ = ContinuedFraction.Expand(
+                    p: p,
+                    q: q,
+                    d: d,
+                    r: r,
+                    terms: terms,
+                    periodStart: out periodStart,
+                    periodLength: out periodLength
+                );
+
+                break;
+            } catch (ArgumentException exception) when ((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue)) {
+                var nextLength = ((terms.Length <= (int.MaxValue / 2)) ? (terms.Length * 2) : int.MaxValue);
+
+                terms = new long[nextLength];
+            }
+        }
 
         // The pre-period is only how the trajectory enters the geodesic; the closed geodesic — and so the inflation — is the
         // product of the period block alone. Compose the partial quotients as convergent matrices [[aᵢ, 1], [1, 0]].
@@ -113,11 +128,21 @@ public readonly record struct QuadraticInflation {
         );
     }
 
-    /// <summary>Returns the inflation factor <c>(Trace + √Discriminant) / 2</c> — the Perron eigenvalue of the substitution matrix and the length ratio of the chain's two tiles.</summary>
+    /// <summary>Returns the inflation factor <c>(Trace + √Discriminant) / 2</c> — the Perron eigenvalue and self-similarity scale of the substitution matrix. For a multi-term period, it is generally not the length ratio of the chain's two tiles.</summary>
     /// <returns>The factor as a fixed-point value; this is the one approximate operation — the trace, determinant, and discriminant above it are exact.</returns>
     public FixedQ4816 InflationFactor() {
+        // λ differs from the integral trace by |det(M)|/λ = 1/λ. Above this threshold that correction is below half of
+        // one Q48.16 ULP, so the correctly rounded value is the trace itself. At the boundary, the determinant-minus-one
+        // root lies just above the trace and rounds back to it; the determinant-plus-one root lies just below by slightly
+        // more than half an ULP and still needs the exact path. This also keeps a representable λ available when its
+        // squared discriminant exceeds Q48.16's range.
+        var trace = Trace;
+        if ((trace > (1L << 17)) || ((trace == (1L << 17)) && (Determinant == -1L))) {
+            return FixedQ4816.FromInteger(value: trace);
+        }
+
         var root = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: Discriminant));
 
-        return ((FixedQ4816.FromInteger(value: Trace) + root) / FixedQ4816.FromInteger(value: 2L));
+        return ((FixedQ4816.FromInteger(value: trace) + root) / FixedQ4816.FromInteger(value: 2L));
     }
 }

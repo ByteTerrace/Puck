@@ -12,8 +12,8 @@ namespace Puck.Maths;
 /// is a Weyl reflection, and <see cref="Cycle(int)"/> is the Coxeter element — the same rotation
 /// <see cref="CyclicRotation"/> exposes as four planes. The cycle partitions the nodes into <see cref="RingCount"/> orbits
 /// of <see cref="RingSize"/> — the eight rings of thirty that <see cref="Project(int)"/> lays out — and the eight ring
-/// radii fall into four exact golden-ratio pairs, the 4D 600-cell (H₄) that lives inside E₈. Every accessor is a single
-/// baked lookup with no allocation; the nodes, their coordinates, and the closure that builds them are computed once at
+/// radii fall into four golden-ratio pairs, the 4D 600-cell (H₄) that lives inside E₈. Every accessor is an allocation-free,
+/// bounds-checked baked lookup; the nodes, their coordinates, and the closure that builds them are computed once at
 /// load (by reflection closure of eight seed nodes, in exact integer arithmetic) and then discarded — only the index
 /// maps survive, so results are identical on every machine.
 /// </remarks>
@@ -38,7 +38,7 @@ public static class SymmetryLattice {
         [0, 0, 0, 0, -2, 2, 0, 0],
         [0, 0, 0, 0, 0, -2, 2, 0],
     ];
-    // The two orthonormal Coxeter-plane basis vectors (FixedQ4816 raw, Q16): the e^{2πi/30}-eigenspace of the cycle,
+    // Q16 approximations to two orthonormal Coxeter-plane basis vectors: the e^{2πi/30}-eigenspace of the cycle,
     // isolated once and baked. Projecting a node onto this plane sorts it into one of the eight rings.
     private static readonly long[] PlaneBasisX = [-6338L, -30797L, -16271L, -872L, 14726L, 29842L, 43815L, -3694L];
     private static readonly long[] PlaneBasisY = [-388L, 5935L, 11658L, 14236L, 13557L, 9649L, 2684L, 60307L];
@@ -163,21 +163,49 @@ public static class SymmetryLattice {
     /// <param name="node">The node to reflect, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <param name="mirror">The node whose hyperplane reflects, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The index of the reflected node; composing reflections realizes the whole symmetry group W(E₈).</returns>
-    public static int Reflect(int node, int mirror) =>
-        ReflectMap[((node * NodeCount) + mirror)];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> or <paramref name="mirror"/> is outside the node range.</exception>
+    public static int Reflect(int node, int mirror) {
+        ValidateNode(node: node, paramName: nameof(node));
+        ValidateNode(node: mirror, paramName: nameof(mirror));
+
+        return ReflectMap[((node * NodeCount) + mirror)];
+    }
     /// <summary>Advances a node one step around its ring — the order-30 cycle whose planes are <see cref="CyclicRotation"/>.</summary>
     /// <param name="node">The node to advance, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The index of the next node in the same ring; returning to the start after <see cref="RingSize"/> steps.</returns>
-    public static int Cycle(int node) =>
-        CycleMap[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Cycle(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return CycleMap[node];
+    }
     /// <summary>Returns which ring a node belongs to: the orbit it occupies under repeated <see cref="Cycle(int)"/>.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The ring in <c>[0, <see cref="RingCount"/>)</c>.</returns>
-    public static int Ring(int node) =>
-        RingMap[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Ring(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return RingMap[node];
+    }
     /// <summary>Projects a node onto the plane where the 240 nodes resolve into eight concentric rings of thirty.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The projected point; its ring is <see cref="Ring(int)"/> and one <see cref="Cycle(int)"/> step turns it 12°.</returns>
-    public static FixedVector2 Project(int node) =>
-        Projection[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static FixedVector2 Project(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return Projection[node];
+    }
+
+    /// <summary>Rejects invalid public node indices before they can wrap a flattened lookup-table offset.</summary>
+    private static void ValidateNode(int node, string paramName) {
+        if ((uint)node >= ((uint)NodeCount)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                actualValue: node,
+                message: $"the node index must be in [0, {NodeCount})"
+            );
+        }
+    }
 }

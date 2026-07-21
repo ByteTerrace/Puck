@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -27,11 +29,14 @@ public static class MetallicQuasicrystal {
     /// <param name="tiles">Receives the tiling in physical order: <see langword="false"/> is the short tile, <see langword="true"/> the long. Every element is written.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
     public static void Word(int n, Span<bool> tiles) {
-        if (0 >= n) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(n),
-                message: "the metallic index must be positive"
-            );
+        _ = Discriminant(n: n);
+
+        // The fixed point starts with n long tiles. Avoid asking the general substitution composer to materialize an
+        // n+1-element image when the requested prefix ends inside that first run (important for very large indices).
+        if (tiles.Length <= n) {
+            tiles.Fill(value: true);
+
+            return;
         }
 
         // The metallic mean is the all-n continued fraction, whose single-term period [n] gives the substitution
@@ -45,6 +50,7 @@ public static class MetallicQuasicrystal {
     /// <returns>The coordinate just past the final tile — the total length of the run.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="positions"/> is shorter than <paramref name="tiles"/>.</exception>
+    /// <exception cref="OverflowException">The total length is outside the representable fixed-point range.</exception>
     public static FixedQ4816 Positions(int n, ReadOnlySpan<bool> tiles, Span<FixedQ4816> positions) {
         if (positions.Length < tiles.Length) {
             throw new ArgumentException(
@@ -58,7 +64,7 @@ public static class MetallicQuasicrystal {
 
         for (var index = 0; (index < tiles.Length); ++index) {
             positions[index] = cursor;
-            cursor += (tiles[index] ? longTile : FixedQ4816.One);
+            cursor = checked(cursor + (tiles[index] ? longTile : FixedQ4816.One));
         }
 
         return cursor;
@@ -68,15 +74,15 @@ public static class MetallicQuasicrystal {
     /// <returns>The factor as a fixed-point value; the one approximate operation, read through <see cref="QuadraticInflation.InflationFactor"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
     public static FixedQ4816 InflationFactor(int n) {
-        if (0 >= n) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(n),
-                message: "the metallic index must be positive"
-            );
-        }
+        var d = Discriminant(n: n);
+
+        // δₙ = n + 2/(n + √(n²+4)). At and above 2¹⁷ the positive correction is strictly below half of
+        // one Q48.16 ULP, so the correctly rounded result is exactly n. This also avoids trying to represent n²+4 as a
+        // Q48.16 input even though δₙ itself remains comfortably representable for every positive int n.
+        if (n >= (1 << 17)) { return FixedQ4816.FromInteger(value: n); }
 
         // δₙ is the fundamental unit of the all-n continued fraction (n + √(n² + 4)) / 2.
-        return QuadraticInflation.FromQuadraticIrrational(p: n, q: 1L, d: (((long)n * n) + 4L), r: 2L).InflationFactor();
+        return QuadraticInflation.FromQuadraticIrrational(p: n, q: 1L, d: d, r: 2L).InflationFactor();
     }
     /// <summary>Determines whether the ring element <c>a + b·δₙ</c> is a vertex of the tiling — the O(1) membership test that addresses points by ring coordinate.</summary>
     /// <param name="n">The metallic index; it must be positive.</param>
@@ -85,32 +91,9 @@ public static class MetallicQuasicrystal {
     /// <returns><see langword="true"/> when the element's Galois conjugate lies in the acceptance window <c>[0, wₙ)</c>. For <c>n = 1</c> this is exactly the classic golden (Fibonacci) membership test.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
     public static bool Contains(int n, long a, long b) {
-        if (0 >= n) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(n),
-                message: "the metallic index must be positive"
-            );
-        }
+        var d = Discriminant(n: n);
 
-        var d = (((long)n * n) + 4L);
-
-        // The conjugate is c = ((2a + bn) − b·√d) / 2; it must satisfy 0 ≤ c < wₙ. The window is wₙ = num / den (both
-        // positive), where num and den are the ring elements below — the density-times-covolume length that makes the
-        // gaps exactly the two tiles δₙ and δₙ². The membership c < wₙ is num − c·den > 0, tested as a surd sign.
-        if (SignSurd(rational: ((2L * a) + (b * n)), coefficient: -b, radicand: d) < 0) { return false; }
-
-        var conjugateRational = (Int128)((2L * a) + (b * n));
-        var conjugateSurd = (Int128)(-b);
-        var numeratorRational = (((((Int128)n * n * n) + ((Int128)n * n)) + (4L * n)) + 4L);
-        var numeratorSurd = ((((Int128)n * n) + n) + 2L);
-        var denominatorRational = ((((Int128)n * n * n * n) + (5L * ((Int128)n * n))) + 4L);
-        var denominatorSurd = (((Int128)n * n * n) + (3L * n));
-
-        // num − c·den over the common factor of four: the sign is that of this residual surd.
-        var residualRational = ((2 * numeratorRational) - ((conjugateRational * denominatorRational) + ((conjugateSurd * denominatorSurd) * d)));
-        var residualSurd = ((2 * numeratorSurd) - ((conjugateRational * denominatorSurd) + (conjugateSurd * denominatorRational)));
-
-        return (SignSurd128(rational: residualRational, coefficient: residualSurd, radicand: d) > 0);
+        return Contains(n: n, a: a, b: b, radicand: d);
     }
     /// <summary>Determines whether the longer tile begins at the vertex <c>a + b·δₙ</c>.</summary>
     /// <param name="n">The metallic index; it must be positive.</param>
@@ -118,51 +101,129 @@ public static class MetallicQuasicrystal {
     /// <param name="b">The coefficient of <c>δₙ</c>.</param>
     /// <returns><see langword="true"/> when the tile starting here is the long one (length <c>δₙ²</c>); otherwise it is the short tile (length <c>δₙ</c>).</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
-    public static bool StartsLongTile(int n, long a, long b) =>
-        // The short step adds δₙ, reaching (a, b + 1); when that is not a vertex the tile must be the long one instead.
-        (Contains(n: n, a: a, b: (b + 1)) == false);
+    public static bool StartsLongTile(int n, long a, long b) {
+        var d = Discriminant(n: n);
+
+        return StartsLongTile(n: n, a: a, b: b, radicand: d);
+    }
     /// <summary>Returns the next vertex along the line — the far end of the tile that starts at <c>a + b·δₙ</c>.</summary>
     /// <param name="n">The metallic index; it must be positive.</param>
     /// <param name="a">The integer part of a vertex.</param>
     /// <param name="b">The coefficient of <c>δₙ</c>.</param>
     /// <returns>The next vertex, reached by adding <c>δₙ²</c> (a long tile) or <c>δₙ</c> (a short tile).</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
-    public static (long A, long B) Next(int n, long a, long b) =>
+    /// <exception cref="OverflowException">The next vertex is outside the signed 64-bit ring-coordinate range.</exception>
+    public static (long A, long B) Next(int n, long a, long b) {
+        var d = Discriminant(n: n);
+
         // δₙ² = n·δₙ + 1, so the long step lands at (a + 1, b + n); the short step adds δₙ, landing at (a, b + 1).
-        (StartsLongTile(n: n, a: a, b: b) ? (a + 1, b + n) : (a, b + 1));
+        return StartsLongTile(n: n, a: a, b: b, radicand: d)
+            ? (checked(a + 1L), checked(b + n))
+            : (a, checked(b + 1L));
+    }
     /// <summary>Returns the previous vertex along the line — the near end of the tile that ends at <c>a + b·δₙ</c>.</summary>
     /// <param name="n">The metallic index; it must be positive.</param>
     /// <param name="a">The integer part of a vertex.</param>
     /// <param name="b">The coefficient of <c>δₙ</c>.</param>
     /// <returns>The preceding vertex of the tiling.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
-    public static (long A, long B) Previous(int n, long a, long b) =>
+    /// <exception cref="OverflowException">The previous vertex is outside the signed 64-bit ring-coordinate range.</exception>
+    public static (long A, long B) Previous(int n, long a, long b) {
+        var d = Discriminant(n: n);
+        var previousLongA = ((Int128)a - 1L);
+        var previousLongB = ((Int128)b - n);
+
         // Of the two candidate predecessors, the true one is a vertex whose forward step lands on (a, b); a non-vertex
         // can also step here, so membership and the step must both be checked.
-        ((Contains(n: n, a: (a - 1), b: (b - n)) && (Next(n: n, a: (a - 1), b: (b - n)) == (a, b))) ? (a - 1, b - n) : (a, b - 1));
+        return (
+            Contains(n: n, a: previousLongA, b: previousLongB, radicand: d) &&
+            StartsLongTile(n: n, a: previousLongA, b: previousLongB, radicand: d)
+        )
+            ? (checked((long)previousLongA), checked((long)previousLongB))
+            : (a, checked(b - 1L));
+    }
     /// <summary>Returns the position of the vertex <c>a + b·δₙ</c> along the line.</summary>
     /// <param name="n">The metallic index; it must be positive.</param>
     /// <param name="a">The integer part of the vertex.</param>
     /// <param name="b">The coefficient of <c>δₙ</c>.</param>
     /// <returns>The fixed-point coordinate <c>a + b·δₙ</c> — the one approximate value; membership and traversal are exact.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive.</exception>
-    public static FixedQ4816 Position(int n, long a, long b) =>
-        (FixedQ4816.FromInteger(value: a) + (FixedQ4816.FromInteger(value: b) * InflationFactor(n: n)));
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="n"/> is not positive, or a ring coordinate is outside the fixed-point integer range.</exception>
+    /// <exception cref="OverflowException">The position is outside the representable fixed-point range.</exception>
+    public static FixedQ4816 Position(int n, long a, long b) {
+        var delta = InflationFactor(n: n);
 
-    /// <summary>Returns the sign of the real number <c>rational + coefficient·√radicand</c>, exactly, by integer arithmetic.</summary>
-    private static int SignSurd(long rational, long coefficient, long radicand) =>
-        SignSurd128(rational: rational, coefficient: coefficient, radicand: radicand);
-    /// <summary>Returns the sign of the real number <c>rational + coefficient·√radicand</c>, exactly, at full width.</summary>
-    private static int SignSurd128(Int128 rational, Int128 coefficient, long radicand) {
+        return checked(FixedQ4816.FromInteger(value: a) + (FixedQ4816.FromInteger(value: b) * delta));
+    }
+
+    /// <summary>Returns the positive discriminant <c>n² + 4</c> after validating the metallic index.</summary>
+    private static long Discriminant(int n) {
+        if (0 >= n) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(n),
+                message: "the metallic index must be positive"
+            );
+        }
+
+        return (((long)n * n) + 4L);
+    }
+    /// <summary>Tests membership for a possibly one-step-wider ring coordinate without narrowing it to <see cref="long"/>.</summary>
+    private static bool Contains(int n, Int128 a, Int128 b, long radicand) {
+        var wideN = ((Int128)n);
+
+        // The conjugate is c = ((2a + bn) − b·√d) / 2. The density-correct acceptance-window width simplifies to
+        // wₙ = (δₙ + 1)/δₙ² = (n² − n + 2 − (n − 1)·√d)/2. Thus 0 ≤ c < wₙ is exactly two
+        // signs of small surds; unlike the former rationalized quotient, their products stay narrow for ordinary inputs.
+        var conjugateRational = ((2 * a) + (b * wideN));
+
+        if (SignSurd(rational: conjugateRational, coefficient: -b, radicand: radicand) < 0) { return false; }
+
+        var residualRational = ((((wideN * wideN) - wideN) + 2) - conjugateRational);
+        var residualSurd = (b - (wideN - 1));
+
+        return (SignSurd(rational: residualRational, coefficient: residualSurd, radicand: radicand) > 0);
+    }
+    /// <summary>Classifies a tile without overflowing the virtual short-step candidate.</summary>
+    private static bool StartsLongTile(int n, Int128 a, Int128 b, long radicand) =>
+        // The short step adds δₙ, reaching (a, b + 1); when that is not a vertex the tile must be the long one instead.
+        (Contains(n: n, a: a, b: (b + 1), radicand: radicand) == false);
+    /// <summary>Returns the sign of <c>rational + coefficient·√radicand</c> exactly, with a fast fixed-width path.</summary>
+    private static int SignSurd(Int128 rational, Int128 coefficient, long radicand) {
         if ((rational == Int128.Zero) && (coefficient == Int128.Zero)) { return 0; }
         if ((rational >= Int128.Zero) && (coefficient >= Int128.Zero)) { return 1; }
         if ((rational <= Int128.Zero) && (coefficient <= Int128.Zero)) { return -1; }
 
-        // Opposite signs: compare rational² against radicand·coefficient² at full width, then read off by rational's sign.
-        var comparison = (rational * rational).CompareTo((coefficient * coefficient) * radicand);
+        // Opposite signs: compare rational² against radicand·coefficient². UInt128 covers the hot, ordinary-coordinate
+        // path; extreme long coordinates and indices require more than 128 bits and fall back to exact BigInteger.
+        var rationalMagnitude = Magnitude(value: rational);
+        var coefficientMagnitude = Magnitude(value: coefficient);
+        int comparison;
 
-        return ((rational > Int128.Zero)
-            ? ((comparison > 0) ? 1 : ((comparison < 0) ? -1 : 0))
-            : ((comparison < 0) ? 1 : ((comparison > 0) ? -1 : 0)));
+        if ((rationalMagnitude <= ulong.MaxValue) && (coefficientMagnitude <= ulong.MaxValue)) {
+            var rationalSquare = (rationalMagnitude * rationalMagnitude);
+            var coefficientSquare = (coefficientMagnitude * coefficientMagnitude);
+
+            if (coefficientSquare <= (UInt128.MaxValue / (ulong)radicand)) {
+                comparison = rationalSquare.CompareTo(coefficientSquare * (ulong)radicand);
+
+                return SignFromSquareComparison(rationalPositive: (rational > Int128.Zero), comparison: comparison);
+            }
+        }
+
+        var wideRational = ((BigInteger)rational);
+        var wideCoefficient = ((BigInteger)coefficient);
+
+        comparison = (wideRational * wideRational).CompareTo((wideCoefficient * wideCoefficient) * radicand);
+
+        return SignFromSquareComparison(rationalPositive: (rational > Int128.Zero), comparison: comparison);
     }
+    /// <summary>Returns an unsigned magnitude without overflowing at the signed minimum.</summary>
+    private static UInt128 Magnitude(Int128 value) =>
+        (value < Int128.Zero)
+            ? ((UInt128)(-(value + Int128.One)) + UInt128.One)
+            : ((UInt128)value);
+    /// <summary>Restores the surd sign from the squared-magnitude comparison and the rational term's sign.</summary>
+    private static int SignFromSquareComparison(bool rationalPositive, int comparison) =>
+        rationalPositive
+            ? ((comparison > 0) ? 1 : ((comparison < 0) ? -1 : 0))
+            : ((comparison < 0) ? 1 : ((comparison > 0) ? -1 : 0));
 }

@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -25,6 +27,7 @@ public static class ContinuedFraction {
     /// <returns>The number of partial quotients written to <paramref name="terms"/> — <paramref name="periodStart"/> plus <paramref name="periodLength"/>. The block <c>terms[periodStart..]</c> repeats forever.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
     /// <exception cref="ArgumentException"><paramref name="terms"/> is too short to hold the pre-period and one period block.</exception>
+    /// <exception cref="OverflowException">A partial quotient is outside the signed 64-bit range.</exception>
     public static int Expand(long p, long q, long d, long r, Span<long> terms, out int periodStart, out int periodLength) {
         if (0L >= q) {
             throw new ArgumentOutOfRangeException(
@@ -57,38 +60,33 @@ public static class ContinuedFraction {
         }
 
         // Canonical form (P + √N) / Q with N = q²·d, then scale so that Q divides N − P² and every later step divides exactly.
-        var stateP = ((Int128)p);
-        var stateN = (((Int128)q * q) * d);
-        var stateQ = ((Int128)r);
+        // The public parameters are individually 64-bit, but q²·d and the normalization by r² can require up to 315
+        // bits. BigInteger is therefore part of the exactness contract, not merely a fallback: narrowing these products
+        // to Int128 silently changed the represented irrational for otherwise valid inputs.
+        var stateP = new BigInteger(value: p);
+        var stateN = ((new BigInteger(value: q) * q) * d);
+        var stateQ = new BigInteger(value: r);
 
-        if (Int128.Zero != ((stateN - (stateP * stateP)) % stateQ)) {
-            var magnitude = Int128.Abs(value: stateQ);
+        if (BigInteger.Zero != ((stateN - (stateP * stateP)) % stateQ)) {
+            var magnitude = BigInteger.Abs(value: stateQ);
 
             stateP *= magnitude;
             stateN *= (stateQ * stateQ);
             stateQ *= magnitude;
         }
 
-        var root = ((Int128)((UInt128)stateN).SquareRoot());
-        var seenP = new List<Int128>();
-        var seenQ = new List<Int128>();
+        var root = SquareRoot(value: stateN);
+        var seen = new Dictionary<(BigInteger P, BigInteger Q), int>();
 
         while (true) {
-            var repeatAt = IndexOfState(
-                seenP: seenP,
-                seenQ: seenQ,
-                stateP: stateP,
-                stateQ: stateQ
-            );
-
-            if (0 <= repeatAt) {
+            if (seen.TryGetValue(key: (stateP, stateQ), value: out var repeatAt)) {
                 periodStart = repeatAt;
-                periodLength = (seenP.Count - repeatAt);
+                periodLength = (seen.Count - repeatAt);
 
-                return seenP.Count;
+                return seen.Count;
             }
 
-            var count = seenP.Count;
+            var count = seen.Count;
 
             if (count >= terms.Length) {
                 throw new ArgumentException(
@@ -101,11 +99,10 @@ public static class ContinuedFraction {
             // sits just below ⌊√N⌋ + 1, which is the bound that floors correctly once the sign flips the inequality.
             var quotient = ((0 < stateQ)
                 ? FloorDivide(numerator: (stateP + root), denominator: stateQ)
-                : FloorDivide(numerator: ((stateP + root) + Int128.One), denominator: stateQ));
+                : FloorDivide(numerator: ((stateP + root) + BigInteger.One), denominator: stateQ));
 
-            seenP.Add(item: stateP);
-            seenQ.Add(item: stateQ);
-            terms[count] = ((long)quotient);
+            seen.Add(key: (stateP, stateQ), value: count);
+            terms[count] = checked((long)quotient);
 
             var nextP = ((quotient * stateQ) - stateP);
 
@@ -114,19 +111,26 @@ public static class ContinuedFraction {
         }
     }
 
-    private static int IndexOfState(List<Int128> seenP, List<Int128> seenQ, Int128 stateP, Int128 stateQ) {
-        for (var index = 0; (index < seenP.Count); ++index) {
-            if ((seenP[index] == stateP) && (seenQ[index] == stateQ)) {
-                return index;
-            }
-        }
+    /// <summary>Returns the floor square root of a non-negative arbitrary-width integer.</summary>
+    private static BigInteger SquareRoot(BigInteger value) {
+        if (value.IsZero) { return BigInteger.Zero; }
 
-        return -1;
+        // This power of two is strictly above √value. Newton descent remains above the root and terminates when the
+        // next estimate can no longer decrease, at which point the current integer is floor(√value).
+        var estimate = (BigInteger.One << checked((int)((value.GetBitLength() + 1L) / 2L)));
+
+        while (true) {
+            var next = ((estimate + (value / estimate)) >> 1);
+
+            if (next >= estimate) { return estimate; }
+
+            estimate = next;
+        }
     }
-    private static Int128 FloorDivide(Int128 numerator, Int128 denominator) {
+    private static BigInteger FloorDivide(BigInteger numerator, BigInteger denominator) {
         var quotient = (numerator / denominator);
         var remainder = (numerator - (quotient * denominator));
 
-        return (quotient - ((remainder != Int128.Zero) && (Int128.IsNegative(value: remainder) != Int128.IsNegative(value: denominator))).As<Int128>());
+        return (quotient - (((remainder != BigInteger.Zero) && (remainder.Sign != denominator.Sign)) ? BigInteger.One : BigInteger.Zero));
     }
 }

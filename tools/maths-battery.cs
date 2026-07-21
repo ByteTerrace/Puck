@@ -1862,6 +1862,13 @@ Console.WriteLine($"cyclic rotation: exact 30-tick loop + identity resync, {{1,7
 if (SymmetryLattice.RingSize != Puck.Maths.CyclicRotation.Period) {
     throw new InvalidOperationException("SYMMETRY LATTICE RING SIZE IS NOT THE CYCLIC ROTATION PERIOD");
 }
+foreach (var invalidNode in new[] { -1, SymmetryLattice.NodeCount, 268_435_456 }) {
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Reflect(node: invalidNode, mirror: 0));
+    ExpectArgumentOutOfRange(parameterName: "mirror", operation: () => SymmetryLattice.Reflect(node: 0, mirror: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Cycle(node: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Ring(node: invalidNode));
+    ExpectArgumentOutOfRange(parameterName: "node", operation: () => SymmetryLattice.Project(node: invalidNode));
+}
 var latticeRingSizes = new int[SymmetryLattice.RingCount];
 var latticeReached = new bool[SymmetryLattice.NodeCount];
 var latticeWorklist = new int[SymmetryLattice.NodeCount];
@@ -1876,6 +1883,14 @@ for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
         if (SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: node, mirror: mirror), mirror: mirror) != node) {
             throw new InvalidOperationException("SYMMETRY LATTICE REFLECTION IS NOT AN INVOLUTION");
         }
+    }
+
+    // Every E8 exponent is odd, so the fifteenth power of this Coxeter element is central inversion. Reflecting a root
+    // through its own hyperplane is the same negation, giving a coordinate-free exact oracle for the half-cycle.
+    var latticeOpposite = node;
+    for (var step = 0; (step < (SymmetryLattice.RingSize / 2)); ++step) { latticeOpposite = SymmetryLattice.Cycle(node: latticeOpposite); }
+    if (latticeOpposite != SymmetryLattice.Reflect(node: node, mirror: node)) {
+        throw new InvalidOperationException("SYMMETRY LATTICE COXETER HALF-CYCLE IS NOT CENTRAL INVERSION");
     }
 }
 for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
@@ -1912,11 +1927,24 @@ if (latticeReachedCount != SymmetryLattice.NodeCount) {
 }
 // Projection geometry: eight rings whose radii pair off by the golden ratio, one cycle step of a twelfth of a turn.
 var latticeGolden = ((1.0 + Math.Sqrt(5.0)) / 2.0);
-var latticeRingRadius = new double[SymmetryLattice.RingCount];
+var latticeRingMinimumRadius = new double[SymmetryLattice.RingCount];
+var latticeRingMaximumRadius = new double[SymmetryLattice.RingCount];
+Array.Fill(latticeRingMinimumRadius, double.PositiveInfinity);
 for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
     var point = SymmetryLattice.Project(node: node);
+    var radius = Math.Sqrt((((double)point.X * (double)point.X) + ((double)point.Y * (double)point.Y)));
+    var ring = SymmetryLattice.Ring(node: node);
 
-    latticeRingRadius[SymmetryLattice.Ring(node: node)] = Math.Sqrt((((double)point.X * (double)point.X) + ((double)point.Y * (double)point.Y)));
+    latticeRingMinimumRadius[ring] = Math.Min(latticeRingMinimumRadius[ring], radius);
+    latticeRingMaximumRadius[ring] = Math.Max(latticeRingMaximumRadius[ring], radius);
+}
+var latticeRingRadius = new double[SymmetryLattice.RingCount];
+for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
+    if ((latticeRingMaximumRadius[ring] - latticeRingMinimumRadius[ring]) > (4.0 / (1L << FixedQ4816.FractionBitCount))) {
+        throw new InvalidOperationException("SYMMETRY LATTICE PROJECTED ORBIT IS NOT CONCENTRIC WITHIN FIXED-POINT PRECISION");
+    }
+
+    latticeRingRadius[ring] = ((latticeRingMinimumRadius[ring] + latticeRingMaximumRadius[ring]) / 2.0);
 }
 Array.Sort(latticeRingRadius);
 var latticeGoldenPairs = 0;
@@ -1928,12 +1956,30 @@ for (var inner = 0; (inner < SymmetryLattice.RingCount); ++inner) {
 if (latticeGoldenPairs != (SymmetryLattice.RingCount / 2)) {
     throw new InvalidOperationException("SYMMETRY LATTICE PROJECTION RINGS ARE NOT IN GOLDEN-RATIO PAIRS");
 }
-var latticeBefore = SymmetryLattice.Project(node: 0);
-var latticeAfter = SymmetryLattice.Project(node: SymmetryLattice.Cycle(node: 0));
-var latticeTurn = (((Math.Atan2((double)latticeAfter.Y, (double)latticeAfter.X) - Math.Atan2((double)latticeBefore.Y, (double)latticeBefore.X)) * 180.0) / Math.PI);
-latticeTurn = (((latticeTurn % 360.0) + 360.0) % 360.0);
-if ((Math.Abs((latticeTurn - 12.0)) > 0.1) && (Math.Abs((latticeTurn - 348.0)) > 0.1)) {
-    throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP DID NOT TURN A TWELFTH OF A TURN");
+// The normalized ring radii are independently known as the eight E8/Ising mass ratios.
+var latticeMassRatios = new[] {
+    1.0,
+    latticeGolden,
+    (2.0 * Math.Cos(Math.PI / 30.0)),
+    (2.0 * latticeGolden * Math.Cos(7.0 * Math.PI / 30.0)),
+    (2.0 * latticeGolden * Math.Cos(2.0 * Math.PI / 15.0)),
+    (2.0 * latticeGolden * Math.Cos(Math.PI / 30.0)),
+    (4.0 * latticeGolden * Math.Cos(Math.PI / 5.0) * Math.Cos(7.0 * Math.PI / 30.0)),
+    (4.0 * latticeGolden * Math.Cos(Math.PI / 5.0) * Math.Cos(2.0 * Math.PI / 15.0)),
+};
+for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
+    if (Math.Abs(((latticeRingRadius[ring] / latticeRingRadius[0]) - latticeMassRatios[ring])) > 0.0001) {
+        throw new InvalidOperationException("SYMMETRY LATTICE PROJECTED RADII DO NOT MATCH THE E8 MASS SPECTRUM");
+    }
+}
+for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+    var latticeBefore = SymmetryLattice.Project(node: node);
+    var latticeAfter = SymmetryLattice.Project(node: SymmetryLattice.Cycle(node: node));
+    var latticeTurn = (((Math.Atan2((double)latticeAfter.Y, (double)latticeAfter.X) - Math.Atan2((double)latticeBefore.Y, (double)latticeBefore.X)) * 180.0) / Math.PI);
+    latticeTurn = (((latticeTurn % 360.0) + 360.0) % 360.0);
+    if ((Math.Abs((latticeTurn - 12.0)) > 0.1) && (Math.Abs((latticeTurn - 348.0)) > 0.1)) {
+        throw new InvalidOperationException("SYMMETRY LATTICE CYCLE STEP DID NOT TURN A TWELFTH OF A TURN");
+    }
 }
 Console.WriteLine($"symmetry lattice: 240 nodes, reflections transitive (full group), order-30 cycle into 8 rings of 30, projection {latticeGoldenPairs} golden pairs OK");
 
@@ -2175,6 +2221,22 @@ for (var metallicIndex = 1; (metallicIndex <= 6); ++metallicIndex) {
 }
 Console.WriteLine("metallic quasicrystal: ring-coordinate chain n=1..6 (Contains==walk, Next/Previous inverse, delta/delta^2 steps, monotone, no SS/L^(n+2), density -> delta) == streamed word OK");
 
+// Width-boundary regressions: membership must widen before arithmetic, traversal must reject an unrepresentable result,
+// and a huge metallic index must remain cheap and representable when only its leading run is requested.
+if (MetallicQuasicrystal.Contains(n: 1, a: long.MinValue, b: 0L)) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL LONG-MIN MEMBERSHIP WRAPPED");
+}
+ExpectOverflow(operation: () => MetallicQuasicrystal.Next(n: 1, a: long.MaxValue, b: long.MaxValue));
+ExpectArgumentOutOfRange(parameterName: "value", operation: () => MetallicQuasicrystal.Position(n: 1, a: long.MaxValue, b: 0L));
+if (MetallicQuasicrystal.InflationFactor(n: int.MaxValue) != FixedQ4816.FromInteger(value: int.MaxValue)) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL LARGE-INDEX FACTOR DID NOT ROUND CORRECTLY");
+}
+var metallicHugeIndexPrefix = new bool[16];
+MetallicQuasicrystal.Word(n: int.MaxValue, tiles: metallicHugeIndexPrefix);
+if (metallicHugeIndexPrefix.Contains(value: false)) {
+    throw new InvalidOperationException("METALLIC QUASICRYSTAL LARGE-INDEX PREFIX IS WRONG");
+}
+
 // ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
 // The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
 // the Mobius action on cusps is a group action agreeing with exact BigInteger rational arithmetic; Gauss reduction
@@ -2368,6 +2430,70 @@ foreach (var continuedFractionCase in continuedFractionCases) {
         throw new InvalidOperationException("CONTINUED FRACTION CONVERGENTS DO NOT APPROACH THE VALUE");
     }
 }
+
+// Full-width exactness: algebraically identical representations must have identical expansions even when q²d exceeds
+// Int128 and the canonical normalization additionally multiplies by r². Oversized partial quotients must fail explicitly
+// rather than narrowing modulo 2^64.
+var continuedFractionSmallEquivalent = new long[32];
+var continuedFractionWideEquivalent = new long[32];
+var smallEquivalentWritten = ContinuedFraction.Expand(
+    p: 0L,
+    q: 1L,
+    d: 3L,
+    r: 1L,
+    terms: continuedFractionSmallEquivalent,
+    periodStart: out var smallEquivalentStart,
+    periodLength: out var smallEquivalentPeriod
+);
+var wideEquivalentWritten = ContinuedFraction.Expand(
+    p: 0L,
+    q: long.MaxValue,
+    d: 3L,
+    r: long.MaxValue,
+    terms: continuedFractionWideEquivalent,
+    periodStart: out var wideEquivalentStart,
+    periodLength: out var wideEquivalentPeriod
+);
+if ((smallEquivalentWritten != wideEquivalentWritten) ||
+    (smallEquivalentStart != wideEquivalentStart) ||
+    (smallEquivalentPeriod != wideEquivalentPeriod) ||
+    !continuedFractionSmallEquivalent.AsSpan(0, smallEquivalentWritten).SequenceEqual(continuedFractionWideEquivalent.AsSpan(0, wideEquivalentWritten))) {
+    throw new InvalidOperationException("CONTINUED FRACTION FULL-WIDTH COMMON SCALE CHANGED THE EXPANSION");
+}
+const long continuedFractionScale = (long.MaxValue / 6L);
+smallEquivalentWritten = ContinuedFraction.Expand(
+    p: 0L,
+    q: 5L,
+    d: 3L,
+    r: 6L,
+    terms: continuedFractionSmallEquivalent,
+    periodStart: out smallEquivalentStart,
+    periodLength: out smallEquivalentPeriod
+);
+wideEquivalentWritten = ContinuedFraction.Expand(
+    p: 0L,
+    q: (5L * continuedFractionScale),
+    d: 3L,
+    r: (6L * continuedFractionScale),
+    terms: continuedFractionWideEquivalent,
+    periodStart: out wideEquivalentStart,
+    periodLength: out wideEquivalentPeriod
+);
+if ((smallEquivalentWritten != wideEquivalentWritten) ||
+    (smallEquivalentStart != wideEquivalentStart) ||
+    (smallEquivalentPeriod != wideEquivalentPeriod) ||
+    !continuedFractionSmallEquivalent.AsSpan(0, smallEquivalentWritten).SequenceEqual(continuedFractionWideEquivalent.AsSpan(0, wideEquivalentWritten))) {
+    throw new InvalidOperationException("CONTINUED FRACTION FULL-WIDTH NORMALIZATION CHANGED THE EXPANSION");
+}
+ExpectOverflow(operation: () => ContinuedFraction.Expand(
+    p: long.MaxValue,
+    q: long.MaxValue,
+    d: long.MaxValue,
+    r: 1L,
+    terms: new long[8],
+    periodStart: out _,
+    periodLength: out _
+));
 Console.WriteLine($"modular: 3 classes + orders {{4,6,inf}}, det-1 adjugate inverse, cusp group action, {modularReductions} Gauss reductions into F, CF periods [1]/[2] (golden/silver) + surd table OK");
 
 // ---- QuadraticInflation + MetallicQuasicrystal (the inflation lens beneath the quasicrystal chains) ----
@@ -2534,6 +2660,38 @@ if (WordComplexity(word: quasicrystalWord, k: 10) == 11) {
     throw new InvalidOperationException("WORD COMPLEXITY ORACLE HAS NO TEETH");
 }
 Console.WriteLine("quadratic quasicrystal: Sturmian p(k)=k+1 across 7 periods, tile-length inflation identity, reproduces golden, oracle has teeth OK");
+
+// Contract and scale regressions outside the ordinary small-period table. Empty outputs still validate; a period longer
+// than the former 128-term scratch buffer streams correctly; and a huge one-term quotient neither allocates its complete
+// image nor loses its representable Perron factor/tile length to Q48.16 cancellation.
+ExpectArgumentOutOfRange(parameterName: "d", operation: () => QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 4L, r: 1L, tiles: []));
+var quadraticLongPeriodWord = new bool[512];
+QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 9949L, r: 1L, tiles: quadraticLongPeriodWord); // period length 217
+for (var k = 1; (k <= 12); ++k) {
+    if (WordComplexity(word: quadraticLongPeriodWord, k: k) != (k + 1)) {
+        throw new InvalidOperationException($"QUADRATIC QUASICRYSTAL LONG-PERIOD WORD NOT STURMIAN k={k}");
+    }
+}
+ExpectOverflow(operation: () => QuadraticInflation.FromQuadraticIrrational(p: 0L, q: 1L, d: 9949L, r: 1L));
+const long quadraticLargeQuotient = 3_000_000_000L;
+const long quadraticLargeDiscriminant = 9_000_000_000_000_000_004L;
+var quadraticLargePrefix = new bool[16];
+QuadraticQuasicrystal.Word(p: quadraticLargeQuotient, q: 1L, d: quadraticLargeDiscriminant, r: 2L, tiles: quadraticLargePrefix);
+if (quadraticLargePrefix.Contains(value: false)) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL LARGE-QUOTIENT PREFIX IS WRONG");
+}
+if (Math.Abs(((double)QuadraticQuasicrystal.LongTileLength(p: quadraticLargeQuotient, q: 1L, d: quadraticLargeDiscriminant, r: 2L)) - quadraticLargeQuotient) > 0.001) {
+    throw new InvalidOperationException("QUADRATIC QUASICRYSTAL LARGE-QUOTIENT TILE LENGTH LOST PRECISION");
+}
+var quadraticOverflowTiles = Enumerable.Repeat(element: true, count: 50_000).ToArray();
+ExpectOverflow(operation: () => QuadraticQuasicrystal.Positions(
+    p: quadraticLargeQuotient,
+    q: 1L,
+    d: quadraticLargeDiscriminant,
+    r: 2L,
+    tiles: quadraticOverflowTiles,
+    positions: new FixedQ4816[quadraticOverflowTiles.Length]
+));
 
 // The number of distinct length-k factors of a word: exactly k+1 for a Sturmian word, bounded for a periodic one.
 static int WordComplexity(ReadOnlySpan<bool> word, int k) {
@@ -3114,6 +3272,24 @@ Console.WriteLine();
 Console.WriteLine("ALL CHECKS PASSED");
 
 // ---- helpers ----
+static void ExpectArgumentOutOfRange(string parameterName, Action operation) {
+    try {
+        operation();
+    } catch (ArgumentOutOfRangeException exception) when (exception.ParamName == parameterName) {
+        return;
+    }
+
+    throw new InvalidOperationException($"EXPECTED ARGUMENT-OUT-OF-RANGE FOR {parameterName}");
+}
+static void ExpectOverflow(Action operation) {
+    try {
+        operation();
+    } catch (OverflowException) {
+        return;
+    }
+
+    throw new InvalidOperationException("EXPECTED OVERFLOW");
+}
 static BigInteger RoundDiv(BigInteger numerator, BigInteger denominator) =>
     (((2 * numerator) + denominator) / (2 * denominator));
 static TResult CreateCheckedGeneric<TResult, TValue>(TValue value)
