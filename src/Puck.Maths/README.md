@@ -54,11 +54,13 @@ deps       none
 | `HexCoord` | `readonly record struct` | An exact hexagonal grid coordinate — the Eisenstein integer `Q + R·ω`. Because it is a genuine number ring, a 60° rotation is an exact integer multiply (`RotatedLeft`/`RotatedRight`, order 6) with no drift, unlike `FixedComplex`; `Length` (hex-grid distance), the six neighbours (`Direction`/`Neighbor`), the ring product `*` (rotation composed with scaling), and `Round` (fractional position → nearest cell, deterministic `FixedQ4816`) are all exact. For deterministic hex-grid games. |
 | `ModularTransform` | `readonly record struct` | An exact element of the modular group — a 2×2 integer matrix of determinant one — acting on the hyperbolic plane by `z ↦ (A·z + B)/(C·z + D)`. The one object beneath the library's three motions: `Classify` sorts it by trace into the elliptic rotations (the sixth root of unity of `HexCoord`), the parabolic tick shear (the kinematics step of `LayerSequence`), and the hyperbolic golden inflation (the step of `MetallicQuasicrystal`). Composition is matrix product; `Inverse` is the adjugate, no division; `Apply` moves a cusp (rational `p/q`, with `∞ = 1/0`) exactly and an interior `FixedComplex` point at the one rounding seam; `GaussReduce` carries a positive-definite form into the fundamental domain by an exact word in `S` and `T`, terminating because the leading coefficient is a strictly decreasing positive integer. |
 | `ContinuedFraction` | `static` | The eventually periodic continued-fraction expansion of an exact quadratic irrational `(p + q·√d)/r`, in pure integer arithmetic — the symbolic coding of a closed geodesic on the modular surface. The golden ratio codes to the all-ones period `[1; 1, …]` and the silver ratio `1 + √2` to the all-twos period `[2; 2, …]`: the two shortest geodesics, the two units that drive the golden and silver cases of `MetallicQuasicrystal`. Fills a caller span, reporting where the period begins and how long it is; no approximate seam. |
-| `QuadraticSurd` | `readonly struct` | An exact real-quadratic value `(a+b·√d)/c`: field arithmetic, sign, comparison, floor, and ceiling use arbitrary-width integers and no floating point. Square-equivalent radicands interoperate in equality, hashing, ordering, and arithmetic without requiring arbitrary-width integer factorization; a square radicand collapses to a rational value, and the default struct is exact zero. |
+| `QuadraticSurd` | `readonly struct` | An exact real-quadratic value `(a+b·√d)/c`: field arithmetic, sign, comparison, floor, and ceiling use arbitrary-width integers and no floating point. Square-equivalent radicands interoperate in equality, hashing, ordering, and arithmetic without requiring arbitrary-width integer factorization; ordering values from genuinely different quadratic fields uses certified rational enclosures, while arithmetic remains field-local. A square radicand collapses to a rational value, and the default struct is exact zero. |
 | `PolynomialContinuedFractionTail` / `PolynomialContinuedFractionAnalysis` | `static` / `sealed class` | Exact analysis of every integer family `sₙ=p·n+q+(r·n²+u·n+v)/sₙ₊₁` with non-negative base and positive numerator on all positive indices. A successful `Analyze` certifies existence and uniqueness of the positive tail, returns its exact quadratic slope/offset/residual, constructs an integer-checkable interval `|sₙ−(λn+β)|≤H/n` beyond an explicit cutoff, and generates any requested finite number of exact asymptotic coefficients. `TryRationalTailCertificate` recognizes polynomial-denominator rational-function tails over the full characteristic field `Q(λ)` through the dense solver's explicit degree-128 resource ceiling, caches the result, and certifies positivity and absence of positive-integer poles; the former linear-fractional recognizer remains as a specialized compatibility API. `TryDegreeOneMinimalityReduction` recognizes the double-square subfamily covered directly by the 2026 minimality theorem. `TryOnePeriodEqualityReduction` additionally recognizes the aligned irrational-characteristic branch `p(u-r)=2rq`, where the transformed Gauss parameters remain rational and equality reduces to an effective 1-period relation. |
 | `QuadraticInflation` | `readonly record struct` | The inflation lens of a quadratic irrational: reads its `ContinuedFraction` period as the exact substitution matrix `∏[[aᵢ,1],[1,0]]`, exposing the conjugacy invariants (`Trace`, `Determinant = (−1)^period`, `Discriminant`), the closed-geodesic `Axis` (a hyperbolic `ModularTransform`), and the `InflationFactor` (the Perron eigenvalue). Golden recovers discriminant 5 and factor φ, silver discriminant 8 and factor 1 + √2 — read from the continued fraction, not fed in. |
 | `QuadraticQuasicrystal` / `QuadraticQuasicrystalIndex` | `static` / `sealed class` | The tiling word of the quasicrystal beneath **any** quadratic irrational, for an arbitrary CF period. `Word` streams its Sturmian fixed point, while `Compile` builds a straight-line substitution grammar supporting exact `TileAt`, prefix long-tile rank, and exact position at arbitrarily large `BigInteger` indices in period-times-logarithmic work without generating the preceding prefix. |
 | `FibonacciResearch` / `GoldenInteger` / `FibonacciRulerWordIndex` / `FibonacciReturnResearch` | `static` / `readonly record struct` / `sealed class` / `static` | Lean-derived exact tools for the golden research branch. Fast doubling and closed two-adic rank formulas jump Fibonacci and golden-ring phases at arbitrary `BigInteger` indices; primitive pairs modulo `2^t` are classified into the two proved projective orbits by their norm modulo eight; `FibonacciSymmetricMinimum.Find` returns a self-verifying exact best-return certificate for any positive period; the ruler index gives random access, prefix counts, and factor counts for the balanced construction; and the return analyzer exposes the canonical signed Cassini coordinates, exact mechanical-error bracket, and every successful period-decomposition certificate. Crucially, a negative coordinate remains visible as a counterexample profile instead of being filtered out. |
+| `ConstantGapCoveringResearch` | `static` | Exact-cover machinery for Hubert colorings: constructs the canonical ruler coloring, decides attainable least periods, enumerates period spectra, and returns independently verifiable residue-class witnesses. Searches and witness verification have an explicit period ceiling. |
+| `SturmianReturnSpectrumResearch` | `static` | Exact Proposition-20 return-spectrum machinery for arbitrary periodic Sturmian directives and periodic left/right colorings. It evaluates a specified finite preperiod, enumerates every determinant-compatible congruence component representing all preperiods, reconstructs an explicit positive prefix for a component, and returns exact phase witnesses and minima; phase-invariant candidate tables make broad searches practical, while a separate optimized Fibonacci path supports cross-checking. |
 | `MetallicQuasicrystal` | `static` | The metallic-mean quasicrystals `δₙ = (n + √(n²+4))/2` for any index — golden is `n = 1` (the Fibonacci chain), silver is `n = 2` (the Pell chain). `Word` streams the tiling; `Contains`/`StartsLongTile`/`Next`/`Previous`/`Position` address points by ring coordinate `a + b·δₙ` in O(1), the membership-and-traversal surface generalized from the retired hand-coded golden and silver chains — `n = 1` reproduces the former golden chain coordinate for coordinate. Exact integer arithmetic above one fixed-point seam, so it never drifts. |
 | `MetallicPolynomialContinuedFraction` | `static` | Exact random access to the metallic polynomial continued fraction: `TailFloor(k, n)` evaluates `⌊sₙ⌋`, where `sₙ = k·n−1+n²/sₙ₊₁`, directly from its proved quadratic-irrational formula. It uses arbitrary-width integer arithmetic and an integer square root instead of a truncation depth or floating-point tolerance; differences of consecutive floors give its associated integer sequence. |
 | `SecureRandom` | `static` | Uniform, unbiased, cryptographically secure unsigned draws — NOT for simulation (deliberately non-reproducible); use `Pcg32XshRr` there. |
@@ -92,7 +94,7 @@ var analysis = FibonacciReturnResearch.Analyze(
 if (analysis.CanonicalProfile is { } profile) {
     bool exactMaximalReturnData = profile.Verify(word);
     bool provedMechanicalStep = profile.MechanicalBoundHolds;
-    bool remainingLeanConjecture = profile.CoordinatesAreNonnegative;
+    bool provedRichPeriodClassification = profile.CoordinatesAreNonnegative;
     Console.WriteLine($"phase={profile.Phase}, (l,k)=({profile.ShortCoordinate},{profile.LongCoordinate})");
 }
 foreach (var certificate in analysis.Decompositions) {
@@ -105,7 +107,7 @@ projective orbits, symmetric minima, the balanced ruler construction, and a fini
 using exact integer and quadratic-surd comparisons. `SearchLimitReached` is kept distinct from failure so a bounded
 experiment can never be mistaken for a proof or counterexample.
 
-For a larger configurable falsification sweep of Lean's remaining
+For a larger configurable regression sweep of the kernel-checked
 `FibonacciRichPeriodClassification` lemma:
 
 ```text
@@ -115,8 +117,51 @@ dotnet run -c Release tools/fibonacci-return-classification-explorer.cs -- 4096 
 The explorer exits `1` with the first exact counterexample candidate, including its canonical Ostrowski
 representations, `2` if the right-mismatch bound is inconclusive, and `0` with phase, coordinate-frequency,
 boundary-case, and extremal-certificate diagnostics when the whole finite box passes. It separately verifies the
-Lean-proved mechanical bracket and the genuinely residual conjecture: at the least phase with
+Lean-proved mechanical bracket and rich-period classification: at the least phase with
 `F_(phase+3)-2 >= maximalOverlap`, both signed Cassini coordinates are nonnegative.
+
+### Hubert-converse exploration
+
+The remaining equality problem is no longer inside the Fibonacci construction. It is the general
+balanced-word converse: combine Hubert's coloring representation with all Sturmian directive tails,
+all finite preperiod congruence components, and every attainable constant-gap coloring period. The
+research APIs make that finite exact layer executable:
+
+```csharp
+using Puck.Maths.Research;
+
+var coloringPeriods = ConstantGapCoveringResearch.PeriodSpectrum(
+    symbolCount: 5,
+    inclusiveMaximumPeriod: 16);
+
+var spectrum = SturmianReturnSpectrumResearch.ComponentMinimum(
+    period: [1, 2],
+    leftColoringPeriod: 4,
+    rightColoringPeriod: 8);
+
+var witness = spectrum.Minimum.Phases
+    .First(phase => phase.Colored == spectrum.Minimum.ColoredLimsup);
+bool congruencesHold = SturmianReturnSpectrumResearch.CongruenceHolds(
+    witness.Matrix,
+    witness.ColoredWitness,
+    leftColoringPeriod: 4,
+    rightColoringPeriod: 8);
+Console.WriteLine($"components={spectrum.CycleCount}, minimum={spectrum.Minimum.ColoredLimsup}");
+```
+
+The verifier independently checks exact-cover search against all small periodic words, continued-
+fraction tail recurrences, published Fibonacci spectra, phase maximization, optimized/general
+agreement, sampled finite preperiods, and the explicit 11-letter counterexample to the formerly
+conjectured stronger colored-lifting inequality. The explorer performs a configurable exact sweep
+across constant-gap period spectra and primitive directive necklaces; the second search scans all
+period pairs in its determinant envelope and stops on an exact theorem-bound or colored-lifting
+counterexample:
+
+```text
+dotnet run -c Release tools/hubert-converse-verifier.cs
+dotnet run -c Release tools/hubert-converse-explorer.cs -- 5 2 2 32
+dotnet run -c Release tools/colored-lifting-conjecture-search.cs -- 64 3 4
+```
 
 ### Odd-cyclic incidence and executable CRT evidence
 

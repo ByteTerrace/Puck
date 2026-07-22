@@ -276,7 +276,7 @@ Proposition 20 of Dvořáková--Opočenská--Pelantová gives
 Thus the main issue is a uniform theorem about an evolving sequence of
 index-\(D\) congruence lattices, not merely an estimate for one lattice.
 
-### A stronger colored lifting conjecture
+### A stronger colored lifting conjecture (false)
 
 For every such coloring,
 
@@ -288,15 +288,56 @@ For every such coloring,
 \]
 
 In the range below \(4\), (CL) says that coloring cannot cross the first
-Sturmian spectral gap after the natural determinant normalization.  It is a
+Sturmian spectral gap after the natural determinant normalization.  It was a
 natural strengthening, but Theorem 5.1 does not require it: Lemma 4.2 proves
 the uniform constant needed here directly.
 
-Formula (CL) is consistent with every exact threshold through ten letters and
-with direct enumeration of the return-lattice formula for quadratic slopes of
-small period, but finite checks are not a proof.
+The conjecture is false.  Take the Sturmian slope
 
-### Why a one-index proof does not work
+\[
+ [0;10,\overline{1,3,3}]
+\]
+
+and coloring periods \(P=5\), \(P'=10\), so \(D=50\).  Concrete
+constant-gap colorings are supplied by the five residue classes modulo \(5\)
+on the first letter and by
+
+\[
+ 0\bmod2,\quad1,3,5,7,9\bmod10
+\]
+
+on the second letter.  Thus this is an actual Hubert coloring on \(5+6=11\)
+letters, not merely a congruence lattice.  Exact full-orbit evaluation gives
+
+\[
+ E^*(\mathbf v)-1=\frac{10-\sqrt{65}}{25},\qquad
+ D(E^*(\mathbf v)-1)=20-2\sqrt{65}<4,       \tag{CLX1}
+\]
+
+whereas the uncolored excess is
+
+\[
+ E^*(\mathbf u)-1=\frac{11+\sqrt{65}}4>4.  \tag{CLX2}
+\]
+
+Therefore the right side of (CL) is \(4\), and (CLX1) disproves (CL).  The
+same value remains above the theorem's required non-Fibonacci constant:
+
+\[
+ 20-2\sqrt{65}>\frac83.
+\]
+
+The all-component search finds 36 congruence cycles; the minimizing component
+has representative \((0,1;1,0)\) at directive phase zero and is reached by the
+one-digit prefix \([10]\).  Its extremal phase is \((1,4;1,3)\) at phase two,
+with return vector \((m,\ell,k)=(0,5,15)\).  The optimized evaluator and an
+independent exhaustive phase loop reproduce (CLX1)--(CLX2), while exact-cover
+search independently reconstructs both colorings.  These checks are permanent
+regressions in [the Hubert-converse verifier](../tools/hubert-converse-verifier.cs);
+the bounded discovery tool is
+[the colored-lifting search](../tools/colored-lifting-conjecture-search.cs).
+
+### Why a one-index proof did not work
 
 The tempting strengthening
 
@@ -324,8 +365,9 @@ For the same example the ratio of the two limsups is
  \frac{21+7\sqrt{65}}8>1.
 \]
 
-Thus the example does not contradict (CL); it proves that any proof of (CL)
-must couple several continued-fraction phases.  These identities, and the
+Thus this local example does not itself contradict (CL), but it proves that
+no pointwise argument could have established it.  The full-orbit example
+(CLX1)--(CLX2) above now disproves (CL).  These identities, and the
 published extremal values for \(d=3,6,8,10\), are checked in exact quadratic
 arithmetic by
 [`tools/fibonacci-coloring-return-spectrum.cs`](../tools/fibonacci-coloring-return-spectrum.cs).
@@ -368,7 +410,7 @@ silver equality itself occurs in the intermediate \(m=1\) cell omitted by a
 digit-only model; `--silver-intermediate-cell` certifies this coordinate
 point.
 
-### Exact divided-cell reformulation of (CL)
+### Exact divided-cell reformulation of the former (CL)
 
 There is a useful coordinate-free form of this stronger conjecture.  Fix a
 phase \((N,m)\), and put
@@ -440,7 +482,7 @@ continued-fraction phases, (DC2) ranges through the successive divided-cell
 bases of one fixed irrational lattice, while the colored sublattice itself
 remains fixed in the original Parikh coordinates.
 
-Hence (CL) is equivalent to the following purely two-dimensional assertion.
+Hence the former (CL) is equivalent to the following purely two-dimensional assertion.
 For every index-\(D\) sublattice of a unimodular irrational lattice, the
 limsup, over its successive divided cells, of
 

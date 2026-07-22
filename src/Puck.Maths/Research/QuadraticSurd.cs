@@ -144,7 +144,25 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         (((double)RationalNumerator + ((double)SurdNumerator * Math.Sqrt((double)Radicand))) / (double)Denominator);
 
     /// <inheritdoc />
-    public int CompareTo(QuadraticSurd other) => (this - other).Sign;
+    public int CompareTo(QuadraticSurd other) {
+        if (Equals(other)) { return 0; }
+        if (TryCommonRadicalParts(this, other, out _)) { return (this - other).Sign; }
+
+        // The positive denominators can be cleared without changing sign.
+        // Distinct square classes make 1, √d, √e linearly independent over Q,
+        // so the enclosure loop must eventually separate the nonzero value.
+        var rational = (RationalNumerator * other.Denominator) -
+            (other.RationalNumerator * Denominator);
+        var leftCoefficient = (SurdNumerator * other.Denominator);
+        var rightCoefficient = -(other.SurdNumerator * Denominator);
+        return BiquadraticSign(
+            rational,
+            leftCoefficient,
+            Radicand,
+            rightCoefficient,
+            other.Radicand
+        );
+    }
 
     /// <inheritdoc />
     public bool Equals(QuadraticSurd other) {
@@ -256,10 +274,26 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
 
     private static (BigInteger Radicand, BigInteger LeftSurdNumerator, BigInteger RightSurdNumerator)
         CommonRadicalParts(QuadraticSurd left, QuadraticSurd right) {
-        if (left.IsRational) { return (right.Radicand, BigInteger.Zero, right.SurdNumerator); }
-        if (right.IsRational) { return (left.Radicand, left.SurdNumerator, BigInteger.Zero); }
+        if (TryCommonRadicalParts(left, right, out var result)) { return result; }
+        throw new ArgumentException(message: "quadratic-surd operands must belong to the same field");
+    }
+
+    private static bool TryCommonRadicalParts(
+        QuadraticSurd left,
+        QuadraticSurd right,
+        out (BigInteger Radicand, BigInteger LeftSurdNumerator, BigInteger RightSurdNumerator) result
+    ) {
+        if (left.IsRational) {
+            result = (right.Radicand, BigInteger.Zero, right.SurdNumerator);
+            return true;
+        }
+        if (right.IsRational) {
+            result = (left.Radicand, left.SurdNumerator, BigInteger.Zero);
+            return true;
+        }
         if (left.Radicand == right.Radicand) {
-            return (left.Radicand, left.SurdNumerator, right.SurdNumerator);
+            result = (left.Radicand, left.SurdNumerator, right.SurdNumerator);
+            return true;
         }
 
         var commonRadicand = BigInteger.GreatestCommonDivisor(left.Radicand, right.Radicand);
@@ -269,13 +303,65 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         var rightScale = BigIntegerMath.SquareRoot(rightScaleSquared);
         if (((leftScale * leftScale) == leftScaleSquared) &&
             ((rightScale * rightScale) == rightScaleSquared)) {
-            return (
+            result = (
                 commonRadicand,
                 left.SurdNumerator * leftScale,
                 right.SurdNumerator * rightScale
             );
+            return true;
         }
+        result = default;
+        return false;
+    }
 
-        throw new ArgumentException(message: "quadratic-surd operands must belong to the same field");
+    private static int BiquadraticSign(
+        BigInteger rational,
+        BigInteger leftCoefficient,
+        BigInteger leftRadicand,
+        BigInteger rightCoefficient,
+        BigInteger rightRadicand
+    ) {
+        var precision = 8;
+        while (true) {
+            var scale = (BigInteger.One << precision);
+            var lower = (rational * scale);
+            var upper = lower;
+            AddRadicalBounds(
+                ref lower,
+                ref upper,
+                leftCoefficient,
+                leftRadicand,
+                scale
+            );
+            AddRadicalBounds(
+                ref lower,
+                ref upper,
+                rightCoefficient,
+                rightRadicand,
+                scale
+            );
+            if (lower.Sign > 0) { return 1; }
+            if (upper.Sign < 0) { return -1; }
+            precision = checked(precision * 2);
+        }
+    }
+
+    private static void AddRadicalBounds(
+        ref BigInteger lower,
+        ref BigInteger upper,
+        BigInteger coefficient,
+        BigInteger radicand,
+        BigInteger scale
+    ) {
+        if (coefficient.IsZero) { return; }
+        var floor = BigIntegerMath.SquareRoot(radicand * scale * scale);
+        var ceiling = (floor + BigInteger.One);
+        if (coefficient.Sign > 0) {
+            lower += (coefficient * floor);
+            upper += (coefficient * ceiling);
+        } else {
+            lower += (coefficient * ceiling);
+            upper += (coefficient * floor);
+        }
     }
 }

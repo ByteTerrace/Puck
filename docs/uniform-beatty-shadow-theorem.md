@@ -16,7 +16,9 @@ presentation now gives the effective bound `#{n <= N : d_n != 0}=O(log N)` for e
 On the unresolved integer-orbit side, exact prime-power profiling has isolated a finite-field monodromy criterion:
 both its determinant and trace halves now have direct finite-field proofs.  They imply unconditional
 superexponential EGF-denominator growth whenever the numerator discriminant is not a rational square, leaving only
-the square-numerator, nonsquare-characteristic, nonaligned hypergeometric branch outside the certified locus.
+the square-numerator, nonsquare-characteristic, nonaligned hypergeometric branch as the possible general obstruction.
+Two new machine-checked trapping theorems nevertheless settle complementary
+infinite two-parameter regions inside that branch.
 
 One obligation remains before the proposed theorem may be cited as stated: totalize the finite-prefix comparison when
 a tail may equal an integer exactly. The generalized-Pell presentation now compiles into an explicit Ostrowski DFAO,
@@ -67,6 +69,64 @@ The motivating metallic slice `(p,q,r,u,v)=(k,-1,1,0,0)` is already fully
 machine-checked: `PuckMathsFormal.BDS.bds_conjecture` in
 `formal/PuckMathsFormal/PuckMathsFormal/BDS/Theorem.lean` proves its discrepancy
 is identically zero for every `k,n>=1`.
+
+The metallic argument is no longer isolated.  The new theorem
+`PuckMathsFormal.PolynomialTail.GeneralizedBDS.generalized_bds_floor` in
+`formal/PuckMathsFormal/PuckMathsFormal/PolynomialTail/GeneralizedBDS.lean`
+proves the following two-parameter extension.  For integers \(k\geq1\) and
+\(-k\leq q\leq0\), every positive solution of
+
+\[
+  s_n=kn+q+\frac{n^2}{s_{n+1}}
+\]
+
+satisfies
+
+\[
+  \left\lfloor s_n\right\rfloor
+  =\left\lfloor \alpha n+\beta\right\rfloor,
+  \qquad
+  \alpha=\frac{k+\sqrt{k^2+4}}2,
+  \qquad
+  \beta=\frac{q\alpha^2-\alpha}{\alpha^2+1}
+\]
+
+for every \(n\geq1\).  Thus the exact Beatty shadow persists while the constant
+term ranges through an interval of \(k+1\) integer values; the published
+metallic case is the single slice \(q=-1\).  The Lean proof includes strict
+trap invariance, compactness-based existence, contraction uniqueness, an
+integral quadratic-norm separation lemma, and the final floor equality.  This
+family has square numerator discriminant and nonsquare characteristic
+discriminant; except on the aligned slice \(2q=-k\), it lies precisely in the
+formerly untouched stratum (E).  It therefore shows that (E) is an obstruction to the *uniform method*,
+not a region in which exact Beatty equality is necessarily absent.
+
+The numerator coefficient can also vary.  The theorem
+`PuckMathsFormal.PolynomialTail.ScaledBDS.scaled_bds_floor` in
+`formal/PuckMathsFormal/PuckMathsFormal/PolynomialTail/ScaledBDS.lean` proves
+that for integers \(p,r\) with \(1\leq r\leq p\), every positive solution of
+
+\[
+  s_n=p(n-1)+\frac{r n^2}{s_{n+1}}
+\]
+
+satisfies
+
+\[
+  \lfloor s_n\rfloor=\lfloor\alpha n+\beta\rfloor,
+  \qquad
+  \alpha=\frac{p+\sqrt{p^2+4r}}2,
+  \qquad
+  \beta=\frac{r}{\sqrt{p^2+4r}}-\alpha
+\]
+
+for every \(n\geq1\).  Its integral norm is congruent to
+\(-r^2\pmod {p^2+4r}\); the hypothesis \(r\leq p\) makes the least positive
+norm at least \(p^2+4r-r^2\), strictly wider than the complete analytic trap
+image.  This entire family has \(\Delta_B=0\), nonsquare
+\(\Delta_c=p^2+4r\), and nonzero alignment residual \(R=pr\).  It is therefore
+an unconditional two-dimensional equality region lying wholly inside (E),
+not merely touching its aligned or rational-characteristic boundary.
 
 ## 1. Exact affine defect
 
@@ -932,7 +992,13 @@ The strongest realized statement is consequently:
 > rational-function tails have a complete finite certificate scheme (with the dense executable recognizer bounded at
 > denominator degree 128), double-square instances reduce to an
 > unconditional published minimality decision procedure, and the aligned square-numerator branch reduces to
-> effective 1-period equality. Whenever every other finite-prefix comparison
+> effective 1-period equality.  In addition, the full integer family
+> `(p,q,r,u,v)=(k,q,1,0,0)` with `k>=1` and `-k<=q<=0` has unconditional
+> all-index Beatty equality by a machine-checked generalized trapping theorem.
+> The complementary scaled family `(p,q,r,u,v)=(p,-p,r,0,0)` with
+> `1<=r<=p` likewise has unconditional all-index equality, despite lying in
+> the nonsquare-characteristic, nonaligned exceptional stratum.
+> Whenever every other finite-prefix comparison
 > avoids an unresolved exact integer hit, these machines extend effectively to a total DFAO and decide all-index
 > identity.
 
@@ -958,6 +1024,7 @@ dotnet run tools/polynomial-tail-rational-verifier.cs
 dotnet run tools/polynomial-tail-rational-box-verifier.cs -- 12 24
 dotnet run tools/polynomial-tail-minimality-reduction-verifier.cs
 dotnet run tools/polynomial-tail-one-period-reduction-verifier.cs
+dotnet run tools/polynomial-exact-beatty-trap-verifier.cs -c Release --no-restore
 dotnet run tools/polynomial-tail-aligned-period-orbit-search.cs -- 200 300 600 10000
 python tools/polynomial-tail-egf-arithmetic-search.py 8 20 500
 python tools/polynomial-tail-padic-sieve.py 500 --cycle-prime-bound 31 --verify --sweep

@@ -30,7 +30,7 @@ s_n=T_n(s_{n+1}).                                      \tag{1}
 
 It then gives its exact affine asymptote, a constructive \(O(1/n)\) interval,
 and its complete formal asymptotic expansion. The implementation is
-[PolynomialContinuedFractionTail](../src/Puck.Maths/PolynomialContinuedFractionTail.cs),
+[PolynomialContinuedFractionTail](../src/Puck.Maths/Research/PolynomialContinuedFractionTail.cs),
 and the independent exact checker is
 [tools/polynomial-continued-fraction-verifier.cs](../tools/polynomial-continued-fraction-verifier.cs).
 
@@ -407,6 +407,65 @@ The existence, uniqueness, and asymptotic arguments also remain valid for real
 coefficients satisfying (H); only the arbitrary-width exact representation and
 finite integer certificate are lost.
 
+## 8. Exact Beatty norm-gap certificates
+
+The zero-linear/zero-constant numerator slice admits a stronger, search-free
+certificate.  For
+
+\[
+s_n=pn+q+\frac{rn^2}{s_{n+1}},\qquad p,r\geq1,\quad -p\leq q\leq0,
+\]
+
+put (K=p^2+4r), (x_n=\lambda n+\beta), (c=\lambda+\beta), and
+
+\[
+C=\frac{rc^2}{\lambda^3},\qquad
+\rho=r\bigl(q(p+q)-r\bigr),\qquad
+G=K+\rho.
+\]
+
+`PolynomialExactBeattyTrap.TryCreate` checks the complete finite sufficient
+criterion: positivity of (G), strict contraction, strict endpoint trapping,
+and
+
+\[
+K\sqrt K\,C<G.
+\]
+
+When it succeeds, `PolynomialExactBeattyTrapCertificate` proves
+
+\[
+x_n<s_n<x_n+\frac Cn
+\quad\hbox{and}\quad
+\lfloor s_n\rfloor=\lfloor x_n\rfloor
+\qquad(n\geq1).
+\]
+
+For an integer boundary (m>x_n), `NormWitness` returns
+
+\[
+Q=Kn+pq-2r,\qquad T=Km-r(p+2q)
+\]
+
+and the integer (F) in
+
+\[
+T^2-pTQ-rQ^2=KF,qquad F\equiv\rho\pmod K.
+\]
+
+The verifier compares all six coefficients of this bivariate identity, so the
+check is universal rather than a sample of indices.  The full unit-numerator
+strip (r=1,-p\leq q\leq0) and the scaled wedge
+(q=-p,1\leq r\leq p) are named certificate families; the general inequality
+recognizes additional parameter triples as well.  Unsupported or insufficient
+cases return `false`, including the genuine floor counterexample
+((p,q,r)=(1,0,3)).
+
+The standalone constructor avoids building the more general asymptotic
+interval analysis.  The measured exact sweep classifies 34,400 triples in
+1.21 seconds (about 28,000 per second), while 100,000 arbitrary-width certified
+floor evaluations take 0.10 seconds on the verification machine.
+
 ## Usage
 
 ~~~csharp
@@ -424,6 +483,19 @@ PolynomialTailIntervalCertificate certificate = analysis.IntervalCertificate;
 var n = certificate.Cutoff;
 var interval = analysis.CertifiedInterval(n);
 var coefficients = analysis.AsymptoticCoefficients(termCount: 20);
+
+if (PolynomialExactBeattyTrap.TryCreate(
+    linear: 7,
+    constant: -3,
+    numeratorQuadratic: 1,
+    numeratorLinear: 0,
+    numeratorConstant: 0,
+    certificate: out var beatty)) {
+    BigInteger exactFloor = beatty.TailFloor(tailIndex: 1_000_000);
+    PolynomialExactBeattyNormWitness witness = beatty.NormWitness(
+        tailIndex: 1_000_000,
+        boundary: exactFloor + 1);
+}
 ~~~
 
 The former metallic family is the specialization
@@ -442,6 +514,7 @@ dotnet run -c Release tools/polynomial-continued-fraction-verifier.cs
 dotnet run -c Release tools/maths-battery.cs
 dotnet run tools/polynomial-tail-rational-verifier.cs -c Release
 dotnet run tools/polynomial-tail-one-period-reduction-verifier.cs -c Release
+dotnet run tools/polynomial-exact-beatty-trap-verifier.cs -c Release --no-restore
 cd formal/PuckMathsFormal && lake build PuckMathsFormal.PolynomialTail
 ~~~
 
