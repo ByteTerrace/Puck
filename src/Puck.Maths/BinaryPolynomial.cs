@@ -11,8 +11,9 @@ namespace Puck.Maths;
 /// </summary>
 /// <remarks>
 /// The type carries a polynomial, not a field element: it has no modulus, no inverse, and no order. Ordinary
-/// multiplication truncates above degree 63 exactly as the library's other fixed-width operators wrap;
-/// <see cref="MultiplyWide(BinaryPolynomial)"/> returns the exact product and the checked operator reports the loss.
+/// multiplication truncates above degree 63 exactly as the library's other fixed-width operators wrap, and the
+/// checked operator reports the loss. Multiplication that needs the exact product reduced by a modulus is a field
+/// operation: use <see cref="BinaryField{T}"/>, which keeps the wide intermediate internally.
 /// </remarks>
 public readonly record struct BinaryPolynomial :
     IAdditionOperators<BinaryPolynomial, BinaryPolynomial, BinaryPolynomial>,
@@ -72,7 +73,7 @@ public readonly record struct BinaryPolynomial :
     /// <param name="left">The first factor.</param>
     /// <param name="right">The second factor.</param>
     /// <returns>The product's coefficients of exponents 0 through 63.</returns>
-    /// <remarks>Truncation matches the library's other fixed-width operators. Use <see cref="MultiplyWide(BinaryPolynomial)"/> for the exact product, or the checked operator to have the loss reported.</remarks>
+    /// <remarks>Truncation matches the library's other fixed-width operators. Use the checked operator to have the loss reported.</remarks>
     public static BinaryPolynomial operator *(BinaryPolynomial left, BinaryPolynomial right) =>
         new(bits: BinaryFieldKernels.CarrylessMultiply64(left: left.Bits, right: right.Bits).Low);
     /// <summary>Multiplies two binary polynomials, reporting any coefficient above degree 63.</summary>
@@ -134,12 +135,6 @@ public readonly record struct BinaryPolynomial :
 
         return new(bits: (value.Bits >>> count));
     }
-    /// <summary>Widens to the packed 128-bit carrier.</summary>
-    /// <param name="value">The polynomial to widen.</param>
-    /// <returns>The same polynomial over the wide carrier.</returns>
-    public static implicit operator BinaryPolynomialWide(BinaryPolynomial value) =>
-        new(bits: ((UInt128)value.Bits));
-
     /// <summary>
     /// Factors <c>t^n + 1</c> over the two-element field for an odd positive <paramref name="cycleOrder"/>. In
     /// characteristic two this is also <c>t^n - 1</c>, the group polynomial of a cyclic action. Automatic trial
@@ -233,14 +228,6 @@ public readonly record struct BinaryPolynomial :
         if ((1 > Degree) || (0UL == (Bits & 1UL))) { return false; }
 
         return BinaryField<ulong>.FromModulus(modulus: this).IsIrreducible();
-    }
-    /// <summary>Returns the exact product of this polynomial and <paramref name="other"/>.</summary>
-    /// <param name="other">The second factor.</param>
-    /// <returns>The exact product over the wide carrier, which always holds it.</returns>
-    public BinaryPolynomialWide MultiplyWide(BinaryPolynomial other) {
-        var product = BinaryFieldKernels.CarrylessMultiply64(left: Bits, right: other.Bits);
-
-        return new BinaryPolynomialWide(bits: ((((UInt128)product.High) << 64) | product.Low));
     }
     /// <summary>Returns the conventional written form of this polynomial, such as <c>t^5+t^2+1</c>.</summary>
     /// <returns>The terms in descending exponent order, or <c>0</c> for the zero polynomial.</returns>

@@ -404,6 +404,14 @@ kernel line.  The horizontal fixed-seed problem is therefore a rationality
 question for this regular logarithmic derivative, not an ambiguity between
 the regular and image solutions.
 
+The apparent extra dependence on the repeated-root shift is removed in
+[the repeated-root regular-line note](polynomial-tail-repeated-root-regular-line.md).
+There the regular seed is reduced by an invertible rational projective map
+to one Lerch value.  The aligned line is proved transcendental, the
+square-characteristic resonances are completely classified, and the
+nonsquare nonaligned remainder is shown to be exactly the pre-existing
+projective Lerch hard core.
+
 After discarding the finitely many primes dividing its denominator, its
 nonkernel primes contain the entire inert half.  In particular their Mertens
 weight diverges, and the factorial divisor argument sharpens to

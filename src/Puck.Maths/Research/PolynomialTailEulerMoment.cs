@@ -33,6 +33,9 @@ public readonly record struct PolynomialTailEulerMomentExclusionCertificate(
 /// <summary>
 /// An exact failed Hausdorff-moment inequality for a putative Euler representation of an integer tail equality.
 /// </summary>
+/// <param name="TailIndex">The positive recurrence index <c>n</c>.</param>
+/// <param name="IntegerBoundary">The putative integer tail value <c>M</c> at that index.</param>
+/// <param name="SignedNumeratorDiscriminantRoot">The exact square root of the quadratic numerator's discriminant; its sign selects which of the two rational roots orients the Euler chart.</param>
 /// <param name="MomentIndex">The exponent <c>k</c> in <c>E[t^k*(1-t)^j]</c>.</param>
 /// <param name="DifferenceOrder">The exponent <c>j</c> in <c>E[t^k*(1-t)^j]</c>.</param>
 /// <param name="Witness">The exact nonpositive value of that putative moment.</param>

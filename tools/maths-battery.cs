@@ -3507,10 +3507,6 @@ for (var trial = 0; (trial < 1_000_000); ++trial) {
         ((binaryDividend % binaryDivisor) != binaryRemainder)) {
         throw new InvalidOperationException("BINARY POLYNOMIAL DIVISION IDENTITY MISMATCH");
     }
-    if (binaryDividend.MultiplyWide(other: binaryDivisor).Low != (binaryDividend * binaryDivisor)) {
-        throw new InvalidOperationException("BINARY POLYNOMIAL WIDE PRODUCT ORACLE MISMATCH");
-    }
-
     var binaryShift = ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL));
     var binaryMonomial = new BinaryPolynomial(bits: (1UL << binaryShift));
 
@@ -3521,16 +3517,19 @@ for (var trial = 0; (trial < 1_000_000); ++trial) {
     }
 }
 // The exact product against the oracle, and the checked operator reporting loss exactly when the exact product has
-// one. Both run at a tenth of the sweep above deliberately: a BigInteger long division costs about a microsecond and
-// a raised OverflowException about one and a half, so a million trials of either would consume the whole section's
-// time budget for coverage the identity sweep and the exhaustive field tables below already carry.
+// one. The type carries no wide product of its own -- degree 64 and above is a field's business, not a polynomial's --
+// so the exact product is recomposed here from four half-width `*` results, each of degree at most 62 and therefore
+// exact. That makes the sweep a cross-check of the operator against the schoolbook arrangement AND against BigInteger.
+// Both run at a tenth of the sweep above deliberately: a BigInteger long division costs about a microsecond and a
+// raised OverflowException about one and a half, so a million trials of either would consume the whole section's time
+// budget for coverage the identity sweep and the exhaustive field tables below already carry.
 for (var trial = 0; (trial < 100_000); ++trial) {
     var binaryWideLeft = new BinaryPolynomial(bits: (NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) >>> ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL))));
     var binaryWideRight = new BinaryPolynomial(bits: (NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) >>> ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL))));
-    var binaryWideProduct = binaryWideLeft.MultiplyWide(other: binaryWideRight);
+    var binaryWideProduct = BinaryExactProduct(left: binaryWideLeft, right: binaryWideRight);
     var binaryCheckedReportedLoss = false;
 
-    if (((BigInteger)binaryWideProduct.Bits) != BinaryOracleMultiply(left: binaryWideLeft.Bits, right: binaryWideRight.Bits)) {
+    if (((BigInteger)binaryWideProduct) != BinaryOracleMultiply(left: binaryWideLeft.Bits, right: binaryWideRight.Bits)) {
         throw new InvalidOperationException("BINARY POLYNOMIAL WIDE PRODUCT ORACLE MISMATCH");
     }
 
@@ -3540,7 +3539,7 @@ for (var trial = 0; (trial < 100_000); ++trial) {
         binaryCheckedReportedLoss = true;
     }
 
-    if (binaryCheckedReportedLoss == binaryWideProduct.High.IsZero) {
+    if (binaryCheckedReportedLoss == (UInt128.Zero == (binaryWideProduct >>> 64))) {
         throw new InvalidOperationException("BINARY POLYNOMIAL CHECKED MULTIPLY DID NOT REPORT LOSS");
     }
 }
@@ -3607,9 +3606,12 @@ foreach (var binaryCarrylessVector in new[] {
     (Left: 0x63746F725D53475DUL, Right: 0x4869285368617929UL, Low: 0x7FA540AC2A281315UL, High: 0x1BD17C8D556AB5A1UL),
     (Left: 0x7B5B546573745665UL, Right: 0x4869285368617929UL, Low: 0xD66EE03E410FD4EDUL, High: 0x1D1E1F2C592E7C45UL),
 }) {
-    var binaryCarrylessProduct = new BinaryPolynomial(bits: binaryCarrylessVector.Left).MultiplyWide(other: new BinaryPolynomial(bits: binaryCarrylessVector.Right));
+    var binaryCarrylessProduct = BinaryExactProduct(
+        left: new BinaryPolynomial(bits: binaryCarrylessVector.Left),
+        right: new BinaryPolynomial(bits: binaryCarrylessVector.Right)
+    );
 
-    if (binaryCarrylessProduct.Bits != ((((UInt128)binaryCarrylessVector.High) << 64) | binaryCarrylessVector.Low)) {
+    if (binaryCarrylessProduct != ((((UInt128)binaryCarrylessVector.High) << 64) | binaryCarrylessVector.Low)) {
         throw new InvalidOperationException("BINARY FIELD PUBLISHED CARRYLESS VECTOR MISMATCH");
     }
 }
@@ -4215,6 +4217,18 @@ static (BigInteger Quotient, BigInteger Remainder) BinaryOracleDivRem(BigInteger
     }
 
     return (Quotient: quotient, Remainder: remainder);
+}
+// The exact 128-bit carryless product, recomposed from four half-width products of the truncating operator. Each
+// factor is at most degree 31, so each partial product is at most degree 62 and `*` returns it exactly -- the
+// recomposition never depends on the very truncation it is here to measure.
+static UInt128 BinaryExactProduct(BinaryPolynomial left, BinaryPolynomial right) {
+    var leftLow = new BinaryPolynomial(bits: ((uint)left.Bits));
+    var leftHigh = new BinaryPolynomial(bits: (left.Bits >>> 32));
+    var rightLow = new BinaryPolynomial(bits: ((uint)right.Bits));
+    var rightHigh = new BinaryPolynomial(bits: (right.Bits >>> 32));
+    var middle = ((leftLow * rightHigh) + (leftHigh * rightLow));
+
+    return ((((UInt128)(leftHigh * rightHigh).Bits) << 64) ^ (((UInt128)middle.Bits) << 32) ^ ((UInt128)(leftLow * rightLow).Bits));
 }
 static BigInteger BinaryOracleFieldMultiply(BigInteger left, BigInteger right, int degree, BigInteger tail) =>
     BinaryOracleDivRem(
