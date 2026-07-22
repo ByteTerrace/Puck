@@ -182,7 +182,13 @@ varying Hensel/kernel lines at almost every inert prime, unless the recurrence
 is on a known rational or aligned locus, would imply that classification. No
 such uniform nonvanishing theorem is claimed here. Equation (14) identifies
 it as a fixed-initial-jet polynomial-solution, or Hasse/p-curvature-kernel,
-condition.
+condition.  The companion note
+[`polynomial-tail-hasse-kernel-line.md`](polynomial-tail-hasse-kernel-line.md)
+now gives that kernel line explicitly as a finite-field Jacobi logarithmic
+derivative.  It also proves that, for a fixed exceptional recurrence, at most
+one integer seed can have exponentially bounded factorial denominators; what
+remains open is whether even that one possible seed exists outside the known
+loci.
 
 Crucially, even that theorem would **not** finish integer equality. It would
 prove that an exceptional positive minimal orbit, if one exists, is not
@@ -193,7 +199,178 @@ irrational-exponent stratum, positivity-to-factorial-reduction is essentially
 as strong as the desired nonexistence theorem rather than a consequence of
 the modular estimates above.
 
-## 4. Formalization boundary
+## 4. The sharp archimedean comparison
+
+The positive characteristic root of the factorially normalized recurrence is
+
+\[
+ c=\frac{\sqrt{p^2+4r}-p}{2},\qquad c^2+pc=r.          \tag{15}
+\]
+
+Write \(D=\sqrt{p^2+4r}\) and \(R=p(u-r)-2rq\).  On the
+nonresonant irrational-exponent branch, the positive minimal orbit has the
+standard recessive asymptotic
+
+\[
+ Q_n=K\,n!c^n n^\theta(1+O(n^{-1})),\qquad K>0,        \tag{16}
+\]
+
+where
+
+\[
+ \boxed{\theta=
+   \frac{u-r-cq}{c(2c+p)}
+   =\frac{u-r}{2r}+\frac{R}{2rD}.}                     \tag{17}
+\]
+
+Indeed, minimality cancels the nearer negative-singularity channel of the EGF
+equation.  Positivity and Pringsheim's theorem then put the first remaining
+singularity at the positive root \(z=1/c\).  On the nonresonant branch its
+nonzero Frobenius channel cannot vanish as well: a solution analytic at both
+finite singularities of this Fuchsian equation would be entire with only
+polynomial growth at infinity, hence polynomial, contrary to \(Q_n>0\) for
+every \(n\).  Frobenius coefficient transfer now proves (16), with positive
+leading constant because every coefficient is positive.
+
+Both constants can be checked directly.  Substituting
+`Q_n=n!c^n n^theta(1+O(1/n))` into (1) first gives
+`c^2+pc=r`; matching the next coefficient gives the first expression in
+(17).  For the second, use \(D=2c+p\), \(D+p=2r/c\), and the definition of
+\(R\).  Equivalently, the nonzero exponent at the positive EGF singularity
+\(z=1/c\) is
+
+\[
+ \delta_+=-\frac{r+u}{2r}-\frac{R}{2rD},
+\]
+
+and coefficient transfer gives \(\theta=-\delta_+-1\).  Thus the exact
+logarithmic statement needed below is
+
+\[
+ \log(Q_n/n!)=n\log c+O(\log n).                       \tag{18}
+\]
+
+In particular, \(c<1\) exactly when \(r<p+1\), or \(r\leq p\) for positive
+integer \(p,r\).  Equation (16) then gives
+
+\[
+ \frac{Q_n}{(n-1)!}=Kc^n n^{\theta+1}(1+O(n^{-1}))
+ \longrightarrow0.                                    \tag{19}
+\]
+
+This tempting small-root estimate does **not** contradict the modular
+divisor theorem.  The latter puts factorial mass in the denominator of
+\(Q_n/n!\), not in \(Q_n\).
+
+Now also assume the nonsquare-numerator hypotheses of Section 2.  There is a
+sharper exact way to see the compatibility.  Put
+
+\[
+ D_n=\operatorname{denominator}(Q_n/n!),\qquad
+ U_n=\frac{Q_n}{\gcd(Q_n,n!)};
+\]
+
+then \(Q_n/n!=U_n/D_n\) in lowest terms.  Let \(I_N\) denote the
+unramified inert-prime part of \(N!\) from (6).  For each such prime, one of
+\(Q_{N-1},Q_N\) is a unit.  Applying (4) at that unit gives the stronger
+adjacent statement
+
+\[
+ \boxed{I_{N-1}\mid D_{N-1}D_N.}                       \tag{20}
+\]
+
+Indeed, if \(Q_{N-1}\) is a unit, \(D_{N-1}\) contains the full
+\(\ell\)-part of \((N-1)!\); if \(Q_N\) is a unit, \(D_N\) contains at least
+that same part.  This argument is prime by prime.
+
+For a positive minimal orbit, (18), (20), and
+\(U_n=(Q_n/n!)D_n\) consequently imply
+
+\[
+ \begin{aligned}
+ \log(U_{N-1}U_N)
+ &=\log(D_{N-1}D_N)+\log\frac{Q_{N-1}Q_N}{(N-1)!N!}\\
+ &\geq \frac12N\log N+O(N).                            \tag{21}
+ \end{aligned}
+\]
+
+Hence at least one of the two reduced numerators satisfies
+
+\[
+ \max\{\log U_{N-1},\log U_N\}
+ \geq\frac14N\log N+O(N).                              \tag{22}
+\]
+
+The factor \(c^N\), including the whole regime \(c<1\), changes only the
+\(O(N)\) term in (21).  The forced half-factorial denominator mass is matched
+by half-factorial numerator height; positivity supplies no upper bound that
+prevents this.  Therefore an archimedean contradiction would require a new
+divisibility theorem on \(Q_N\) itself.  For example,
+\((N-1)!\mid Q_N\) along an infinite subsequence would contradict (19), but
+(3)--(6) point in the opposite direction and do not imply such a divisor.
+
+More generally, suppose positive integers \(L_N\mid Q_N\) are available along
+an infinite subsequence and
+
+\[
+ \log\frac{N!}{L_N}\leq\kappa N+o(N).                  \tag{23}
+\]
+
+Since \(Q_N/L_N\) is then a positive integer, (18) forces
+\[
+ 0\leq\log(Q_N/L_N)
+ \leq(\log c+\kappa)N+o(N).
+\]
+This is impossible whenever \(\kappa<-\log c\).  Equation (23) is therefore
+the precise near-full-factorial numerator divisibility threshold that would
+close a small-\(c\) stratum.  The present inert-prime result has logarithmic
+mass only \(\tfrac12N\log N+O(N)\), and it occurs on the denominator side, so
+it is far from this threshold in both location and size.
+
+## 5. Exact density ceilings for nonkilling primes
+
+The period trace formula also rules out a different hoped-for strengthening:
+nonkilling cannot have density one.  Write
+
+\[
+ \chi_B(\ell)=\left(\frac{\Delta_B}{\ell}\right),\qquad
+ \chi_c(\ell)=\left(\frac{\Delta_c}{\ell}\right),
+ \quad \Delta_c=p^2+4r.
+\]
+
+First suppose \(R\ne0\), and discard the finitely many ramified primes and
+primes dividing \(R\).  If \(\chi_B(\ell)=-1\), every transfer is invertible, so every nonzero
+initial state survives.  If
+\(\chi_B(\ell)=\chi_c(\ell)=1\), the monodromy has determinant and trace zero;
+Cayley--Hamilton makes its square zero, so **every** state dies within two
+periods.  Chebotarev therefore gives the following exact state-independent
+bounds for any fixed seed:
+
+1. If \(\mathbf Q(\sqrt{\Delta_B})\) and
+   \(\mathbf Q(\sqrt{\Delta_c})\) are distinct quadratic fields, the
+   nonkilling set contains the \(\chi_B=-1\) primes of density \(1/2\), but
+   excludes the simultaneously split primes of density \(1/4\).  Its lower
+   density is at least \(1/2\) and its upper density is at most \(3/4\).
+2. If the two nonsquare discriminants define the same quadratic field, the
+   inert primes survive and the split primes die.  The nonkilling set has
+   density exactly \(1/2\), independently of the seed.
+3. Separately, if \(R=0\) and \(\Delta_B\) is nonsquare, every split-numerator prime also
+   has zero trace.  Again, up to finitely many primes, nonkilling is exactly
+   numerator inertness and has density \(1/2\).
+4. On the exceptional square-numerator branch (12), every
+   \(\Delta_c\)-split prime kills every state, while only the
+   \(\Delta_c\)-inert half can be nonkilling.  Thus every seed has nonkilling
+   upper density at most \(1/2\).
+
+The same statements hold with Dirichlet/Mertens density, which is the notion
+relevant to (10)--(11).  Thus the useful unresolved target in (12) is not a
+density-one nonkilling theorem.  It is enough, and is best possible in this
+form, to prove that the nonkernel subset of the inert half has divergent
+Mertens weight.  Conversely, exponential factorial reduction requires the
+fixed state to lie in the varying kernel line at all but a
+Mertens-negligible subset of that inert half.
+
+## 6. Formalization boundary
 
 The Lean file now contains the recurrence lemma that nonvanishing quadratic
 coefficients preserve a nonzero adjacent state. It has deliberately not been

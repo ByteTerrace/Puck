@@ -274,8 +274,15 @@ public static class PolynomialBeattyShadow {
         }
 
         var prefix = new Dictionary<BigInteger, BigInteger>();
+        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(out var exactTrap);
+        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(out var shiftedExactTrap);
         for (var tailIndex = BigInteger.One; tailIndex < eventual.Cutoff; ++tailIndex) {
-            if (!analysis.TryCertifiedFloor(tailIndex, refinementRounds, out var tailFloor)) {
+            BigInteger tailFloor;
+            if (hasExactTrap) {
+                tailFloor = exactTrap.TailFloor(tailIndex);
+            } else if (hasShiftedExactTrap) {
+                tailFloor = shiftedExactTrap.TailFloor(tailIndex);
+            } else if (!analysis.TryCertifiedFloor(tailIndex, refinementRounds, out tailFloor)) {
                 certificate = null;
                 unresolvedTailIndex = tailIndex;
                 return false;
@@ -325,8 +332,15 @@ public static class PolynomialBeattyShadow {
         }
 
         var prefix = new Dictionary<BigInteger, BigInteger>();
+        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(out var exactTrap);
+        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(out var shiftedExactTrap);
         for (var tailIndex = BigInteger.One; tailIndex < eventual.Cutoff; ++tailIndex) {
-            if (!analysis.TryCertifiedFloor(tailIndex, refinementRounds, out var tailFloor)) {
+            BigInteger tailFloor;
+            if (hasExactTrap) {
+                tailFloor = exactTrap.TailFloor(tailIndex);
+            } else if (hasShiftedExactTrap) {
+                tailFloor = shiftedExactTrap.TailFloor(tailIndex);
+            } else if (!analysis.TryCertifiedFloor(tailIndex, refinementRounds, out tailFloor)) {
                 certificate = null;
                 unresolvedTailIndex = tailIndex;
                 return false;

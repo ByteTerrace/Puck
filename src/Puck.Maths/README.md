@@ -37,6 +37,8 @@ deps       none
 | `FixedRigidTransform` | `readonly record struct` | Rotation + translation as one unit dual quaternion: normalized `FromRotationTranslation`/`FromDualQuaternion` boundaries, fast raw composition by `*`, explicit `ComposeNormalized` for long chains, matching generic-math multiplication/identity interfaces, `TransformPoint`, `Inverse`, `Normalize`, and screw interpolation by `ScLerp`. Positional construction is the documented unchecked representation seam. Precision ≈ 2⁻¹⁵ relative to translation magnitude. |
 | `WorldCoord3` | `readonly record struct` | Canonical hierarchical world position: signed 64-bit cell indices plus a centred `FixedVector3` local offset — the floating-origin coordinate for planet-scale scenes. Construction and `WithLocal` canonicalize; `TryCreate`, `TryTranslate`, and `TryDelta` expose range failure without exceptions; throwing operators fail rather than silently wrap. Its heterogeneous generic-math interfaces expose position + displacement → position and position − position → displacement without pretending that positions form a vector space. |
 | `BinaryIntegerFunctions` | `static` ext. methods | Bit manipulation & base-10 digit ops over `IBinaryInteger<T>`. |
+| `BinaryPolynomial` / `BinaryPolynomialWide` | `readonly record struct` | Exact polynomials over `GF(2)`, packed one coefficient per bit into a `ulong` (degree ≤ 63) and a `UInt128` (degree ≤ 127). Addition is XOR and doubles as subtraction. Euclidean division is exact — `(a / b) * b + a % b == a` with no rounding seam — and `<<`/`>>` are multiplication and division by the indeterminate. Ordinary `*` truncates like every other fixed-width operator in the library, `checked *` reports the loss, and `MultiplyWide` returns the exact 127-bit product; all three come from one carryless multiply, so there is one thing to be right about. Rounds out with monic GCD, an irreducibility decision, and the factorization of `tⁿ+1` for odd `n ≤ 31`. It is the modulus carrier beneath `BinaryField<T>` and cyclic-incidence analysis, and is independently useful for binary linear codes and CRC-style recurrences. There is deliberately no ordering: a polynomial ring has none, and the packed carrier would have made `<` compile and lie. |
+| `BinaryField<T>` / `BinaryFields` | `readonly record struct` / `static` | The finite field `GF(2^k)` for any `k` from 1 through 128, over a caller-chosen or canonical irreducible modulus. Elements are bare packed integers — `byte`, `ushort`, `uint`, `ulong`, `UInt128` — so a region of field values is just a span and the field object names the structure they live in: `Multiply`, `Square`, `SquareRoot`, `Inverse`, `Divide`, `Exponentiate`, `Reduce`. The modulus is stored as its tail because a degree-`k` modulus needs `k+1` bits and would not fit the carrier at the top degree; nothing else is precomputed, so constructing a field is free. Everything is exactly associative, commutative, and distributive, with an exact inverse for every non-zero element — unlike a rounded fixed-point product, a field product is safe to reassociate. `MultiplyAccumulateRegion` is the vectorized bulk primitive that erasure coding, syndrome evaluation, and elimination over the field all sit on. `BinaryFields` holds the canonical minimum-weight fields at degrees 8, 16, 32, 64, and 128. |
 | `UnsignedNumberFunctions` | `static` ext. methods | Pairing functions, prime factorization, modular inverse, integer roots. |
 | `PrimeExtensions` | `static` ext. methods | Deterministic primality, n-th prime, prime counting (`uint`). |
 | `MonotonicPartitioner` | `static` | Jump-consistent routing of 65536 values (or a `Guid`, via its trailing entropy) onto 1–1024 buckets: deterministic (a client/server agreement — both ends of a wire compute the same route), monotonic (growth only moves values into the new bucket), uniform (⌊65536/N⌋ or ⌈65536/N⌉ per bucket, quantization skew ≤ ~2 % at every count). Ownership chains compressed into checkpoint + varint tail-stream tables; `GetMetrics` reports a value's rank, migration count, and distance to its next migration (`MonotonicPartitionerMetrics`). |
@@ -47,7 +49,6 @@ deps       none
 | `LayerSequence` | `readonly record struct` | Layered index spaces (the generalized figurate numbers): a `Seed`-sized core wrapped by layers that start at `Start` and grow by `Step`, with **constant-time** index→layer lookup by inverting the quadratic prefix sum in pure integer arithmetic — no walking, no floating point. A negative `Step` bounds the space; `Project` saturates against that horizon with linear-overflow and square-root-depth excess channels. |
 | `CyclicRotation` | `static` | Deterministic, perfectly looping rotation driven by a tick: four planes turning at speeds {1, 7, 11, 13} in 12° steps, resyncing to the identity every 30 ticks. Rotations are `FixedComplex` read from a baked table of the 30th roots of unity, indexed by `tick mod 30` and never accumulated, so the loop closes bit-exactly with no drift on any backend. For looping deterministic animation: SDF spins, light-phase cycles, colour wheels. (Mathematically, the Coxeter element of E₈ — see `SymmetryLattice`.) |
 | `SymmetryLattice` | `static` | A fixed, maximally symmetric set of 240 nodes in 8D (the root system of E₈), addressed by index. `Reflect` composes to the whole symmetry group W(E₈) (order 696,729,600); `Cycle` is the order-30 element `CyclicRotation` drives, cutting the nodes into `Ring`s of thirty; `Antipode`, `CanonicalRay`, and `AreOrthogonal` expose the exact 120-ray incidence seam; `RayCycleFactors` gives the five binary factors for the induced order-15 action; `Project` lays the roots on the Coxeter plane. |
-| `BinaryPolynomial` | `readonly record struct` | A packed polynomial over `GF(2)`: exact XOR addition, checked carryless multiplication, remainder, GCD, irreducibility, and automatic factorization of `tⁿ+1` for odd `n ≤ 31`. It is the finite-field/modulus carrier beneath cyclic-incidence analysis and is independently useful for binary codes and CRC-style recurrences. |
 | `OddCyclicIncidence` / `OddCyclicWordAnalysis` | `sealed class` | Geometry-neutral exact analysis of any free odd-cyclic binary incidence system. A compact letter×ray-orbit polynomial table yields `t=1` syndromes, the syndrome-matroid circuit filter, ranks over every CRT field, exact expanded nullity, and parity-proof irreducibility. Optional direct expansion recomputes the large binary rank and fails if it disagrees with the CRT sum, making the theorem executable as a per-word certificate. |
 | `AutomaticSelectionAutomaton` / `AutomaticCyclicIncidence` | `sealed class` | Composes a finite-output positional or quadratic-Ostrowski sequence with `OddCyclicIncidence`. Prefix and range masks are accumulated exactly in `GF(2)` without scanning the range; positional prefix accumulation can itself be compiled to a DFAO. Reusable factories cover digit-sum residue selectors and the canonical binary Gray orbit through every selection mask—and hence every kernel relation—while safety-bounded compilation avoids materializing exponential output spaces. |
 | `HilbertCurve` | `static` | The Hilbert space-filling curve: an exact bijection between a 1D distance and a 2D grid point (`Encode`/`Decode`) that preserves locality — consecutive distances are always grid neighbours, unlike Morton/Z-order (`BitwisePair`), which jumps at power-of-two seams. For cache-coherent chunk/tile ordering, spatial hashing, texture swizzling. `order` in `[1, 31]`. |
@@ -235,11 +236,12 @@ proofs in 32 residue classes.
 > `BinaryIntegerConstants<T>` is an internal helper (width, log2-width, the constants
 > 9 and 10 for an arbitrary `T`) and is not part of the public surface.
 
-**Verifying changes**: the fast contract gate is Post A1
-(`dotnet run --project src/Puck.Post -c Release -- --stage fixed-point`); the deep
-oracle battery — ULP sweeps, independent wide-integer specifications, distribution tests,
-benchmarks — is `dotnet run -c Release tools/maths-battery.cs` (~2–3 minutes). Run the
-battery before completing any change to this project.
+**Verifying changes**: the fast contract gates are Post A1
+(`dotnet run --project src/Puck.Post -c Release -- --stage fixed-point`) and the
+binary-field stage (`… -- --stage binary-field`); the deep oracle battery — ULP sweeps,
+independent wide-integer specifications, distribution tests, benchmarks — is
+`dotnet run -c Release tools/maths-battery.cs` (~2–3 minutes). Run the battery before
+completing any change to this project.
 
 ---
 
@@ -638,6 +640,53 @@ using Puck.Maths;
 
 uint full   = SecureRandom.NextUInt<uint>();                      // whole range
 uint bounded = SecureRandom.NextUInt<uint>(maximum: 99, minimum: 1); // inclusive [1, 99]
+```
+
+### Binary fields
+
+`BinaryField<T>` separates the two objects a packed polynomial can be. A `BinaryPolynomial`
+is an element of `GF(2)[t]`: it has a degree, exact division with remainder, and no inverse.
+A `BinaryField<T>` is the quotient by a fixed irreducible modulus, and its elements are bare
+packed integers that only mean anything relative to that modulus — so the field is named at
+the call site rather than smuggled into every value.
+
+```csharp
+using Puck.Maths;
+
+var field = BinaryFields.Degree8;                               // GF(2^8), t^8+t^4+t^3+t+1
+byte product = field.Multiply(left: 0x53, right: 0xCA);         // 0x01 — they are inverses
+byte inverse = field.Inverse(value: 0x53);                      // 0xCA
+byte power = field.Exponentiate(value: 0x03, exponent: 255UL);  // 1 — the group has order 255
+
+// Any modulus, any degree through 128, not just the canonical ones.
+var custom = BinaryField<ulong>.FromModulus(modulus: new BinaryPolynomial(bits: 0x1FUL));
+bool usable = custom.IsIrreducible();
+
+// The bulk primitive: destination ^= scalar * source, over a whole region.
+field.MultiplyAccumulateRegion(destination: parity, source: shard, scalar: 0x1D);
+```
+
+Elements must be reduced and the modulus must be irreducible; `IsReduced` and `IsIrreducible`
+test both, and neither is enforced on the hot path, exactly as `ModularInverse` states its own
+precondition. `Inverse` and `Divide` throw on zero.
+
+Unlike a rounded fixed-point product, a field product carries no rounding at all:
+multiplication is exactly associative, exactly commutative, and exactly distributive over
+addition, so reassociating or parallelizing a chain of field products is safe.
+
+The hardware paths are performance only. Multiplication runs on the carryless-multiply
+instruction when it is available and on a table-free masked-comb fallback otherwise; region
+scaling runs on the hardware Galois-field affine transform for byte-wide and sixteen-bit
+fields, a nibble-split shuffle when only a byte shuffle is available, and a scalar loop
+otherwise. Reduction, inversion, division, and exponentiation are one implementation shared by
+both paths, so there is nothing above the product that could differ. Every region path is
+executed against the scalar path on the same inputs by the gate — including on machines that
+support the fast paths, because the portable kernels are named separately and never gated — and
+the gate additionally relaunches itself with each instruction set suppressed and requires an
+identical result digest. "Bit-identical to the fallback" is a result, not a claim.
+
+```text
+dotnet run --project src/Puck.Post -c Release -- --stage binary-field
 ```
 
 ---

@@ -2262,7 +2262,7 @@ if ((SymmetryLattice.RayCount != 120) || (SymmetryLattice.RayCycleOrder != 15)) 
 }
 var latticeRayFactorProduct = SymmetryLattice.RayCycleFactors.ToArray().Aggregate(
     seed: new BinaryPolynomial(bits: 1UL),
-    func: (product, factor) => (product * factor)
+    func: (product, factor) => checked(product * factor)
 );
 if (latticeRayFactorProduct.Bits != ((1UL << SymmetryLattice.RayCycleOrder) | 1UL)) {
     throw new InvalidOperationException("SYMMETRY LATTICE RAY-CYCLE FACTORIZATION CHANGED");
@@ -3081,11 +3081,11 @@ if ((nonCanonicalSilver != canonicalSilver) ||
     ((nonCanonicalSilver + canonicalSilver) != (QuadraticSurd.Rational(2) * canonicalSilver))) {
     throw new InvalidOperationException("QUADRATIC SURD SQUARE-EQUIVALENT REPRESENTATIONS DISAGREE");
 }
-var silverIndex = QuadraticQuasicrystal.Compile(1, 1, 2, 1);
-if ((silverIndex.ExactLongTileLength != canonicalSilver) ||
-    (silverIndex.PositionAt(4096) !=
-        (QuadraticSurd.Rational(4096 - silverIndex.CountLongTiles(4096)) +
-            (QuadraticSurd.Rational(silverIndex.CountLongTiles(4096)) * canonicalSilver)))) {
+var silverQuasicrystalIndex = QuadraticQuasicrystal.Compile(1, 1, 2, 1);
+if ((silverQuasicrystalIndex.ExactLongTileLength != canonicalSilver) ||
+    (silverQuasicrystalIndex.PositionAt(4096) !=
+        (QuadraticSurd.Rational(4096 - silverQuasicrystalIndex.CountLongTiles(4096)) +
+            (QuadraticSurd.Rational(silverQuasicrystalIndex.CountLongTiles(4096)) * canonicalSilver)))) {
     throw new InvalidOperationException("QUADRATIC QUASICRYSTAL INDEPENDENT SURD IDENTITY WRONG");
 }
 (long P, long Q, long D, long R)[] quasicrystalCases = [
@@ -3485,6 +3485,334 @@ if ((maxErrSmall > 0.75) || (maxErrMid > 1.0) || (maxErrHuge > 2.5)) {
 }
 Console.WriteLine("accuracy gates passed (<=0.75 near, <=1.0 mid, <=2.5 full-range)");
 
+// ---- binary field (the GF(2)[t] ring and its GF(2^k) quotients) ----
+// Oracles: BigInteger coefficient bit-vectors carrying schoolbook carryless multiplication, schoolbook long division,
+// and extended Euclid -- the definitions, over a carrier with no word split, no limbs, no reduction tail, no lanes.
+// Every oracle call rebuilds the modulus as (1 << degree) | tail, so dropping the implicit leading term diverges.
+// This battery is a file-based app with a compiler-generated assembly name and therefore cannot be named in an
+// InternalsVisibleTo attribute: only the public surface is reachable here, so the per-tier hardware cross-product
+// (portable versus carryless, and every region rung against the scalar rung) lives in the Post binary-field stage.
+Console.WriteLine();
+Console.WriteLine("---- binary field ----");
+var binaryFieldTimer = Stopwatch.StartNew();
+var binaryPolynomialRng = Pcg32XshRr.Create(state: 0x9E3779B97F4A7C15UL, stream: 41UL);
+for (var trial = 0; (trial < 1_000_000); ++trial) {
+    var binaryDividend = new BinaryPolynomial(bits: NextBinaryPolynomialBits(generator: ref binaryPolynomialRng));
+    var binaryDivisor = new BinaryPolynomial(bits: (NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) | 1UL));
+    var (binaryQuotient, binaryRemainder) = binaryDividend.DivRem(divisor: binaryDivisor);
+
+    if ((((binaryQuotient * binaryDivisor) + binaryRemainder) != binaryDividend) ||
+        (binaryDivisor.Degree <= binaryRemainder.Degree) ||
+        ((binaryDividend / binaryDivisor) != binaryQuotient) ||
+        ((binaryDividend % binaryDivisor) != binaryRemainder)) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL DIVISION IDENTITY MISMATCH");
+    }
+    if (binaryDividend.MultiplyWide(other: binaryDivisor).Low != (binaryDividend * binaryDivisor)) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL WIDE PRODUCT ORACLE MISMATCH");
+    }
+
+    var binaryShift = ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL));
+    var binaryMonomial = new BinaryPolynomial(bits: (1UL << binaryShift));
+
+    if (((binaryDividend << binaryShift) != (binaryDividend * binaryMonomial)) ||
+        ((binaryDividend >>> binaryShift) != (binaryDividend / binaryMonomial)) ||
+        ((binaryDividend >> binaryShift) != (binaryDividend >>> binaryShift))) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL SHIFT IS NOT MULTIPLICATION BY THE INDETERMINATE");
+    }
+}
+// The exact product against the oracle, and the checked operator reporting loss exactly when the exact product has
+// one. Both run at a tenth of the sweep above deliberately: a BigInteger long division costs about a microsecond and
+// a raised OverflowException about one and a half, so a million trials of either would consume the whole section's
+// time budget for coverage the identity sweep and the exhaustive field tables below already carry.
+for (var trial = 0; (trial < 100_000); ++trial) {
+    var binaryWideLeft = new BinaryPolynomial(bits: (NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) >>> ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL))));
+    var binaryWideRight = new BinaryPolynomial(bits: (NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) >>> ((int)(NextBinaryPolynomialBits(generator: ref binaryPolynomialRng) % 64UL))));
+    var binaryWideProduct = binaryWideLeft.MultiplyWide(other: binaryWideRight);
+    var binaryCheckedReportedLoss = false;
+
+    if (((BigInteger)binaryWideProduct.Bits) != BinaryOracleMultiply(left: binaryWideLeft.Bits, right: binaryWideRight.Bits)) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL WIDE PRODUCT ORACLE MISMATCH");
+    }
+
+    try {
+        _ = checked(binaryWideLeft * binaryWideRight);
+    } catch (OverflowException) {
+        binaryCheckedReportedLoss = true;
+    }
+
+    if (binaryCheckedReportedLoss == binaryWideProduct.High.IsZero) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL CHECKED MULTIPLY DID NOT REPORT LOSS");
+    }
+}
+// The catalogue check value of CRC-32/ISO-HDLC, computed as what a CRC actually is: the Euclidean remainder of the
+// message times t^32 by the generator polynomial, with the reflected wire convention supplied by reversing each input
+// byte and the final register. An external anchor on carryless multiplication, remainder, and the shift operators.
+var binaryCrcGenerator = new BinaryPolynomial(bits: 0x1_04C11DB7UL);
+var binaryCrcMonomial = new BinaryPolynomial(bits: (1UL << 32));
+var binaryCrcRegister = new BinaryPolynomial(bits: 0xFFFFFFFFUL);
+foreach (var binaryCrcCharacter in "123456789") {
+    var binaryCrcByte = ((byte)binaryCrcCharacter).ReverseBits();
+
+    for (var binaryCrcBit = 7; (0 <= binaryCrcBit); --binaryCrcBit) {
+        var binaryCrcTerm = ((1 == ((binaryCrcByte >>> binaryCrcBit) & 1)) ? binaryCrcMonomial : BinaryPolynomial.Zero);
+
+        binaryCrcRegister = (((binaryCrcRegister << 1) + binaryCrcTerm) % binaryCrcGenerator);
+    }
+}
+if (0xCBF43926U != (((uint)binaryCrcRegister.Bits).ReverseBits() ^ 0xFFFFFFFFU)) {
+    throw new InvalidOperationException("BINARY POLYNOMIAL CRC CHECK VALUE MISMATCH");
+}
+// The number of monic irreducible polynomials at each degree over the two-element field (OEIS A001037), by exhaustive
+// enumeration. An implementation that is self-consistently wrong still cannot reproduce a published property of the
+// ring GF(2)[t] itself.
+var binaryIrreducibleCounts = new[] { 2, 1, 2, 3, 6, 9, 18, 30, 56, 99, 186, 335, 630, 1_161, 2_182, 4_080, };
+for (var binaryDegree = 1; (binaryDegree <= 16); ++binaryDegree) {
+    var binaryLeadingTerm = (1UL << binaryDegree);
+    var binaryIrreducibleCount = 0;
+
+    for (var binaryTail = 0UL; (binaryTail < binaryLeadingTerm); ++binaryTail) {
+        if (new BinaryPolynomial(bits: (binaryLeadingTerm | binaryTail)).IsIrreducible()) { ++binaryIrreducibleCount; }
+    }
+
+    // t is the one irreducible polynomial with a zero constant term, and the decision rejects it: a modulus of t
+    // leaves a zero reduction tail, and its quotient ring carries a nilpotent and so is not a field. Degree one is
+    // therefore one short of the published count, and every other degree matches it exactly.
+    var binaryExpectedCount = ((1 == binaryDegree) ? (binaryIrreducibleCounts[0] - 1) : binaryIrreducibleCounts[binaryDegree - 1]);
+
+    if (binaryIrreducibleCount != binaryExpectedCount) {
+        throw new InvalidOperationException("BINARY POLYNOMIAL IRREDUCIBLE COUNT MISMATCH");
+    }
+}
+// The five canonical presets are never taken on their word: each is re-proved irreducible here, which removes the
+// entire "the constant table has a typo" failure class for three lines.
+if (!BinaryFields.Degree8.IsIrreducible() ||
+    !BinaryFields.Degree16.IsIrreducible() ||
+    !BinaryFields.Degree32.IsIrreducible() ||
+    !BinaryFields.Degree64.IsIrreducible() ||
+    !BinaryFields.Degree128.IsIrreducible()) {
+    throw new InvalidOperationException("BINARY FIELD MODULUS NOT IRREDUCIBLE");
+}
+// The published byte-field products, which pin the degree-8 field the hardware Galois-field instructions are defined
+// over, and the published carryless-multiply reference vectors, which pin the exact 128-bit product of two degree-63
+// polynomials independently of any modulus.
+foreach (var binaryByteVector in new[] { (Left: ((byte)0x53), Right: ((byte)0xCA), Product: ((byte)0x01)), (Left: ((byte)0x57), Right: ((byte)0x83), Product: ((byte)0xC1)), (Left: ((byte)0x57), Right: ((byte)0x13), Product: ((byte)0xFE)), }) {
+    if ((BinaryFields.Degree8.Multiply(left: binaryByteVector.Left, right: binaryByteVector.Right) != binaryByteVector.Product) ||
+        (BinaryFields.Degree8.Multiply(left: binaryByteVector.Right, right: binaryByteVector.Left) != binaryByteVector.Product)) {
+        throw new InvalidOperationException("BINARY FIELD PUBLISHED BYTE VECTOR MISMATCH");
+    }
+}
+foreach (var binaryCarrylessVector in new[] {
+    (Left: 0x63746F725D53475DUL, Right: 0x5B477565726F6E5DUL, Low: 0x929633D5D36F0451UL, High: 0x1D4D84C85C3440C0UL),
+    (Left: 0x7B5B546573745665UL, Right: 0x5B477565726F6E5DUL, Low: 0xBABF262DF4B7D5C9UL, High: 0x1A2BF6DB3A30862FUL),
+    (Left: 0x63746F725D53475DUL, Right: 0x4869285368617929UL, Low: 0x7FA540AC2A281315UL, High: 0x1BD17C8D556AB5A1UL),
+    (Left: 0x7B5B546573745665UL, Right: 0x4869285368617929UL, Low: 0xD66EE03E410FD4EDUL, High: 0x1D1E1F2C592E7C45UL),
+}) {
+    var binaryCarrylessProduct = new BinaryPolynomial(bits: binaryCarrylessVector.Left).MultiplyWide(other: new BinaryPolynomial(bits: binaryCarrylessVector.Right));
+
+    if (binaryCarrylessProduct.Bits != ((((UInt128)binaryCarrylessVector.High) << 64) | binaryCarrylessVector.Low)) {
+        throw new InvalidOperationException("BINARY FIELD PUBLISHED CARRYLESS VECTOR MISMATCH");
+    }
+}
+// Every degree-8 field, exhaustively, against the oracle: all thirty irreducible moduli crossed with all 65 536
+// ordered operand pairs. The moduli are discovered by the irreducibility decision rather than transcribed, and their
+// count is pinned against the published one above.
+var binaryDegree8Moduli = new List<byte>();
+for (var binaryTail = 1; (binaryTail < 256); binaryTail += 2) {
+    if (BinaryField<byte>.Create(degree: 8, reductionTail: ((byte)binaryTail)).IsIrreducible()) { binaryDegree8Moduli.Add(item: ((byte)binaryTail)); }
+}
+if (binaryDegree8Moduli.Count != binaryIrreducibleCounts[7]) {
+    throw new InvalidOperationException("BINARY POLYNOMIAL IRREDUCIBLE COUNT MISMATCH");
+}
+foreach (var binaryTail in binaryDegree8Moduli) {
+    var binaryByteField = BinaryField<byte>.Create(degree: 8, reductionTail: binaryTail);
+
+    for (var binaryLeft = 0; (binaryLeft < 256); ++binaryLeft) {
+        for (var binaryRight = 0; (binaryRight < 256); ++binaryRight) {
+            if (binaryByteField.Multiply(left: ((byte)binaryLeft), right: ((byte)binaryRight)) !=
+                ((byte)BinaryOracleFieldMultiply(left: binaryLeft, right: binaryRight, degree: 8, tail: binaryTail))) {
+                throw new InvalidOperationException("BINARY FIELD MULTIPLY ORACLE MISMATCH");
+            }
+        }
+    }
+}
+// The degree-8 multiplicative group: every non-zero element inverts to what extended Euclid says, every order divides
+// 255, and exactly phi(255) = 128 elements generate the whole group.
+var binaryPrimitiveCount = 0;
+for (var binaryValue = 1; (binaryValue < 256); ++binaryValue) {
+    var binaryInverse = BinaryFields.Degree8.Inverse(value: ((byte)binaryValue));
+
+    if ((binaryInverse != ((byte)BinaryOracleInverse(value: binaryValue, degree: 8, tail: 0x1B))) ||
+        (BinaryFields.Degree8.Multiply(left: ((byte)binaryValue), right: binaryInverse) != BinaryFields.Degree8.One)) {
+        throw new InvalidOperationException("BINARY FIELD INVERSE ORACLE MISMATCH");
+    }
+    if (BinaryFields.Degree8.Exponentiate(value: ((byte)binaryValue), exponent: 255UL) != BinaryFields.Degree8.One) {
+        throw new InvalidOperationException("BINARY FIELD MULTIPLICATIVE ORDER MISMATCH");
+    }
+
+    var binaryOrder = 1;
+    var binaryPower = ((byte)binaryValue);
+
+    while (BinaryFields.Degree8.One != binaryPower) {
+        binaryPower = BinaryFields.Degree8.Multiply(left: binaryPower, right: ((byte)binaryValue));
+        ++binaryOrder;
+    }
+
+    if (0 != (255 % binaryOrder)) { throw new InvalidOperationException("BINARY FIELD MULTIPLICATIVE ORDER MISMATCH"); }
+    if (255 == binaryOrder) { ++binaryPrimitiveCount; }
+}
+if (128 != binaryPrimitiveCount) { throw new InvalidOperationException("BINARY FIELD MULTIPLICATIVE ORDER MISMATCH"); }
+// Degree four is the cheapest place a "degree below the carrier width" bug surfaces: the mask, the split, and the
+// fold all have to respect a degree that is half the byte it lives in.
+foreach (var binaryNarrowTail in (byte[])[0x3, 0x9, 0xF,]) {
+    var binaryNarrowField = BinaryField<byte>.Create(degree: 4, reductionTail: binaryNarrowTail);
+
+    if (!binaryNarrowField.IsIrreducible()) { throw new InvalidOperationException("BINARY FIELD MODULUS NOT IRREDUCIBLE"); }
+
+    for (var binaryLeft = 0; (binaryLeft < 16); ++binaryLeft) {
+        for (var binaryRight = 0; (binaryRight < 16); ++binaryRight) {
+            if (binaryNarrowField.Multiply(left: ((byte)binaryLeft), right: ((byte)binaryRight)) !=
+                ((byte)BinaryOracleFieldMultiply(left: binaryLeft, right: binaryRight, degree: 4, tail: binaryNarrowTail))) {
+                throw new InvalidOperationException("BINARY FIELD MULTIPLY ORACLE MISMATCH");
+            }
+        }
+
+        if ((0 != binaryLeft) &&
+            (binaryNarrowField.Inverse(value: ((byte)binaryLeft)) != ((byte)BinaryOracleInverse(value: binaryLeft, degree: 4, tail: binaryNarrowTail)))) {
+            throw new InvalidOperationException("BINARY FIELD INVERSE ORACLE MISMATCH");
+        }
+    }
+}
+// GF(2), the degree-one field, pinned explicitly. It is a real instantiation rather than a curiosity: t+1 divides
+// every t^n+1 for odd n, so cyclic-incidence analysis constructs it on every run.
+var binaryTwoElementField = BinaryField<byte>.Create(degree: 1, reductionTail: 0x1);
+if (!binaryTwoElementField.IsIrreducible() ||
+    (binaryTwoElementField.Inverse(value: 1) != 1) ||
+    (binaryTwoElementField.Multiply(left: 1, right: 1) != 1) ||
+    (binaryTwoElementField.Multiply(left: 1, right: 0) != 0) ||
+    (binaryTwoElementField.Exponentiate(value: 0, exponent: 0UL) != 1)) {
+    throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH");
+}
+ExpectDivideByZero(operation: () => BinaryFields.Degree8.Inverse(value: 0));
+ExpectDivideByZero(operation: () => BinaryFields.Degree8.Divide(left: 1, right: 0));
+ExpectDivideByZero(operation: () => BinaryFields.Degree128.Inverse(value: UInt128.Zero));
+// The full degree-16 inverse table against extended Euclid, then 256 fixed-right-operand full sweeps: multiplication
+// by a non-zero element is a bijection of the field, which is exactly the property a fold that loses a bit destroys.
+var binaryField16 = BinaryFields.Degree16;
+for (var binaryValue = 1; (binaryValue <= 0xFFFF); ++binaryValue) {
+    var binaryInverse = binaryField16.Inverse(value: ((ushort)binaryValue));
+
+    if ((binaryInverse != ((ushort)BinaryOracleInverse(value: binaryValue, degree: 16, tail: 0x2B))) ||
+        (binaryField16.Multiply(left: ((ushort)binaryValue), right: binaryInverse) != binaryField16.One)) {
+        throw new InvalidOperationException("BINARY FIELD INVERSE ORACLE MISMATCH");
+    }
+}
+var binaryImageSeen = new bool[65_536];
+for (var binarySweep = 0; (binarySweep < 256); ++binarySweep) {
+    var binaryFixedRight = ((ushort)(1 + (binarySweep * 255)));
+
+    Array.Clear(array: binaryImageSeen);
+
+    for (var binaryLeft = 0; (binaryLeft <= 0xFFFF); ++binaryLeft) {
+        var binaryImage = binaryField16.Multiply(left: ((ushort)binaryLeft), right: binaryFixedRight);
+
+        if (binaryImageSeen[binaryImage]) { throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH"); }
+
+        binaryImageSeen[binaryImage] = true;
+    }
+}
+// Randomized comparison against the oracle at the three wide degrees, always including the boundary set
+// {0, 1, t, tail, mask, leading} crossed with itself -- the values where a mask, a split, or a shift by the carrier
+// width goes wrong. All three run on the widest carrier, so degrees 32 and 64 additionally exercise the
+// degree-below-the-carrier-width path at 128 bits. The trial counts are sized against a BigInteger long division
+// costing six to sixteen microseconds at these degrees, which is why the high-volume work below is oracle-free.
+var binaryOracleRng = Pcg32XshRr.Create(state: 0xD1B54A32D192ED03UL, stream: 43UL);
+foreach (var binaryCase in new[] { (Degree: 32, Tail: ((UInt128)0x8D), Trials: 200_000), (Degree: 64, Tail: ((UInt128)0x1B), Trials: 200_000), (Degree: 128, Tail: ((UInt128)0x87), Trials: 100_000), }) {
+    var binaryWideField = BinaryField<UInt128>.Create(degree: binaryCase.Degree, reductionTail: binaryCase.Tail);
+    var binaryMask = (UInt128.MaxValue >>> (128 - binaryCase.Degree));
+    var binaryBoundary = new[] { UInt128.Zero, UInt128.One, ((UInt128)2), binaryCase.Tail, binaryMask, (UInt128.One << (binaryCase.Degree - 1)), };
+
+    if (!binaryWideField.IsIrreducible()) { throw new InvalidOperationException("BINARY FIELD MODULUS NOT IRREDUCIBLE"); }
+
+    foreach (var binaryLeft in binaryBoundary) {
+        foreach (var binaryRight in binaryBoundary) {
+            if (binaryWideField.Multiply(left: binaryLeft, right: binaryRight) !=
+                ((UInt128)BinaryOracleFieldMultiply(left: ((BigInteger)binaryLeft), right: ((BigInteger)binaryRight), degree: binaryCase.Degree, tail: ((BigInteger)binaryCase.Tail)))) {
+                throw new InvalidOperationException("BINARY FIELD MULTIPLY ORACLE MISMATCH");
+            }
+        }
+    }
+
+    for (var trial = 0; (trial < binaryCase.Trials); ++trial) {
+        var binaryLeft = (NextBinaryFieldElement(generator: ref binaryOracleRng) & binaryMask);
+        var binaryRight = (NextBinaryFieldElement(generator: ref binaryOracleRng) & binaryMask);
+
+        if (binaryWideField.Multiply(left: binaryLeft, right: binaryRight) !=
+            ((UInt128)BinaryOracleFieldMultiply(left: ((BigInteger)binaryLeft), right: ((BigInteger)binaryRight), degree: binaryCase.Degree, tail: ((BigInteger)binaryCase.Tail)))) {
+            throw new InvalidOperationException("BINARY FIELD MULTIPLY ORACLE MISMATCH");
+        }
+    }
+}
+// Oracle-free algebraic identity sweeps, run at implementation speed. Every line is a law of the field rather than a
+// value read off a reference, so an implementation that is wrong in a self-consistent way still has to satisfy all of
+// them simultaneously.
+var binarySweepRng = Pcg32XshRr.Create(state: 0x2545F4914F6CDD1DUL, stream: 47UL);
+var binarySamples8 = new byte[40_000];
+var binarySamples16 = new ushort[40_000];
+var binarySamples32 = new uint[40_000];
+var binarySamples64 = new ulong[20_000];
+var binarySamples128 = new UInt128[2_000];
+for (var index = 0; (index < binarySamples8.Length); ++index) { binarySamples8[index] = ((byte)binarySweepRng.NextUInt32()); }
+for (var index = 0; (index < binarySamples16.Length); ++index) { binarySamples16[index] = ((ushort)binarySweepRng.NextUInt32()); }
+for (var index = 0; (index < binarySamples32.Length); ++index) { binarySamples32[index] = binarySweepRng.NextUInt32(); }
+for (var index = 0; (index < binarySamples64.Length); ++index) { binarySamples64[index] = NextBinaryPolynomialBits(generator: ref binarySweepRng); }
+for (var index = 0; (index < binarySamples128.Length); ++index) { binarySamples128[index] = NextBinaryFieldElement(generator: ref binarySweepRng); }
+CheckBinaryFieldIdentities(field: BinaryFields.Degree8, samples: binarySamples8, frobeniusExponent: 256UL);
+CheckBinaryFieldIdentities(field: BinaryFields.Degree16, samples: binarySamples16, frobeniusExponent: 65_536UL);
+CheckBinaryFieldIdentities(field: BinaryFields.Degree32, samples: binarySamples32, frobeniusExponent: 4_294_967_296UL);
+// The Frobenius identity a^(2^k) == a needs an exponent of 2^k, which stops fitting the exponent's own carrier at
+// degree 64; SquareRoot, which is k-1 squarings, covers the same map at those two degrees and is swept there.
+CheckBinaryFieldIdentities(field: BinaryFields.Degree64, samples: binarySamples64, frobeniusExponent: 0UL);
+CheckBinaryFieldIdentities(field: BinaryFields.Degree128, samples: binarySamples128, frobeniusExponent: 0UL);
+var binaryVolumeField = BinaryFields.Degree64;
+var binaryVolumeLeft = 0x0123456789ABCDEFUL;
+var binaryVolumeRight = 0xFEDCBA9876543210UL;
+for (var trial = 0; (trial < 5_000_000); ++trial) {
+    var binaryVolumeThird = NextBinaryPolynomialBits(generator: ref binarySweepRng);
+    var binaryVolumeProduct = binaryVolumeField.Multiply(left: binaryVolumeLeft, right: binaryVolumeRight);
+
+    if ((binaryVolumeProduct != binaryVolumeField.Multiply(left: binaryVolumeRight, right: binaryVolumeLeft)) ||
+        (binaryVolumeField.Multiply(left: binaryVolumeLeft, right: (binaryVolumeRight ^ binaryVolumeThird)) !=
+            (binaryVolumeProduct ^ binaryVolumeField.Multiply(left: binaryVolumeLeft, right: binaryVolumeThird))) ||
+        (binaryVolumeField.Square(value: binaryVolumeLeft) != binaryVolumeField.Multiply(left: binaryVolumeLeft, right: binaryVolumeLeft)) ||
+        (binaryVolumeField.Multiply(left: binaryVolumeLeft, right: binaryVolumeField.One) != binaryVolumeLeft) ||
+        (binaryVolumeField.Multiply(left: binaryVolumeLeft, right: binaryVolumeField.Zero) != binaryVolumeField.Zero)) {
+        throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH");
+    }
+
+    binaryVolumeLeft = binaryVolumeProduct;
+    binaryVolumeRight = binaryVolumeThird;
+}
+// The bulk region primitives against the elementwise definition at every length from zero through 259 and at a spread
+// of large lengths, at every carrier, through the public API alone. A vectorized region kernel fails in its tail, so
+// complete short-length coverage is where this earns its time.
+CheckBinaryFieldRegions(field: BinaryFields.Degree8, samples: binarySamples8, scalars: (byte[])[0x00, 0x01, 0x1D, 0xFF,]);
+CheckBinaryFieldRegions(field: BinaryFields.Degree16, samples: binarySamples16, scalars: (ushort[])[0x0000, 0x0001, 0x1234, 0xFFFF,]);
+CheckBinaryFieldRegions(field: BinaryFields.Degree32, samples: binarySamples32, scalars: (uint[])[0x00000000U, 0x00000001U, 0x9E3779B9U, 0xFFFFFFFFU,]);
+CheckBinaryFieldRegions(field: BinaryFields.Degree64, samples: binarySamples64, scalars: (ulong[])[0UL, 1UL, 0x9E3779B97F4A7C15UL, ulong.MaxValue,]);
+CheckBinaryFieldRegions(field: BinaryFields.Degree128, samples: binarySamples128, scalars: (UInt128[])[UInt128.Zero, UInt128.One, ((UInt128)0x9E3779B97F4A7C15UL), UInt128.MaxValue,]);
+// Argument validation, which is the whole of the public region contract beyond the arithmetic. A region laid exactly
+// on top of another stays legal, because that is what in-place scaling is.
+var binaryOverlapBuffer = new byte[8];
+ExpectArgument(operation: () => BinaryFields.Degree8.AddRegion(destination: new byte[4], source: new byte[5]));
+ExpectArgument(operation: () => BinaryFields.Degree8.ScaleRegion(destination: new byte[4], source: new byte[5], scalar: 1));
+ExpectArgument(operation: () => BinaryFields.Degree8.MultiplyAccumulateRegion(destination: new byte[4], source: new byte[5], scalar: 1));
+ExpectArgument(operation: () => BinaryFields.Degree8.ScaleRegion(destination: binaryOverlapBuffer.AsSpan(start: 0, length: 4), source: binaryOverlapBuffer.AsSpan(start: 1, length: 4), scalar: 1));
+ExpectArgumentOutOfRange(parameterName: "degree", operation: () => BinaryField<byte>.Create(degree: 0, reductionTail: 0x1));
+ExpectArgumentOutOfRange(parameterName: "degree", operation: () => BinaryField<byte>.Create(degree: 9, reductionTail: 0x1));
+BinaryFields.Degree8.ScaleRegion(destination: binaryOverlapBuffer, source: binaryOverlapBuffer, scalar: 1);
+binaryFieldTimer.Stop();
+Console.WriteLine($"binary field: A001037 counts through degree 16, CRC-32 check value, 30 exhaustive degree-8 tables against the oracle, the degree-16 inverse table, wide-degree oracle sweeps, and region tails at five carriers OK ({binaryFieldTimer.Elapsed.TotalSeconds:F1}s)");
+
 // ---- benchmarks ----
 Console.WriteLine();
 Console.WriteLine("---- benchmarks (ns/op, throughput over 4096-element operand sets) ----");
@@ -3770,12 +4098,230 @@ quatTimer.Restart();
 for (var n = 0; (n < 5_000_000); n++) { quatSink ^= ModularTransform.GaussReduce(a: (30L + (n & 15)), b: 1L, c: 1L).A; }
 quatTimer.Stop();
 Console.WriteLine($"modular gauss reduce : {(quatTimer.Elapsed.TotalNanoseconds / 5_000_000d),8:F2} ns/op");
+// Binary fields. Only the dispatched public path is reachable from a file-based app, so these are the tiers this
+// machine actually selects; the per-tier comparison needs the internal kernels and lives in the Post binary-field stage.
+var binaryBenchSink = 0UL;
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree8.Multiply(left: ((byte)n), right: 0x1D); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^8) multiply     : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree16.Multiply(left: ((ushort)n), right: 0x1234); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^16) multiply    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree32.Multiply(left: ((uint)n), right: 0x9E3779B9U); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^32) multiply    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 0; (n < 50_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree64.Multiply(left: ((ulong)n), right: 0x9E3779B97F4A7C15UL); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^64) multiply    : {(quatTimer.Elapsed.TotalNanoseconds / 50_000_000d),8:F2} ns/op");
+var binaryBenchSink128 = UInt128.Zero;
+var binaryBenchFactor = ((((UInt128)0x9E3779B97F4A7C15UL) << 64) | 0xBF58476D1CE4E5B9UL);
+quatTimer.Restart();
+for (var n = 0; (n < 10_000_000); ++n) { binaryBenchSink128 ^= BinaryFields.Degree128.Multiply(left: ((UInt128)(uint)n), right: binaryBenchFactor); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^128) multiply   : {(quatTimer.Elapsed.TotalNanoseconds / 10_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 1; (n <= 5_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree8.Inverse(value: ((byte)((n & 0xFE) | 1))); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^8) inverse      : {(quatTimer.Elapsed.TotalNanoseconds / 5_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 1; (n <= 5_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree16.Inverse(value: ((ushort)(n | 1))); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^16) inverse     : {(quatTimer.Elapsed.TotalNanoseconds / 5_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 1; (n <= 2_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree32.Inverse(value: ((uint)(n | 1))); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^32) inverse     : {(quatTimer.Elapsed.TotalNanoseconds / 2_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 1; (n <= 2_000_000); ++n) { binaryBenchSink ^= BinaryFields.Degree64.Inverse(value: ((ulong)(n | 1))); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^64) inverse     : {(quatTimer.Elapsed.TotalNanoseconds / 2_000_000d),8:F2} ns/op");
+quatTimer.Restart();
+for (var n = 1; (n <= 500_000); ++n) { binaryBenchSink128 ^= BinaryFields.Degree128.Inverse(value: ((UInt128)(uint)(n | 1))); }
+quatTimer.Stop();
+Console.WriteLine($"gf(2^128) inverse    : {(quatTimer.Elapsed.TotalNanoseconds / 500_000d),8:F2} ns/op");
+// Region throughput across the three cache regimes: L1-resident, L2/L3-resident, and main memory.
+foreach (var binaryRegionByteCount in new[] { 1_024, 65_536, 4_194_304, }) {
+    var binaryRegionDestination = new byte[binaryRegionByteCount];
+    var binaryRegionSource = new byte[binaryRegionByteCount];
+    var binaryRegionPassCount = (268_435_456 / binaryRegionByteCount);
+
+    rng.NextBytes(buffer: binaryRegionSource);
+    quatTimer.Restart();
+
+    for (var n = 0; (n < binaryRegionPassCount); ++n) {
+        BinaryFields.Degree8.MultiplyAccumulateRegion(destination: binaryRegionDestination, source: binaryRegionSource, scalar: 0x1D);
+    }
+
+    quatTimer.Stop();
+    Console.WriteLine($"gf(2^8) region {binaryRegionByteCount,7} B: {(((double)binaryRegionByteCount * binaryRegionPassCount) / (quatTimer.Elapsed.TotalSeconds * 1_073_741_824d)),8:F2} GiB/s");
+    binaryBenchSink ^= binaryRegionDestination[0];
+}
+quatSink ^= unchecked((long)(binaryBenchSink ^ ((ulong)binaryBenchSink128) ^ ((ulong)(binaryBenchSink128 >>> 64))));
 sink ^= quatSink;
 Console.WriteLine($"(sink {sink})");
 Console.WriteLine();
 Console.WriteLine("ALL CHECKS PASSED");
 
 // ---- helpers ----
+static void ExpectArgument(Action operation) {
+    try {
+        operation();
+    } catch (ArgumentException) {
+        return;
+    }
+
+    throw new InvalidOperationException("EXPECTED ARGUMENT EXCEPTION");
+}
+static void ExpectDivideByZero(Action operation) {
+    try {
+        operation();
+    } catch (DivideByZeroException) {
+        return;
+    }
+
+    throw new InvalidOperationException("EXPECTED DIVIDE BY ZERO");
+}
+static ulong NextBinaryPolynomialBits(ref Pcg32XshRr generator) =>
+    ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32());
+static UInt128 NextBinaryFieldElement(ref Pcg32XshRr generator) =>
+    ((((UInt128)NextBinaryPolynomialBits(generator: ref generator)) << 64) | NextBinaryPolynomialBits(generator: ref generator));
+// The binary-field oracles. Coefficients live one per bit of an unbounded BigInteger, so there is no carrier width, no
+// limb split, no reduction tail, and no lane structure for a shared mistake to hide in: multiplication is the
+// definition (a sum of shifts), division is schoolbook long division, and inversion is extended Euclid rather than the
+// implementation's Frobenius addition chain.
+static int BinaryOracleDegree(BigInteger value) =>
+    (value.IsZero ? -1 : (((int)value.GetBitLength()) - 1));
+static BigInteger BinaryOracleMultiply(BigInteger left, BigInteger right) {
+    var product = BigInteger.Zero;
+
+    for (var exponent = 0; (exponent <= BinaryOracleDegree(value: right)); ++exponent) {
+        if (!((right >> exponent) & BigInteger.One).IsZero) { product ^= (left << exponent); }
+    }
+
+    return product;
+}
+static (BigInteger Quotient, BigInteger Remainder) BinaryOracleDivRem(BigInteger dividend, BigInteger divisor) {
+    var divisorDegree = BinaryOracleDegree(value: divisor);
+    var quotient = BigInteger.Zero;
+    var remainder = dividend;
+
+    for (var shift = (BinaryOracleDegree(value: remainder) - divisorDegree); (0 <= shift); shift = (BinaryOracleDegree(value: remainder) - divisorDegree)) {
+        quotient ^= (BigInteger.One << shift);
+        remainder ^= (divisor << shift);
+    }
+
+    return (Quotient: quotient, Remainder: remainder);
+}
+static BigInteger BinaryOracleFieldMultiply(BigInteger left, BigInteger right, int degree, BigInteger tail) =>
+    BinaryOracleDivRem(
+        dividend: BinaryOracleMultiply(left: left, right: right),
+        divisor: ((BigInteger.One << degree) | tail)
+    ).Remainder;
+static BigInteger BinaryOracleInverse(BigInteger value, int degree, BigInteger tail) {
+    var coefficientNew = BigInteger.One;
+    var coefficientOld = BigInteger.Zero;
+    var remainderNew = value;
+    var remainderOld = ((BigInteger.One << degree) | tail);
+
+    while (!remainderNew.IsZero) {
+        var (quotient, remainder) = BinaryOracleDivRem(dividend: remainderOld, divisor: remainderNew);
+
+        remainderOld = remainderNew;
+        remainderNew = remainder;
+        (coefficientOld, coefficientNew) = (coefficientNew, (coefficientOld ^ BinaryOracleMultiply(left: quotient, right: coefficientNew)));
+    }
+
+    return coefficientOld;
+}
+static void CheckBinaryFieldIdentities<T>(BinaryField<T> field, T[] samples, ulong frobeniusExponent)
+    where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+    for (var index = 0; (index < samples.Length); ++index) {
+        var left = field.Reduce(value: samples[index]);
+        var right = field.Reduce(value: samples[((index + 1) % samples.Length)]);
+        var third = field.Reduce(value: samples[((index + 2) % samples.Length)]);
+        var product = field.Multiply(left: left, right: right);
+
+        if ((product != field.Multiply(left: right, right: left)) ||
+            (field.Multiply(left: product, right: third) != field.Multiply(left: left, right: field.Multiply(left: right, right: third))) ||
+            (field.Multiply(left: left, right: field.Add(left: right, right: third)) != field.Add(left: product, right: field.Multiply(left: left, right: third))) ||
+            (field.Multiply(left: left, right: field.One) != left) ||
+            (field.Multiply(left: left, right: field.Zero) != field.Zero) ||
+            (field.Square(value: left) != field.Multiply(left: left, right: left)) ||
+            (field.Square(value: field.Add(left: left, right: right)) != field.Add(left: field.Square(value: left), right: field.Square(value: right))) ||
+            (field.SquareRoot(value: field.Square(value: left)) != left) ||
+            (field.Square(value: field.SquareRoot(value: left)) != left) ||
+            (field.Exponentiate(value: left, exponent: 0UL) != field.One) ||
+            !field.IsReduced(value: product)) {
+            throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH");
+        }
+        if ((0UL != frobeniusExponent) && (field.Exponentiate(value: left, exponent: frobeniusExponent) != left)) {
+            throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH");
+        }
+        if ((field.Zero != right) &&
+            ((field.Inverse(value: field.Inverse(value: right)) != right) ||
+             (field.Multiply(left: field.Divide(left: left, right: right), right: right) != left) ||
+             (field.Multiply(left: right, right: field.Inverse(value: right)) != field.One))) {
+            throw new InvalidOperationException("BINARY FIELD IDENTITY SWEEP MISMATCH");
+        }
+    }
+}
+static void CheckBinaryFieldRegions<T>(BinaryField<T> field, T[] samples, T[] scalars)
+    where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+    const int shortLengthLimit = 260;
+
+    var actual = new T[65_536];
+    var addend = new T[65_536];
+    var expected = new T[65_536];
+    var seed = new T[65_536];
+
+    for (var index = 0; (index < seed.Length); ++index) {
+        addend[index] = field.Reduce(value: samples[((index * 7) % samples.Length)]);
+        seed[index] = field.Reduce(value: samples[(index % samples.Length)]);
+    }
+
+    foreach (var scalar in scalars) {
+        var reduced = field.Reduce(value: scalar);
+
+        foreach (var length in Enumerable.Range(start: 0, count: shortLengthLimit).Concat(second: [1_024, 4_096, 65_536,])) {
+            for (var index = 0; (index < length); ++index) { expected[index] = field.Multiply(left: reduced, right: seed[index]); }
+
+            field.ScaleRegion(destination: actual.AsSpan(start: 0, length: length), source: seed.AsSpan(start: 0, length: length), scalar: reduced);
+
+            if (!actual.AsSpan(start: 0, length: length).SequenceEqual(other: expected.AsSpan(start: 0, length: length))) {
+                throw new InvalidOperationException("BINARY FIELD REGION TAIL LENGTH MISMATCH");
+            }
+
+            seed.AsSpan(start: 0, length: length).CopyTo(destination: actual.AsSpan(start: 0, length: length));
+            field.ScaleRegionInPlace(values: actual.AsSpan(start: 0, length: length), scalar: reduced);
+
+            if (!actual.AsSpan(start: 0, length: length).SequenceEqual(other: expected.AsSpan(start: 0, length: length))) {
+                throw new InvalidOperationException("BINARY FIELD REGION TAIL LENGTH MISMATCH");
+            }
+
+            for (var index = 0; (index < length); ++index) { expected[index] = field.Add(left: addend[index], right: expected[index]); }
+
+            addend.AsSpan(start: 0, length: length).CopyTo(destination: actual.AsSpan(start: 0, length: length));
+            field.MultiplyAccumulateRegion(destination: actual.AsSpan(start: 0, length: length), source: seed.AsSpan(start: 0, length: length), scalar: reduced);
+
+            if (!actual.AsSpan(start: 0, length: length).SequenceEqual(other: expected.AsSpan(start: 0, length: length))) {
+                throw new InvalidOperationException("BINARY FIELD REGION TAIL LENGTH MISMATCH");
+            }
+
+            for (var index = 0; (index < length); ++index) { expected[index] = field.Add(left: addend[index], right: seed[index]); }
+
+            addend.AsSpan(start: 0, length: length).CopyTo(destination: actual.AsSpan(start: 0, length: length));
+            field.AddRegion(destination: actual.AsSpan(start: 0, length: length), source: seed.AsSpan(start: 0, length: length));
+
+            if (!actual.AsSpan(start: 0, length: length).SequenceEqual(other: expected.AsSpan(start: 0, length: length))) {
+                throw new InvalidOperationException("BINARY FIELD REGION TAIL LENGTH MISMATCH");
+            }
+        }
+    }
+}
 static void ExpectArgumentOutOfRange(string parameterName, Action operation) {
     try {
         operation();

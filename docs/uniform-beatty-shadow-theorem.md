@@ -14,15 +14,43 @@ reduction, and effective sign stabilization. Thus every sufficiently large nonze
 channel presentation, and the toolkit decides whether the discrepancy is eventually identically zero.  The same
 presentation now gives the effective bound `#{n <= N : d_n != 0}=O(log N)` for every irrational-slope instance.
 On the unresolved integer-orbit side, exact prime-power profiling has isolated a finite-field monodromy criterion:
-both its determinant and trace halves now have direct finite-field proofs.  They imply unconditional
-superexponential EGF-denominator growth whenever the numerator discriminant is not a rational square, leaving only
-the square-numerator, nonsquare-characteristic, nonaligned hypergeometric branch as the possible general obstruction.
+both its determinant and trace halves now have direct finite-field proofs. They imply unconditional
+superexponential EGF-denominator growth whenever the numerator discriminant is not a rational square. This is a
+strong necessary arithmetic condition, not an exclusion theorem: positivity has not been proved incompatible with
+that growth. On the square-numerator, nonsquare-characteristic, nonaligned branch the denominator argument does not
+even remove candidates, and the remaining equality is an explicit hypergeometric connection-coordinate problem.
 Two new machine-checked trapping theorems nevertheless settle complementary
 infinite two-parameter regions inside that branch.
+
+The later hard-core analysis further sharpens, but does not close, this
+boundary.  In the repeated-root Lerch slice, exact orbit inequalities exclude
+every first-tail integer hit with `q=0` and `1<=r<=40p`; every fixed wedge
+`r<=C*p` reduces after four inequalities to finitely many seeds.  The whole
+square-characteristic Lerch slice is now classified by Baker's theorem: its
+only algebraic case is the exact-affine resonance, while every other first
+tail is transcendental.  On the remaining irrational-characteristic branch,
+the inert-prime kernel is an explicit finite-field Jacobi logarithmic
+derivative, and at most one integer seed per recurrence can have exponential
+factorial reduction.  A projective two-line trap now completely classifies
+the canonical repeated-root image seed for `(p,-p,r,2r,r)`: `s_1=r/p`
+holds only at the affine resonance `r=2p^2`, and every nonsquare instance
+fails at a finite orbit index.  These are genuine new infinite classifications, but
+they leave one possible exceptional seed and do not prove that positivity
+forces factorial reduction.  In fact a separate strict positive integral
+holonomic EGF now proves that positivity, integrality, and holonomy alone do
+not force it.  A local-exponent comparison also proves that this counterexample
+cannot be pulled back into the admissible PCF operator family: a successful
+converse must use the PCF equation's specific two-singularity connection
+geometry.
 
 One obligation remains before the proposed theorem may be cited as stated: totalize the finite-prefix comparison when
 a tail may equal an integer exactly. The generalized-Pell presentation now compiles into an explicit Ostrowski DFAO,
 the rational-slope branch compiles into a radix-2 DFAO, and both branches splice in every finitely certified prefix.
+Both total constructors now consume `PolynomialExactBeattyTrapCertificate`
+and its verified one-index shifted form directly, so every accepted norm-gap
+family totalizes with zero refinement rounds. The shifted form covers
+`B_n=r(n+1)^2` whenever `(p,q-p,r,0,0)` passes the native recognizer; this
+includes general certificates beyond the two named BDS slices.
 
 This obligation is not routine numerical cleanup. Degree-(2,1) polynomial continued fractions include rational-limit
 families and special-function values, so a blanket equality oracle risks subsuming unresolved irrationality questions.
@@ -656,6 +684,26 @@ orbit remains positive forever. The bridge is machine-checked by
 `positive_orbit_successor_of_positive_ratio` in
 `PolynomialTail/IntegerOrbit.lean`.
 
+This also locates the computability gap exactly. For fixed integer input, the
+claim `s_N=M` is the universal arithmetic statement
+
+\[
+ Q_j>0\quad\text{for every }j\geq0,
+\]
+
+whereas its negation has the finite witness `Q_j<=0` for some `j`. Thus
+non-equality is uniformly semidecidable by exact orbit iteration; equality is
+a co-r.e. (`Pi^0_1`) property of this presentation. The moment hierarchy is a
+second, often faster, complete semidecision for non-equality on the
+square-numerator branch, but it has the same logical polarity. A total
+algorithm would follow immediately from any recursively enumerable family of
+finite certificates covering every positive orbit: run the positive-certificate
+search and the first-sign-failure search in parallel. Conversely, accumulating
+more finite exclusion tests alone cannot supply that missing semidecision.
+Since the eventual construction leaves only finitely many exact boundary
+questions, this is also the precise gap between the eventual DFAO and an
+effective total DFAO.
+
 This reformulation makes searches much cheaper and identifies the precise new
 theorem one would need: positivity is decidable for this restricted integral
 degree-(2,1) recurrence, or every positive instance has a hypergeometric
@@ -911,8 +959,9 @@ mismatches.  Thus the remaining arithmetic question is whether the positive
 minimal initial state can satisfy (K) for enough primes without coming from a
 certified rational or hypergeometric tail.
 
-There is no such particular-state exception when the numerator discriminant
-is nonsquare over `Q`.  Let `Delta_B=u^2-4rv` be a nonzero nonsquare integer.
+There is no such particular-state exception in the modular lower-bound
+argument when the numerator discriminant is nonsquare over `Q`. Let
+`Delta_B=u^2-4rv` be a nonzero nonsquare integer.
 For every unramified prime inert in `Q(sqrt(Delta_B))`, the determinant product
 above is nonzero, so `M_ell` is invertible.  Since the initial state `(1,d)` is
 nonzero modulo every prime, its residue orbit cannot become zero.  Every such
@@ -939,9 +988,16 @@ only outside-rational-exponent branch on which kernel accidents can matter is
 therefore
 
 \[
- \Delta_B\in\mathbf Q^{\,2},\qquad
- \Delta_c\notin\mathbf Q^{\,2},\qquad R\ne0. \tag{E}
+\Delta_B\in\mathbf Q^{\,2},\qquad
+\Delta_c\notin\mathbf Q^{\,2},\qquad R\ne0. \tag{E}
 \]
+
+This does **not** say that equality outside (E) is impossible. Outside (E),
+the theorem forces superexponential denominator growth but presently supplies
+no contradiction with positivity. Inside (E), even that obstruction can be
+evaded by the explicit kernel condition (K). These are two differently
+constrained parts of the same open minimality problem, not a decided region
+and one residual region.
 
 The determinant and state-dynamics parts of this argument are now
 machine-checked in

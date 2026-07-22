@@ -29,6 +29,13 @@ if (CaptureLifetimeProbe.TryRun(args: args, exitCode: out var captureProbeExitCo
     return captureProbeExitCode;
 }
 
+// The binary-field tier children are pure CPU processes relaunched under the runtime's instruction-set suppression
+// knobs (see BinaryFieldStage): they must return before the GPU host is built, or five feature-suppressed digests
+// would each pay for a Vulkan device they never touch.
+if (BinaryFieldProbe.TryRun(args: args, exitCode: out var binaryFieldProbeExitCode)) {
+    return binaryFieldProbeExitCode;
+}
+
 // The drift-HUNT surface (the differential fuzzer flipped from gate to MAXIMIZER — see DriftHuntCli/DriftHunt). The
 // PARENT `--hunt-drift` orchestrator spawns one isolated child per candidate and needs no GPU host, so it runs and
 // returns BEFORE the battery's composition root is built. The CHILD `--hunt-render` mode is handled at node selection

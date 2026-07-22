@@ -16,7 +16,7 @@ namespace Puck.Maths.Research;
 public sealed class OddCyclicIncidence {
     private readonly ulong[] Columns;
     private readonly BinaryPolynomial[] FactorStorage;
-    private readonly BinaryField[] Fields;
+    private readonly BinaryField<ulong>[] Fields;
     private readonly ulong[][] EvaluatedColumns;
     private readonly BigInteger[] Syndromes;
 
@@ -83,14 +83,14 @@ public sealed class OddCyclicIncidence {
         }
 
         ValidateFactors();
-        Fields = FactorStorage.Select(selector: factor => new BinaryField(modulus: factor.Bits)).ToArray();
+        Fields = FactorStorage.Select(selector: factor => BinaryField<ulong>.FromModulus(modulus: factor)).ToArray();
         EvaluatedColumns = new ulong[Fields.Length][];
 
         for (var component = 0; (component < Fields.Length); ++component) {
             var evaluated = new ulong[Columns.Length];
 
             for (var index = 0; (index < Columns.Length); ++index) {
-                evaluated[index] = BinaryPolynomial.Remainder(dividend: Columns[index], divisor: Fields[component].Modulus);
+                evaluated[index] = Fields[component].Reduce(value: Columns[index]);
             }
 
             EvaluatedColumns[component] = evaluated;
@@ -327,7 +327,7 @@ public sealed class OddCyclicIncidence {
             var factor = FactorStorage[first];
 
             if (!factor.IsIrreducible()) { throw new ArgumentException($"Factor {factor.Bits:x} is reducible.", "factors"); }
-            product *= factor;
+            product = checked(product * factor);
 
             for (var second = first + 1; (second < FactorStorage.Length); ++second) {
                 if (!factor.GreatestCommonDivisor(other: FactorStorage[second]).IsOne) {
@@ -382,36 +382,6 @@ public sealed class OddCyclicIncidence {
         }
 
         return rank;
-    }
-
-    private sealed class BinaryField {
-        public BinaryField(ulong modulus) {
-            Modulus = modulus;
-            Degree = BitOperations.Log2(modulus);
-        }
-
-        public ulong Modulus { get; }
-        public int Degree { get; }
-
-        public ulong Multiply(ulong left, ulong right) =>
-            BinaryPolynomial.MultiplyModulo(left: left, right: right, modulus: Modulus);
-
-        public ulong Inverse(ulong value) {
-            if (value == 0UL) { throw new DivideByZeroException("Zero has no multiplicative inverse."); }
-
-            var exponent = ((1UL << Degree) - 2UL);
-            var result = 1UL;
-            var power = value;
-
-            while (exponent != 0UL) {
-                if ((exponent & 1UL) != 0UL) { result = Multiply(left: result, right: power); }
-
-                exponent >>= 1;
-                if (exponent != 0UL) { power = Multiply(left: power, right: power); }
-            }
-
-            return result;
-        }
     }
 }
 

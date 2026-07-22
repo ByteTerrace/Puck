@@ -54,7 +54,12 @@ internal static class PostProbeProcess {
     public static ProbeResult RunCaptureLifetime() =>
         Run(arguments: ["--capture-probe"], environment: null);
 
-    private static ProbeResult Run(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? environment) {
+    /// <summary>Launches this executable with an arbitrary argument list and waits for it.</summary>
+    /// <param name="arguments">The child's command line.</param>
+    /// <param name="environment">Extra environment variables for the child (e.g. an instruction-set suppression knob), or <see langword="null"/>.</param>
+    /// <returns>The finished run.</returns>
+    /// <exception cref="InvalidOperationException">The current executable path could not be determined, or a framework-dependent host could not locate its entry assembly.</exception>
+    public static ProbeResult Run(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? environment) {
         var executable = (Environment.ProcessPath ?? throw new InvalidOperationException(message: "Environment.ProcessPath is unavailable; the Tier-D probes cannot relaunch the POST."));
         var startInfo = new ProcessStartInfo {
             CreateNoWindow = true,
