@@ -27,6 +27,7 @@ internal static class PostStages {
             new WorldCoord3Stage(),
             new BinaryIntegerFunctionsStage(),
             new BinaryFieldStage(),
+            new DigitalNetStage(),
             new MonotonicPartitionerStage(),
             new SdfLipschitzStage(),
             new DeterminismStage(),

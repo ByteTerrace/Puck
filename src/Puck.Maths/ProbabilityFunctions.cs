@@ -30,7 +30,7 @@ public static class ProbabilityFunctions {
         // one branch, so the valid-range path keeps a single comparison.
         if (!((Zero <= probability) && (probability <= One))) {
             throw new ArgumentOutOfRangeException(
-                message: "probability must be between the inclusive range [0, 1]",
+                message: "The probability must be within the inclusive range [0, 1].",
                 paramName: nameof(probability)
             );
         }

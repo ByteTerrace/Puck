@@ -2,10 +2,11 @@ namespace Puck.Maths;
 
 /// <summary>Identifies one rung of the bulk region-scaling ladder beneath <see cref="BinaryField{T}"/>.</summary>
 /// <remarks>
-/// The rungs are ordered widest-first, and within a width the hardware Galois-field affine transform precedes the
-/// nibble-split byte shuffle. Each rung is a separately named kernel that queries no instruction-set support of its
-/// own, so a verifier holding the matching support flag can execute any two rungs over the same region inside one
-/// process and compare them.
+/// The members ascend narrowest-first, and within a width the nibble-split byte shuffle precedes the hardware
+/// Galois-field affine transform. Dispatch runs in the reverse order — widest-first, affine before split — and lives
+/// in <c>BinaryFieldKernels.TryMultiplyAccumulateRegionByte</c>; this type only names the rungs. Each rung is a
+/// separately named kernel that queries no instruction-set support of its own, so a verifier holding the matching
+/// support flag can execute any two rungs over the same region inside one process and compare them.
 /// </remarks>
 internal enum BinaryFieldRegionTier {
     /// <summary>The element-at-a-time loop over the scalar field multiply, available on every machine.</summary>

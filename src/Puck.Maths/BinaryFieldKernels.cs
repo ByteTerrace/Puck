@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -78,7 +79,7 @@ internal static class BinaryFieldKernels {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static (ulong Low, ulong High) CarrylessMultiply64(ulong left, ulong right) {
-        if (Pclmulqdq.IsSupported) { return CarrylessMultiply64Carryless(left: left, right: right); }
+        if (Pclmulqdq.IsSupported) { return CarrylessMultiply64Hardware(left: left, right: right); }
 
         return CarrylessMultiply64Portable(left: left, right: right);
     }
@@ -92,7 +93,7 @@ internal static class BinaryFieldKernels {
     /// The control byte selects the low half of both operands, which is the only pairing the scalar seam ever wants.
     /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The carryless-multiply instruction set is unavailable. Every caller except a tier verifier reaches this kernel through <see cref="CarrylessMultiply64(ulong, ulong)"/>, which never calls it in that case.</exception>
-    internal static (ulong Low, ulong High) CarrylessMultiply64Carryless(ulong left, ulong right) {
+    internal static (ulong Low, ulong High) CarrylessMultiply64Hardware(ulong left, ulong right) {
         var product = Pclmulqdq.CarrylessMultiply(
             left: Vector128.CreateScalar(value: left),
             right: Vector128.CreateScalar(value: right),
@@ -133,6 +134,7 @@ internal static class BinaryFieldKernels {
     /// combining XOR chain short, where the recursive split trades a shorter instruction count for a longer chain.
     /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not one of the supported element carriers. A binary field requires a fixed carrier width.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static (T Low, T High) CarrylessMultiplyWide<T>(T left, T right) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         switch (left) {
             case byte:
@@ -179,7 +181,7 @@ internal static class BinaryFieldKernels {
                 break;
         }
 
-        throw new NotSupportedException(message: $"{typeof(T)} is not a supported binary-field element carrier. A binary field requires a fixed carrier width.");
+        return ThrowUnsupportedCarrier<T>();
     }
     /// <summary>Gets the total number of bits occupied by the element carrier.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
@@ -483,7 +485,12 @@ internal static class BinaryFieldKernels {
     /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
     /// <param name="degree">The field's degree, which is at most eight.</param>
     /// <param name="tail">The modulus tail.</param>
-    /// <remarks>Every element is the sum of the scalar times its low nibble and the scalar times its high nibble, so two sixteen-entry tables built through the field's own multiply cover the whole byte range.</remarks>
+    /// <remarks>
+    /// Every element is the sum of the scalar times its low nibble and the scalar times its high nibble, so two
+    /// sixteen-entry tables built through the field's own multiply cover the whole byte range. The lookups use the
+    /// per-lane <see cref="Ssse3.Shuffle(Vector128{byte}, Vector128{byte})"/> rather than the cross-platform shuffle:
+    /// the indices are masked to a nibble, so no lane's top bit is set and the two select the identical entry.
+    /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The 128-bit byte-shuffle instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionSplit128(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
         Span<byte> highTable = stackalloc byte[16];
@@ -506,7 +513,7 @@ internal static class BinaryFieldKernels {
             // shift and the mask below discards the four bits that crossed the byte boundary.
             var high = (Vector128.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble);
             var low = (block & nibble);
-            var product = (Vector128.Shuffle(vector: lowVector, indices: low) ^ Vector128.Shuffle(vector: highVector, indices: high));
+            var product = (Ssse3.Shuffle(value: lowVector, mask: low) ^ Ssse3.Shuffle(value: highVector, mask: high));
 
             (product ^ (Vector128.LoadUnsafe(source: ref destinationBytes, elementOffset: ((nuint)index)) & keep))
                 .StoreUnsafe(destination: ref destinationBytes, elementOffset: ((nuint)index));
@@ -528,7 +535,11 @@ internal static class BinaryFieldKernels {
     /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
     /// <param name="degree">The field's degree, which is at most eight.</param>
     /// <param name="tail">The modulus tail.</param>
-    /// <remarks>The sixteen-entry tables are replicated into every 128-bit half, and every index is a nibble, so the cross-platform shuffle and the per-half byte shuffle it may compile to select the same entry.</remarks>
+    /// <remarks>
+    /// The sixteen-entry tables are replicated into every 128-bit lane and every index is masked to a nibble, so the
+    /// per-lane <see cref="Avx2.Shuffle(Vector256{byte}, Vector256{byte})"/> selects the same entry the cross-platform
+    /// shuffle would: no index crosses a lane and no lane's top bit is set.
+    /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The 256-bit byte-shuffle instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionSplit256(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
         Span<byte> highTable = stackalloc byte[16];
@@ -551,7 +562,7 @@ internal static class BinaryFieldKernels {
             var block = Vector256.LoadUnsafe(source: ref sourceBytes, elementOffset: ((nuint)index));
             var high = (Vector256.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble);
             var low = (block & nibble);
-            var product = (Vector256.Shuffle(vector: lowVector, indices: low) ^ Vector256.Shuffle(vector: highVector, indices: high));
+            var product = (Avx2.Shuffle(value: lowVector, mask: low) ^ Avx2.Shuffle(value: highVector, mask: high));
 
             (product ^ (Vector256.LoadUnsafe(source: ref destinationBytes, elementOffset: ((nuint)index)) & keep))
                 .StoreUnsafe(destination: ref destinationBytes, elementOffset: ((nuint)index));
@@ -573,6 +584,11 @@ internal static class BinaryFieldKernels {
     /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
     /// <param name="degree">The field's degree, which is at most eight.</param>
     /// <param name="tail">The modulus tail.</param>
+    /// <remarks>
+    /// The sixteen-entry tables are replicated into every 128-bit lane and every index is masked to a nibble, so the
+    /// per-lane <see cref="Avx512BW.Shuffle(Vector512{byte}, Vector512{byte})"/> selects the same entry the
+    /// cross-platform shuffle would: no index crosses a lane and no lane's top bit is set.
+    /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The 512-bit byte-shuffle instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionSplit512(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
         Span<byte> highTable = stackalloc byte[16];
@@ -597,7 +613,7 @@ internal static class BinaryFieldKernels {
             var block = Vector512.LoadUnsafe(source: ref sourceBytes, elementOffset: ((nuint)index));
             var high = (Vector512.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble);
             var low = (block & nibble);
-            var product = (Vector512.Shuffle(vector: lowVector, indices: low) ^ Vector512.Shuffle(vector: highVector, indices: high));
+            var product = (Avx512BW.Shuffle(value: lowVector, mask: low) ^ Avx512BW.Shuffle(value: highVector, mask: high));
 
             (product ^ (Vector512.LoadUnsafe(source: ref destinationBytes, elementOffset: ((nuint)index)) & keep))
                 .StoreUnsafe(destination: ref destinationBytes, elementOffset: ((nuint)index));
@@ -772,6 +788,7 @@ internal static class BinaryFieldKernels {
     /// there is no constant that could be derived differently on two paths, and the iteration count depends only on
     /// the operand values rather than on which multiplication tier produced them.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T ReduceWide<T>(T low, T high, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var width = CarrierBitCount<T>();
         // The mask is built by right-shifting an all-ones value rather than as ((one << degree) - one): at
@@ -985,6 +1002,14 @@ internal static class BinaryFieldKernels {
         // (2 * degree) - 2, so its high limb has degree at most degree - 2 and stays inside the carrier.
         return (Low: (low & mask), High: ((high << (width - degree)) | (low >>> degree)));
     }
+    /// <summary>Throws for an unsupported element carrier, kept out of line so the inlined multiply body stays lean.</summary>
+    /// <typeparam name="T">The unsupported element carrier.</typeparam>
+    /// <returns>This method never returns; the declared return type only lets a caller use it in a value position.</returns>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (T Low, T High) ThrowUnsupportedCarrier<T>() =>
+        throw new NotSupportedException(message: $"{typeof(T)} is not a supported binary-field element carrier. A binary field requires a fixed carrier width.");
     /// <summary>Runs the widest available vector rung over a region of byte-wide field elements.</summary>
     /// <typeparam name="T">The packed element carrier, which is <see cref="byte"/> at run time.</typeparam>
     /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>

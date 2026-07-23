@@ -70,6 +70,7 @@ public readonly record struct BinaryField<T> where T : IBinaryInteger<T>, IUnsig
     /// <summary>Creates the field defined by a whole modulus polynomial, whose leading term is stripped to form the tail.</summary>
     /// <param name="modulus">The modulus, whose degree becomes the field's and whose constant term must be non-zero.</param>
     /// <returns>The described field.</returns>
+    /// <remarks>The modulus arrives as a <see cref="BinaryPolynomial"/>, whose packed carrier tops out at degree 63, so the degree-64 through degree-128 fields — including the catalog's own <c>Degree64</c> and <c>Degree128</c> — can only be built through <see cref="Create(int, T)"/>.</remarks>
     /// <exception cref="ArgumentException"><paramref name="modulus"/> has degree below one or a zero constant term.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> has a degree above the carrier's width in bits.</exception>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not one of the supported element carriers. A binary field requires a fixed carrier width.</exception>

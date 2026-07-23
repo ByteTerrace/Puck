@@ -86,7 +86,8 @@ public static class UnsignedNumberFunctions {
     /// <remarks>
     /// The small prime factors are removed first, after which trial division advances over a modulo-30 wheel that
     /// visits only the eight residues coprime to 30 and stops once the trial factor exceeds the square root of the
-    /// remaining cofactor.
+    /// remaining cofactor. The output order is non-decreasing by contract — equal factors are always adjacent — so a
+    /// caller may deduplicate by comparing each factor against its predecessor alone.
     /// </remarks>
     public static IEnumerable<T> EnumeratePrimeFactors<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         if (T.CreateChecked(value: 4) > value) { yield break; }

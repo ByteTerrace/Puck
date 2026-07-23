@@ -126,7 +126,7 @@ internal sealed class BinaryFieldStage : IPostStage {
                 continue;
             }
 
-            var hardware = BinaryFieldKernels.CarrylessMultiply64Carryless(left: vector.Left, right: vector.Right);
+            var hardware = BinaryFieldKernels.CarrylessMultiply64Hardware(left: vector.Left, right: vector.Right);
 
             if ((hardware.Low != vector.Low) || (hardware.High != vector.High)) {
                 return $"the hardware carryless multiply of 0x{vector.Left:X16} and 0x{vector.Right:X16} gave 0x{hardware.High:X16}_{hardware.Low:X16}, the published vector is 0x{vector.High:X16}_{vector.Low:X16}";

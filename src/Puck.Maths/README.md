@@ -37,8 +37,14 @@ deps       none
 | `FixedRigidTransform` | `readonly record struct` | Rotation + translation as one unit dual quaternion: normalized `FromRotationTranslation`/`FromDualQuaternion` boundaries, fast raw composition by `*`, explicit `ComposeNormalized` for long chains, matching generic-math multiplication/identity interfaces, `TransformPoint`, `Inverse`, `Normalize`, and screw interpolation by `ScLerp`. Positional construction is the documented unchecked representation seam. Precision ≈ 2⁻¹⁵ relative to translation magnitude. |
 | `WorldCoord3` | `readonly record struct` | Canonical hierarchical world position: signed 64-bit cell indices plus a centred `FixedVector3` local offset — the floating-origin coordinate for planet-scale scenes. Construction and `WithLocal` canonicalize; `TryCreate`, `TryTranslate`, and `TryDelta` expose range failure without exceptions; throwing operators fail rather than silently wrap. Its heterogeneous generic-math interfaces expose position + displacement → position and position − position → displacement without pretending that positions form a vector space. |
 | `BinaryIntegerFunctions` | `static` ext. methods | Bit manipulation & base-10 digit ops over `IBinaryInteger<T>`. |
-| `BinaryPolynomial` | `readonly record struct` | Exact polynomials over `GF(2)`, packed one coefficient per bit into a `ulong` (degree ≤ 63). Addition is XOR and doubles as subtraction. Euclidean division is exact — `(a / b) * b + a % b == a` with no rounding seam — and `<<`/`>>` are multiplication and division by the indeterminate. Ordinary `*` truncates like every other fixed-width operator in the library and `checked *` reports the loss; both come from one carryless multiply, so there is one thing to be right about. A product that needs its bits above degree 63 is a field operation — `BinaryField<T>` keeps that wide intermediate internally. Rounds out with monic GCD, an irreducibility decision, and the factorization of `tⁿ+1` for odd `n ≤ 31`. It is the modulus carrier beneath `BinaryField<T>` and cyclic-incidence analysis, and is independently useful for binary linear codes and CRC-style recurrences. There is deliberately no ordering: a polynomial ring has none, and the packed carrier would have made `<` compile and lie. |
+| `BinaryPolynomial` | `readonly record struct` | Exact polynomials over `GF(2)`, packed one coefficient per bit into a `ulong` (degree ≤ 63). Addition is XOR and doubles as subtraction. Euclidean division is exact — `(a / b) * b + a % b == a` with no rounding seam — and `<<`/`>>` are multiplication and division by the indeterminate. Ordinary `*` truncates like every other fixed-width operator in the library and `checked *` reports the loss; both come from one carryless multiply, so there is one thing to be right about. A product that needs its bits above degree 63 is a field operation — `BinaryField<T>` keeps that wide intermediate internally. Rounds out with monic GCD, an irreducibility decision, a **primitivity** decision through degree 32 (strictly stronger — it additionally says the root generates the whole multiplicative group, which is what makes a linear recurrence maximal-period; bounded there because it needs `2ⁿ−1` factored), and the factorization of `tⁿ+1` for odd `n ≤ 31`. It is the modulus carrier beneath `BinaryField<T>` and cyclic-incidence analysis, and is independently useful for binary linear codes and CRC-style recurrences. There is deliberately no ordering: a polynomial ring has none, and the packed carrier would have made `<` compile and lie. |
 | `BinaryField<T>` / `BinaryFields` | `readonly record struct` / `static` | The finite field `GF(2^k)` for any `k` from 1 through 128, over a caller-chosen or canonical irreducible modulus. Elements are bare packed integers — `byte`, `ushort`, `uint`, `ulong`, `UInt128` — so a region of field values is just a span and the field object names the structure they live in: `Multiply`, `Square`, `SquareRoot`, `Inverse`, `Divide`, `Exponentiate`, `Reduce`. The modulus is stored as its tail because a degree-`k` modulus needs `k+1` bits and would not fit the carrier at the top degree; nothing else is precomputed, so constructing a field is free. Everything is exactly associative, commutative, and distributive, with an exact inverse for every non-zero element — unlike a rounded fixed-point product, a field product is safe to reassociate. `MultiplyAccumulateRegion` is the vectorized bulk primitive that erasure coding, syndrome evaluation, and elimination over the field all sit on. `BinaryFields` holds the canonical minimum-weight fields at degrees 8, 16, 32, 64, and 128. |
+| `PrimeField64` / `QuadraticExtensionField64` | `readonly record struct` | The finite fields of odd characteristic — the companions to `BinaryField<T>`: `F_p` for an odd prime `p < 2⁶²`, and its quadratic extension `F_{p²} = F_p(√d)` over a non-square `d`. Elements are bare `ulong` (base) or `(A, B)` pairs (extension); the field object names the structure they live in, so nothing but the modulus (and the non-square) is stored. `Add`/`Subtract`/`Multiply` (widen to `UInt128`, reduce once)/`Negate`/`Pow`/`Inverse`, `LegendreCharacter` (the quadratic character), `TrySqrt` (both residue classes; a nonresidue-assisted descent when `p ≡ 1 mod 4`), a `BatchInverse` that turns a whole region over with one inversion, and a validated `Create` that decides primality exactly to a fixed complete witness set. The extension adds `Frobenius`/`Norm`/`Trace` and a deterministic smallest-non-square chooser. For deterministic odd-base permutations and scrambles, odd-radix sampling nets, procedural incidence structures over a prime alphabet, and exact square roots modulo a prime. |
+| `NumberTheoryFunctions` | `static` | Arbitrary-width number theory, the past-`2⁶⁴` companion to `PrimeField64`: `JacobiSymbol` (binary reciprocity — no factorization, no exponentiation), `SegmentedPrimeSieve`/`EnumeratePrimes` (a closed range of primes in working memory bounded by the range's square root, delivered by callback or lazily), and `HenselLiftRoot` (lifts a simple polynomial root from a prime to a prime power — the derivative-unit case, honest about the non-unit failure mode). |
+| `FixedSplit` | `readonly struct` | Split numbers over `FixedQ4816` — the hyperbolic sibling completing the planar trio with `FixedComplex` (`i² = −1`) and `FixedDual` (`ε² = 0`): here `j² = +1`, multiplication is hyperbolic rotation, and the quadratic form `u² − v²` is indefinite — it vanishes on the two diagonals and the ring has zero divisors, so division is unit-checked. `FromRapidity` composes boosts/squeezes the way `FixedComplex.Rotate` composes turns. For scaling flows, rate composition, and anything metallic-mean-shaped. |
+| `QuadraticAlgebra<TScalar>` | `readonly record struct` | The unifying skeleton behind every two-dimensional number system in this library: adjoin one root of `x² = P·x + Q` to any carrier satisfying six operator interfaces. `(0,−1)` is `FixedComplex`, `(0,0)` is `FixedDual`, `(0,+1)` is `FixedSplit`, `(k,1)` is the metallic surd world, and over `PrimeField64` it is `F_{p²}` — all verified reproductions (`tools/quadratic-algebra-verifier.cs`). Carries `Conjugate`/`Norm`/`Trace`/`Discriminant`, the division-free companion (Möbius) step on projective pairs, and `CompanionPower` — the closed-form engine for metallic and continued-fraction sequences. The discriminant's sign/character (negative, zero, positive; split, ramified, inert) is the one trichotomy every specialization inherits. |
+| `QuadraticIntegerArithmetic` | `static` | Primality and factorization *inside* `QuadraticAlgebra<BigInteger>` — the concepts of `PrimeExtensions`, one story up: `IsPrimeElement` via norms, `SplittingCharacter` (split/inert/ramified by the Jacobi symbol), `FundamentalUnit` (the continued-fraction walk; the `Δ = 5` world answers with the golden unit), `CanonicalAssociate` (documented deterministic normalization under the unit action), and `TryFactorize` — exact, deterministic, ascending-by-norm factorization that reassembles bit-identically, and that **fails honestly with a class-group witness** when a needed prime is non-principal (the obstruction names the rational prime and its splitting; in the `Δ = −20` world, `6` refuses to factor and the API tells you exactly why). Zero obstructions across the nine imaginary class-number-one worlds; the failure witness is a feature — non-unique factorization made measurable. |
+| `DigitalNetSampler` / `NestedDyadicPermutation` / `UnitriangularBitMix` / `SphericalCapSampleTable` | `static` | Digital `(0, m, 2)`-nets over `GF(2)` — Sobol' sequences — whose stratification is a **theorem**, not a measurement: the first `2ᵐ` points put exactly one point in every dyadic box of area `2⁻ᵐ`. A point is the XOR of the direction vectors its index's set bits select, so it is pure integer, stateless (sample `N` is a function of `N` alone — nothing to snapshot), and seekable. Direction numbers come from a generator polynomial proved primitive by `BinaryPolynomial`. Two randomizations are offered because two are all that provably preserve the net: a digital shift (`DeriveScramble`, XOR by a fixed vector) and `NestedDyadicPermutation` (index shuffling that carries an aligned dyadic block onto an aligned dyadic block — an *arbitrary* mixing bijection does not, and would destroy stratification). `UnitriangularBitMix` is the invertible key mix beneath them, bijective by theorem rather than by tuning. `SphericalCapSampleTable` bakes a whole net-point-to-cap-direction map into one flat `uint` table, so a consumer needs no `sqrt`, reciprocal, normalize, or trigonometry at the point of use. |
 | `UnsignedNumberFunctions` | `static` ext. methods | Pairing functions, prime factorization, modular inverse, integer roots. |
 | `PrimeExtensions` | `static` ext. methods | Deterministic primality, n-th prime, prime counting (`uint`). |
 | `MonotonicPartitioner` | `static` | Jump-consistent routing of 65536 values (or a `Guid`, via its trailing entropy) onto 1–1024 buckets: deterministic (a client/server agreement — both ends of a wire compute the same route), monotonic (growth only moves values into the new bucket), uniform (⌊65536/N⌋ or ⌈65536/N⌉ per bucket, quantization skew ≤ ~2 % at every count). Ownership chains compressed into checkpoint + varint tail-stream tables; `GetMetrics` reports a value's rank, migration count, and distance to its next migration (`MonotonicPartitionerMetrics`). |
@@ -65,6 +71,8 @@ deps       none
 | `MetallicQuasicrystal` | `static` | The metallic-mean quasicrystals `δₙ = (n + √(n²+4))/2` for any index — golden is `n = 1` (the Fibonacci chain), silver is `n = 2` (the Pell chain). `Word` streams the tiling; `Contains`/`StartsLongTile`/`Next`/`Previous`/`Position` address points by ring coordinate `a + b·δₙ` in O(1), the membership-and-traversal surface generalized from the retired hand-coded golden and silver chains — `n = 1` reproduces the former golden chain coordinate for coordinate. Exact integer arithmetic above one fixed-point seam, so it never drifts. |
 | `MetallicPolynomialContinuedFraction` | `static` | Exact random access to the metallic polynomial continued fraction: `TailFloor(k, n)` evaluates `⌊sₙ⌋`, where `sₙ = k·n−1+n²/sₙ₊₁`, directly from its proved quadratic-irrational formula. It uses arbitrary-width integer arithmetic and an integer square root instead of a truncation depth or floating-point tolerance; differences of consecutive floors give its associated integer sequence. |
 | `SecureRandom` | `static` | Uniform, unbiased, cryptographically secure unsigned draws — NOT for simulation (deliberately non-reproducible); use `Pcg32XshRr` there. |
+| `ProbabilityFunctions` | `static` ext. methods | The normal-distribution quantile (inverse CDF): `InverseStandardNormalCdf` and `InverseNormalCdf` evaluate minimax rational approximations by Horner's method with fused multiply-adds over three regions of the probability. |
+| `Fnv1aHash` | `struct` | A 64-bit FNV-1a hash accumulator — the allocation-free, endianness-independent state probe a determinism/replay check folds per tick. `Create` primes the offset basis; `Add` folds bytes and 32/64-bit values least-significant byte first; `Value` reads the digest. |
 
 ### Lean-derived Fibonacci research
 
@@ -237,8 +245,9 @@ proofs in 32 residue classes.
 > 9 and 10 for an arbitrary `T`) and is not part of the public surface.
 
 **Verifying changes**: the fast contract gates are Post A1
-(`dotnet run --project src/Puck.Post -c Release -- --stage fixed-point`) and the
-binary-field stage (`… -- --stage binary-field`); the deep oracle battery — ULP sweeps,
+(`dotnet run --project src/Puck.Post -c Release -- --stage fixed-point`), the
+binary-field stage (`… -- --stage binary-field`), and the digital-net stage
+(`… -- --stage digital-net`); the deep oracle battery — ULP sweeps,
 independent wide-integer specifications, distribution tests, benchmarks — is
 `dotnet run -c Release tools/maths-battery.cs` (~2–3 minutes). Run the battery before
 completing any change to this project.
@@ -441,7 +450,17 @@ produce identical bits on every machine.
   position) for smooth variation over space (terrain, wind, per-cell decisions via
   `Hash`). Nothing to persist.
 - **`LowDiscrepancy`** — *coverage*: `R1`/`R2` map an index to points that fill the
-  interval/square evenly (spawn scatter, placement, stratified sampling). Stateless.
+  interval/square evenly (spawn scatter, placement). Stateless.
+- **`DigitalNetSampler`** — *provable stratification*: the same shape as `LowDiscrepancy`
+  (index in, point out, no state) but a strictly stronger guarantee. `R1`/`R2` are additive
+  recurrences: they equidistribute asymptotically and stratify **nothing** exactly — there is
+  no `m` for which you can name the boxes and say each holds one point. A `(0, 2)`-sequence
+  does exactly that for *every* `m` and *every* box shape, which is a theorem with a finite
+  witness (and is checked exhaustively by the `digital-net` stage). It also scrambles: XOR by
+  a `GF(2)` vector randomizes the point set without breaking the theorem, so per-pixel or
+  per-entity decorrelation is free. Reach for `R2` when "spread out" is enough and for
+  `DigitalNetSampler` when the estimator's error depends on real stratification — Monte Carlo
+  integration, area-light sampling, anything averaged over many draws.
 
 ### Rules that keep it deterministic
 
@@ -687,6 +706,85 @@ identical result digest. "Bit-identical to the fallback" is a result, not a clai
 
 ```text
 dotnet run --project src/Puck.Post -c Release -- --stage binary-field
+```
+
+### Digital nets
+
+`DigitalNetSampler` is the sampler you reach for when a stochastic estimator has to run inside
+a deterministic simulation. It is Sobol's construction over `GF(2)`, built on the same
+`BinaryPolynomial` the fields are: dimension 0 is bit reversal, dimension 1 is the recurrence
+generated by the primitive polynomial `t + 1`, and a point is nothing but the XOR of the
+direction vectors its index's set bits select.
+
+Four properties follow, and each is the reason a piece of it is shaped the way it is.
+
+- **Pure integer.** No float appears anywhere in the point. There is nothing for two
+  compilers, two backends, or two machines to round differently.
+- **Provably stratified.** Two dimensions of the construction form a `(0, 2)`-sequence: for
+  every `m`, the first `2ᵐ` points place exactly one point in every dyadic box of area `2⁻ᵐ`,
+  at every box shape. That is a theorem, and the gate checks it exhaustively rather than
+  measuring discrepancy.
+- **Stateless and seekable.** Sample `N` is a pure function of `N`. There is no generator
+  state to persist, so — unlike `Pcg32XshRr` — nothing rides a snapshot, and an accumulation
+  indexed by a tick counter is resumable and replay-exact by construction.
+- **Randomizable without losing the theorem.** A digital shift (XOR by a fixed vector, from
+  `DeriveScramble`) is an affine bijection of the coordinate's bits, so it carries dyadic
+  boxes onto dyadic boxes of the same shape. That is what decorrelates one consumer from
+  its neighbour.
+
+```csharp
+using Puck.Maths;
+
+Span<uint> directionNumbers = stackalloc uint[DigitalNetSampler.PlaneDirectionNumberCount];
+
+DigitalNetSampler.BuildPlaneDirectionNumbers(destination: directionNumbers);
+
+// One key per lattice site; the scramble decorrelates neighbouring sites.
+var key = DigitalNetSampler.DeriveKey(x: pixelX, y: pixelY, stream: viewIndex);
+var scramble = DigitalNetSampler.DeriveScramble(key: key);
+
+for (var draw = 0U; (draw < samplesPerSite); ++draw) {
+    var index = DigitalNetSampler.ShuffleIndex(index: ((tick * samplesPerSite) + draw), salt: key);
+    var point = DigitalNetSampler.SamplePlane(index: index, directionNumbers: directionNumbers, scramble: scramble);
+    // point.X and point.Y are UQ0.32 raw bits.
+}
+```
+
+`ShuffleIndex` is the one place a plausible shortcut is wrong. Giving each site a different
+walk through the sequence needs a permutation of the *index*, and an arbitrary mixing bijection
+scatters a site's first `2ᵐ` draws across the whole index space — the resulting point set is
+not a net at all, and the stratification you paid for is gone. `NestedDyadicPermutation` is
+used instead because it carries an aligned block of `2ᵐ` indices onto an aligned block of `2ᵐ`
+indices, and every such block of a `(0, 2)`-sequence is itself a net. `UnitriangularBitMix`
+sits beneath both: every step is either XOR with a shift of the word (a unit-diagonal matrix
+over `GF(2)`, hence nonsingular) or multiplication by an odd constant (a unit modulo `2³²`),
+so its invertibility is a theorem with a closed-form inverse rather than a property hoped for
+of a tuned hash.
+
+`SphericalCapSampleTable` is the GPU-facing form: one flat `uint[]` holding the direction
+numbers, a quantized azimuth table, and a quantized polar table stored as `(axial, radial)`
+pairs sharing one denominator, so `axial² + radial² = 1` holds by construction. A consumer
+reads the leading 12 bits of each net coordinate, loads four floats, and combines them with
+multiplies and adds — no `sqrt`, no reciprocal, no normalize, no trigonometry, because those
+are exactly the operations a shading language is permitted to round differently (Vulkan allows
+3 ULP on `Sqrt` and 2.5 ULP on division). Every table value is computed in `double` and rounded
+exactly once. The azimuth table calls the platform's `Math.Cos`/`Math.Sin`, which makes the
+table a per-machine build-time input, not a portable constant: the reproducibility claim it
+supports is same-machine replay, and the geometric invariant above holds anywhere.
+
+Nothing here allocates: every entry point writes into a caller-owned span, and the tables are
+rebuilt only when their defining angle changes.
+
+The gate proves rather than asserts. It shows the mix is a bijection over all `2³²` words in
+both directions; that the nested permutation really does preserve aligned blocks; that
+`IsPrimitive` is correct by re-deriving the classical census `φ(2ⁿ−1)/n` over every monic
+polynomial through degree 14; that both dimensions' direction numbers match oracles sharing no
+code with the recurrence (the anti-diagonal, and Pascal's triangle mod 2 via Lucas' theorem);
+and that the net property survives exhaustively through order 14, under 256 digital shifts and
+five index shuffles, and at the shipped 12-bit quantization.
+
+```text
+dotnet run --project src/Puck.Post -c Release -- --stage digital-net
 ```
 
 ---
