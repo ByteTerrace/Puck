@@ -73,8 +73,8 @@ public static class MetallicPolynomialContinuedFraction {
         var rational = ((surdCoefficient * metallicIndex) + (2 * (metallicIndex - 2)));
         var denominator = (2 * discriminant);
         var radicand = ((surdCoefficient * surdCoefficient) * discriminant);
-        var rootFloor = BigIntegerMath.SquareRoot(value: radicand);
-        var candidate = BigIntegerMath.FloorDivide(
+        var rootFloor = BigIntegerFunctions.SquareRoot(value: radicand);
+        var candidate = BigIntegerFunctions.FloorDivide(
             numerator: (rational + rootFloor),
             denominator: denominator
         );

@@ -441,7 +441,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
                     (wNumerator * scale * scale));
 
                 if (contractionGap > 0) {
-                    var radius = BigIntegerMath.CeilingDivide(
+                    var radius = BigIntegerFunctions.CeilingDivide(
                         numerator: (residualMagnitudeCeiling * successorSquared *
                             lowerOneNumerator * lowerTwoNumerator),
                         denominator: contractionGap
@@ -938,7 +938,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
         if (denominatorAtOne.IsZero) { return false; }
 
-        var lastNegativeIndex = BigIntegerMath.FloorDivide(
+        var lastNegativeIndex = BigIntegerFunctions.FloorDivide(
             numerator: -denominatorConstant,
             denominator: denominatorScale
         );
@@ -963,7 +963,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger firstIndex) {
         if (quadratic <= BigInteger.Zero) { return false; }
 
-        var vertexFloor = BigIntegerMath.FloorDivide(numerator: -linear, denominator: (2 * quadratic));
+        var vertexFloor = BigIntegerFunctions.FloorDivide(numerator: -linear, denominator: (2 * quadratic));
         var firstCandidate = BigInteger.Max(firstIndex, vertexFloor);
         var secondCandidate = BigInteger.Max(firstIndex, (vertexFloor + 1));
 
@@ -1070,7 +1070,7 @@ public static class PolynomialContinuedFractionTail {
     }
 
     private static bool NumeratorIsPositive(BigInteger quadratic, BigInteger linear, BigInteger constant) {
-        var vertexFloor = BigIntegerMath.FloorDivide(numerator: -linear, denominator: (2 * quadratic));
+        var vertexFloor = BigIntegerFunctions.FloorDivide(numerator: -linear, denominator: (2 * quadratic));
         var firstCandidate = BigInteger.Max(BigInteger.One, vertexFloor);
         var secondCandidate = BigInteger.Max(BigInteger.One, (vertexFloor + 1));
 
@@ -1138,7 +1138,7 @@ public static class PolynomialContinuedFractionTail {
                     // after clearing all dyadic and (N+1)^2 denominators.
                     var radiusNumerator = (residualMagnitudeCeiling * successorSquared *
                         lowerTwoNumerator * scale);
-                    var radius = BigIntegerMath.CeilingDivide(
+                    var radius = BigIntegerFunctions.CeilingDivide(
                         numerator: radiusNumerator,
                         denominator: contractionGap
                     );

@@ -210,7 +210,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var discriminant = ((b * b) - (4 * a * c));
         if (discriminant < BigInteger.Zero) { return []; }
 
-        var root = BigIntegerMath.SquareRoot(discriminant);
+        var root = BigIntegerFunctions.SquareRoot(discriminant);
         if ((root * root) != discriminant) { return []; }
 
         var result = new List<int>(capacity: 2);

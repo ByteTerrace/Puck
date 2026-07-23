@@ -32,7 +32,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if ((p < BigInteger.One) || (r < BigInteger.One)) { return false; }
 
         var characteristicDiscriminant = ((p * p) + (4 * r));
-        var characteristicRoot = BigIntegerMath.SquareRoot(characteristicDiscriminant);
+        var characteristicRoot = BigIntegerFunctions.SquareRoot(characteristicDiscriminant);
         if ((characteristicRoot * characteristicRoot) != characteristicDiscriminant) { return false; }
         var cNumerator = (characteristicRoot - p);
         var c = BigInteger.DivRem(cNumerator, 2, out var cRemainder);

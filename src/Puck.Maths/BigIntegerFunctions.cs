@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Maths;
 
 /// <summary>Shared exact operations on arbitrary-width signed integers.</summary>
-internal static class BigIntegerMath {
+internal static class BigIntegerFunctions {
     /// <summary>Returns the floor square root of a non-negative integer.</summary>
     /// <param name="value">The non-negative value to take the square root of.</param>
     /// <returns>The largest integer whose square does not exceed <paramref name="value"/>.</returns>

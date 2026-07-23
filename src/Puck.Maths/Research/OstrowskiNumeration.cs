@@ -40,7 +40,7 @@ public sealed class QuadraticOstrowskiSystem {
             stateQ *= magnitude;
         }
 
-        var root = BigIntegerMath.SquareRoot(stateN);
+        var root = BigIntegerFunctions.SquareRoot(stateN);
         var seen = new Dictionary<(BigInteger P, BigInteger Q), int>();
         var terms = new List<BigInteger>();
 
@@ -55,8 +55,8 @@ public sealed class QuadraticOstrowskiSystem {
 
             seen[(stateP, stateQ)] = terms.Count;
             var quotient = (stateQ.Sign > 0)
-                ? BigIntegerMath.FloorDivide(stateP + root, stateQ)
-                : BigIntegerMath.FloorDivide(stateP + root + 1, stateQ);
+                ? BigIntegerFunctions.FloorDivide(stateP + root, stateQ)
+                : BigIntegerFunctions.FloorDivide(stateP + root + 1, stateQ);
             terms.Add(quotient);
             var nextP = ((quotient * stateQ) - stateP);
             stateQ = ((stateN - (nextP * nextP)) / stateQ);

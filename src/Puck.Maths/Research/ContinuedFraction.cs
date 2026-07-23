@@ -75,7 +75,7 @@ public static class ContinuedFraction {
             stateQ *= magnitude;
         }
 
-        var root = BigIntegerMath.SquareRoot(value: stateN);
+        var root = BigIntegerFunctions.SquareRoot(value: stateN);
         var seen = new Dictionary<(BigInteger P, BigInteger Q), int>();
 
         while (true) {
@@ -98,8 +98,8 @@ public static class ContinuedFraction {
             // Floor of (P + √N) / Q: for a positive denominator the numerator floors with ⌊√N⌋; for a negative one the surd
             // sits just below ⌊√N⌋ + 1, which is the bound that floors correctly once the sign flips the inequality.
             var quotient = ((0 < stateQ)
-                ? BigIntegerMath.FloorDivide(numerator: (stateP + root), denominator: stateQ)
-                : BigIntegerMath.FloorDivide(numerator: ((stateP + root) + BigInteger.One), denominator: stateQ));
+                ? BigIntegerFunctions.FloorDivide(numerator: (stateP + root), denominator: stateQ)
+                : BigIntegerFunctions.FloorDivide(numerator: ((stateP + root) + BigInteger.One), denominator: stateQ));
 
             seen.Add(key: (stateP, stateQ), value: count);
             terms[count] = checked((long)quotient);

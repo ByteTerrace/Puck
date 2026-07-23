@@ -177,7 +177,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (Parameters.NumeratorLinear * Parameters.NumeratorLinear) -
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
-        var numeratorRoot = BigIntegerMath.SquareRoot(numeratorDiscriminant);
+        var numeratorRoot = BigIntegerFunctions.SquareRoot(numeratorDiscriminant);
         var alignmentResidual = (
             (Parameters.Linear * (Parameters.NumeratorLinear - Parameters.NumeratorQuadratic)) -
             (2 * Parameters.NumeratorQuadratic * Parameters.Constant)
@@ -321,7 +321,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
         if (numeratorDiscriminant < BigInteger.Zero) { return false; }
-        var numeratorRoot = BigIntegerMath.SquareRoot(numeratorDiscriminant);
+        var numeratorRoot = BigIntegerFunctions.SquareRoot(numeratorDiscriminant);
         if ((numeratorRoot * numeratorRoot) != numeratorDiscriminant) { return false; }
 
         var twoR = (2 * Parameters.NumeratorQuadratic);

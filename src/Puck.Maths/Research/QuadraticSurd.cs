@@ -70,7 +70,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         }
 
         if (!surdNumerator.IsZero) {
-            var root = BigIntegerMath.SquareRoot(value: radicand);
+            var root = BigIntegerFunctions.SquareRoot(value: radicand);
 
             if ((root * root) == radicand) {
                 rationalNumerator += (surdNumerator * root);
@@ -105,11 +105,11 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
     /// <summary>Returns the greatest integer no larger than this value.</summary>
     public BigInteger Floor() {
         if (SurdNumerator.IsZero) {
-            return BigIntegerMath.FloorDivide(numerator: RationalNumerator, denominator: Denominator);
+            return BigIntegerFunctions.FloorDivide(numerator: RationalNumerator, denominator: Denominator);
         }
 
         var rootRadicand = ((SurdNumerator * SurdNumerator) * Radicand);
-        var rootFloor = BigIntegerMath.SquareRoot(value: rootRadicand);
+        var rootFloor = BigIntegerFunctions.SquareRoot(value: rootRadicand);
         BigInteger lowerNumerator;
 
         if (SurdNumerator.Sign > 0) {
@@ -119,7 +119,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
             lowerNumerator = (RationalNumerator - rootCeiling);
         }
 
-        var candidate = BigIntegerMath.FloorDivide(numerator: lowerNumerator, denominator: Denominator);
+        var candidate = BigIntegerFunctions.FloorDivide(numerator: lowerNumerator, denominator: Denominator);
         var threshold = (((candidate + 1) * Denominator) - RationalNumerator);
         bool reachesNext;
 
@@ -299,8 +299,8 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         var commonRadicand = BigInteger.GreatestCommonDivisor(left.Radicand, right.Radicand);
         var leftScaleSquared = (left.Radicand / commonRadicand);
         var rightScaleSquared = (right.Radicand / commonRadicand);
-        var leftScale = BigIntegerMath.SquareRoot(leftScaleSquared);
-        var rightScale = BigIntegerMath.SquareRoot(rightScaleSquared);
+        var leftScale = BigIntegerFunctions.SquareRoot(leftScaleSquared);
+        var rightScale = BigIntegerFunctions.SquareRoot(rightScaleSquared);
         if (((leftScale * leftScale) == leftScaleSquared) &&
             ((rightScale * rightScale) == rightScaleSquared)) {
             result = (
@@ -354,7 +354,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         BigInteger scale
     ) {
         if (coefficient.IsZero) { return; }
-        var floor = BigIntegerMath.SquareRoot(radicand * scale * scale);
+        var floor = BigIntegerFunctions.SquareRoot(radicand * scale * scale);
         var ceiling = (floor + BigInteger.One);
         if (coefficient.Sign > 0) {
             lower += (coefficient * floor);

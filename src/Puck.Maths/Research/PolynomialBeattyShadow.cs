@@ -783,7 +783,7 @@ public static class PolynomialBeattyShadow {
         var slopeSurd = normCertificate.SlopeSurdNumerator;
         var offsetSurd = normCertificate.OffsetSurdNumerator;
         if ((slopeSurd * orientationCutoff + offsetSurd) <= 0) {
-            orientationCutoff = (BigIntegerMath.FloorDivide(-offsetSurd, slopeSurd) + 1);
+            orientationCutoff = (BigIntegerFunctions.FloorDivide(-offsetSurd, slopeSurd) + 1);
         }
         var cutoff = BigInteger.Max(
             normCertificate.Cutoff,
@@ -840,7 +840,7 @@ public static class PolynomialBeattyShadow {
             );
         }
 
-        var root = BigIntegerMath.SquareRoot(value: certificate.Radicand);
+        var root = BigIntegerFunctions.SquareRoot(value: certificate.Radicand);
         if ((root * root) == certificate.Radicand) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(analysis),

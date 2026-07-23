@@ -118,7 +118,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
         if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerMath.SquareRoot(discriminant);
+        var root = BigIntegerFunctions.SquareRoot(discriminant);
         if ((root * root) != discriminant) { return false; }
 
         if (TryCreateEulerMomentIntegerExclusionCertificate(
@@ -172,7 +172,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
         if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerMath.SquareRoot(discriminant);
+        var root = BigIntegerFunctions.SquareRoot(discriminant);
         if ((root * root) != discriminant) { return false; }
 
         if (TryCreateEulerHausdorffIntegerExclusionCertificate(
@@ -241,7 +241,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
         if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerMath.SquareRoot(discriminant);
+        var root = BigIntegerFunctions.SquareRoot(discriminant);
         if ((root * root) != discriminant) { return false; }
 
         if (TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate(
@@ -340,7 +340,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (4 * Parameters.NumeratorQuadratic * Parameters.NumeratorConstant)
         );
         if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerMath.SquareRoot(discriminant);
+        var root = BigIntegerFunctions.SquareRoot(discriminant);
         if ((root * root) != discriminant) { return false; }
 
         if (TryCreateEulerMomentRegularization(

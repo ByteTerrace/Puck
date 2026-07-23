@@ -54,7 +54,7 @@ public static class QuadraticIntegerArithmetic {
         var discriminant = algebra.Discriminant;
 
         if (discriminant.Sign >= 0) {
-            var root = BigIntegerMath.SquareRoot(value: discriminant);
+            var root = BigIntegerFunctions.SquareRoot(value: discriminant);
 
             if ((root * root) == discriminant) {
                 throw new ArgumentException(message: "The discriminant P² + 4Q must be a nonsquare; a square (or zero) discriminant does not name a quadratic-field order.", paramName: nameof(algebra));
@@ -121,7 +121,7 @@ public static class QuadraticIntegerArithmetic {
             foreach (var target in (BigInteger[])[(deltaYSquared - 4), (deltaYSquared + 4)]) {
                 if (target.Sign <= 0) { continue; }
 
-                var x = BigIntegerMath.SquareRoot(value: target);
+                var x = BigIntegerFunctions.SquareRoot(value: target);
 
                 if ((x * x) != target) { continue; }
 
@@ -200,7 +200,7 @@ public static class QuadraticIntegerArithmetic {
         if (norm.IsZero || norm.IsOne) { return false; }
         if (IsRationalPrime(value: norm)) { return true; }
 
-        var root = BigIntegerMath.SquareRoot(value: norm);
+        var root = BigIntegerFunctions.SquareRoot(value: norm);
 
         if (((root * root) == norm) && IsRationalPrime(value: root) && (QuadraticSplitting.Inert == algebra.SplittingCharacter(rationalPrime: root))) {
             var inert = algebra.CanonicalAssociate(value: new Element(U: root, V: BigInteger.Zero));
@@ -328,14 +328,14 @@ public static class QuadraticIntegerArithmetic {
             // Positive-definite norm form: 4ℓ = (2a + Pb)² + |Δ|b², so b and a are bounded — a finite lattice search.
             var absoluteDiscriminant = -discriminant;
             var fourMagnitude = (4 * magnitude);
-            var bBound = BigIntegerMath.SquareRoot(value: (fourMagnitude / absoluteDiscriminant));
+            var bBound = BigIntegerFunctions.SquareRoot(value: (fourMagnitude / absoluteDiscriminant));
 
             for (var b = -bBound; b <= bBound; ++b) {
                 var remainder = (fourMagnitude - (absoluteDiscriminant * b * b));
 
                 if (remainder.Sign < 0) { continue; }
 
-                var root = BigIntegerMath.SquareRoot(value: remainder);
+                var root = BigIntegerFunctions.SquareRoot(value: remainder);
 
                 if ((root * root) != remainder) { continue; }
 
@@ -372,7 +372,7 @@ public static class QuadraticIntegerArithmetic {
     private static List<Element> ImaginaryUnits(QuadraticAlgebra<BigInteger> algebra) {
         var absoluteDiscriminant = -algebra.Discriminant;
         var p = algebra.P;
-        var bBound = BigIntegerMath.SquareRoot(value: (new BigInteger(value: 4) / absoluteDiscriminant));
+        var bBound = BigIntegerFunctions.SquareRoot(value: (new BigInteger(value: 4) / absoluteDiscriminant));
         var units = new List<Element>();
 
         for (var b = -bBound; b <= bBound; ++b) {
@@ -380,7 +380,7 @@ public static class QuadraticIntegerArithmetic {
 
             if (remainder.Sign < 0) { continue; }
 
-            var root = BigIntegerMath.SquareRoot(value: remainder);
+            var root = BigIntegerFunctions.SquareRoot(value: remainder);
 
             if ((root * root) != remainder) { continue; }
 

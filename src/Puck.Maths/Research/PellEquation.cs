@@ -69,7 +69,7 @@ public static class PellEquation {
     public static PellUnit FundamentalUnit(BigInteger radicand) {
         ValidateRadicand(radicand: radicand);
 
-        var root = BigIntegerMath.SquareRoot(value: radicand);
+        var root = BigIntegerFunctions.SquareRoot(value: radicand);
         var remainder = BigInteger.Zero;
         var denominator = BigInteger.One;
         var quotient = root;
@@ -125,15 +125,15 @@ public static class PellEquation {
         }
 
         var strictSquareCeiling = ((2 * BigInteger.Abs(norm) * unit.X) - 1);
-        var xBound = BigIntegerMath.SquareRoot(value: strictSquareCeiling);
-        var yBound = BigIntegerMath.SquareRoot(value: (strictSquareCeiling / radicand));
+        var xBound = BigIntegerFunctions.SquareRoot(value: strictSquareCeiling);
+        var yBound = BigIntegerFunctions.SquareRoot(value: (strictSquareCeiling / radicand));
         var representatives = new List<GeneralizedPellRepresentative>();
 
         for (var y = -yBound; y <= yBound; ++y) {
             var xSquare = (norm + (radicand * y * y));
             if (xSquare.Sign < 0) { continue; }
 
-            var x = BigIntegerMath.SquareRoot(value: xSquare);
+            var x = BigIntegerFunctions.SquareRoot(value: xSquare);
             if ((x * x) != xSquare) { continue; }
 
             representatives.Add(new GeneralizedPellRepresentative(X: x, Y: y));
@@ -191,7 +191,7 @@ public static class PellEquation {
             );
         }
 
-        var root = BigIntegerMath.SquareRoot(value: radicand);
+        var root = BigIntegerFunctions.SquareRoot(value: radicand);
         if ((root * root) == radicand) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(radicand),
