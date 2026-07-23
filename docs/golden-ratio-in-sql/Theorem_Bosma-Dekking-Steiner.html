@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I poked at the golden ratio in SQL for fun</title>
+<meta name="description" content="It started with the golden ratio and a SQL query saved under the name Nonsense.sql. A few afternoons of goofing around later, an open maths problem fell over.">
+
+<!-- Fonts (progressive enhancement — the page degrades gracefully to system serifs if these
+     don't load, and math is native MathML, so nothing here is required for correct rendering). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
+
+<style>
+  /* Palette. Not sampled off the photograph, built to feel like it: open, warm-hearted,
+     good to sit in at either brightness. Three hue families and nothing else, which is
+     what keeps anything on the page from clashing.
+
+       ground     H~275  violet, chroma held very low so it behaves as a neutral
+       accent     H~350  rose-coral, the warm one; links, emphasis, the lead element
+       accent-2   H~168  jade, its near-complement; the paired second element
+
+     Accent and accent-2 sit about 180 apart, so the two paired things in a widget are
+     as far apart as the wheel allows and never read as the same colour. The ground sits
+     off both of those axes and stays desaturated, so it never competes with either.
+     Light and dark are the SAME three hues with lightness inverted and chroma re-tuned,
+     which is what makes them a matched pair rather than two unrelated themes. */
+  :root {
+    --paper:        #e7e4ed;
+    --paper-2:      #dbd7e4;
+    --ink:          #2b2736;
+    --ink-soft:     #5a5470;
+    --ink-faint:    #877f99;
+    --accent:       #ad3a53; /* deep enough to carry link text on this ground */
+    --accent-bright:#d15d78;
+    --accent-ink:   #fdf0f3; /* text ON an accent fill; the fill is dark in this theme */
+    --accent-2:     #0e7d6b;
+    --rule:         #d0cbdc;
+    --code-bg:      #221f2c;
+    --code-fg:      #e9e5f1;
+    --quote-bg:     #e0dce9;
+    --measure:      39rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:        #1b1924;
+      --paper-2:      #262231;
+      --ink:          #ebe7f2;
+      --ink-soft:     #b5aec3;
+      --ink-faint:    #847d93;
+      --accent:       #f2879a; /* same hue, lifted to sit on a dark ground */
+      --accent-bright:#ffa3b3;
+      --accent-ink:   #2a0d14; /* the fill is light here, so this flips dark */
+      --accent-2:     #4fd0b4;
+      --rule:         #363145;
+      --code-bg:      #15131c;
+      --code-fg:      #e8e3f0;
+      --quote-bg:     #262231;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#e7e4ed; --paper-2:#dbd7e4; --ink:#2b2736; --ink-soft:#5a5470;
+    --ink-faint:#877f99; --accent:#ad3a53; --accent-bright:#d15d78;
+    --accent-ink:#fdf0f3; --accent-2:#0e7d6b; --rule:#d0cbdc;
+    --code-bg:#221f2c; --code-fg:#e9e5f1; --quote-bg:#e0dce9;
+  }
+  :root[data-theme="dark"] {
+    --paper:#1b1924; --paper-2:#262231; --ink:#ebe7f2; --ink-soft:#b5aec3;
+    --ink-faint:#847d93; --accent:#f2879a; --accent-bright:#ffa3b3;
+    --accent-ink:#2a0d14; --accent-2:#4fd0b4; --rule:#363145;
+    --code-bg:#15131c; --code-fg:#e8e3f0; --quote-bg:#262231;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: clamp(1.08rem, 0.98rem + 0.5vw, 1.28rem);
+    line-height: 1.66;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: var(--measure); margin: 0 auto; padding: clamp(2.5rem, 6vw, 5.5rem) 1.4rem 6rem; }
+
+  /* Header */
+  header { margin-bottom: 3.2rem; }
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.4rem;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(2.1rem, 1.4rem + 3.4vw, 3.5rem);
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+    margin: 0 0 0.9rem;
+    color: var(--ink);
+  }
+  .dek {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: clamp(1.25rem, 1rem + 1.2vw, 1.7rem);
+    line-height: 1.28;
+    color: var(--ink-soft);
+    margin: 0 0 1.8rem;
+  }
+  .byline {
+    font-size: 0.94rem;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule);
+    padding-top: 1.1rem;
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  .byline a { color: var(--ink-soft); }
+  .acks {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--ink-faint);
+    margin: 0.55rem 0 0;
+  }
+  .acks a { color: var(--ink-faint); }
+
+  /* The obligatory tweet, standing in as a TLDR. Styled in-page rather than embedded
+     from x.com, so the page keeps working offline, in print, and with no third-party script. */
+  .tldr {
+    margin: 0 0 3.2rem;
+    background: var(--quote-bg);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 1.15rem 1.25rem 1rem;
+  }
+  .tldr-lab {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 0.75rem;
+  }
+  .tldr-body {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.75;
+    margin: 0 0 0.85rem;
+    overflow-wrap: break-word;
+  }
+  .tldr-body b { color: var(--accent); font-weight: 500; }
+  .tldr-src { font-size: 0.84rem; color: var(--ink-faint); margin: 0; }
+  .tldr-src a { color: var(--ink-soft); }
+
+  /* Body */
+  h2 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem);
+    line-height: 1.14;
+    letter-spacing: -0.01em;
+    margin: 3.4rem 0 1.1rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--rule);
+  }
+  .hedge { color: var(--accent); font-weight: 500; }
+
+  p { margin: 0 0 1.35rem; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  a {
+    color: var(--accent);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    transition: text-decoration-color .15s ease, color .15s ease;
+  }
+  a:hover { text-decoration-color: var(--accent-bright); color: var(--accent-bright); }
+
+  /* Lists */
+  ul { margin: 0 0 1.35rem; padding-left: 1.2rem; }
+  li { margin: 0 0 0.7rem; padding-left: 0.3rem; }
+  li::marker { color: var(--accent); }
+
+  /* Inline code */
+  code {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.86em;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.08em 0.34em;
+    color: var(--ink);
+  }
+
+  /* Code block */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 10px;
+    padding: 1.2rem 1.3rem;
+    overflow-x: auto;
+    margin: 1.8rem 0 2rem;
+    line-height: 1.55;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 14px 30px -18px rgba(0,0,0,.5);
+    -webkit-overflow-scrolling: touch;
+  }
+  pre code {
+    font-size: 0.82rem;
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+  }
+  /* Syntax colours from the same three families, raised in chroma to carry on the dark
+     code ground: accent, accent-2, and the violet ground itself as the third voice. */
+  .sql-kw { color: #f2879a; }
+  .sql-fn { color: #58d3b8; }
+  .sql-str{ color: #a79cf2; }
+  .sql-com{ color: #6b6480; font-style: italic; }
+
+  /* Blockquotes */
+  blockquote {
+    margin: 1.9rem 0;
+    padding: 1.05rem 1.4rem;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    font-style: italic;
+    color: var(--ink-soft);
+  }
+  blockquote p { margin: 0; }
+  blockquote.prompt {
+    font-style: normal;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  blockquote.prompt .cmd { color: var(--accent); font-weight: 500; }
+
+  /* Math (native MathML — no external dependency) */
+  math { font-size: 1.06em; }
+  math[display="block"] {
+    display: block;
+    margin: 1.9rem 0;
+    font-size: 1.18em;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.35rem 0;
+  }
+
+  /* Interactive: the layer machine */
+  .ls-widget {
+    margin: 2.6rem 0;
+    padding: 1.5rem 1.4rem 1.7rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+  }
+  .ls-summary {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.25rem;
+    color: var(--ink);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+  .ls-summary::-webkit-details-marker { display: none; }
+  .ls-summary::before {
+    content: "▸";
+    color: var(--accent);
+    font-size: 0.82em;
+    transform: translateY(-0.05em);
+    transition: transform .2s ease;
+  }
+  .ls-widget[open] .ls-summary::before { transform: translateY(-0.05em) rotate(90deg); }
+  .ls-summary:hover { color: var(--accent); }
+  .ls-hint {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    font-weight: 400;
+    color: var(--ink-faint);
+  }
+  .ls-widget[open] .ls-summary { margin-bottom: 1rem; }
+  .ls-widget[open] .ls-hint { display: none; }
+  .ls-sub { font-size: 0.96rem; color: var(--ink-soft); margin: 0 0 1.1rem; line-height: 1.5; }
+  .ls-sub b { color: var(--accent); font-weight: 600; }
+
+  .ls-presets { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.2rem; }
+  .ls-chip {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 0.34rem 0.72rem;
+    cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .ls-chip:hover { color: var(--accent); border-color: var(--accent); }
+  .ls-chip[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+
+  .ls-controls { display: grid; grid-template-columns: 1fr; gap: 0.85rem; margin: 0 0 1.1rem; }
+  @media (min-width: 520px) { .ls-controls { grid-template-columns: repeat(3, 1fr); } }
+  .ls-ctl { display: flex; flex-direction: column; gap: 0.35rem; }
+  .ls-ctl .lab {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.72rem; color: var(--ink-soft);
+  }
+  .ls-ctl .lab b { color: var(--accent); font-weight: 500; font-size: 0.82rem; }
+  input[type="range"].ls-range {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 2px; background: var(--rule); outline: none; margin: 0;
+  }
+  .ls-range::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none;
+  }
+  .ls-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
+
+  .ls-name { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; align-items: baseline; margin: 0.2rem 0 0.2rem; }
+  .ls-name #lsName { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.08rem; color: var(--accent); }
+  .ls-seq { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.82rem; color: var(--ink-soft); margin: 0 0 1rem; }
+  .ls-seq .lbl { color: var(--ink-faint); }
+  .ls-seq b { color: var(--accent); }
+
+  .ls-figure { margin: 0 0 1rem; }
+  .ls-figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; overflow: visible; }
+  .ls-dot { cursor: pointer; vector-effect: non-scaling-stroke; transition: stroke .12s; }
+  .ls-dot:hover { stroke: var(--ink-faint); stroke-width: 2; }
+  .ls-dot--hit, .ls-dot--hit:hover { stroke: var(--accent); stroke-width: 3; }
+  .ls-figure--animate .ls-dot { transform-box: fill-box; transform-origin: center; animation: ls-pop .32s cubic-bezier(.2,.8,.3,1.15) both; animation-delay: calc(var(--i) * 4ms); }
+  @keyframes ls-pop { from { transform: scale(.001); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .ls-figure--animate .ls-dot { animation: none; } }
+
+  .ls-probe-out { font-size: 0.92rem; color: var(--ink); margin: 0; min-height: 1.2em; line-height: 1.5; }
+  .ls-probe-out b { color: var(--accent); font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 600; }
+  .ls-probe-out em { color: var(--ink-faint); font-style: italic; }
+
+
+  /* Interactive: the modular group */
+  .mt-stage { display: grid; grid-template-columns: 1fr; gap: 1.1rem 1.3rem; align-items: center; margin: 0.2rem 0 1rem; }
+  @media (min-width: 520px) { .mt-stage { grid-template-columns: minmax(0, 340px) 1fr; } }
+
+  .ls-chip:disabled { opacity: 0.36; cursor: not-allowed; }
+  .ls-chip:disabled:hover { color: var(--ink-soft); border-color: var(--rule); }
+
+  .mt-figure svg { display: block; width: 340px; max-width: 100%; height: auto; margin: 0 auto; }
+  .mt-dot { fill: var(--ink-faint); pointer-events: none; }
+  .mt-cell {
+    fill: color-mix(in srgb, var(--accent) 18%, transparent);
+    stroke: var(--accent); stroke-width: 1.6px; stroke-linejoin: round;
+    vector-effect: non-scaling-stroke; pointer-events: none;
+  }
+  .mt-basis { vector-effect: non-scaling-stroke; pointer-events: none; }
+  .mt-basis1 { stroke: var(--accent); stroke-width: 2.4px; }
+  .mt-basis2 { stroke: var(--accent-2); stroke-width: 2.4px; }
+  .mt-tip1 { fill: var(--accent); pointer-events: none; }
+  .mt-tip2 { fill: var(--accent-2); pointer-events: none; }
+  .mt-origin { fill: var(--ink-soft); pointer-events: none; }
+
+  .mt-matrix {
+    display: inline-grid; grid-template-columns: repeat(2, minmax(3ch, auto));
+    gap: 0.2rem 0.95rem; justify-items: end;
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 1rem;
+    color: var(--ink); padding: 0.5rem 0.75rem;
+    border-left: 2px solid var(--accent); border-right: 2px solid var(--accent);
+    border-radius: 4px; font-variant-numeric: tabular-nums;
+  }
+  .mt-readout { display: flex; flex-direction: column; gap: 0.85rem; }
+  .mt-facts { display: flex; flex-direction: column; gap: 0.4rem; margin: 0; }
+  .mt-fact { display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; }
+  .mt-fact .k {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.68rem;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); min-width: 5.4rem;
+  }
+  .mt-fact .v { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.9rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .mt-cap { font-family: "Newsreader", Georgia, serif; font-style: italic; font-size: 0.86rem; color: var(--ink-faint); }
+  .mt-class {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 600; font-size: 0.84rem;
+    color: var(--ink); background: color-mix(in srgb, var(--accent) 26%, transparent);
+    padding: 0.06em 0.5em; border-radius: 4px;
+  }
+
+  /* Interactive: the quasicrystals (golden Penrose, silver Ammann-Beenker) */
+  .qc-controls { grid-template-columns: 1fr; }
+
+  /* Shared button primitive (the momentary-action counterpart to the .ls-chip pill),
+     used by the proof playback controls. */
+  .ls-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .ls-btn {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 0.36rem 0.9rem;
+    cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s, opacity .15s;
+  }
+  .ls-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .ls-btn--go { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 500; }
+  .ls-btn--go:hover { color: var(--accent-ink); background: var(--accent-bright); border-color: var(--accent-bright); }
+  .ls-btn:disabled { opacity: 0.4; cursor: default; color: var(--ink-soft); background: transparent; border-color: var(--rule); }
+
+  .qc-figure {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 0.6rem;
+    margin: 0 0 0.85rem;
+  }
+  .qc-figure svg { display: block; width: 100%; height: auto; max-height: 440px; margin: 0 auto; }
+  .qc-thick   { fill: color-mix(in srgb, var(--accent) 82%, var(--paper)); }
+  .qc-thick-1 { fill: color-mix(in srgb, var(--accent-bright) 72%, var(--paper)); }
+  .qc-thick-2 { fill: color-mix(in srgb, var(--accent) 54%, var(--paper)); }
+  .qc-thin    { fill: color-mix(in srgb, var(--accent-2) 58%, var(--paper)); }
+  .qc-thin-1  { fill: color-mix(in srgb, var(--accent-2) 44%, var(--paper)); }
+  .qc-thin-2  { fill: color-mix(in srgb, var(--accent-2) 72%, var(--paper)); }
+  .qc-tileEdge {
+    fill: none;
+    stroke: color-mix(in srgb, var(--ink) 26%, transparent);
+    stroke-width: 1;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .qc-figure.qc-bloom-on svg { animation: qcBloom .45s ease both; }
+  @keyframes qcBloom { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .qc-figure.qc-bloom-on svg { animation: none; } }
+
+  .qc-ratio {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border-radius: 4px;
+    padding: 0.02em 0.28em;
+  }
+
+  .qc-matrix-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    margin: 1.1rem 0 0;
+    line-height: 1.5;
+  }
+  .qc-matrix {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.86rem;
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    white-space: nowrap;
+  }
+  .qc-mat {
+    display: inline-grid;
+    grid-template-columns: repeat(2, 1.15em);
+    gap: 0.1em 0.5em;
+    padding: 0.18em 0.4em;
+    margin-left: 0.15rem;
+    border-left: 2px solid var(--ink-faint);
+    border-right: 2px solid var(--ink-faint);
+    border-radius: 3px;
+    text-align: center;
+  }
+  .qc-mat b { font-weight: 500; color: var(--ink-soft); }
+  .qc-matrix-note { flex: 1 1 15rem; min-width: 0; }
+
+  /* Interactive: the proof, animated (the gap patrol) */
+  .bp-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.85rem 1.5rem; margin: 0.2rem 0 0.9rem; }
+  .bp-family { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .bp-family .ls-presets { margin: 0; }
+  .bp-clab { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+  .bp-stage {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 0.45rem;
+    margin: 0.2rem 0 0.9rem;
+  }
+  .bp-stage svg { display: block; width: 100%; height: auto; }
+  .bp-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .bp-ink { fill: var(--ink); }
+  .bp-soft { fill: var(--ink-soft); }
+  .bp-faint { fill: var(--ink-faint); }
+  .bp-fill-a { fill: var(--accent); }
+  .bp-fill-b { fill: var(--accent-2); }
+  .bp-stroke-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .bp-axis { stroke: var(--rule); stroke-width: 1; }
+  .bp-intline { stroke: var(--ink-faint); stroke-width: 2; }
+  .bp-sliver { fill: color-mix(in srgb, var(--accent-bright) 30%, transparent); }
+  .bp-inset { fill: var(--paper-2); stroke: var(--rule); }
+  .bp-panel { fill: var(--paper-2); stroke: var(--rule); }
+  .bp-ring { stroke: var(--accent-bright); stroke-width: 1.6; fill: none; }
+
+  /* Footnotes */
+  .footnotes {
+    margin-top: 3.2rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.94rem;
+    color: var(--ink-soft);
+  }
+  .footnotes p { margin: 0 0 0.8rem; }
+
+  /* Footer */
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.9rem;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--ink-faint); }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 1rem; right: 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink-soft);
+    border-radius: 999px;
+    width: 2.4rem; height: 2.4rem;
+    font-size: 1rem;
+    cursor: pointer;
+    display: grid; place-items: center;
+    line-height: 1;
+    transition: color .15s, border-color .15s;
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  @media (max-width: 480px) {
+    footer { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle light and dark theme">◑</button>
+
+<div class="wrap">
+  <article>
+    <header>
+      <h1>I poked at the golden ratio in SQL for fun.</h1>
+      <p class="dek">An open maths problem fell over.</p>
+      <p class="byline">
+        <span>By David Jürgens</span>
+        <span><a href="#bosma-dekking-steiner">in a hurry? skip to the result</a></span>
+      </p>
+      <p class="acks">the authors who deserve all the credit for their original work: Benoît Cloitre, Wieb Bosma, Michel Dekking, Wolfgang Steiner, Robbert Fokkink, and Gandhar Joshi</p>
+    </header>
+
+    <aside class="tldr" aria-label="Summary: the whole result, in one tweet">
+      <p class="tldr-lab">TLDR</p>
+      <p class="tldr-body"><b>Bosma–Dekking–Steiner conjecture: proven.</b><br>k,n∈ℕ₊: K=k²+4, α=(k+√K)/2, x=αn−(1+α)/√K, C=(α−1)²/(Kα), P(z)=Kz²+(Kn−k−2)√Kz. sⱼ&gt;0, sⱼ=kj−1+j²/sⱼ₊₁⇒x&lt;sₙ&lt;x+C/n. For m∈ℤ, m&gt;x: 0&lt;P(m−x)=K(m²−kmn−n²+m+n)−k≡−k mod K⇒P(m−x)≥K−k&gt;P(C/n)⇒m−x&gt;C/n⇒⌊sₙ⌋=⌊x⌋.</p>
+      <p class="tldr-src"><a href="https://x.com/Kittoes0124/status/2079386024753443324">@Kittoes0124</a>, 21 July 2026</p>
+    </aside>
+
+    <p>It started with the golden ratio, years ago. I had recently learned that it was an infinite continued fraction that could be represented by a simple equation, <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msqrt><mn>5</mn></msqrt><mo stretchy="false">)</mo><mtext> </mtext><mi mathvariant="normal">/</mi><mtext> </mtext><mn>2</mn></mrow><annotation encoding="application/x-tex">(1 + \sqrt{5})\,/\,2</annotation></semantics></math>.</p>
+
+    <p>How?! An infinite tower represented by an equation that even I can comprehend&hellip; this is obviously neat! I understood every piece of that expression in isolation. I know what addition does. I know what division does. I know what a square root does. Those numbers aren't magic constants, they're building blocks that a toddler can play with. How does all of that simplicity turn into an object that I personally consider to be unapproachably complex?</p>
+
+    <p>With no intuition, my only choice was to do what I know how to do as a programmer: treat the equation like code and swap out its parts to see how it behaved. Since SQL was my daily language at the time, my sandbox was a query.</p>
+
+    <pre><code><span class="sql-kw">select</span> X = X.n
+     , [Circle] = [Circle].n
+     , [DxCircle] = X.n / <span class="sql-fn">NullIf</span>(2. * <span class="sql-fn">Abs</span>(X.n), 0)
+     , [Rectangle] = [Rectangle].n
+     , [Dx Rectangle] = 1. / <span class="sql-fn">Sqrt</span>(4 * X.n + 1)
+     , [Square] = [Square].n
+     , [Dx Square] = 1. / <span class="sql-fn">NullIf</span>(2. * <span class="sql-fn">Sqrt</span>(X.n), 0)
+     , [Triangle] = [Triangle].n
+     , [Dx Triangle] = 2. / <span class="sql-fn">Sqrt</span>(8 * X.n + 1)
+     , [Square Triangle] = [Square Triangle].n
+     , [Dx Square Triangle] = (1 / <span class="sql-fn">NullIf</span>(2 * <span class="sql-fn">Sqrt</span>(X.n), 0) + 1) * 0.5
+     , [√2] = ([Triangle].n - 1) / <span class="sql-fn">NullIf</span>([Square].n - 1, 0)
+<span class="sql-kw">from</span> dbo.RangeInt(0, 1000000) X
+<span class="sql-kw">cross apply</span> (<span class="sql-kw">values</span>((1 + <span class="sql-fn">Sqrt</span>(X.n * X.n)) * 0.5)) [Circle] (n)
+<span class="sql-kw">cross apply</span> (<span class="sql-kw">values</span>((1 + <span class="sql-fn">Sqrt</span>(1 + 4 * X.n)) * 0.5)) [Rectangle] (n)
+<span class="sql-kw">cross apply</span> (<span class="sql-kw">values</span>((1 + <span class="sql-fn">Sqrt</span>(X.n)))) [Square] (n)
+<span class="sql-kw">cross apply</span> (<span class="sql-kw">values</span>((1 + <span class="sql-fn">Sqrt</span>(1 + 8 * X.n)) * 0.5)) [Triangle] (n)
+<span class="sql-kw">cross apply</span> (<span class="sql-kw">values</span>((X.n + <span class="sql-fn">Sqrt</span>(X.n)) * 0.5)) [Square Triangle] (n)</code></pre>
+
+    <p>Every one of those <code>cross apply</code> lines is the golden ratio's formula with a piece swapped out. Keep the skeleton <code>(&lt;x&gt; + √&lt;y&gt;) / &lt;z&gt;</code>, change a variable, watch what happens. Eventually I settled on the form <code>(1 + √&lt;y&gt;) / 2</code> because it had the most approachable results. Two things jumped out at me, and I could not explain either of them.</p>
+
+    <p>First: the floors of the outputs all <em>counted</em>. Each variant, fed the right inputs, enumerated the positive integers &mdash; not approximately, every one of them hit <strong>every</strong> positive integer. Different formulas, same infinite result. That felt marvelous but also really weird. How was I supposed to tell these functions apart when the only tool I had effectively insisted they were all the same?</p>
+
+    <p>Second: when I looked at which inputs made each formula land exactly on an integer, I recognized them. They were the figurate numbers: triangular numbers, square numbers, etc. The names in the query (<code>Triangle</code>, <code>Square</code>, <code>Rectangle</code>) are literal because each variant is the formula that <em>un-counts</em> its shape, the inverse of stacking dots into triangles or squares.</p>
+
+    <p>I felt like there was something there, but I just didn't know enough to say what it was or explore much further on my own. So the query sat in a <a href="https://gist.github.com/Kittoes0124/6827d08e457c1c8b790422af2212982d">public gist</a>, saved under the name <code>Nonsense.sql</code> because that's what I believed this exploration to be&hellip;</p>
+
+    <h2>Modern LLMs enter the chat</h2>
+
+    <p>Recently, I was digging through my old gists to hopefully find inspiration for the application I've been building, and I ran into <code>Nonsense.sql</code> again. Reading it back, I thought the figurate numbers might end up being useful to me. I can't tell you how&hellip; that's still just a hunch, but I really needed a break from correctness and performance validation for a bit.</p>
+
+    <p>So I handed the query to <a href="https://gemini.google.com/">Gemini</a> (3.1 Pro) and asked it to make something useful out of my code. I explained the observations I'd made back then about the counting, the figurate inputs, and the fact that every variant seemed to give the same answer. Then I pushed for what I actually wanted: the general formula underneath them all. We went back and forth like that, developing and generalizing until I felt like the limit had been reached.</p>
+
+    <p>Later, I handed the pile of formulas to <a href="https://claude.ai/">Claude</a> (Fable 5/Opus 4.8) for implementation and asked the question I'd never had anyone to ask before: &ldquo;What is the object that represents this?&rdquo; The first answers were too specific. Every time it handed me something tied to one of my examples I pushed it to generalize further by asking &ldquo;What's underneath that?&rdquo; This went on for a while and what came out the other side was a small pile of code in my application's math library:</p>
+
+    <ul>
+      <li><code>LayerSequence</code> &mdash; a layered index space whose layer boundaries are exactly the generalized figurate numbers, answering &ldquo;which layer is index n in?&rdquo; by inverting the quadratic in pure integer arithmetic. My <code>Triangle</code> and <code>Square</code> columns, made rigorous.</li>
+      <li><code>ModularTransform</code> &mdash; exact 2×2 integer matrices of determinant one, the modular group, which turned out to be the single object underneath everything else.</li>
+      <li><code>MetallicQuasicrystal</code> and <code>QuadraticQuasicrystal</code> &mdash; the golden ratio generalized to the whole metallic family, <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>δ</mi><mi>k</mi></msub><mo>=</mo><mo stretchy="false">(</mo><mi>k</mi><mo>+</mo><msqrt><mrow><msup><mi>k</mi><mn>2</mn></msup><mo>+</mo><mn>4</mn></mrow></msqrt><mo stretchy="false">)</mo><mtext> </mtext><mi mathvariant="normal">/</mi><mtext> </mtext><mn>2</mn></mrow><annotation encoding="application/x-tex">\delta_k = (k + \sqrt{k^2 + 4})\,/\,2</annotation></semantics></math>, each one generating an aperiodic tiling by inflation. The golden ratio is just <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k = 1</annotation></semantics></math>.</li>
+    </ul>
+
+    <p>Those descriptions and names obviously aren't mine because I don't really understand any of the maths involved. I can read code though, and now I had a toolkit I could actually play with. It did everything I'd been asking for:</p>
+
+    <ul>
+      <li>It never debases itself by touching a float. It's integers the whole way through, square roots included, so I get deterministic results for every query.</li>
+      <li>Nothing in it is a special case. There isn't a line or conditional anywhere that says &ldquo;and here are the triangular numbers&rdquo; or &ldquo;and here's the golden ratio&rdquo;; they just fall out of the machinery. The figurate numbers are where the layers land, the golden ratio is <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k = 1</annotation></semantics></math>, and there are all kinds of other families in there that I can't even name.</li>
+      <li>No loops, constant time execution everywhere. Nothing in it ever counts up to an answer; asking which layer an index lives in just inverts the quadratic. Membership works the same way, and so does stepping forwards and backwards.</li>
+    </ul>
+
+    <details class="ls-widget" id="lsWidget" aria-label="Interactive: the layer machine">
+      <summary class="ls-summary">Play with the layers <span class="ls-hint">(expand; the dots un-count themselves)</span></summary>
+      <p class="ls-sub">These shapes are all built the same way, which is the bit that got me: <b>each new layer just wraps around whatever came before</b>. Three sliders set it going, the size of the <b>first layer</b>, how much each layer <b>grows</b>, and how many dots sit in the <b>center</b>. Nudge them, or grab a preset, and the figurate numbers fall out on their own. The tool you're poking at here is <code>LayerSequence</code> from the list above, ported into the browser.</p>
+
+      <div class="ls-presets" role="group" aria-label="Presets">
+        <button class="ls-chip" data-seed="0" data-start="1" data-step="0">Line</button>
+        <button class="ls-chip" data-seed="0" data-start="1" data-step="1">Triangle</button>
+        <button class="ls-chip" data-seed="0" data-start="1" data-step="2">Square</button>
+        <button class="ls-chip" data-seed="0" data-start="2" data-step="2">Rectangle</button>
+        <button class="ls-chip" data-seed="1" data-start="4" data-step="4">Diamond</button>
+        <button class="ls-chip" data-seed="1" data-start="5" data-step="5">Pentagon</button>
+        <button class="ls-chip" data-seed="1" data-start="6" data-step="6">Hexagon</button>
+        <button class="ls-chip" data-seed="0" data-start="6" data-step="-1">Funnel</button>
+      </div>
+
+      <div class="ls-controls">
+        <div class="ls-ctl"><div class="lab"><span>first layer</span><b id="lsStartV">1</b></div><input id="lsStart" class="ls-range" type="range" min="1" max="12" step="1" value="1"></div>
+        <div class="ls-ctl"><div class="lab"><span>growth per layer</span><b id="lsStepV">+1</b></div><input id="lsStep" class="ls-range" type="range" min="-6" max="10" step="1" value="1"></div>
+        <div class="ls-ctl"><div class="lab"><span>center dots</span><b id="lsSeedV">0</b></div><input id="lsSeed" class="ls-range" type="range" min="0" max="8" step="1" value="0"></div>
+      </div>
+
+      <p class="ls-name"><span id="lsName">Triangular numbers</span></p>
+      <p class="ls-seq"><span class="lbl">figurate numbers:</span> <b id="lsSeq">1, 3, 6, 10, 15, …</b></p>
+
+      <div class="ls-figure" id="lsFig"></div>
+
+      <p class="ls-probe-out" id="lsProbeOut"><em>Click any dot and it un-counts itself. Which layer does it live in? Found in one shot, without counting up to it.</em></p>
+    </details>
+
+    <details class="ls-widget" id="mtWidget" aria-label="Interactive: the modular group">
+      <summary class="ls-summary">Play with the grid <span class="ls-hint">(expand; the area never budges)</span></summary>
+      <p class="ls-sub">There are only <b>two moves</b> here, a <b>quarter turn</b> (S) and a <b>shear</b> (T). String them together however you like and you always land on a 2&nbsp;by&nbsp;2 grid of whole numbers whose <b>determinant stays exactly 1</b>. The coral cell twists and stretches as you go, sometimes into a proper mess, and yet the <b>area it covers never once budges</b>. I still find that strange. The tool here is <code>ModularTransform</code> from the list above, echoed into the browser.</p>
+
+      <div class="ls-presets" role="group" aria-label="Moves">
+        <button class="ls-chip" type="button" data-move="S">quarter turn (S)</button>
+        <button class="ls-chip" type="button" data-move="T">shear (T)</button>
+        <button class="ls-chip" type="button" data-move="Ti">shear back (T inverse)</button>
+        <button class="ls-chip" type="button" data-move="undo">undo</button>
+        <button class="ls-chip" type="button" data-move="reset">reset</button>
+      </div>
+
+      <div class="mt-stage">
+        <div class="ls-figure mt-figure" id="mtFig"></div>
+        <div class="mt-readout">
+          <div class="mt-matrix" role="img" aria-label="the current matrix">
+            <span id="mtA">1</span><span id="mtB">0</span>
+            <span id="mtC">0</span><span id="mtD">1</span>
+          </div>
+          <div class="mt-facts">
+            <div class="mt-fact"><span class="k">determinant</span><span class="v" id="mtDet">1</span><span class="mt-cap">it never moves</span></div>
+            <div class="mt-fact"><span class="k">trace</span><span class="v" id="mtTrace">2</span></div>
+            <div class="mt-fact"><span class="k">class</span><span class="mt-class" id="mtClass">identity</span><span class="mt-cap" id="mtClassText">nothing yet; press a move</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="ls-probe-out" id="mtProbe"><em>Press a move and watch the coral cell. Undo steps back with the exact opposite matrix (the adjugate), so nothing ever rounds.</em></p>
+    </details>
+
+    <details class="ls-widget" id="qcWidget" aria-label="Interactive: the golden and silver tilings">
+      <summary class="ls-summary">Play with the tiling <span class="ls-hint">(expand; it blooms)</span></summary>
+      <p class="ls-sub">These are the quasicrystals I kept staring at, built by the same trick as everything else here: each step cuts every tile into smaller ones by a metallic rule, and the pattern just grows richer around whatever was already there. The <b>golden</b> chip is the <b>Penrose tiling</b>, five-fold, two rhombi and nothing else, the k = 1 case of the metallic family. The <b>silver</b> chip is the <b>Ammann&ndash;Beenker tiling</b>, eight-fold, squares and 45&deg; rhombi, the k = 2 case. Both are aperiodic and still perfectly ordered, with a symmetry no ordinary crystal is allowed to have; slide a copy of either over itself and it never lines up again. The metallic mean is the inflation factor in each, the golden ratio for one and the silver ratio δ₂ = 1 + √2 for the other, and as you subdivide, the tile counts lock onto the proportions it dictates: thick against thin closes in on the golden ratio, rhombi against squares on √2. Bronze and up carry tilings of their own that I can't even draw here. The tool here is <code>MetallicQuasicrystal</code> / <code>QuadraticQuasicrystal</code> from the list above, sketched into the browser.</p>
+
+      <div class="ls-presets" role="group" aria-label="Metallic presets">
+        <button class="ls-chip" type="button" data-k="1" aria-pressed="true">golden (k=1)</button>
+        <button class="ls-chip" type="button" data-k="2" aria-pressed="false">silver (k=2)</button>
+      </div>
+
+      <div class="ls-controls qc-controls">
+        <div class="ls-ctl">
+          <div class="lab"><span>detail</span><b id="qcTileDepthV">5</b></div>
+          <input id="qcTileDepth" class="ls-range" type="range" min="0" max="6" step="1" value="5" aria-label="detail">
+        </div>
+      </div>
+
+      <div class="qc-figure" id="qcTileFig" role="img" aria-label="A Penrose rhombus tiling filling a decagon: two rhombi in coral and jade, never repeating, with a five-fold star at its heart. Sliding the detail up cuts every tile into smaller ones by the golden ratio."></div>
+
+      <p class="ls-probe-out" id="qcTileOut"></p>
+
+      <p class="qc-matrix-line">
+        <span class="qc-matrix" id="qcTileMat" aria-hidden="true">M<sub>k</sub><sup>2</sup>&nbsp;=&nbsp;<span class="qc-mat"><b>2</b><b>1</b><b>1</b><b>1</b></span></span>
+        <span class="qc-matrix-note" id="qcTileNote">Count the half-tiles, and every inflation multiplies them by this little matrix, which is the square of the metallic matrix M<sub>k</sub> at k = 1. That same M<sub>k</sub> turns up again near the end of this essay, as the tiny integer matrix underneath the Bosma&ndash;Dekking&ndash;Steiner proof.</span>
+      </p>
+    </details>
+
+    <h2>The Jacobian conjecture is disproven<sup class="hedge">*</sup>!</h2>
+
+    <p>On July 19th, 2026, Levent Alpöge <a href="https://x.com/__alpoge__/status/2079028340955197566">posted on Twitter</a>. The post read &ldquo;hello there the jacobian conjecture is false thanx&rdquo; and contained an equation. Using Fable, he had found a counterexample to <a href="https://en.wikipedia.org/wiki/Jacobian_conjecture">the Jacobian conjecture</a>: an 87-year-old problem, resolved in a mere tweet, solved by a robot parrot. The same conjecture once <a href="https://www.newyorker.com/magazine/2015/02/02/pursuit-beauty">derailed the early career of Yitang Zhang</a>. He <a href="https://www.math.purdue.edu/~ttm/ZhangYt.pdf">wrote his doctoral thesis on it</a>, never published it, and got shot down in a way that reads as plain unfair; the kind of blow that ends careers and keeps people away from hard problems forever. He kept going anyways, and decades later he became famous for prime gaps.</p>
+
+    <p>I relay that latter story because nobody in it escapes being wrong. Zhang got it wrong; the mentor was wrong in his theory and wrong again to shoot down the student he himself had aimed at it; and the conjecture itself sat there fooling experts for eighty-seven years. Even the greats miss, and I find that a bit freeing: not everyone can prove a great theorem, but a great theorem can come from anywhere&hellip; even from a man who felt forced to perform sums while working in a sandwich shop.</p>
+
+    <p>Inspired to goof off, equipped with some new toys, and just having learned about the <code>/goal</code> directive, I asked <a href="https://chatgpt.com">ChatGPT</a> (GPT-5.6) to review the toolkit Claude had implemented. It found some bugs, we fixed them, and then I sent this exact prompt:</p>
+
+    <blockquote class="prompt"><p><span class="cmd">/goal</span> Use our new toolkit to explore the state of the art. Find relevant open math problems and do not stop until you have successfully used the kit to solve at least one open problem.</p></blockquote>
+
+    <p>A hair over fifteen minutes later, it claimed it had solved one. <strong>What?!</strong> Nonsense! <em>Poppycock even!</em></p>
+
+    <p>So, I reviewed the logs to see what it had actually done and, indeed, it went hunting through open problems, looking for one that was shaped like the toolkit, and settled on a conjecture that had been left in the closing paragraph of a 2018 paper; restated last year with a note that the general case was still open. Then it applied the tools and a solution emerged.</p>
+
+    <p>I was out of Fable credits, so I settled for Opus 4.8 and asked it to check. It doubted the claim, as it should have, but it thought the result was correct. Gemini agreed. Then I had ChatGPT prove it in Lean, and it claimed it had.</p>
+
+    <p>That's when I started taking it seriously, because this is just not how it usually goes. If you've ever had a model hand you a fantastical result, you know the drill: you send it to another model and watch it get torn to pieces; it doesn't get turned into a Lean proof. Time to email <a href="https://lemire.me/blog">Daniel Lemire</a>, who knows I'm ignorant AF and is kind enough to humor me anyways. He wrote back:</p>
+
+    <blockquote><p>I am optimistic that this is correct. You should do a write up (at least a gist).</p></blockquote>
+
+    <p>Here we are now.</p>
+
+    <h2 id="bosma-dekking-steiner">The Bosma–Dekking–Steiner conjecture is proven<sup class="hedge">**</sup>?</h2>
+
+    <p>In 2018, Bosma, Dekking, and Steiner published a paper titled <em>A Remarkable Integer Sequence Related to π and √2</em>, and in its last paragraph they left a conjecture. In 2025, Fokkink and Joshi restated it as Conjecture 20 of their paper on Cloitre's hiccup sequences, proved a special case, and noted that the general proof was still missing. The mathematics that follows isn't mine, so what you're getting is my retelling of the models' account, the same way I'd explain someone else's code after stepping through it.</p>
+
+    <p>Fix an integer <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>≥</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k \ge 1</annotation></semantics></math> and let <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>=</mo><mo stretchy="false">(</mo><mi>k</mi><mo>+</mo><msqrt><mrow><msup><mi>k</mi><mn>2</mn></msup><mo>+</mo><mn>4</mn></mrow></msqrt><mo stretchy="false">)</mo><mtext> </mtext><mi mathvariant="normal">/</mi><mtext> </mtext><mn>2</mn></mrow><annotation encoding="application/x-tex">\alpha = (k + \sqrt{k^2 + 4})\,/\,2</annotation></semantics></math>, the <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math>-th metallic mean; the golden ratio is the case <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k = 1</annotation></semantics></math>. Now consider the sequence defined by the recurrence</p>
+
+    <p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>s</mi><mi>n</mi></msub><mo>=</mo><mi>k</mi><mi>n</mi><mo>−</mo><mn>1</mn><mo>+</mo><mfrac><msup><mi>n</mi><mn>2</mn></msup><msub><mi>s</mi><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></msub></mfrac></mrow><annotation encoding="application/x-tex">s_n = kn - 1 + \frac{n^2}{s_{n+1}}</annotation></semantics></math></p>
+
+    <p>an infinite continued-fraction-like tower, each term leaning on the next one forever. The conjecture says that the floor of this infinitely nested object is exactly the floor of a straight line:</p>
+
+    <p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mo fence="true">⌊</mo><msub><mi>s</mi><mi>n</mi></msub><mo fence="true">⌋</mo></mrow><mo>=</mo><mrow><mo fence="true">⌊</mo><mi>α</mi><mi>n</mi><mo>−</mo><mfrac><mrow><mn>1</mn><mo>+</mo><mi>α</mi></mrow><msqrt><mrow><msup><mi>k</mi><mn>2</mn></msup><mo>+</mo><mn>4</mn></mrow></msqrt></mfrac><mo fence="true">⌋</mo></mrow></mrow><annotation encoding="application/x-tex">\left\lfloor s_n \right\rfloor = \left\lfloor \alpha n - \frac{1 + \alpha}{\sqrt{k^2 + 4}} \right\rfloor</annotation></semantics></math></p>
+
+    <p>for every <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>≥</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k \ge 1</annotation></semantics></math> and <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>≥</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n \ge 1</annotation></semantics></math>. The proof runs through exactly the objects Claude had built. Underneath the <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math>-th metallic mean sits one tiny integer matrix,</p>
+
+    <p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>M</mi><mi>k</mi></msub><mo>=</mo><mrow><mo fence="true">(</mo><mtable rowspacing="0.16em" columnalign="center center" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mi>k</mi></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>1</mn></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>1</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0</mn></mstyle></mtd></mtr></mtable><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">M_k = \begin{pmatrix} k &amp; 1 \\ 1 &amp; 0 \end{pmatrix}</annotation></semantics></math></p>
+
+    <p>with two numbers baked into it: a big root and a small one. The big root is <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi></mrow><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> itself, the slope of the straight line. The small one, its conjugate, is what makes the whole thing work: it converts the question &ldquo;can an integer sneak into the gap between the line and the tower?&rdquo; into a question about size. Any integer that tried to sneak in would hand you a quadratic norm: a positive whole number provably congruent to <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mi>k</mi><mspace></mspace><mspace width="0.4444em"></mspace><mo stretchy="false">(</mo><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">d</mi></mrow><mspace width="0.3333em"></mspace><msup><mi>k</mi><mn>2</mn></msup><mo>+</mo><mn>4</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">-k \pmod{k^2 + 4}</annotation></semantics></math>, and therefore provably too big to fit in the gap. Nothing fits, so nobody sneaks in, and the floors agree everywhere.</p>
+
+    <details class="ls-widget" id="bpWidget" aria-label="Interactive: the proof, animated">
+      <summary class="ls-summary">Watch the proof happen <span class="ls-hint">(expand; a whole number gets bounced)</span></summary>
+      <p class="ls-sub">The whole argument, acted out with live numbers: the tower assembles, the line shows up, and every whole number that tries to squeeze between them gets weighed and turned away. Pick a <b>k</b> and press <b>play</b>. Every number on screen is worked out for that <b>k</b>, which is sort of the point... it is meant to hold for all of them at once.</p>
+
+      <div class="bp-controls">
+        <div class="ls-btns" role="group" aria-label="Playback">
+          <button class="ls-btn ls-btn--go" type="button" id="bpPlay">play</button>
+          <button class="ls-btn" type="button" id="bpStep">step</button>
+          <button class="ls-btn" type="button" id="bpRestart">back to start</button>
+        </div>
+        <div class="bp-family">
+          <span class="bp-clab">which metallic mean?</span>
+          <div class="ls-presets" role="group" aria-label="Metallic family">
+            <button class="ls-chip" type="button" data-bpk="1">golden (k=1)</button>
+            <button class="ls-chip" type="button" data-bpk="2">silver (k=2)</button>
+            <button class="ls-chip" type="button" data-bpk="3">bronze (k=3)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bp-stage" id="bpStage"></div>
+      <p class="ls-probe-out" id="bpCaption"></p>
+    </details>
+
+    <h2>Conclusion</h2>
+
+    <p>Is it true? Here is exactly what I can and can't tell you.</p>
+
+    <ul>
+      <li>The proof was formalized in Lean 4 against mathlib.</li>
+      <li>The final theorem has no <code>sorry</code>, no <code>admit</code>, and no axioms of its own (the authorities tell me that this is a good thing).</li>
+      <li>A separate verifier re-checks the whole construction in exact rational arithmetic, no floating point anywhere.</li>
+    </ul>
+
+    <p>My understanding, as an outsider, is that the kernel has already checked every step of the proof; that is its entire job, and it doesn't care that a robot parrot wrote the thing. What still needs human eyes is the statement itself: does the theorem in the Lean file actually say what Conjecture 20 says on paper? I can't answer that one.</p>
+
+    <p>This kind of recreation used to be borderline impossible; not because the maths was out of reach, but because the company was. How many others in the world could possibly care about some random sequences that fell out of my contrived SQL query? Collaborators are a mere prompt away now: completely different AI models, happy to care about anything at any hour, no matter how niche.</p>
+
+    <p>You probably have a Nonsense.sql of your own: a shelved question you stopped taking seriously because nobody around you could possibly have cared. Go pick it up and play around a bit. Use your imagination, borrow from the bots whenever you find your own wanting, and if you discover something interesting then share it with someone, because that is how this whole thing worked: strangers helping strangers, some human, some not, some no longer with us, each one leaving something behind for those who come after.</p>
+
+    <div class="footnotes">
+      <p><span class="hedge">*</span>Disproven in three dimensions and above, the two-dimensional case is still open.</p>
+      <p><span class="hedge">**</span>Proven, pending human verification.</p>
+      <p>The sources, all in one place:</p>
+      <ul>
+        <li>Benoît Cloitre – <em><a href="https://oeis.org/A086398">the inspiring OEIS sequence</a></em></li>
+        <li>Wieb Bosma, Michel Dekking, and Wolfgang Steiner – <em><a href="https://arxiv.org/pdf/1710.01498">A Remarkable Integer Sequence Related to π and √2</a></em></li>
+        <li>Robbert Fokkink and Gandhar Joshi – <em><a href="https://arxiv.org/pdf/2507.16956">On Cloitre's hiccup sequences</a></em></li>
+        <li>Benoît Cloitre – <em><a href="https://arxiv.org/pdf/2602.17735">The Golden Sieve</a></em></li>
+      </ul>
+    </div>
+
+    <footer>
+      <span>© 2026 David Jürgens</span>
+    </footer>
+  </article>
+</div>
+
+<script>
+  // Theme toggle (defaults to system; click to override)
+  (function () {
+    var btn = document.getElementById('themeToggle');
+    var root = document.documentElement;
+    btn.addEventListener('click', function () {
+      var current = root.getAttribute('data-theme');
+      if (!current) {
+        current = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    });
+  })();
+</script>
+
+<script>
+  // The layer machine — a faithful browser port of Puck.Maths LayerSequence.
+  // Exact integer arithmetic throughout (BigInt), an integer square root, and the
+  // same inverted-quadratic LayerOf. No floats anywhere the answer depends on.
+  (function () {
+    var F = function (id) { return document.getElementById(id); };
+    var figEl = F('lsFig'), nameEl = F('lsName'), seqEl = F('lsSeq'), probeOut = F('lsProbeOut'),
+        sSeed = F('lsSeed'), sStart = F('lsStart'), sStep = F('lsStep'),
+        vSeed = F('lsSeedV'), vStart = F('lsStartV'), vStep = F('lsStepV');
+    if (!figEl) { return; }
+
+    var state = { seed: 0, start: 1, step: 1 };
+    var MAXL = 12, MAXD = 320, lastIndex = 0, selectedIndex = null;
+    var B = BigInt;
+
+    // exact integer helpers, mirroring the library
+    function isqrt(n) { if (n < 2n) { return n < 0n ? 0n : n; } var x = n, y = (x + 1n) >> 1n; while (y < x) { x = y; y = (x + n / x) >> 1n; } return x; }
+    function fdiv(a, b) { var q = a / b; if ((a % b !== 0n) && ((a < 0n) !== (b < 0n))) { q -= 1n; } return q; }
+    function countN(n) { var s = B(state.seed), a = B(state.start), d = B(state.step); return s + a * n + d * (n * (n - 1n) / 2n); }
+    function layerOf(i) {
+      var s = B(state.seed), a = B(state.start), d = B(state.step);
+      if (i < s) { return 0n; }
+      if (d === 0n) { if (a <= 0n) { return -1n; } return 1n + fdiv(i - s, a); }
+      var b = 2n * a - d;
+      var disc = b * b + 8n * d * (i - s);
+      if (disc < 0n) { return -1n; }
+      var layer = fdiv(isqrt(disc) - b, 2n * d);
+      if (d < 0n && countN(layer) > i) { layer -= 1n; }
+      return layer + 1n;
+    }
+
+    function polyName(k) { var m = { 3: 'triangular', 4: 'square', 5: 'pentagonal', 6: 'hexagonal', 7: 'heptagonal', 8: 'octagonal', 9: 'nonagonal', 10: 'decagonal' }; return m[k] || (k + '-gonal'); }
+    function cap(x) { return x.charAt(0).toUpperCase() + x.slice(1); }
+    function familyName(s, a, d) {
+      if (a <= 0 && s <= 0) { return 'Nothing yet'; }
+      if (d === 0) { return 'A straight count'; }
+      if (d < 0) { return 'A shape that shrinks and stops'; }
+      if (s === 0) {
+        if (a === 1 && d >= 1) { return cap(polyName(d + 2)) + ' numbers'; }
+        if (a === 2 && d === 2) { return 'Pronic (oblong) numbers'; }
+        return 'A custom family, drawn as growth rings';
+      }
+      if (s === 1 && a === d && a >= 3) { return 'Centered ' + polyName(a) + ' numbers'; }
+      return 'A custom family, drawn as growth rings';
+    }
+    function color(layer, layerCount) {
+      if (layer === 0) { return 'var(--ink-soft)'; }
+      var t = layerCount <= 1 ? 0 : (layer - 1) / (layerCount - 1);
+      // Which layer a dot sits in is an ordered quantity, so this is a sequential ramp:
+      // ONE hue, mixed from the page surface toward the companion accent. The order then
+      // reads as lightness, which survives colour-blindness and greyscale, rather than as
+      // a sweep through hues. It also re-tints itself for either theme for free.
+      return 'color-mix(in srgb, var(--accent-2) ' + Math.round(38 + 62 * t) + '%, var(--paper))';
+    }
+    function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+    // Which family, so we can draw each in its own honest shape rather than as rows.
+    function kindOf(s, a, d) {
+      if (d === 0) { return 'line'; }                              // a straight count
+      if (d < 0) { return 'taper'; }                               // bounded: shrinks to a point
+      if (s === 0 && a === 1 && d === 1) { return 'triangle'; }
+      if (s === 0 && a === 1 && d === 2) { return 'square'; }
+      if (s === 0 && a === 1 && d >= 3) { return 'polygonal'; }    // classical corner figure, k = d + 2 sides
+      if (s === 0 && a === 2 && d === 2) { return 'rect'; }
+      if (s === 1 && a === d && a >= 3) { return 'centered'; }
+      return 'rings'; // universal fallback: the core in the middle, one ring per layer
+    }
+
+    // Build every dot's real 2D position (grid units). Global index runs core-first,
+    // then layer by layer — matching LayerOf, so the probe highlight is exact.
+    function build(s, a, d) {
+      var layers = [], count = (s > 0 ? s : 0), continues = false, n = 1;
+      if (s > 0) { layers.push({ layer: 0, size: s }); }
+      while (true) {
+        if (n > MAXL || count >= MAXD) { continues = true; break; }
+        var sz = a + (n - 1) * d;
+        if (sz <= 0) { break; }
+        layers.push({ layer: n, size: sz }); count += sz; n++;
+      }
+      var kind = kindOf(s, a, d), dots = [], idx = 0;
+      function put(x, y, layer) { dots.push({ x: x, y: y, layer: layer, index: idx }); idx++; }
+
+      if (kind === 'triangle') {
+        var ys = 0.8660254;
+        layers.forEach(function (row) {
+          var L = row.layer; if (L === 0) { return; }
+          for (var j = 0; j < L; j++) { put(j - (L - 1) / 2, (L - 1) * ys, L); }
+        });
+      } else if (kind === 'square') {
+        layers.forEach(function (row) {
+          var L = row.layer; if (L === 0) { return; }
+          for (var y = 0; y < L; y++) { put(L - 1, y, L); }        // the new right column
+          for (var x = 0; x < L - 1; x++) { put(x, L - 1, L); }    // the new bottom row
+        });
+      } else if (kind === 'rect') {
+        layers.forEach(function (row) {
+          var L = row.layer; if (L === 0) { return; }
+          for (var x = 0; x < L; x++) { put(x, L - 1, L); }        // new bottom row
+          for (var y = 0; y < L; y++) { put(L, y, L); }            // new right column
+        });
+      } else if (kind === 'centered') {
+        var sides = a, gap = Math.max(1, sides / 6);
+        put(0, 0, 0);
+        layers.forEach(function (row) {
+          var rr = row.layer; if (rr === 0) { return; }
+          var rad = rr * gap, V = [], k;
+          for (k = 0; k < sides; k++) { var ang = (-90 + k * 360 / sides) * Math.PI / 180; V.push([rad * Math.cos(ang), rad * Math.sin(ang)]); }
+          for (k = 0; k < sides; k++) {
+            var p0 = V[k], p1 = V[(k + 1) % sides];
+            for (var t = 0; t < rr; t++) { put(p0[0] + (p1[0] - p0[0]) * t / rr, p0[1] + (p1[1] - p0[1]) * t / rr, rr); }
+          }
+        });
+      } else if (kind === 'polygonal') {
+        // The classical k-gonal figure: nested polygons sharing the anchor vertex, each
+        // gnomon wrapping the far sides. Triangle and square are the k=3 and k=4 cases
+        // of this same construction; here it carries pentagonal numbers and beyond.
+        var kk = d + 2, msc = Math.max(1, 0.95 / (2 * Math.sin(Math.PI / kk)));
+        var VV = [], qq, aa0 = -Math.PI / 2; // anchor vertex at the top, shape hangs below
+        for (qq = 0; qq < kk; qq++) { var th = aa0 + qq * 2 * Math.PI / kk; VV.push([Math.cos(th), Math.sin(th)]); }
+        var DD = VV.map(function (p) { return [(p[0] - VV[0][0]) * msc, (p[1] - VV[0][1]) * msc]; });
+        layers.forEach(function (row) {
+          var L = row.layer; if (L === 0) { return; }
+          if (L === 1) { put(0, 0, 1); return; }
+          var sc = L - 1;
+          for (var ee = 1; ee <= kk - 2; ee++) {
+            var AX = DD[ee][0] * sc, AY = DD[ee][1] * sc, BX = DD[ee + 1][0] * sc, BY = DD[ee + 1][1] * sc;
+            for (var tt = (ee === 1 ? 0 : 1); tt <= sc; tt++) { put(AX + (BX - AX) * tt / sc, AY + (BY - AY) * tt / sc, L); }
+          }
+        });
+      } else if (kind === 'line') {
+        var placed = 0, lcap = 24, li, jj, rw;
+        for (li = 0; li < layers.length && placed < lcap; li++) {
+          rw = layers[li];
+          for (jj = 0; jj < rw.size && placed < lcap; jj++) { put(placed, 0, rw.layer); placed++; }
+        }
+      } else if (kind === 'taper') {
+        var ys2 = 0.8660254, yrow = 0;
+        layers.forEach(function (row) {
+          for (var j = 0; j < row.size; j++) { put(j - (row.size - 1) / 2, yrow * ys2, row.layer); }
+          yrow++;
+        });
+      } else { // 'rings': the universal middle-out picture for any custom family
+        var TAU = 2 * Math.PI, rr;
+        if (s === 1) { put(0, 0, 0); rr = 0.35; }
+        else if (s > 1) {
+          var r0 = Math.max(0.6, (s * 0.95) / TAU);
+          for (var cc = 0; cc < s; cc++) { var ca = -Math.PI / 2 + cc * TAU / s; put(r0 * Math.cos(ca), r0 * Math.sin(ca), 0); }
+          rr = r0;
+        } else { rr = 0; } // seed 0: the hole in the middle IS the intuition
+        layers.forEach(function (row) {
+          var L = row.layer; if (L === 0) { return; }
+          rr = Math.max(rr + 1, (row.size * 0.95) / TAU); // one step out, or wide enough to hold the layer
+          for (var tt2 = 0; tt2 < row.size; tt2++) { var an = -Math.PI / 2 + tt2 * TAU / row.size; put(rr * Math.cos(an), rr * Math.sin(an), L); }
+        });
+      }
+      return { dots: dots, continues: continues, layerCount: layers.length - (s > 0 ? 1 : 0) };
+    }
+
+    function fmt(x) { return Math.round(x * 1000) / 1000; }
+
+    function render(animate) {
+      var s = state.seed, a = state.start, d = state.step;
+      var built = build(s, a, d), dots = built.dots, layerCount = built.layerCount, R = 0.4;
+      lastIndex = Math.max(dots.length - 1, 0);
+
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      dots.forEach(function (p) { if (p.x < minX) { minX = p.x; } if (p.x > maxX) { maxX = p.x; } if (p.y < minY) { minY = p.y; } if (p.y > maxY) { maxY = p.y; } });
+      if (!isFinite(minX)) { minX = maxX = minY = maxY = 0; }
+      var pad = R + 0.4, vw = (maxX - minX) + 2 * pad, vh = (maxY - minY) + 2 * pad;
+      if (vw <= 0) { vw = 1; } if (vh <= 0) { vh = 1; }
+
+      var displayW = Math.round(Math.min(440, Math.max(170, vw * 30)));
+      var svg = '<svg viewBox="' + fmt(minX - pad) + ' ' + fmt(minY - pad) + ' ' + fmt(vw) + ' ' + fmt(vh) + '" style="width:' + displayW + 'px;max-width:100%;height:auto" preserveAspectRatio="xMidYMid meet" role="img" aria-label="dot figure">';
+      for (var i = 0; i < dots.length; i++) {
+        var p = dots[i];
+        svg += '<circle class="ls-dot" data-index="' + p.index + '" cx="' + fmt(p.x) + '" cy="' + fmt(p.y) + '" r="' + R + '" fill="' + color(p.layer, layerCount) + '" style="--i:' + Math.min(p.index, 90) + '"/>';
+      }
+      svg += '</svg>';
+      figEl.classList.toggle('ls-figure--animate', !!animate);
+      figEl.innerHTML = svg;
+
+      nameEl.textContent = familyName(s, a, d);
+
+      var seq = [], m = Math.min(layerCount, 9);
+      for (var L = 1; L <= m; L++) { seq.push(String(Number(countN(B(L))))); }
+      if (layerCount > 9 || (built.continues && d > 0)) { seq.push('…'); }
+      seqEl.textContent = seq.join(', ') || '—';
+
+      // Highlight a random dot on first render, so the widget opens already un-counting one.
+      // (Presentation only — which dot to ring, never the layer math itself.)
+      if (selectedIndex === null) { selectedIndex = Math.floor(Math.random() * (lastIndex + 1)); }
+      else if (selectedIndex > lastIndex) { selectedIndex = lastIndex; }
+      probe();
+    }
+
+    function probe() {
+      var prev = figEl.querySelector('.ls-dot--hit'); if (prev) { prev.classList.remove('ls-dot--hit'); }
+      if (selectedIndex === null) {
+        probeOut.innerHTML = '<em>Click any dot and it un-counts itself. Which layer does it live in? Found in one shot, without counting up to it.</em>';
+        return;
+      }
+      var i = selectedIndex, L = Number(layerOf(B(i)));
+      var el = figEl.querySelector('.ls-dot[data-index="' + i + '"]');
+      if (el) { el.classList.add('ls-dot--hit'); }
+      var off = i - (L <= 0 ? 0 : Number(countN(B(L - 1))));
+      if (L === 0) {
+        probeOut.innerHTML = 'Dot <b>' + i + '</b> sits in the center, offset ' + off + '. <em>Before the first layer, so there is nothing to solve.</em>';
+      } else {
+        probeOut.innerHTML = 'Dot <b>' + i + '</b> lands in <b>layer ' + L + '</b>, offset ' + off + ', the ' + ordinal(L) + ' layer out. <em>Found by inverting the quadratic, not by counting up to it.</em>';
+      }
+    }
+
+    function chips() { return document.querySelectorAll('#lsWidget .ls-chip'); } // scoped: other widgets have .ls-chip buttons of their own
+    function updateChips() {
+      chips().forEach(function (ch) {
+        var on = (+ch.dataset.seed === state.seed) && (+ch.dataset.start === state.start) && (+ch.dataset.step === state.step);
+        ch.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    function syncLabels() {
+      vSeed.textContent = state.seed; vStart.textContent = state.start;
+      vStep.textContent = (state.step > 0 ? '+' : '') + state.step;
+      updateChips();
+    }
+    function onSlide() {
+      state.seed = +sSeed.value; state.start = +sStart.value; state.step = +sStep.value;
+      syncLabels(); render(false);
+    }
+    sSeed.addEventListener('input', onSlide);
+    sStart.addEventListener('input', onSlide);
+    sStep.addEventListener('input', onSlide);
+    figEl.addEventListener('click', function (e) {
+      var t = e.target.closest('.ls-dot');
+      if (!t) { return; }
+      selectedIndex = +t.getAttribute('data-index');
+      probe();
+    });
+    chips().forEach(function (ch) {
+      ch.addEventListener('click', function () {
+        state.seed = +ch.dataset.seed; state.start = +ch.dataset.start; state.step = +ch.dataset.step;
+        sSeed.value = state.seed; sStart.value = state.start; sStep.value = state.step;
+        syncLabels(); render(true);
+      });
+    });
+    var rt;
+    window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (details && !details.open) { return; } render(false); }, 150); });
+
+    // Collapsed by default: render (or re-render, so the figure sizes to the now-visible
+    // container and the pop animation plays) the first time the reader expands it.
+    var details = F('lsWidget');
+    if (details) { details.addEventListener('toggle', function () { if (details.open) { render(true); } }); }
+
+    syncLabels();
+    if (!details || details.open) { render(true); }
+  })();
+</script>
+
+<script>
+  // The modular group, made pokeable — a small browser echo of Puck.Maths ModularTransform.
+  // Every matrix here is exact integer arithmetic (BigInt), determinant one, and its inverse
+  // is the adjugate, with no division anywhere. Floats appear only to place pixels in the SVG.
+  (function () {
+    var root = document.getElementById('mtWidget');
+    if (!root) { return; }
+    var figEl = document.getElementById('mtFig');
+    var mtA = document.getElementById('mtA'), mtB = document.getElementById('mtB'),
+        mtC = document.getElementById('mtC'), mtD = document.getElementById('mtD'),
+        mtDet = document.getElementById('mtDet'), mtTrace = document.getElementById('mtTrace'),
+        mtClass = document.getElementById('mtClass'), mtClassText = document.getElementById('mtClassText'),
+        mtProbe = document.getElementById('mtProbe');
+    if (!figEl || !mtA || !mtProbe) { return; }
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ---- exact integer group (BigInt), mirroring ModularTransform ----
+    // A matrix is { a, b, c, d } standing for [[a, b], [c, d]].
+    var GENS = {
+      S:  { a: 0n, b: -1n, c: 1n, d: 0n },   // z -> -1/z, a quarter turn
+      T:  { a: 1n, b: 1n,  c: 0n, d: 1n },   // z -> z + 1, a shear
+      Ti: { a: 1n, b: -1n, c: 0n, d: 1n }    // z -> z - 1, the shear undone
+    };
+    function mul(g, m) {          // matrix product g * m (g applied on the left, second)
+      return {
+        a: (g.a * m.a) + (g.b * m.c),
+        b: (g.a * m.b) + (g.b * m.d),
+        c: (g.c * m.a) + (g.d * m.c),
+        d: (g.c * m.b) + (g.d * m.d)
+      };
+    }
+    function adjInverse(m) {      // the adjugate [[d, -b], [-c, a]] — the exact inverse when det is one
+      return { a: m.d, b: -m.b, c: -m.c, d: m.a };
+    }
+    function classify(m) {       // read the motion off the absolute trace, like Classify()
+      var t = m.a + m.d, at = (t < 0n) ? -t : t;
+      return (at < 2n) ? 'elliptic' : ((at === 2n) ? 'parabolic' : 'hyperbolic');
+    }
+    var CLASS_TEXT = { elliptic: 'it rotates', parabolic: 'it shears', hyperbolic: 'it stretches' };
+    var LIMIT = 999999n;
+    function maxAbs(m) {
+      var m1 = 0n, arr = [m.a, m.b, m.c, m.d], i, v;
+      for (i = 0; i < 4; i++) { v = (arr[i] < 0n) ? -arr[i] : arr[i]; if (v > m1) { m1 = v; } }
+      return m1;
+    }
+    function grown(m) { return maxAbs(m) > LIMIT; }
+
+    var IDENT = { a: 1n, b: 0n, c: 0n, d: 1n };
+    var state = IDENT, history = [];
+
+    function applyMove(move) {
+      if (move === 'reset') { state = IDENT; history = []; commit(true); return; }
+      if (move === 'undo') {
+        if (history.length === 0) { return; }               // nothing to walk back
+        var last = history.pop();
+        state = mul(adjInverse(GENS[last]), state);          // undo a left-multiply with the exact inverse
+        commit(true);
+        return;
+      }
+      if (grown(state)) { return; }                          // buttons are disabled here anyway; belt and suspenders
+      state = mul(GENS[move], state);                        // new = G * current, by left multiplication
+      history.push(move);
+      commit(true);
+    }
+
+    // ---- the drawing (floats, presentation only) ----
+    // We image a FIXED finite grid of source points and let the outer ones shear out of the
+    // fixed viewport. (The full integer lattice would just map onto itself, since the matrix
+    // is a bijection of the whole grid; a finite patch is what actually moves on screen.)
+    var V = 6, RANGE = 8, srcs = [];
+    (function () { for (var x = -RANGE; x <= RANGE; x++) { for (var y = -RANGE; y <= RANGE; y++) { srcs.push([x, y]); } } })();
+
+    var scene = false, dotEls = [], cellEl, b1El, b2El, tip1El, tip2El;
+    function buildScene() {
+      var p = [], i;
+      p.push('<svg viewBox="-6.6 -6.6 13.2 13.2" preserveAspectRatio="xMidYMid meet" role="img" aria-label="the integer grid under the current matrix, with the unit cell in coral">');
+      p.push('<defs><clipPath id="mtClip"><rect x="-6.3" y="-6.3" width="12.6" height="12.6"/></clipPath></defs>');
+      p.push('<g clip-path="url(#mtClip)">');
+      p.push('<polygon class="mt-cell" id="mtCell" points="0,0 1,0 1,-1 0,-1"/>');
+      for (i = 0; i < srcs.length; i++) { p.push('<circle class="mt-dot" data-i="' + i + '" r="0.12" cx="0" cy="0"/>'); }
+      p.push('<line class="mt-basis mt-basis2" id="mtLine2" x1="0" y1="0" x2="0" y2="-1"/>');
+      p.push('<line class="mt-basis mt-basis1" id="mtLine1" x1="0" y1="0" x2="1" y2="0"/>');
+      p.push('<circle class="mt-tip2" id="mtTip2" r="0.2" cx="0" cy="-1"/>');
+      p.push('<circle class="mt-tip1" id="mtTip1" r="0.2" cx="1" cy="0"/>');
+      p.push('<circle class="mt-origin" id="mtOrigin" r="0.16" cx="0" cy="0"/>');
+      p.push('</g></svg>');
+      figEl.innerHTML = p.join('');
+      dotEls = [];
+      var cs = figEl.querySelectorAll('.mt-dot');
+      for (i = 0; i < cs.length; i++) { dotEls[+cs[i].getAttribute('data-i')] = cs[i]; }
+      cellEl = figEl.querySelector('#mtCell');
+      b1El = figEl.querySelector('#mtLine1'); b2El = figEl.querySelector('#mtLine2');
+      tip1El = figEl.querySelector('#mtTip1'); tip2El = figEl.querySelector('#mtTip2');
+      scene = true;
+    }
+
+    // Note the y flip: math y points up, SVG y points down, so screen y = -(image y).
+    function fx(n) { return n.toFixed(3); }
+    function paint(M) {
+      var A = M.A, Bv = M.B, C = M.C, D = M.D, i, s, ix, iy, el;
+      for (i = 0; i < srcs.length; i++) {
+        s = srcs[i]; ix = (A * s[0]) + (Bv * s[1]); iy = (C * s[0]) + (D * s[1]); el = dotEls[i];
+        el.setAttribute('cx', fx(ix)); el.setAttribute('cy', fx(-iy));
+      }
+      // the unit cell: images of (0,0), (1,0), (1,1), (0,1)
+      cellEl.setAttribute('points',
+        '0,0 ' + fx(A) + ',' + fx(-C) + ' ' + fx(A + Bv) + ',' + fx(-(C + D)) + ' ' + fx(Bv) + ',' + fx(-D));
+      b1El.setAttribute('x2', fx(A)); b1El.setAttribute('y2', fx(-C));
+      tip1El.setAttribute('cx', fx(A)); tip1El.setAttribute('cy', fx(-C));
+      b2El.setAttribute('x2', fx(Bv)); b2El.setAttribute('y2', fx(-D));
+      tip2El.setAttribute('cx', fx(Bv)); tip2El.setAttribute('cy', fx(-D));
+    }
+
+    var curM = { A: 1, B: 0, C: 0, D: 1 }, raf = 0;
+    function toNum(m) { return { A: Number(m.a), B: Number(m.b), C: Number(m.c), D: Number(m.d) }; }
+    function animateMorph(from, to) {
+      // Lerp the four entries and repaint each frame: dots, cell, and basis all morph together.
+      // The in-between matrices are not determinant one; this is pixels only, never the state.
+      if (reduced) { curM = to; paint(to); return; }
+      if (raf) { cancelAnimationFrame(raf); }
+      var t0 = 0, dur = 320;
+      function step(now) {
+        if (!t0) { t0 = now; }
+        var t = Math.min(1, (now - t0) / dur);
+        var e = (t < 0.5) ? (2 * t * t) : (1 - Math.pow((-2 * t) + 2, 2) / 2);
+        paint({
+          A: from.A + ((to.A - from.A) * e), B: from.B + ((to.B - from.B) * e),
+          C: from.C + ((to.C - from.C) * e), D: from.D + ((to.D - from.D) * e)
+        });
+        if (t < 1) { raf = requestAnimationFrame(step); } else { curM = to; raf = 0; }
+      }
+      raf = requestAnimationFrame(step);
+    }
+
+    // ---- wiring ----
+    var btn = {};
+    root.querySelectorAll('.ls-chip').forEach(function (b) {
+      btn[b.getAttribute('data-move')] = b;
+      b.addEventListener('click', function () { applyMove(b.getAttribute('data-move')); });
+    });
+
+    function updateProbe(isGrown) {
+      if (isGrown) {
+        mtProbe.innerHTML = '<em>The numbers have run clean past what this little window can hold. The shear keeps stretching even after the picture gives up on it; that runaway is the hyperbolic move, in the flesh. Undo or reset to climb back.</em>';
+        return;
+      }
+      if (history.length === 0) {
+        mtProbe.innerHTML = '<em>Push the buttons and keep an eye on the coral cell. Undo walks it back with the exact opposite matrix (the adjugate), so nothing ever rounds off.</em>';
+        return;
+      }
+      var sym = { S: 'S', T: 'T', Ti: 'T⁻¹' };
+      var seq = history.map(function (k) { return sym[k]; }).join(' · ');
+      mtProbe.innerHTML = 'word so far: <b>' + seq + '</b>';
+    }
+
+    function commit(animate) {
+      mtA.textContent = String(state.a); mtB.textContent = String(state.b);
+      mtC.textContent = String(state.c); mtD.textContent = String(state.d);
+      mtDet.textContent = String((state.a * state.d) - (state.b * state.c)); // always 1
+      mtTrace.textContent = String(state.a + state.d);
+      var isIdNow = (state.a === 1n) && (state.b === 0n) && (state.c === 0n) && (state.d === 1n);
+      if (isIdNow) {
+        // Classify() faithfully calls the identity parabolic (trace 2), but a reader staring at
+        // an untouched grid deserves the plainer truth. Display only; the classifier is untouched.
+        mtClass.textContent = 'identity'; mtClassText.textContent = 'nothing yet; press a move';
+      } else {
+        var cl = classify(state);
+        mtClass.textContent = cl; mtClassText.textContent = CLASS_TEXT[cl];
+      }
+
+      var isGrown = grown(state);
+      ['S', 'T', 'Ti'].forEach(function (k) { if (btn[k]) { btn[k].disabled = isGrown; } });
+      updateProbe(isGrown);
+
+      if (!scene) { buildScene(); }
+      var target = toNum(state);
+      if (animate) { animateMorph(curM, target); } else { curM = target; paint(target); }
+    }
+
+    // Collapsed by default: build and paint the first time the reader expands it.
+    root.addEventListener('toggle', function () { if (root.open) { commit(false); } });
+    if (root.open) { commit(false); }
+
+    // ---- silent self-tests (no visible output unless something is actually wrong) ----
+    (function selfTest() {
+      try {
+        function det(m) { return (m.a * m.d) - (m.b * m.c); }
+        function isId(m) { return (m.a === 1n) && (m.b === 0n) && (m.c === 0n) && (m.d === 1n); }
+        var picks = [GENS.S, GENS.T, GENS.Ti], i;
+
+        // 1: determinant stays exactly 1 after 50 random generator applications
+        var m = { a: 1n, b: 0n, c: 0n, d: 1n };
+        for (i = 0; i < 50; i++) { m = mul(picks[Math.floor(Math.random() * 3)], m); }
+        console.assert(det(m) === 1n, 'modular self-test: determinant drifted from 1');
+
+        // 2: the adjugate inverse is a true two-sided inverse (roundtrip is the identity)
+        console.assert(isId(mul(m, adjInverse(m))), 'modular self-test: M * inverse(M) is not the identity');
+        console.assert(isId(mul(adjInverse(m), m)), 'modular self-test: inverse(M) * M is not the identity');
+
+        // 3: classification by |trace| — S rotates, T shears, and T*T*S*T*T stretches
+        console.assert(classify(GENS.S) === 'elliptic', 'modular self-test: S should be elliptic');
+        console.assert(classify(GENS.T) === 'parabolic', 'modular self-test: T should be parabolic');
+        var word = mul(GENS.T, mul(GENS.T, mul(GENS.S, mul(GENS.T, GENS.T)))); // T*T*S*T*T = [[2,3],[1,2]], trace 4
+        var tr = word.a + word.d;
+        console.assert(((tr > 2n) || (tr < -2n)), 'modular self-test: the word should have |trace| > 2');
+        console.assert(classify(word) === 'hyperbolic', 'modular self-test: T*T*S*T*T should be hyperbolic');
+      } catch (e) { /* stay silent */ }
+    })();
+  })();
+</script>
+
+<script>
+  // The quasicrystals — a browser sketch of Puck.Maths MetallicQuasicrystal / QuadraticQuasicrystal,
+  // drawn the way these tilings are really grown: deflation. Two families share one pipeline. GOLDEN is
+  // the Penrose tiling (k = 1): Robinson half-tiles cut by the golden rule, counts advancing by the square
+  // of M_k = [[k,1],[1,0]] at k = 1. SILVER is the Ammann-Beenker tiling (k = 2): unit rhombi and
+  // half-squares (right isosceles triangles) cut by the silver rule lambda = 1 + sqrt2, whole-tile counts
+  // advancing by [[3,2],[4,3]] on (squares, rhombi). Every hypotenuse interior to the figure is shared by
+  // two half-squares, so squares render seamless; the only exposed hypotenuses lie on the star's rim. All
+  // geometry is float and only ever places pixels; the tile counts are exact.
+  (function () {
+    // ---- pure math core (no DOM) ----
+    var PHI = (1 + Math.sqrt(5)) / 2, S2 = Math.sqrt(2);
+    function pt(x, y) { return { x: x, y: y }; }
+    function lerp(a, b, t) { return pt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); }
+    function polyArea(v) { var a = 0, i, n = v.length, p, q; for (i = 0; i < n; i++) { p = v[i]; q = v[(i + 1) % n]; a += p.x * q.y - q.x * p.y; } return a < 0 ? -a / 2 : a / 2; }
+    function totalArea(tiles) { var s = 0, i; for (i = 0; i < tiles.length; i++) { s += polyArea(tiles[i].v); } return s; }
+
+    // A tile is { k, v }: v is the vertex list. For golden, k = 0 is half of a THIN rhombus, k = 1 half of
+    // a THICK one, and v = [A, B, C] a Robinson half-triangle (B-C the shared internal seam). For silver,
+    // k = 'R' is a whole 45-degree rhombus (v = [A, B, C, D]) and k = 'H' a half-square (v = [A, B, C],
+    // right angle at A, B-C the hypotenuse).
+
+    // ===== GOLDEN: the Penrose deflation (unchanged math) =====
+    function seedGolden() {
+      var tiles = [], o = pt(0, 0), i, B, C, tmp;
+      for (i = 0; i < 10; i++) {
+        B = pt(Math.cos((2 * i - 1) * Math.PI / 10), Math.sin((2 * i - 1) * Math.PI / 10));
+        C = pt(Math.cos((2 * i + 1) * Math.PI / 10), Math.sin((2 * i + 1) * Math.PI / 10));
+        if (i % 2 === 0) { tmp = B; B = C; C = tmp; }
+        tiles.push({ k: 0, v: [o, B, C] });
+      }
+      return tiles;
+    }
+    function subGolden(tiles) {
+      var out = [], i, t, A, B, C, P, Q, R;
+      for (i = 0; i < tiles.length; i++) {
+        t = tiles[i]; A = t.v[0]; B = t.v[1]; C = t.v[2];
+        if (t.k === 0) {
+          P = lerp(A, B, 1 / PHI);
+          out.push({ k: 0, v: [C, P, B] });
+          out.push({ k: 1, v: [P, C, A] });
+        } else {
+          Q = lerp(B, A, 1 / PHI);
+          R = lerp(B, C, 1 / PHI);
+          out.push({ k: 1, v: [R, C, A] });
+          out.push({ k: 1, v: [Q, R, B] });
+          out.push({ k: 0, v: [R, Q, A] });
+        }
+      }
+      return out;
+    }
+    function countThin(tiles) { var n = 0, i; for (i = 0; i < tiles.length; i++) { if (tiles[i].k === 0) { n++; } } return n; }
+    function countThick(tiles) { var n = 0, i; for (i = 0; i < tiles.length; i++) { if (tiles[i].k === 1) { n++; } } return n; }
+    function advGolden(thin, thick) { return [thin + thick, thin + 2 * thick]; }
+
+    // ===== SILVER: the Ammann-Beenker deflation =====
+    // Substitution constants, all exact in the ring Z[sqrt2]: g = 1/lambda = sqrt2 - 1, and the edge
+    // splits sqrt2/2, 2 - sqrt2, 1 - sqrt2/2 that place the half-square legs.
+    var g = S2 - 1, hh = 1 - S2 / 2, pp = 2 - S2, qq = S2 / 2;
+    // Each child is { k, c } with c a list of [s, t]; child vertex = A + s*(v1 - A) + t*(vLast - A), where
+    // vLast is D for a rhombus parent, C for a half-square parent. Rules verified (partition, congruence,
+    // counts, hypotenuse pairing, eight-fold symmetry, area) to depth 4 offline.
+    var RULE_R = [
+      { k: 'R', c: [[0, 0], [g, 0], [g, g], [0, g]] },
+      { k: 'H', c: [[g, g], [0, g], [0, 1]] },
+      { k: 'H', c: [[g, g], [1, 0], [g, 0]] },
+      { k: 'R', c: [[0, 1], [g, g], [1, 0], [pp, pp]] },
+      { k: 'H', c: [[pp, pp], [pp, 1], [0, 1]] },
+      { k: 'R', c: [[1, 0], [pp, pp], [pp, 1], [1, g]] },
+      { k: 'H', c: [[pp, 1], [1, g], [1, 1]] }
+    ];
+    var RULE_H = [
+      { k: 'R', c: [[0, 0], [hh, hh], [qq, hh], [g, 0]] },
+      { k: 'H', c: [[hh, hh], [0, pp], [0, 0]] },
+      { k: 'R', c: [[0, 1], [hh, qq], [hh, hh], [0, pp]] },
+      { k: 'H', c: [[hh, hh], [qq, hh], [hh, qq]] },
+      { k: 'H', c: [[qq, hh], [g, 0], [1, 0]] }
+    ];
+    function E(j) { var a = j * Math.PI / 4; return pt(Math.cos(a), Math.sin(a)); }
+    function seedSilver() {
+      var tiles = [], j, a, b;
+      for (j = 0; j < 8; j++) { a = E(j); b = E(j + 1); tiles.push({ k: 'R', v: [pt(0, 0), a, pt(a.x + b.x, a.y + b.y), b] }); }
+      return tiles;
+    }
+    function applySilver(t) {
+      var rule = (t.k === 'R') ? RULE_R : RULE_H, A = t.v[0], v1 = t.v[1], vl = (t.k === 'R') ? t.v[3] : t.v[2];
+      var ux = v1.x - A.x, uy = v1.y - A.y, wx = vl.x - A.x, wy = vl.y - A.y, out = [], i, ch, verts, m, s, tt;
+      for (i = 0; i < rule.length; i++) {
+        ch = rule[i]; verts = [];
+        for (m = 0; m < ch.c.length; m++) { s = ch.c[m][0]; tt = ch.c[m][1]; verts.push(pt(A.x + s * ux + tt * wx, A.y + s * uy + tt * wy)); }
+        out.push({ k: ch.k, v: verts });
+      }
+      return out;
+    }
+    function subSilver(tiles) { var out = [], i, kids, j; for (i = 0; i < tiles.length; i++) { kids = applySilver(tiles[i]); for (j = 0; j < kids.length; j++) { out.push(kids[j]); } } return out; }
+    function countHalfSq(tiles) { var n = 0, i; for (i = 0; i < tiles.length; i++) { if (tiles[i].k === 'H') { n++; } } return n; }
+    function countRhombi(tiles) { var n = 0, i; for (i = 0; i < tiles.length; i++) { if (tiles[i].k === 'R') { n++; } } return n; }
+    function advSilver(hs, r) { return [3 * hs + 4 * r, 2 * hs + 3 * r]; } // half-squares, rhombi
+
+    // star rim, so the self-test can confirm exposed hypotenuses only ever land on it
+    function starRim() { var b = [], j, a, c; for (j = 0; j < 8; j++) { a = E(j); c = E(j + 1); b.push(a); b.push(pt(a.x + c.x, a.y + c.y)); } return b; }
+    function onSeg(p, a, b) { var abx = b.x - a.x, aby = b.y - a.y, apx = p.x - a.x, apy = p.y - a.y; if (Math.abs(abx * apy - aby * apx) > 1e-6) { return false; } var tt = (apx * abx + apy * aby) / (abx * abx + aby * aby); return tt > -1e-6 && tt < 1 + 1e-6; }
+    function onRim(p) { var rim = starRim(), i; for (i = 0; i < rim.length; i++) { if (onSeg(p, rim[i], rim[(i + 1) % rim.length])) { return true; } } return false; }
+
+    // ---- silent self-tests (pure math only; no visible output unless something is wrong) ----
+    (function selfTest() {
+      try {
+        var i, d;
+
+        // GOLDEN: seed is ten equal half-tiles whose union is the unit-circle decagon.
+        var seedG = seedGolden();
+        console.assert(seedG.length === 10, 'penrose self-test: the seed should hold 10 half-tiles');
+        var a0 = polyArea(seedG[0].v);
+        for (i = 0; i < seedG.length; i++) { console.assert(Math.abs(polyArea(seedG[i].v) - a0) < 1e-12, 'penrose self-test: seed half-tiles should be equal in area'); }
+        var decagon = 5 * Math.sin(Math.PI / 5);
+        console.assert(Math.abs(totalArea(seedG) - decagon) < 1e-9 * decagon, 'penrose self-test: seed area should equal the unit-circle decagon area');
+        console.assert(countThin(seedG) === 10 && countThick(seedG) === 0, 'penrose self-test: seed counts should be (10 thin, 0 thick)');
+        var tilesA = seedGolden(), baseG = totalArea(tilesA);
+        for (d = 1; d <= 6; d++) { tilesA = subGolden(tilesA); console.assert(Math.abs(totalArea(tilesA) - baseG) <= 1e-9 * baseG, 'penrose self-test: total tile area not conserved at depth ' + d); }
+        var tilesB = seedGolden(), thin = 10, thick = 0, nc;
+        for (d = 1; d <= 6; d++) { tilesB = subGolden(tilesB); nc = advGolden(thin, thick); thin = nc[0]; thick = nc[1]; console.assert(countThin(tilesB) === thin && countThick(tilesB) === thick, 'penrose self-test: counts diverged at depth ' + d); }
+        var pt2 = 10, pk = 0, cc;
+        for (d = 1; d <= 9; d++) { cc = advGolden(pt2, pk); pt2 = cc[0]; pk = cc[1]; }
+        console.assert(Math.abs((pk / pt2) - PHI) < 1e-5, 'penrose self-test: thick:thin ratio does not approach the golden ratio');
+
+        // SILVER: seed is eight unit rhombi, the eight-fold star, area 4*sqrt2.
+        var seedS = seedSilver(), STAR = 4 * S2;
+        console.assert(seedS.length === 8 && countRhombi(seedS) === 8 && countHalfSq(seedS) === 0, 'ammann-beenker self-test: seed should be 8 rhombi');
+        console.assert(Math.abs(totalArea(seedS) - STAR) < 1e-9 * STAR, 'ammann-beenker self-test: seed area should be 4*sqrt2');
+        var tilesC = seedSilver(), baseS = totalArea(tilesC);
+        for (d = 1; d <= 3; d++) { tilesC = subSilver(tilesC); console.assert(Math.abs(totalArea(tilesC) - baseS) <= 1e-9 * baseS, 'ammann-beenker self-test: total area not conserved at depth ' + d); }
+        var tilesD = seedSilver(), hs = 0, r = 8, ns;
+        for (d = 1; d <= 3; d++) { tilesD = subSilver(tilesD); ns = advSilver(hs, r); hs = ns[0]; r = ns[1]; console.assert(countHalfSq(tilesD) === hs && countRhombi(tilesD) === r, 'ammann-beenker self-test: counts diverged from [[3,2],[4,3]] at depth ' + d); console.assert(hs % 2 === 0, 'ammann-beenker self-test: half-square count should stay even at depth ' + d); }
+        // hypotenuse pairing at depth 2: interior hypotenuses shared by exactly two half-squares, and any
+        // single (unpaired) hypotenuse lies on the star's rim (whole squares therefore render seamless).
+        var d2 = subSilver(subSilver(seedSilver())), hyp = {}, t, K;
+        function kp(p) { return Math.round(p.x * 1e5) + ',' + Math.round(p.y * 1e5); }
+        for (i = 0; i < d2.length; i++) { t = d2[i]; if (t.k === 'H') { K = [kp(t.v[1]), kp(t.v[2])].sort().join('~'); hyp[K] = hyp[K] || { n: 0, m: pt((t.v[1].x + t.v[2].x) / 2, (t.v[1].y + t.v[2].y) / 2) }; hyp[K].n++; } }
+        for (K in hyp) { console.assert(hyp[K].n === 2 || (hyp[K].n === 1 && onRim(hyp[K].m)), 'ammann-beenker self-test: hypotenuse neither paired nor on the rim'); }
+        // rhombi:squares approaches sqrt2 (count-only recurrence out to depth 9; no geometry).
+        var qh = 0, qr = 8, qc;
+        for (d = 1; d <= 9; d++) { qc = advSilver(qh, qr); qh = qc[0]; qr = qc[1]; }
+        console.assert(Math.abs((qr / (qh / 2)) - S2) < 1e-5, 'ammann-beenker self-test: rhombi:squares does not approach sqrt2');
+      } catch (e) { /* stay silent */ }
+    })();
+
+    // ---- DOM wiring (everything below is presentation) ----
+    var root = document.getElementById('qcWidget');
+    if (!root) { return; }
+
+    var figEl = document.getElementById('qcTileFig'),
+        outEl = document.getElementById('qcTileOut'),
+        slider = document.getElementById('qcTileDepth'),
+        depthVEl = document.getElementById('qcTileDepthV'),
+        matEl = document.getElementById('qcTileMat'),
+        noteEl = document.getElementById('qcTileNote');
+    if (!figEl || !slider) { return; }
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var SCALE = 100;
+
+    // A subtle lightness variation by distance from the center: an unforced sunburst, kept legible in both
+    // themes because every fill mixes toward var(--paper), which flips with the theme.
+    function bucket(x, y, mult) { var b = Math.floor(Math.sqrt(x * x + y * y) * mult); if (b > 2) { b = 2; } if (b < 0) { b = 0; } return b; }
+    function classGolden(t) {
+      var A = t.v[0], B = t.v[1], C = t.v[2], cx = (A.x + B.x + C.x) / 3, cy = (A.y + B.y + C.y) / 3;
+      var fam = (t.k === 1) ? 'qc-thick' : 'qc-thin', b = bucket(cx, cy, 2.6);
+      return (b === 0) ? fam : (fam + '-' + b);
+    }
+    function classSilver(t) {
+      // Colour a half-square by its hypotenuse midpoint (the square's centre), so the two halves of one
+      // square share a shade and read as a single seamless tile; colour a rhombus by its centroid.
+      var rx, ry, fam;
+      if (t.k === 'H') { rx = (t.v[1].x + t.v[2].x) / 2; ry = (t.v[1].y + t.v[2].y) / 2; fam = 'qc-thick'; }
+      else { rx = (t.v[0].x + t.v[1].x + t.v[2].x + t.v[3].x) / 4; ry = (t.v[0].y + t.v[1].y + t.v[2].y + t.v[3].y) / 4; fam = 'qc-thin'; }
+      var b = bucket(rx, ry, 1.5);
+      return (b === 0) ? fam : (fam + '-' + b);
+    }
+
+    function xy(p) { return (p.x * SCALE).toFixed(1) + ' ' + (-p.y * SCALE).toFixed(1); }
+    function pv(p) { return (p.x * SCALE).toFixed(1) + ',' + (-p.y * SCALE).toFixed(1); }
+
+    // GOLDEN svg: a filled polygon per half-tile, plus ONE stroked path collecting each rhombus outline as
+    // the open run C -> A -> B. The internal diagonal B-C (the shared seam between mirror half-tiles) is
+    // never stroked, so full rhombi read cleanly.
+    function svgGolden(tiles) {
+      var poly = [], edge = [], i, t;
+      for (i = 0; i < tiles.length; i++) {
+        t = tiles[i];
+        poly.push('<polygon class="' + classGolden(t) + '" points="' + pv(t.v[0]) + ' ' + pv(t.v[1]) + ' ' + pv(t.v[2]) + '"/>');
+        edge.push('M' + xy(t.v[2]) + 'L' + xy(t.v[0]) + 'L' + xy(t.v[1]));
+      }
+      return '<svg viewBox="-102 -102 204 204" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Penrose rhombus tiling">' + poly.join('') + '<path class="qc-tileEdge" d="' + edge.join('') + '"/></svg>';
+    }
+
+    // SILVER svg: rhombi stroke their whole outline; half-squares stroke only their two legs (C -> A -> B),
+    // leaving the hypotenuse B-C invisible so paired half-squares read as one whole square. A hypotenuse
+    // shared by two half-squares is interior and stays hidden; one that appears alone is on the star's rim,
+    // so it is stroked to close the figure.
+    function svgSilver(tiles) {
+      var hyp = {}, i, t, K;
+      function kp(p) { return Math.round(p.x * 1e5) + ',' + Math.round(p.y * 1e5); }
+      for (i = 0; i < tiles.length; i++) { t = tiles[i]; if (t.k === 'H') { K = [kp(t.v[1]), kp(t.v[2])].sort().join('~'); hyp[K] = (hyp[K] || 0) + 1; } }
+      var poly = [], edge = [], j, pts;
+      for (i = 0; i < tiles.length; i++) {
+        t = tiles[i]; pts = [];
+        for (j = 0; j < t.v.length; j++) { pts.push(pv(t.v[j])); }
+        poly.push('<polygon class="' + classSilver(t) + '" points="' + pts.join(' ') + '"/>');
+        if (t.k === 'R') {
+          edge.push('M' + xy(t.v[0]) + 'L' + xy(t.v[1]) + 'L' + xy(t.v[2]) + 'L' + xy(t.v[3]) + 'Z');
+        } else {
+          edge.push('M' + xy(t.v[2]) + 'L' + xy(t.v[0]) + 'L' + xy(t.v[1]));
+          K = [kp(t.v[1]), kp(t.v[2])].sort().join('~');
+          if (hyp[K] === 1) { edge.push('M' + xy(t.v[1]) + 'L' + xy(t.v[2])); }
+        }
+      }
+      return '<svg viewBox="-190 -190 380 380" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Ammann-Beenker tiling">' + poly.join('') + '<path class="qc-tileEdge" d="' + edge.join('') + '"/></svg>';
+    }
+
+    function readoutGolden(depth, tiles) {
+      var thin = countThin(tiles), thick = countThick(tiles), total = thin + thick;
+      if (thick === 0) {
+        return 'At <b>depth ' + depth + '</b>: the bare sun, <b>' + thin + '</b> thin half-tiles and no thick ones yet. Slide the detail up and the golden rule takes over.';
+      }
+      var ratio = (thick / thin).toFixed(4);
+      return 'At <b>depth ' + depth + '</b>: <b>' + thin + '</b> thin half-tiles and <b>' + thick + '</b> thick, <b>' + total + '</b> in all. Thick against thin is <span class="qc-ratio">' + ratio + '</span>, closing in on the golden ratio <span class="qc-ratio">' + PHI.toFixed(4) + '</span>.';
+    }
+    function readoutSilver(depth, tiles) {
+      var sq = countHalfSq(tiles) / 2, rh = countRhombi(tiles), total = sq + rh;
+      if (sq === 0) {
+        return 'At <b>depth ' + depth + '</b>: the bare eight-fold star, <b>' + rh + '</b> rhombi and no squares yet. Slide the detail up and the silver rule cuts in.';
+      }
+      var ratio = (rh / sq).toFixed(4);
+      return 'At <b>depth ' + depth + '</b>: <b>' + sq + '</b> squares and <b>' + rh + '</b> rhombi (half-squares pair off), <b>' + total + '</b> tiles in all. Rhombi against squares is <span class="qc-ratio">' + ratio + '</span>, closing in on <span class="qc-ratio">' + S2.toFixed(4) + '</span>; the silver ratio δ₂ = 1 + √2 is the inflation factor.';
+    }
+
+    var GOLD_MAT = 'M<sub>k</sub><sup>2</sup>&nbsp;=&nbsp;<span class="qc-mat"><b>2</b><b>1</b><b>1</b><b>1</b></span>';
+    var GOLD_NOTE = 'Count the half-tiles, and every inflation multiplies them by this little matrix, which is the square of the metallic matrix M<sub>k</sub> at k = 1. That same M<sub>k</sub> turns up again near the end of this essay, as the tiny integer matrix underneath the Bosma&ndash;Dekking&ndash;Steiner proof.';
+    var SILV_MAT = '<span class="qc-mat"><b>3</b><b>2</b><b>4</b><b>3</b></span>';
+    var SILV_NOTE = 'Count the whole tiles, and every inflation multiplies (squares, rhombi) by this matrix: a square becomes 3 squares and 4 rhombi, a rhombus 2 squares and 3 rhombi. It is not M<sub>k</sub><sup>2</sup>, but its larger eigenvalue is δ₂² = 3 + 2√2, the square of the silver mean, and that mean is the big root of the same M<sub>k</sub> that returns near the end of this essay, underneath the Bosma&ndash;Dekking&ndash;Steiner proof.';
+
+    var ARIA_GOLD = 'A Penrose rhombus tiling filling a decagon: two rhombi in coral and jade, never repeating, with a five-fold star at its heart. Sliding the detail up cuts every tile into smaller ones by the golden ratio.';
+    var ARIA_SILV = 'An Ammann-Beenker tiling filling an eight-pointed star: squares and 45-degree rhombi in coral and jade, never repeating, with eight-fold symmetry. Sliding the detail up cuts every tile into smaller ones by the silver ratio.';
+
+    var families = {
+      golden: { seed: seedGolden, sub: subGolden, svg: svgGolden, readout: readoutGolden, max: 6, mat: GOLD_MAT, note: GOLD_NOTE, aria: ARIA_GOLD, gens: null, cache: {} },
+      silver: { seed: seedSilver, sub: subSilver, svg: svgSilver, readout: readoutSilver, max: 3, mat: SILV_MAT, note: SILV_NOTE, aria: ARIA_SILV, gens: null, cache: {} }
+    };
+    function build(F) { var gens = [F.seed()], d; for (d = 1; d <= F.max; d++) { gens[d] = F.sub(gens[d - 1]); } F.gens = gens; }
+    build(families.golden); build(families.silver);
+
+    var curFam = 'golden', depthOf = { golden: 5, silver: 3 };
+
+    function syncControls() {
+      var F = families[curFam], depth = depthOf[curFam];
+      slider.max = F.max;
+      slider.value = depth;
+      depthVEl.textContent = depth;
+    }
+    function updateChips() {
+      var want = (curFam === 'golden') ? 1 : 2, chips = root.querySelectorAll('.ls-chip'), i;
+      for (i = 0; i < chips.length; i++) { chips[i].setAttribute('aria-pressed', (+chips[i].getAttribute('data-k') === want) ? 'true' : 'false'); }
+    }
+    function render(bloom) {
+      var F = families[curFam], depth = depthOf[curFam];
+      if (!F.cache[depth]) { F.cache[depth] = F.svg(F.gens[depth]); }
+      figEl.innerHTML = F.cache[depth];
+      figEl.setAttribute('aria-label', F.aria);
+      if (bloom && !reduced) {
+        figEl.classList.remove('qc-bloom-on');
+        void figEl.offsetWidth; // restart the animation
+        figEl.classList.add('qc-bloom-on');
+      } else {
+        figEl.classList.remove('qc-bloom-on');
+      }
+      syncControls();
+      if (matEl) { matEl.innerHTML = F.mat; }
+      if (noteEl) { noteEl.innerHTML = F.note; }
+      outEl.innerHTML = F.readout(depth, F.gens[depth]);
+    }
+    function setFamily(fam, bloom) {
+      curFam = fam;
+      if (depthOf[fam] > families[fam].max) { depthOf[fam] = families[fam].max; }
+      updateChips();
+      render(bloom);
+    }
+
+    slider.addEventListener('input', function () { depthOf[curFam] = +slider.value; render(true); });
+    var chips = root.querySelectorAll('.ls-chip'), ci;
+    for (ci = 0; ci < chips.length; ci++) {
+      chips[ci].addEventListener('click', function () { setFamily(+this.getAttribute('data-k') === 2 ? 'silver' : 'golden', true); });
+    }
+
+    // Collapsed by default: render the first time the reader expands it (clientWidth is 0 while collapsed,
+    // so a viewBox-scaled SVG is the only thing that sizes correctly on open).
+    root.addEventListener('toggle', function () { if (root.open) { render(false); } });
+    updateChips();
+    if (root.open) { render(false); }
+  })();
+</script>
+
+<script>
+  // The proof, animated — the Bosma–Dekking–Steiner argument played out with live numbers.
+  // Five scenes: the tower assembles, the line arrives and the tower's values land on it,
+  // we zoom into the sliver between them, a would-be intruder integer gets weighed by its
+  // norm and bounced, and the floors light up equal. The tower values are computed by
+  // backward iteration for the chosen k (floats, pixels only; exactness lives in the Lean file).
+  (function () {
+    var root = document.getElementById('bpWidget');
+    if (!root) { return; }
+    var stage = document.getElementById('bpStage'), cap = document.getElementById('bpCaption'),
+        playBtn = document.getElementById('bpPlay'), stepBtn = document.getElementById('bpStep'),
+        restartBtn = document.getElementById('bpRestart');
+    if (!stage || !cap || !playBtn) { return; }
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  ANIMATION TIMING  —  the only knobs you need; edit the numbers below.
+    //  SPEED   scales everything at once: 1 is normal, 2 is half as fast (slower),
+    //          0.5 is twice as fast.
+    //  GAP_MS  is the still pause held between scenes, in milliseconds. The scene
+    //          settles on its final frame and just sits there for this long before
+    //          the next one starts. Set it to 0 for no pause, higher to linger.
+    //  SCENE_MS is how long each scene's own action takes, in milliseconds; raise
+    //          one to draw that scene out, lower it to hurry past. Nothing else to
+    //          touch: the fade in/out timing follows each scene's length on its own.
+    var SPEED = 1;
+    var GAP_MS = 700;
+    var SCENE_MS = {
+      tower:  3800,   // 1. the recurrence writes itself out, line by line
+      line:   4200,   // 2. the line sweeps in and the tower's values drop onto it
+      zoom:   4600,   // 3. the ring pulses, then the zoomed-in sliver panel appears
+      bounce: 6400,   // 4. the intruder integer drops in, gets weighed, and is thrown out
+      floors: 4800    // 5. the floors light up equal, one column at a time
+    };
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Each phase is its scene's action (CONTENT) followed by the pause (GAP). During
+    // the pause the scene is simply held on its final frame, so nothing overlaps and
+    // every cut between scenes stays clean.
+    var CONTENT = [SCENE_MS.tower, SCENE_MS.line, SCENE_MS.zoom, SCENE_MS.bounce, SCENE_MS.floors]
+      .map(function (ms) { return ms * SPEED; });
+    var GAP = GAP_MS * SPEED;
+    var PH = CONTENT.map(function (c) { return c + GAP; });
+    var TOTAL = PH.reduce(function (a, b) { return a + b; }, 0);
+    var K = 1, NMAX = 12, ZN = 5;
+    var t = 0, playing = false, ended = false, built = false, lastPhase = -1, raf = 0, lastTs = 0;
+
+    function alphaOf(k) { return (k + Math.sqrt(k * k + 4)) / 2; }
+    function cOf(k) { var a = alphaOf(k); return (1 + a) / Math.sqrt(k * k + 4); }
+    function towerVals(k, N) {
+      var a = alphaOf(k), c = cOf(k), M = N + 40, s = new Array(M + 2);
+      s[M + 1] = a * (M + 1) - c;
+      for (var j = M; j >= 1; j--) { s[j] = k * j - 1 + (j * j) / s[j + 1]; }
+      return s;
+    }
+    function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+    function ease(v) { v = clamp01(v); return v * v * (3 - 2 * v); }
+    function fx(n) { return n.toFixed(2); }
+
+    var A, C, S, vmax, gapZ, minNorm, el = {};
+    function computeData() {
+      A = alphaOf(K); C = cOf(K); S = towerVals(K, NMAX + 2);
+      vmax = A * (NMAX + 0.8);
+      gapZ = S[ZN] - (A * ZN - C);
+      minNorm = (K * K + 4) - K;
+    }
+    function xOf(n) { return 50 + (n - 1) * (560 / (NMAX - 1)); }
+    function yOf(v) { return 275 - v * (250 / vmax); }
+
+    function buildScene() {
+      var p = [], n, i;
+      var lx1 = xOf(0.7), ly1 = yOf(A * 0.7 - C), lx2 = xOf(NMAX + 0.3), ly2 = yOf(A * (NMAX + 0.3) - C);
+      var lineLen = Math.hypot(lx2 - lx1, ly2 - ly1);
+
+      p.push('<svg viewBox="0 0 640 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="the proof, animated: the tower, the line, the gap, and the integer that cannot fit">');
+
+      // scene 0: the tower
+      p.push('<g id="bpG0" opacity="1">');
+      var tl = [
+        's₁ = ' + K + '·1 − 1 + 1²⁄s₂',
+        's₂ = ' + K + '·2 − 1 + 2²⁄s₃',
+        's₃ = ' + K + '·3 − 1 + 3²⁄s₄',
+        '⋱ and so on, forever'
+      ];
+      for (i = 0; i < 4; i++) {
+        p.push('<text id="bpT' + i + '" class="bp-mono bp-ink" x="320" y="' + (95 + i * 36) + '" font-size="19" text-anchor="middle" opacity="0">' + tl[i] + '</text>');
+      }
+      p.push('<text class="bp-mono bp-faint" x="320" y="252" font-size="11" text-anchor="middle">each term leans on the one after it</text>');
+      p.push('</g>');
+
+      // scenes 1+: the chart
+      p.push('<g id="bpG1" opacity="0">');
+      p.push('<line class="bp-axis" x1="40" y1="275" x2="620" y2="275"/>');
+      p.push('<line class="bp-axis" x1="40" y1="275" x2="40" y2="20"/>');
+      p.push('<text class="bp-mono bp-faint" x="612" y="290" font-size="11" text-anchor="end">n</text>');
+      p.push('<line id="bpLine" class="bp-stroke-a" x1="' + fx(lx1) + '" y1="' + fx(ly1) + '" x2="' + fx(lx2) + '" y2="' + fx(ly2) + '" stroke-dasharray="' + fx(lineLen) + '" stroke-dashoffset="' + fx(lineLen) + '"/>');
+      p.push('<text class="bp-mono bp-fill-a" x="' + fx(lx2 - 4) + '" y="' + fx(ly2 + 16) + '" font-size="12" text-anchor="end">αn − (1+α)⁄√(k²+4)</text>');
+      for (n = 1; n <= NMAX; n++) {
+        p.push('<circle id="bpD' + n + '" class="bp-fill-b" r="4" cx="' + fx(xOf(n)) + '" cy="' + fx(yOf(S[n])) + '" opacity="0"/>');
+      }
+      p.push('<text class="bp-mono bp-fill-b" x="52" y="30" font-size="12">the tower sₙ</text>');
+      p.push('</g>');
+
+      // scene 2: a ring pulse on the dot, then a large, crisp inset (no scaling, so the text
+      // is never blurry); the inset sits centered over the dimmed chart
+      var ix = 170, iy = 28, iw = 300, ih = 214, icx = ix + iw / 2;
+      p.push('<g id="bpG2" opacity="0">');
+      p.push('<circle id="bpRing" class="bp-ring" r="6" cx="' + fx(xOf(ZN)) + '" cy="' + fx(yOf(S[ZN])) + '" opacity="0"/>');
+      p.push('<g id="bpInset" opacity="0">');
+      p.push('<rect class="bp-inset" x="' + ix + '" y="' + iy + '" width="' + iw + '" height="' + ih + '" rx="10"/>');
+      p.push('<text class="bp-mono bp-faint" x="' + fx(icx) + '" y="' + (iy + 20) + '" font-size="12.5" text-anchor="middle">between ' + Math.floor(S[ZN]) + ' and ' + (Math.floor(S[ZN]) + 1) + ' at n = 5, magnified</text>');
+      p.push('<line class="bp-intline" x1="' + (ix + 18) + '" y1="' + (iy + 44) + '" x2="' + (ix + iw - 18) + '" y2="' + (iy + 44) + '"/>');
+      p.push('<text class="bp-mono bp-faint" x="' + (ix + 22) + '" y="' + (iy + 60) + '" font-size="12">' + (Math.floor(S[ZN]) + 1) + ', the next whole number: far above</text>');
+      p.push('<line x1="' + (ix + 18) + '" y1="' + (iy + 100) + '" x2="' + (ix + iw - 18) + '" y2="' + (iy + 100) + '" stroke="var(--accent-2)" stroke-width="2.5"/>');
+      p.push('<text class="bp-mono bp-fill-b" x="' + (ix + 22) + '" y="' + (iy + 95) + '" font-size="12">the tower, s₅ = ' + S[ZN].toFixed(4) + '</text>');
+      p.push('<rect class="bp-sliver" x="' + (ix + 18) + '" y="' + (iy + 100) + '" width="' + (iw - 36) + '" height="30"/>');
+      p.push('<line x1="' + (ix + 18) + '" y1="' + (iy + 130) + '" x2="' + (ix + iw - 18) + '" y2="' + (iy + 130) + '" stroke="var(--accent)" stroke-width="2.5"/>');
+      p.push('<text class="bp-mono bp-fill-a" x="' + (ix + 22) + '" y="' + (iy + 146) + '" font-size="12">the line = ' + (A * ZN - C).toFixed(4) + '</text>');
+      p.push('<line class="bp-intline" x1="' + (ix + 18) + '" y1="' + (iy + 186) + '" x2="' + (ix + iw - 18) + '" y2="' + (iy + 186) + '"/>');
+      p.push('<text class="bp-mono bp-faint" x="' + (ix + 22) + '" y="' + (iy + 202) + '" font-size="12">' + Math.floor(S[ZN]) + ', the whole number below: far beneath</text>');
+      p.push('</g>');
+      p.push('<text id="bpGapNote" class="bp-mono bp-faint" x="' + (ix + iw) + '" y="' + (iy + ih + 14) + '" font-size="10.5" text-anchor="end" opacity="0">(the gap, drawn thousands of times too wide)</text>');
+      p.push('</g>');
+
+      // scene 3: the intruder
+      p.push('<g id="bpG3" opacity="0">');
+      p.push('<g id="bpMG"><circle class="bp-ink" r="6" cx="' + fx(icx) + '" cy="14" fill="var(--ink)"/>');
+      p.push('<text class="bp-mono bp-ink" x="' + fx(icx + 12) + '" y="18" font-size="11">m, a whole number?</text></g>');
+      p.push('<text id="bpS1" class="bp-mono bp-ink" x="' + fx(icx) + '" y="' + (iy + 162) + '" font-size="12" text-anchor="middle" opacity="0">its norm: positive, ≡ −' + K + ' (mod ' + (K * K + 4) + ')</text>');
+      p.push('<text id="bpS2" class="bp-mono bp-fill-a" x="' + fx(icx) + '" y="' + (iy + 178) + '" font-size="12" text-anchor="middle" opacity="0">so at least ' + minNorm + '. no room. out.</text>');
+      p.push('</g>');
+
+      // scene 4: the floors, side by side
+      p.push('<g id="bpG4" opacity="0">');
+      p.push('<rect class="bp-panel" x="60" y="45" width="520" height="190" rx="10"/>');
+      p.push('<text class="bp-mono bp-soft" x="320" y="75" font-size="13" text-anchor="middle">the floors, side by side (k = ' + K + ')</text>');
+      for (n = 1; n <= 8; n++) {
+        var cx2 = 92 + (n - 1) * 62;
+        var fT = Math.floor(S[n]), fL = Math.floor(A * n - C);
+        p.push('<g id="bpF' + n + '" opacity="0">');
+        p.push('<text class="bp-mono bp-faint" x="' + cx2 + '" y="105" font-size="11" text-anchor="middle">n=' + n + '</text>');
+        p.push('<text class="bp-mono bp-fill-b" x="' + cx2 + '" y="140" font-size="16" text-anchor="middle">' + fT + '</text>');
+        p.push('<text class="bp-mono bp-fill-a" x="' + cx2 + '" y="166" font-size="14" text-anchor="middle">=</text>');
+        p.push('<text class="bp-mono bp-ink" x="' + cx2 + '" y="196" font-size="16" text-anchor="middle">' + fL + '</text>');
+        p.push('</g>');
+      }
+      p.push('<text class="bp-mono bp-soft" x="320" y="222" font-size="12" text-anchor="middle">⌊sₙ⌋ above, ⌊αn − (1+α)⁄√(k²+4)⌋ below. every n, every k.</text>');
+      p.push('</g>');
+
+      p.push('</svg>');
+      stage.innerHTML = p.join('');
+
+      el = { g0: 0, g1: 0, g2: 0, g3: 0, g4: 0 };
+      el.g0 = document.getElementById('bpG0'); el.g1 = document.getElementById('bpG1');
+      el.g2 = document.getElementById('bpG2'); el.g3 = document.getElementById('bpG3');
+      el.g4 = document.getElementById('bpG4');
+      el.line = document.getElementById('bpLine'); el.lineLen = lineLen;
+      el.ring = document.getElementById('bpRing'); el.insetG = document.getElementById('bpInset');
+      el.gapNote = document.getElementById('bpGapNote'); el.iy = iy; el.icx = icx;
+      el.mg = document.getElementById('bpMG');
+      el.s1 = document.getElementById('bpS1'); el.s2 = document.getElementById('bpS2');
+      el.towers = []; for (i = 0; i < 4; i++) { el.towers.push(document.getElementById('bpT' + i)); }
+      el.dots = []; for (n = 1; n <= NMAX; n++) { el.dots[n] = document.getElementById('bpD' + n); }
+      el.floors = []; for (n = 1; n <= 8; n++) { el.floors[n] = document.getElementById('bpF' + n); }
+      built = true; lastPhase = -1;
+    }
+
+    var CAPTIONS = function () {
+      return [
+        'The tower, for k = ' + K + ': every term leans on the one after it, forever. An infinite object, from three integers.',
+        'The line: slope α = ' + A.toFixed(6) + ', the big root of Mₖ. The tower’s values land almost exactly on it.',
+        'Zooming in at n = 5. The real gap is ' + gapZ.toFixed(4) + ', far too thin to draw. The floors can only disagree if a whole number hides inside that sliver.',
+        'Suppose one did. It would hand you its norm: a positive whole number congruent to −' + K + ' (mod ' + (K * K + 4) + '), so at least ' + minNorm + '. The sliver has nowhere near that much room. Out it goes.',
+        'No whole number can sneak in, so the floors agree everywhere. That is the conjecture, and the Lean file says it with no sorry in it.'
+      ];
+    };
+
+    function phaseAt(time) {
+      var acc = 0;
+      // u runs 0..1 across the scene's action, then stays pinned at 1 through the pause.
+      for (var p = 0; p < PH.length; p++) { if (time < acc + PH[p]) { return { p: p, u: clamp01((time - acc) / CONTENT[p]) }; } acc += PH[p]; }
+      return { p: PH.length - 1, u: 1 };
+    }
+
+    function frame(time) {
+      if (!built) { return; }
+      var ph = phaseAt(time), p = ph.p, u = ph.u, n, i;
+
+      // Scene envelopes: every scene fades in at the start of its own phase and out at the
+      // end of it, so nothing ever crossfades into anything else. The chart is the one
+      // persistent layer; it dims (never vanishes) while the inset and the floors hold focus.
+      var g0o = (p === 0) ? ease(u / 0.08) * (1 - ease((u - 0.90) / 0.10)) : 0;
+      var g1o = 0;
+      if (p === 1) { g1o = ease(u / 0.08); }
+      else if (p === 2) { g1o = 1 - 0.65 * ease(u / 0.18); }
+      else if (p === 3) { g1o = 0.35; }
+      else if (p === 4) { g1o = 0.22; }
+      var out3 = (p === 3) ? (1 - ease((u - 0.92) / 0.08)) : 1;
+      el.g0.setAttribute('opacity', String(g0o));
+      el.g1.setAttribute('opacity', String(g1o));
+      el.g2.setAttribute('opacity', String((p === 2) ? 1 : (p === 3 ? out3 : 0)));
+      el.g3.setAttribute('opacity', String((p === 3) ? out3 : 0));
+      el.g4.setAttribute('opacity', String((p === 4) ? ease(u / 0.12) : 0));
+
+      // scene 0: tower lines reveal one at a time, with room to read
+      for (i = 0; i < 4; i++) {
+        var lu = (p > 0) ? 1 : ease((u - (0.06 + i * 0.20)) / 0.14);
+        el.towers[i].setAttribute('opacity', String(lu));
+      }
+
+      // scene 1: the line sweeps, then the dots drop onto it
+      var uLine = (p > 1) ? 1 : (p === 1 ? ease((u - 0.06) / 0.42) : 0);
+      el.line.setAttribute('stroke-dashoffset', fx(el.lineLen * (1 - uLine)));
+      for (n = 1; n <= NMAX; n++) {
+        var du = (p > 1) ? 1 : (p === 1 ? ease((u - 0.30 - n * 0.042) / 0.20) : 0);
+        el.dots[n].setAttribute('opacity', String(du));
+        el.dots[n].setAttribute('cy', fx(yOf(S[n]) - 22 * (1 - du)));
+      }
+
+      // scene 2: a quick ring pulse on the dot, then the inset pops in crisp at full size
+      if (p === 2 || p === 3) {
+        var ru = (p === 2) ? ease(u / 0.10) * (1 - ease((u - 0.12) / 0.10)) : 0;
+        el.ring.setAttribute('opacity', String(ru));
+        el.ring.setAttribute('r', fx(5 + 12 * ((p === 2) ? ease(u / 0.18) : 1)));
+        var iu = (p === 2) ? ease((u - 0.16) / 0.12) : 1;
+        el.insetG.setAttribute('opacity', String(iu));
+        el.insetG.setAttribute('transform', 'translate(0,' + fx(8 * (1 - iu)) + ')');
+        el.gapNote.setAttribute('opacity', String((p === 2) ? ease((u - 0.34) / 0.14) : 1));
+      }
+
+      // scene 3: the intruder descends, is stamped, and is thrown out
+      if (p === 3) {
+        var dIn = ease(u / 0.20);
+        var my = 14 + (el.iy + 115 - 14) * dIn;
+        var out = ease((u - 0.74) / 0.16);
+        var mx = el.icx + 260 * out;
+        el.mg.setAttribute('transform', 'translate(' + fx(mx - el.icx) + ',' + fx(my - 14) + ')');
+        el.mg.setAttribute('opacity', String(1 - out));
+        el.s1.setAttribute('opacity', String(ease((u - 0.28) / 0.12)));
+        el.s2.setAttribute('opacity', String(ease((u - 0.48) / 0.12)));
+      }
+
+      // scene 4: the floors light up column by column
+      for (n = 1; n <= 8; n++) {
+        el.floors[n].setAttribute('opacity', (p === 4) ? String(ease((u - 0.10 - n * 0.075) / 0.12)) : 0);
+      }
+
+      if (p !== lastPhase) { lastPhase = p; cap.textContent = CAPTIONS()[p]; }
+    }
+
+    // Just play/pause; pressing play at the end restarts on its own (see the play handler),
+    // so there is no separate "replay" label competing with the "back to start" button.
+    function setPlayLabel() { playBtn.textContent = playing ? 'pause' : 'play'; }
+    function loop(ts) {
+      raf = 0;
+      if (!playing) { return; }
+      var dt = lastTs ? Math.min(ts - lastTs, 50) : 16;
+      lastTs = ts;
+      t += dt;
+      if (t >= TOTAL) { t = TOTAL - 1; playing = false; ended = true; setPlayLabel(); }
+      frame(t);
+      if (playing) { raf = requestAnimationFrame(loop); }
+    }
+    function start() { if (!raf) { lastTs = 0; raf = requestAnimationFrame(loop); } }
+
+    playBtn.addEventListener('click', function () {
+      if (!built) { return; }
+      if (ended) { t = 0; ended = false; lastPhase = -1; }
+      playing = !playing; setPlayLabel();
+      if (playing) { start(); } else { frame(t); }
+    });
+    stepBtn.addEventListener('click', function () {
+      if (!built) { return; }
+      playing = false; ended = false;
+      var ph = phaseAt(t), acc = 0, p;
+      if (ph.u > 0.985) {
+        // the current scene is already finished: advance to the end of the next one, or wrap
+        if (ph.p === 4) { t = 0; }
+        else { for (p = 0; p <= ph.p + 1; p++) { acc += PH[p]; } t = acc - 1; }
+      } else {
+        // finish the current scene
+        for (p = 0; p <= ph.p; p++) { acc += PH[p]; }
+        t = acc - 1;
+      }
+      if (t >= TOTAL - 2) { ended = true; }
+      lastPhase = -1; setPlayLabel(); frame(t);
+    });
+    restartBtn.addEventListener('click', function () {
+      if (!built) { return; }
+      t = 0; ended = false; playing = false; lastPhase = -1; setPlayLabel(); frame(0);
+    });
+    root.querySelectorAll('.ls-chip[data-bpk]').forEach(function (ch) {
+      ch.addEventListener('click', function () {
+        K = +ch.getAttribute('data-bpk');
+        computeData(); buildScene();
+        root.querySelectorAll('.ls-chip[data-bpk]').forEach(function (c2) { c2.setAttribute('aria-pressed', (+c2.getAttribute('data-bpk') === K) ? 'true' : 'false'); });
+        t = 0; ended = false; lastPhase = -1; frame(0);
+        if (!reduced) { playing = true; setPlayLabel(); start(); } else { playing = false; setPlayLabel(); }
+      });
+    });
+
+    root.addEventListener('toggle', function () {
+      if (!root.open) { playing = false; setPlayLabel(); return; }
+      if (!built) {
+        computeData(); buildScene(); frame(0);
+        root.querySelector('.ls-chip[data-bpk="1"]').setAttribute('aria-pressed', 'true');
+        if (!reduced) { playing = true; start(); } else { cap.textContent = CAPTIONS()[0]; }
+        setPlayLabel();
+      }
+    });
+
+    // ---- silent self-tests ----
+    (function selfTest() {
+      try {
+        for (var k = 1; k <= 3; k++) {
+          var a = alphaOf(k), c = cOf(k), s = towerVals(k, 14);
+          for (var n = 1; n <= 12; n++) {
+            var L = a * n - c;
+            console.assert(Math.floor(s[n]) === Math.floor(L), 'bp self-test: floors differ at n=' + n + ', k=' + k);
+            console.assert(s[n] > L, 'bp self-test: tower should sit above the line at n=' + n + ', k=' + k);
+          }
+        }
+      } catch (e) { /* stay silent */ }
+    })();
+  })();
+</script>
+</body>
+</html>
