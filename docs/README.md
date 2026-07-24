@@ -30,6 +30,7 @@ sources remain useful to engineering decisions.
 
 | Document | Purpose |
 |---|---|
+| [Maths core review](reviews/2026-07-22-maths-core-review.md) | Active findings and next-moves checklist for the non-Research `Puck.Maths` core (GF(2) algebra + digital-net sampling clusters): one critical C#↔HLSL constant divergence, confirmed codegen headroom, and the ordered correction/expansion/performance/ergonomics plan. Tests deliberately out of scope during active development. |
 | [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
 | [World authoring, audio, and Forge implementation review](reviews/2026-07-19-large-change-set-review.md) | Static review of the landed P3–P6, audio, Forge, and overlay work: capacity contracts, transactional/lifetime defects, proof gaps, and ordered remediation. |
 | [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
@@ -51,6 +52,7 @@ Git history holds the rest.
 | [Demo to World port](demo-to-world-port-plan.md) | **The plan of record.** The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project — start at its **State** block (7 arcs landed, unmerged; 8–12 remain). Carries the deletion ledger, open questions, and the parallel carried tracks. |
 | [Game studio](game-studio-plan.md) | Creator workflow and remaining product roadmap; port-reference for arcs 7/8 (banner-dated — destination is World, the Demo is a library that no longer runs). |
 | [Tessellation world](tessellation-world-plan.md) | Creative-work handoff for the World terrain, day cycle, settlements, and weather — verified by running the world. |
+| Maths research corpus (relocated) | The polynomial-tail / Beatty / metallic-mean / parity-irreducibility research program — theorems, certificates, verifiers, and the Lean project — moved out of Puck on 2026-07-23 to `D:\Source\ByteTerrace\Temp\Maths` (see its `MANIFEST.md`). The production primitives it yielded remain in `src/Puck.Maths`. |
 | [Machine fleet](machine-fleet-plan.md) | Emulator-fleet performance model and optimization priorities. |
 | [Machine fleet briefing](machine-fleet-briefing.md) | Workload classes, scale posture, and design constraints. |
 | [Ideal GamingBrick](ideal-gaming-brick-plan.md) | Cross-generation emulator architecture and roadmap. |
