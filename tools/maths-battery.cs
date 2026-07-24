@@ -1073,6 +1073,116 @@ foreach (var bin in bins) {
 }
 Console.WriteLine("low discrepancy: R1/R2 values + coverage OK");
 
+// ---- CertifiedLowDiscrepancy (badly-approximable equidistribution, certified by the continued fraction) ----
+// The largest partial quotient K of a quadratic irrational's continued fraction certifies how evenly {n·alpha} covers
+// [0, 1): the star discrepancy is bounded exactly when alpha is badly approximable (K finite). Oracles: K recomputed
+// straight from ContinuedFraction.Expand (the max over a_1.., the integer part a_0 dropped, since it does not clump the
+// fractional points), and the empirically measured exact one-dimensional star-discrepancy of the generated points, which
+// must fall under the closed-form certified bound at every scale. Golden [1] is the Hurwitz-optimal K = 1, silver [2] is
+// K = 2, and every metallic mean delta_n is K = n -- the same badly-approximable units MetallicQuasicrystal is built on.
+Span<long> certifiedTerms = stackalloc long[128];
+(string Name, long P, long Q, long D, long R, long K)[] certifiedCases = [
+    ("golden",   1L, 1L, 5L,    2L, 1L),    // (1 + sqrt 5)/2 = [1; (1)]
+    ("silver",   1L, 1L, 2L,    1L, 2L),    // 1 + sqrt 2 = [2; (2)]
+    ("sqrt2",    0L, 1L, 2L,    1L, 2L),    // sqrt 2 = [1; (2)]
+    ("sqrt13",   0L, 1L, 13L,   1L, 6L),    // sqrt 13 = [3; (1, 1, 1, 1, 6)]
+    ("sqrt50",   0L, 1L, 50L,   1L, 14L),   // sqrt 50 = [7; (14)]
+    ("sqrt2501", 0L, 1L, 2501L, 1L, 100L),  // sqrt 2501 = [50; (100)]
+];
+foreach (var certifiedCase in certifiedCases) {
+    var certified = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: certifiedCase.P, q: certifiedCase.Q, d: certifiedCase.D, r: certifiedCase.R);
+
+    // Oracle: recompute the certificate directly from the raw expansion -- the max partial quotient a_1.. from Expand.
+    var certifiedWritten = ContinuedFraction.Expand(
+        p: certifiedCase.P,
+        q: certifiedCase.Q,
+        d: certifiedCase.D,
+        r: certifiedCase.R,
+        terms: certifiedTerms,
+        periodStart: out var certifiedStart,
+        periodLength: out _
+    );
+    var certifiedOracleK = 1L;
+
+    for (var i = 1; (i < certifiedStart); ++i) { certifiedOracleK = Math.Max(certifiedOracleK, certifiedTerms[i]); }
+    for (var i = certifiedStart; (i < certifiedWritten); ++i) { certifiedOracleK = Math.Max(certifiedOracleK, certifiedTerms[i]); }
+
+    if ((certified.Certificate != certifiedCase.K) || (certifiedOracleK != certifiedCase.K)) {
+        throw new InvalidOperationException($"CERTIFIED LOW DISCREPANCY CERTIFICATE WRONG {certifiedCase.Name}");
+    }
+
+    // The measured exact star-discrepancy of the first N points must lie under the certified bound at every scale.
+    foreach (var certifiedN in new[] { 64, 256, 1024, 4096, 16384 }) {
+        if (CertifiedStarDiscrepancy(sequence: certified, pointCount: certifiedN) > ((double)certified.DiscrepancyBound(pointCount: certifiedN))) {
+            throw new InvalidOperationException($"CERTIFIED LOW DISCREPANCY MEASURED EXCEEDS CERTIFIED {certifiedCase.Name} N={certifiedN}");
+        }
+    }
+}
+
+// A large integer part is not a large partial quotient: (201 + sqrt 5)/2 = 100 + phi still certifies at one.
+if (CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 201L, q: 1L, d: 5L, r: 2L).Certificate != 1L) {
+    throw new InvalidOperationException("CERTIFIED LOW DISCREPANCY INTEGER PART INFLATED THE CERTIFICATE");
+}
+
+// Metallic means delta_n = [n; n, n, ...] certify at exactly n, tying the sequence back to the quasicrystal family.
+var certifiedGolden = CertifiedLowDiscrepancy.MetallicMean(n: 1);
+var certifiedSilver = CertifiedLowDiscrepancy.MetallicMean(n: 2);
+
+for (var n = 1; (n <= 6); ++n) {
+    if (CertifiedLowDiscrepancy.MetallicMean(n: n).Certificate != n) {
+        throw new InvalidOperationException($"CERTIFIED LOW DISCREPANCY METALLIC MEAN CERTIFICATE WRONG n={n}");
+    }
+}
+if ((certifiedGolden.Certificate != 1L) || (certifiedSilver.Certificate != 2L)) {
+    throw new InvalidOperationException("CERTIFIED LOW DISCREPANCY GOLDEN/SILVER MEANS ARE NOT K=1/K=2");
+}
+
+// Teeth: the certificate is meaningful, not vacuous -- a small K measures markedly lower than a large one at the same N,
+// and the measured discrepancy is monotone in K across golden (1) < silver (2) < sqrt 50 (14).
+var certifiedBadK = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 0L, q: 1L, d: 2501L, r: 1L);  // K = 100
+
+foreach (var certifiedN in new[] { 1024, 4096, 16384 }) {
+    if (CertifiedStarDiscrepancy(sequence: certifiedBadK, pointCount: certifiedN) <= (2.0 * CertifiedStarDiscrepancy(sequence: certifiedGolden, pointCount: certifiedN))) {
+        throw new InvalidOperationException($"CERTIFIED LOW DISCREPANCY TEETH: LARGE-K NOT MARKEDLY WORSE N={certifiedN}");
+    }
+}
+
+var certifiedSqrt50 = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 0L, q: 1L, d: 50L, r: 1L);  // K = 14
+
+if (!((CertifiedStarDiscrepancy(sequence: certifiedGolden, pointCount: 16384) < CertifiedStarDiscrepancy(sequence: certifiedSilver, pointCount: 16384)) &&
+      (CertifiedStarDiscrepancy(sequence: certifiedSilver, pointCount: 16384) < CertifiedStarDiscrepancy(sequence: certifiedSqrt50, pointCount: 16384)))) {
+    throw new InvalidOperationException("CERTIFIED LOW DISCREPANCY TEETH: MEASURED DISCREPANCY NOT MONOTONE IN K");
+}
+
+// Determinism: two independent builds agree bit-for-bit over a long run, and the golden point matches its known value.
+var certifiedGoldenAgain = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L);
+
+for (var i = 0UL; (i < 200000UL); ++i) {
+    if (certifiedGolden.Point(index: i) != certifiedGoldenAgain.Point(index: i)) {
+        throw new InvalidOperationException("CERTIFIED LOW DISCREPANCY NOT DETERMINISTIC ACROSS BUILDS");
+    }
+}
+if (Math.Abs((((double)certifiedGolden.Point(index: 1UL)) - 0.61803398874989485)) > 1e-9) {
+    throw new InvalidOperationException("CERTIFIED LOW DISCREPANCY GOLDEN POINT ONE IS NOT PHI - 1");
+}
+foreach (var certifiedCase in certifiedCases) {
+    var certifiedSequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: certifiedCase.P, q: certifiedCase.Q, d: certifiedCase.D, r: certifiedCase.R);
+    var certifiedSorted = new double[4096];
+
+    for (var i = 0; (i < certifiedSorted.Length); ++i) { certifiedSorted[i] = ((double)certifiedSequence.Point(index: (ulong)(i + 1))); }
+
+    Array.Sort(certifiedSorted);
+
+    var certifiedGap = (certifiedSorted[0] + (1.0 - certifiedSorted[^1]));
+
+    for (var i = 1; (i < certifiedSorted.Length); ++i) { certifiedGap = Math.Max(certifiedGap, (certifiedSorted[i] - certifiedSorted[i - 1])); }
+
+    if (certifiedGap > 0.05) {
+        throw new InvalidOperationException($"CERTIFIED LOW DISCREPANCY LEAVES A LARGE EMPTY GAP {certifiedCase.Name}");
+    }
+}
+Console.WriteLine("certified low discrepancy: K from CF (golden 1/silver 2/metallic n, a_0 dropped), measured <= certified bound, teeth (K=1 << K=100, monotone), deterministic + covered OK");
+
 var signedShortPair = BinaryIntegerFunctions.BitwisePair<short, uint>(value: short.MinValue, other: 0);
 var signedLongPair = BinaryIntegerFunctions.BitwisePair<long, Int128>(value: long.MinValue, other: 0L);
 if ((signedShortPair != (1U << 30)) ||
@@ -2175,6 +2285,115 @@ for (var metallicIndex = 1; (metallicIndex <= 6); ++metallicIndex) {
 }
 Console.WriteLine("metallic quasicrystal: ring-coordinate chain n=1..6 (Contains==walk, Next/Previous inverse, delta/delta^2 steps, monotone, no SS/L^(n+2), density -> delta) == streamed word OK");
 
+// ---- QuadraticQuasicrystal.Chain random access (the general cut-and-project: ANY CF period, not just metallic [n]) ----
+// The general chain addresses vertices by their (longCount, shortCount) abelianization: a point is a member iff its
+// Galois-conjugate internal coordinate C*a + (lambda'-A)*b lands in the acceptance window [0, C + A - lambda'). For each
+// period the ring-coordinate walk from the origin must stay in the set, invert under Previous, step by exactly the long
+// (a+1,b) or short (a,b+1) vector, advance monotonically, and reach the streamed word's long-density. Contains must equal
+// the walked vertex set EXACTLY over a coordinate box the walk fully covers (a mis-sized window would pass the walk yet
+// admit ghost points), and the ring-coordinate walk word must be a contiguous factor of the independently streamed
+// substitution word (the trusted Sturmian oracle) — two implementations of one tiling. Single-term periods reproduce the
+// same tiling language as MetallicQuasicrystal (verified first), so the general path subsumes the metallic chains.
+for (var chainN = 1; (chainN <= 6); ++chainN) {
+    var chainSingle = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(p: chainN, q: 1L, d: (((long)chainN * chainN) + 4L), r: 2L);
+    var chainSinglePoint = (A: 0L, B: 0L);
+    var chainMetallicPoint = (A: 0L, B: 0L);
+    var chainGeneralWord = new bool[3000];
+    var chainMetallicWord = new bool[3000];
+
+    for (var step = 0; (step < chainGeneralWord.Length); ++step) {
+        chainGeneralWord[step] = chainSingle.StartsLongTile(a: chainSinglePoint.A, b: chainSinglePoint.B);
+        chainSinglePoint = chainSingle.Next(a: chainSinglePoint.A, b: chainSinglePoint.B);
+        chainMetallicWord[step] = MetallicQuasicrystal.StartsLongTile(n: chainN, a: chainMetallicPoint.A, b: chainMetallicPoint.B);
+        chainMetallicPoint = MetallicQuasicrystal.Next(n: chainN, a: chainMetallicPoint.A, b: chainMetallicPoint.B);
+    }
+
+    // The general single-term walk and the metallic walk realize one tiling: each is a factor of the other (phase aside).
+    if (!IsFactorOfWord(haystack: chainMetallicWord, needle: chainGeneralWord.AsSpan(0, 900))) {
+        throw new InvalidOperationException($"QUADRATIC CHAIN SINGLE-TERM != METALLIC WALK n={chainN}");
+    }
+    if (!IsFactorOfWord(haystack: chainGeneralWord, needle: chainMetallicWord.AsSpan(0, 900))) {
+        throw new InvalidOperationException($"METALLIC WALK != QUADRATIC CHAIN SINGLE-TERM n={chainN}");
+    }
+}
+
+// Multi-term periods: sqrt(3)=[1;1,2], sqrt(7)=[2;1,1,1,4], sqrt(13), sqrt(23), plus a 6-term (sqrt(19)) and a general
+// (p,q,d,r) with a non-unit numerator — 2-, 3-, 4-, 5-, and 6-term periods, none reachable by the metallic [n] family.
+(long P, long Q, long D, long R)[] chainCases = [
+    (0L, 1L, 3L, 1L), (0L, 1L, 7L, 1L), (0L, 1L, 13L, 1L), (0L, 1L, 23L, 1L), (0L, 1L, 19L, 1L), (3L, 1L, 11L, 1L),
+];
+foreach (var chainCase in chainCases) {
+    var chain = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(p: chainCase.P, q: chainCase.Q, d: chainCase.D, r: chainCase.R);
+
+    if (!chain.Contains(a: 0L, b: 0L)) {
+        throw new InvalidOperationException($"QUADRATIC CHAIN ORIGIN IS NOT A MEMBER d={chainCase.D}");
+    }
+
+    var chainPoint = (A: 0L, B: 0L);
+    var chainLong = 0L;
+    var chainWalkWord = new bool[8000];
+    var chainVisited = new HashSet<(long A, long B)>();
+
+    for (var step = 0; (step < chainWalkWord.Length); ++step) {
+        chainVisited.Add(item: chainPoint);
+
+        var isLong = chain.StartsLongTile(a: chainPoint.A, b: chainPoint.B);
+        var next = chain.Next(a: chainPoint.A, b: chainPoint.B);
+
+        chainWalkWord[step] = isLong;
+
+        if (!chain.Contains(a: next.A, b: next.B)) {
+            throw new InvalidOperationException($"QUADRATIC CHAIN WALK LEFT THE SET d={chainCase.D}");
+        }
+        if (chain.Previous(a: next.A, b: next.B) != chainPoint) {
+            throw new InvalidOperationException($"QUADRATIC CHAIN PREVIOUS IS NOT THE INVERSE OF NEXT d={chainCase.D}");
+        }
+        if (isLong ? (((next.A - chainPoint.A) != 1L) || ((next.B - chainPoint.B) != 0L)) : (((next.A - chainPoint.A) != 0L) || ((next.B - chainPoint.B) != 1L))) {
+            throw new InvalidOperationException($"QUADRATIC CHAIN STEP IS NOT THE LONG OR SHORT VECTOR d={chainCase.D}");
+        }
+        if (chain.Position(a: next.A, b: next.B) <= chain.Position(a: chainPoint.A, b: chainPoint.B)) {
+            throw new InvalidOperationException($"QUADRATIC CHAIN POSITIONS ARE NOT INCREASING d={chainCase.D}");
+        }
+
+        if (isLong) { ++chainLong; }
+
+        chainPoint = next;
+    }
+
+    // Long-density matches the streamed word (the Perron frequency), so the walk labels long/short as the substitution does.
+    var chainStreamed = new bool[60000];
+    QuadraticQuasicrystal.Word(p: chainCase.P, q: chainCase.Q, d: chainCase.D, r: chainCase.R, tiles: chainStreamed);
+
+    var chainStreamedLong = 0L;
+    foreach (var tile in chainStreamed) { if (tile) { ++chainStreamedLong; } }
+
+    if (Math.Abs(((double)chainLong / chainWalkWord.Length) - ((double)chainStreamedLong / chainStreamed.Length)) > 0.02) {
+        throw new InvalidOperationException($"QUADRATIC CHAIN DENSITY DISAGREES WITH THE STREAMED WORD d={chainCase.D}");
+    }
+
+    // Contains must equal the walked set exactly over a coordinate box the walk fully covers — no ghost members admitted.
+    // The final vertex overshooting the box in both coordinates guarantees every box point was passed by the monotone walk.
+    var chainBox = 60L;
+
+    if ((chainPoint.A <= chainBox) || (chainPoint.B <= chainBox)) {
+        throw new InvalidOperationException($"QUADRATIC CHAIN WALK DID NOT COVER THE BOX d={chainCase.D}");
+    }
+
+    for (var boxA = 0L; (boxA <= chainBox); ++boxA) {
+        for (var boxB = 0L; (boxB <= chainBox); ++boxB) {
+            if (chain.Contains(a: boxA, b: boxB) != chainVisited.Contains(item: (boxA, boxB))) {
+                throw new InvalidOperationException($"QUADRATIC CHAIN CONTAINS DISAGREES WITH THE WALK d={chainCase.D} ({boxA},{boxB})");
+            }
+        }
+    }
+
+    // Two independent implementations agree: the cut-and-project walk word is a factor of the streamed substitution word.
+    if (!IsFactorOfWord(haystack: chainStreamed, needle: chainWalkWord.AsSpan(0, 1500))) {
+        throw new InvalidOperationException($"QUADRATIC CHAIN RANDOM ACCESS != STREAMED WORD d={chainCase.D}");
+    }
+}
+Console.WriteLine("quadratic quasicrystal chain: general ring-coordinate random access over 2..6-term periods (Contains==walk, Next/Previous inverse, long/short steps, monotone, density) == streamed word, single-term == metallic OK");
+
 // ---- ModularTransform + ContinuedFraction (the modular group beneath the three motions) ----
 // The four canonical elements land in the three conjugacy classes; SL2(Z) has determinant one and adjugate inverse;
 // the Mobius action on cusps is a group action agreeing with exact BigInteger rational arithmetic; Gauss reduction
@@ -2483,6 +2702,25 @@ for (var n = 1; (n <= 6); ++n) {
     }
 }
 Console.WriteLine("inflation lens: golden/silver recovered (disc 5/8, hyperbolic unimodular axes), surd = characteristic root; metallic family reproduces both chains, frequency -> delta_n, sigma(word) == word OK");
+
+// The exact star-discrepancy of a one-dimensional point set: sort, then the largest signed gap between the empirical and
+// the uniform cumulative distribution. The empirical oracle the certified discrepancy bound must dominate.
+static double CertifiedStarDiscrepancy(CertifiedLowDiscrepancy sequence, int pointCount) {
+    var points = new double[pointCount];
+
+    for (var i = 0; (i < pointCount); ++i) { points[i] = ((double)sequence.Point(index: (ulong)(i + 1))); }
+
+    Array.Sort(points);
+
+    var discrepancy = 0.0;
+
+    for (var i = 0; (i < pointCount); ++i) {
+        discrepancy = Math.Max(discrepancy, ((((double)(i + 1)) / pointCount) - points[i]));
+        discrepancy = Math.Max(discrepancy, (points[i] - (((double)i) / pointCount)));
+    }
+
+    return discrepancy;
+}
 
 // Is `needle` a contiguous factor of `haystack`? A phase-independent witness that two tiling words share a language.
 static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {

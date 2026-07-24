@@ -21,6 +21,8 @@ namespace Puck.Maths;
 /// <see cref="QuadraticInflation.InflationFactor"/>, and <see cref="Positions(long, long, long, long, ReadOnlySpan{bool}, Span{FixedQ4816})"/>
 /// lays the tiles on the line with the short tile as the unit and the long tile as <see cref="LongTileLength(long, long, long, long)"/> —
 /// the one approximate seam, matching <see cref="MetallicQuasicrystal.Position(int, long, long)"/>; the word above it is exact combinatorics.
+/// Beyond streaming, the nested <see cref="Chain"/> addresses the same tiling's vertices by ring coordinate in O(1) —
+/// the general membership-and-traversal surface the metallic family carries only for single-term periods.
 /// </remarks>
 public static class QuadraticQuasicrystal {
     /// <summary>Fills a leading run of the tiling word of <c>(p + q·√d) / r</c>: the fixed point of the substitution its continued-fraction period composes.</summary>
@@ -151,5 +153,118 @@ public static class QuadraticQuasicrystal {
         image.Slice(start: 0, length: count).CopyTo(destination: tiles.Slice(start: at, length: count));
 
         return (at + count);
+    }
+
+    /// <summary>
+    /// Ring-coordinate random access into the same tiling <see cref="Word(long, long, long, long, Span{bool})"/> streams:
+    /// the O(1) membership-and-traversal surface that <see cref="MetallicQuasicrystal"/> carries for the single-term
+    /// (metallic) periods, generalized to every continued-fraction period. The tiling's vertices form a cut-and-project set
+    /// whose two-tile step lattice is the abelianization <c>ℤ²</c> of the long/short letter counts; a lattice point
+    /// <c>(a, b) = (longCount, shortCount)</c> is a vertex exactly when its Galois-conjugate internal coordinate falls in a
+    /// bounded acceptance window. Build one with <see cref="FromQuadraticIrrational(long, long, long, long)"/> and reuse it —
+    /// the period is expanded once and the substitution matrix cached, so each query is a handful of integer operations.
+    /// </summary>
+    /// <remarks>
+    /// The physical tile lengths are the left Perron eigenvector of the substitution matrix <c>M = [[A, B], [C, D]]</c>:
+    /// long <c>∝ C</c>, short <c>∝ λ − A</c> (with <c>λ</c> the inflation factor). Applying the field's Galois conjugation
+    /// sends <c>λ ↦ λ'</c> (the other root of <c>x² − Trace·x + Determinant</c>), giving the internal (star) coordinate
+    /// <c>s(a, b) = C·a + (λ' − A)·b</c>. The acceptance window is the half-open interval <c>[0, C + A − λ')</c> — its length
+    /// is the sum of the two internal tile lengths, the covolume the cut-and-project set demands, with the origin at the left
+    /// edge. Both internal tile lengths are irrational surds (the naive <c>ℓ_short = 1</c> would make the short tile rational
+    /// and unbound the window, so the tiles are taken as the eigenvector components <c>C</c> and <c>λ − A</c>), so the window
+    /// is genuinely bounded and <see cref="Contains(long, long)"/> is decisive. Only <see cref="Position(long, long)"/> crosses
+    /// the approximate seam; membership and traversal are exact integer surd signs. For a single-term period the walk
+    /// reproduces the same tiling language as <see cref="MetallicQuasicrystal"/> — but in tile-count coordinates, whereas
+    /// <see cref="MetallicQuasicrystal"/> keeps the ring coordinate <c>a + b·δₙ</c> that matches the former golden and silver
+    /// files; general periods (with <c>C &gt; 1</c>) admit no such ring embedding, which is why this surface addresses by
+    /// tile count.
+    /// </remarks>
+    public readonly record struct Chain {
+        private Chain(QuadraticInflation inflation, FixedQ4816 inflationFactor) {
+            Inflation = inflation;
+            InflationFactor = inflationFactor;
+        }
+
+        /// <summary>Gets the inflation lens beneath the chain — the exact substitution matrix and its conjugacy invariants.</summary>
+        public QuadraticInflation Inflation { get; }
+        /// <summary>Gets the inflation factor <c>λ</c> — the Perron eigenvalue and the self-similarity scale — as a fixed-point value; the one approximate seam, used only by <see cref="Position(long, long)"/>.</summary>
+        public FixedQ4816 InflationFactor { get; }
+
+        /// <summary>Builds the ring-coordinate chain of the quadratic irrational <c>(p + q·√d) / r</c> from its continued-fraction period.</summary>
+        /// <param name="p">The rational part of the numerator.</param>
+        /// <param name="q">The coefficient of the surd; it must be positive.</param>
+        /// <param name="d">The radicand; it must be at least two and not a perfect square.</param>
+        /// <param name="r">The denominator; it must be non-zero.</param>
+        /// <returns>The chain, with the substitution matrix and inflation factor read from the period.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
+        /// <exception cref="OverflowException">A partial-quotient product exceeds <see cref="long"/> — the period is too long for the width.</exception>
+        public static Chain FromQuadraticIrrational(long p, long q, long d, long r) {
+            var inflation = QuadraticInflation.FromQuadraticIrrational(p: p, q: q, d: d, r: r);
+
+            return new Chain(inflation: inflation, inflationFactor: inflation.InflationFactor());
+        }
+
+        /// <summary>Determines whether the lattice point <c>(a, b) = (longCount, shortCount)</c> is a vertex of the tiling — the O(1) membership test that addresses points by ring coordinate.</summary>
+        /// <param name="a">The long-tile count of the vertex — the number of long tiles from the origin.</param>
+        /// <param name="b">The short-tile count of the vertex — the number of short tiles from the origin.</param>
+        /// <returns><see langword="true"/> when the point's internal (Galois-conjugate) coordinate lies in the acceptance window <c>[0, C + A − λ')</c>.</returns>
+        public bool Contains(long a, long b) {
+            var matrixA = Inflation.A;
+            var matrixC = Inflation.C;
+            var discriminant = Inflation.Discriminant;
+
+            // The internal coordinate is s = C·a + (λ' − A)·b, with λ' = (Trace − √Δ) / 2, so 2·s = (2C·a + (D − A)·b) − b·√Δ.
+            // Membership is 0 ≤ s: the lower edge is closed, so the origin (0, 0) at s = 0 is the left endpoint of the window.
+            if (SignSurd128(rational: (((Int128)(2L * matrixC) * a) + ((Int128)(Inflation.D - matrixA) * b)), coefficient: (Int128)(-b), radicand: discriminant) < 0) {
+                return false;
+            }
+
+            // The window length is |W| = C + A − λ', so 2(|W| − s) = (2C·(1 − a) + (A − D)·(1 + b)) + (1 + b)·√Δ; the upper edge
+            // is open, keeping the single lattice point that lands exactly on it (the far singular point) out of the set.
+            return (SignSurd128(rational: (((Int128)(2L * matrixC) * (1L - a)) + ((Int128)(matrixA - Inflation.D) * (1L + b))), coefficient: (Int128)(1L + b), radicand: discriminant) > 0);
+        }
+        /// <summary>Determines whether the longer-count step begins at the vertex <c>(a, b)</c> — that is, whether the next tile is a long one.</summary>
+        /// <param name="a">The long-tile count of the vertex.</param>
+        /// <param name="b">The short-tile count of the vertex.</param>
+        /// <returns><see langword="true"/> when the tile starting here is the long one; otherwise it is the short tile.</returns>
+        public bool StartsLongTile(long a, long b) =>
+            // The short step reaches (a, b + 1); when that is not a vertex the tile starting here must be the long one instead.
+            (Contains(a: a, b: (b + 1L)) == false);
+        /// <summary>Returns the next vertex along the line — the far end of the tile that starts at <c>(a, b)</c>.</summary>
+        /// <param name="a">The long-tile count of a vertex.</param>
+        /// <param name="b">The short-tile count of a vertex.</param>
+        /// <returns>The next vertex, reached by a long step <c>(a + 1, b)</c> or a short step <c>(a, b + 1)</c>.</returns>
+        public (long A, long B) Next(long a, long b) =>
+            (StartsLongTile(a: a, b: b) ? (a + 1L, b) : (a, b + 1L));
+        /// <summary>Returns the previous vertex along the line — the near end of the tile that ends at <c>(a, b)</c>.</summary>
+        /// <param name="a">The long-tile count of a vertex.</param>
+        /// <param name="b">The short-tile count of a vertex.</param>
+        /// <returns>The preceding vertex of the tiling.</returns>
+        public (long A, long B) Previous(long a, long b) =>
+            // Of the two candidate predecessors, the true one is a vertex whose forward step lands on (a, b); a non-vertex can
+            // also step here, so membership and the step must both be checked — the long candidate first, else the short one.
+            ((Contains(a: (a - 1L), b: b) && (Next(a: (a - 1L), b: b) == (a, b))) ? (a - 1L, b) : (a, b - 1L));
+        /// <summary>Returns the position of the vertex <c>(a, b)</c> along the line.</summary>
+        /// <param name="a">The long-tile count of the vertex.</param>
+        /// <param name="b">The short-tile count of the vertex.</param>
+        /// <returns>The fixed-point coordinate <c>C·a + (λ − A)·b</c> — the physical length swept by the long and short tiles; the one approximate value, membership and traversal being exact.</returns>
+        public FixedQ4816 Position(long a, long b) =>
+            // The physical tile lengths are the left Perron eigenvector (long ∝ C, short ∝ λ − A), so the swept length is
+            // C·a + (λ − A)·b = (C·a − A·b) + λ·b — increasing at every step, both tile lengths being positive.
+            (FixedQ4816.FromInteger(value: ((Inflation.C * a) - (Inflation.A * b))) + (InflationFactor * FixedQ4816.FromInteger(value: b)));
+
+        /// <summary>Returns the sign of the real number <c>rational + coefficient·√radicand</c>, exactly, at full width.</summary>
+        private static int SignSurd128(Int128 rational, Int128 coefficient, long radicand) {
+            if ((rational == Int128.Zero) && (coefficient == Int128.Zero)) { return 0; }
+            if ((rational >= Int128.Zero) && (coefficient >= Int128.Zero)) { return 1; }
+            if ((rational <= Int128.Zero) && (coefficient <= Int128.Zero)) { return -1; }
+
+            // Opposite signs: compare rational² against radicand·coefficient² at full width, then read off by rational's sign.
+            var comparison = (rational * rational).CompareTo((coefficient * coefficient) * radicand);
+
+            return ((rational > Int128.Zero)
+                ? ((comparison > 0) ? 1 : ((comparison < 0) ? -1 : 0))
+                : ((comparison < 0) ? 1 : ((comparison > 0) ? -1 : 0)));
+        }
     }
 }
