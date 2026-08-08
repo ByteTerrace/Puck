@@ -348,8 +348,9 @@
         ],
         "wheels": [
           {
+            "id": "play-primary",
             "group": "play",
-            "holdPage": "play-wheel",
+            "holdPages": ["play-wheel"],
             "rings": [
               {
                 "id": "play-wheel-act",
@@ -357,37 +358,11 @@
                   { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
                   { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
                   { "source": null, "command": "world.console", "label": "Console", "icon": "edit.op" },
-                  { "source": null, "command": "player.bindings", "label": "Bindings", "icon": "edit.link" },
+                  { "source": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
                   { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
-                  { "source": null, "command": "world.addons", "label": "Addons", "icon": "edit.link" }
+                  { "source": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
                 ],
                 "label": "Act",
-                "icon": null
-              },
-              {
-                "id": "play-wheel-world",
-                "entries": [
-                  { "source": null, "command": "world.status", "label": "Status", "icon": "action.target" },
-                  { "source": null, "command": "world.state", "label": "State", "icon": "edit.style" },
-                  { "source": null, "command": "world.portals", "label": "Portals", "icon": "edit.link" },
-                  { "source": null, "command": "world.players", "label": "Players", "icon": "action.target" },
-                  { "source": null, "command": "world.looks", "label": "Looks", "icon": "edit.material" },
-                  { "source": null, "command": "world.refusals", "label": "Refusals", "icon": "edit.delete" }
-                ],
-                "label": "World",
-                "icon": null
-              },
-              {
-                "id": "play-wheel-view",
-                "entries": [
-                  { "source": null, "command": "world.view.state", "label": "Layout", "icon": "edit.style" },
-                  { "source": null, "command": "world.view.pointer", "label": "Pointer", "icon": "action.target" },
-                  { "source": null, "command": "world.view.orbit", "label": "Orbit", "icon": "edit.op" },
-                  { "source": null, "command": "world.hud", "label": "HUD", "icon": "edit.link" },
-                  { "source": null, "command": "world.fps", "label": "FPS", "icon": "edit.next" },
-                  { "source": null, "command": "world.gpu", "label": "GPU", "icon": "edit.record" }
-                ],
-                "label": "View",
                 "icon": null
               }
             ]

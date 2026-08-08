@@ -116,9 +116,8 @@ internal sealed class WorldCursorFeed {
 
     /// <summary>Recomposes and publishes this frame's cursor frame (the overlay's <c>FeedTick</c>).</summary>
     public void Tick() {
-        // The mouse rides the keyboard's seat, exactly as WorldPointerSink resolves it — no other seat carries a
-        // pointer today, so at most one cursor entry publishes per frame.
-        var slot = (m_roster.DeviceSlot(device: PlayerRoster.KeyboardDevice) ?? 0);
+        // The process has one pointer, so at most one cursor entry publishes per frame.
+        var slot = WorldPointerSlot.Resolve(roster: m_roster);
         var count = 0;
         var position = m_pointer.Position(slot: slot);
         var view = m_viewports.Seat(slot: slot);

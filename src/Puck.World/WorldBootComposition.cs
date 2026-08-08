@@ -637,20 +637,20 @@ internal static class WorldBootComposition {
 
         // The radial action menu — held binding pages presenting themselves: the store the overlay's wheel writer
         // reads, the feed that keeps the radial's presentation state (hub anchor, active ring, hovered sector) and
-        // commits a sector through the console door, and the verb surface (player.wheel.ring/.commit +
+        // returns a sector activation through the seat's input-router lane, and the verb surface
         // world.view.wheel). The feed is the process's ONE IWorldWheelConsumer — registered as a consumer BELOW so
         // WorldPointerSink's construction-time registration sees it and stops drain-discarding the wheel
-        // accumulator. Its console door is LAZY (the Func<InputRouter> precedent): TextCommandSource consumes the
-        // CommandRegistry, which aggregates WorldWheelCommandModule, which consumes the feed.
+        // accumulator. Its router is lazy because CommandRegistry aggregates WorldWheelCommandModule, which consumes
+        // the feed.
         services.AddSingleton<WheelStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldWheelFeed(
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
-            feed: sp.GetRequiredService<WorldCursorFeed>(),
+            cursor: sp.GetRequiredService<WorldCursorFeed>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>(),
             store: sp.GetRequiredService<WheelStore>(),
-            console: () => sp.GetRequiredService<TextCommandSource>()
+            router: () => sp.GetRequiredService<InputRouter>()
         ));
         services.AddSingleton<IWorldPointerConsumer>(implementationFactory: static sp => sp.GetRequiredService<WorldWheelFeed>());
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWheelCommandModule(

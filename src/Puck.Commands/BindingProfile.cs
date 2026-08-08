@@ -213,46 +213,136 @@ public static class BindingProfile {
             }
         }
 
-        // The wheel section: one radial menu per group, its rings ordinary pages worn as concentric shells. The
-        // structural rules mirror the chord rows' own (declared group, resolvable hold page, unique ring page ids)
-        // plus the wheel's presentation bounds; every refusal names the offending wheel and enumerates the
-        // admissible values. Sector rows deliberately narrow the page-entry shape — see BindingWheelDefinition.
+        // Named radial presentations. A group may carry several and each may be selected by several page rows;
+        // the row map is still the presenter's allocation-free active lookup. Sectors compile to opaque binding
+        // activations rather than console text, preserving the slot's principal and ordinary command-map gates.
         var wheels = (document.Wheels ?? []);
         var wheelViewByRow = new Dictionary<int, BindingWheelView>();
+        var wheelIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var wheel in wheels) {
             if (wheel is null) {
                 throw new ArgumentException(message: "A wheels row is null.", paramName: nameof(document));
             }
 
+            if (string.IsNullOrEmpty(value: wheel.Id) || !wheelIds.Add(item: wheel.Id)) {
+                throw new ArgumentException(message: $"Wheel id \"{wheel.Id}\" must be non-empty and profile-unique.", paramName: nameof(document));
+            }
+
             if (string.IsNullOrEmpty(value: wheel.Group) || !groupIndexByName.TryGetValue(key: wheel.Group, value: out var wheelGroupIndex)) {
-                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" names a group no chord row declares.", paramName: nameof(document));
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" names group \"{wheel.Group}\", which no chord row declares.", paramName: nameof(document));
             }
 
-            if (string.IsNullOrEmpty(value: wheel.HoldPage) ||
-                !pageRowsById.TryGetValue(key: wheel.HoldPage, value: out var holdRow) ||
-                (holdRow.GroupIndex != wheelGroupIndex)) {
-                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" holds on page \"{wheel.HoldPage}\", which no chord row of that group declares.", paramName: nameof(document));
+            var holdPages = (wheel.HoldPages ?? []);
+
+            if (holdPages.Count == 0) {
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" must name at least one hold page.", paramName: nameof(document));
             }
 
-            if (wheelViewByRow.ContainsKey(key: holdRow.RowIndex)) {
-                throw new ArgumentException(message: $"Group \"{wheel.Group}\" declares two wheels — exactly one wheel per group.", paramName: nameof(document));
+            var holdRows = new int[holdPages.Count];
+            var seenHoldPages = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var holdIndex = 0; (holdIndex < holdPages.Count); holdIndex++) {
+                var holdPage = holdPages[holdIndex];
+
+                if (string.IsNullOrEmpty(value: holdPage) || !seenHoldPages.Add(item: holdPage) ||
+                    !pageRowsById.TryGetValue(key: holdPage, value: out var holdRow) ||
+                    (holdRow.RowIndex < 0) || (holdRow.GroupIndex != wheelGroupIndex)) {
+                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" holds on invalid or repeated page \"{holdPage}\"; every hold page must be a distinct chord-row page of group \"{wheel.Group}\".", paramName: nameof(document));
+                }
+
+                if (wheelViewByRow.ContainsKey(key: holdRow.RowIndex)) {
+                    throw new ArgumentException(message: $"Hold page \"{holdPage}\" presents more than one wheel.", paramName: nameof(document));
+                }
+
+                holdRows[holdIndex] = holdRow.RowIndex;
+            }
+
+            var style = (wheel.Style ?? new BindingWheelStyleDefinition());
+
+            if (!Enum.IsDefined(value: style.PointerSelection) || !Enum.IsDefined(value: style.Placement) ||
+                !Enum.IsDefined(value: style.RingSelection)) {
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries an invalid selection or placement policy.", paramName: nameof(document));
+            }
+
+            if (!float.IsFinite(f: style.DeadZoneFraction) || (style.DeadZoneFraction < 0f) || (style.DeadZoneFraction >= 0.5f) ||
+                !float.IsFinite(f: style.RingWidthFraction) || (style.RingWidthFraction <= 0f) || (style.RingWidthFraction >= 0.5f) ||
+                !float.IsFinite(f: style.OuterGraceRingFraction) || (style.OuterGraceRingFraction < 0f) ||
+                !float.IsFinite(f: style.RotationDegrees)) {
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries invalid style geometry.", paramName: nameof(document));
             }
 
             var ringCount = (wheel.Rings?.Count ?? 0);
 
             if ((ringCount < BindingWheelDefinition.MinRings) || (ringCount > BindingWheelDefinition.MaxRings)) {
-                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" declares {ringCount} rings; a wheel presents {BindingWheelDefinition.MinRings}..{BindingWheelDefinition.MaxRings}.", paramName: nameof(document));
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" declares {ringCount} rings; a wheel presents {BindingWheelDefinition.MinRings}..{BindingWheelDefinition.MaxRings}.", paramName: nameof(document));
+            }
+
+            if ((style.InitialRing < 0) || (style.InitialRing >= ringCount)) {
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" initial ring {style.InitialRing} is outside its {ringCount} rings.", paramName: nameof(document));
+            }
+
+            if ((style.DeadZoneFraction + ((ringCount + style.OuterGraceRingFraction) * style.RingWidthFraction)) >= 0.5f) {
+                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" style extends beyond half of the seat's smaller viewport extent.", paramName: nameof(document));
+            }
+
+            BindingWheelExcursionView? excursionView = null;
+
+            if (style.RingSelection == BindingWheelRingSelectionMode.Explicit) {
+                if (style.Excursion is not null) {
+                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries excursion ranges while ring selection is Explicit.", paramName: nameof(document));
+                }
+            } else {
+                var excursion = (style.Excursion
+                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" selects rings by Excursion but declares no excursion policy.", paramName: nameof(document)));
+                var thresholds = (excursion.Thresholds
+                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" excursion policy declares null thresholds.", paramName: nameof(document)));
+
+                if (!float.IsFinite(f: excursion.DeadZone) || (excursion.DeadZone < 0f) ||
+                    !float.IsFinite(f: excursion.SpatialTravelFraction) || (excursion.SpatialTravelFraction <= 0f) || (excursion.SpatialTravelFraction > 1f) ||
+                    !float.IsFinite(f: excursion.Hysteresis) || (excursion.Hysteresis < 0f)) {
+                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries invalid excursion geometry.", paramName: nameof(document));
+                }
+
+                if (thresholds.Count != (ringCount - 1)) {
+                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" has {ringCount} rings but {thresholds.Count} excursion thresholds; exactly {ringCount - 1} boundaries are required.", paramName: nameof(document));
+                }
+
+                var thresholdSquares = new float[thresholds.Count];
+                var outwardSquares = new float[thresholds.Count];
+                var inwardSquares = new float[thresholds.Count];
+                var previous = excursion.DeadZone;
+
+                for (var thresholdIndex = 0; (thresholdIndex < thresholds.Count); thresholdIndex++) {
+                    var threshold = thresholds[thresholdIndex];
+
+                    if (!float.IsFinite(f: threshold) || (threshold <= previous) || ((threshold - previous) <= (2f * excursion.Hysteresis))) {
+                        throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" excursion threshold {thresholdIndex} must be finite, strictly ascending from the dead zone, and leave room for twice the authored hysteresis.", paramName: nameof(document));
+                    }
+
+                    thresholdSquares[thresholdIndex] = (threshold * threshold);
+                    outwardSquares[thresholdIndex] = ((threshold + excursion.Hysteresis) * (threshold + excursion.Hysteresis));
+                    inwardSquares[thresholdIndex] = ((threshold - excursion.Hysteresis) * (threshold - excursion.Hysteresis));
+                    previous = threshold;
+                }
+
+                excursionView = new BindingWheelExcursionView(
+                    DeadZoneSquared: (excursion.DeadZone * excursion.DeadZone),
+                    ThresholdsSquared: thresholdSquares,
+                    OutwardThresholdsSquared: outwardSquares,
+                    InwardThresholdsSquared: inwardSquares,
+                    SpatialTravelFraction: excursion.SpatialTravelFraction
+                );
             }
 
             var ringViews = new BindingWheelRingView[ringCount];
 
             for (var ringIndex = 0; (ringIndex < ringCount); ringIndex++) {
                 var ring = (wheel.Rings![ringIndex]
-                    ?? throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" ring {ringIndex} is null.", paramName: nameof(document)));
+                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" ring {ringIndex} is null.", paramName: nameof(document)));
 
                 if (string.IsNullOrEmpty(value: ring.Id)) {
-                    throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" ring {ringIndex} must carry a page id.", paramName: nameof(document));
+                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" ring {ringIndex} must carry a page id.", paramName: nameof(document));
                 }
 
                 // Ring pages share the document-wide page-id namespace (they ARE pages) — but hold no chord row,
@@ -287,28 +377,36 @@ public static class BindingProfile {
                         throw new ArgumentException(message: $"{sectorPath} carries an activator — the radial gesture is a sector's trigger.", paramName: nameof(document));
                     }
                     if (sector.Channel is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries a channel destination — a sector commits a console-dispatchable command, never a folded channel.", paramName: nameof(document));
-                    }
-                    if (sector.Value is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries a constant value — a committed console line carries none.", paramName: nameof(document));
+                        throw new ArgumentException(message: $"{sectorPath} carries a channel destination — a one-shot radial activation targets a command, never a folded channel.", paramName: nameof(document));
                     }
                     if (sector.Scale is not null) {
                         throw new ArgumentException(message: $"{sectorPath} carries a scale — a sector has no channel to scale.", paramName: nameof(document));
-                    }
-                    if (sector.ActivateOn is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries an activation phase — the wheel's release-commit is a sector's only edge.", paramName: nameof(document));
                     }
                     if (sector.Mode != BindingEntryMode.Hold) {
                         throw new ArgumentException(message: $"{sectorPath} sets mode {sector.Mode} — a sector carries no held state.", paramName: nameof(document));
                     }
 
-                    sectorViews[sectorIndex] = new BindingWheelSectorView(Command: sector.Command!, Label: sector.Label, Icon: sector.Icon);
+                    ValidateValue(value: sector.Value, path: sectorPath, isChannel: false, paramName: nameof(document));
+                    var phase = (sector.ActivateOn ?? CommandPhase.Started);
+                    var value = (sector.Value ?? ((phase is CommandPhase.Completed or CommandPhase.Canceled)
+                        ? CommandValue.Digital(active: false)
+                        : CommandValue.Digital(active: true)));
+
+                    sectorViews[sectorIndex] = new BindingWheelSectorView(
+                        Activation: new BindingActivation(command: sector.Command!, value: value, phase: phase),
+                        Label: sector.Label,
+                        Icon: sector.Icon
+                    );
                 }
 
                 ringViews[ringIndex] = new BindingWheelRingView(PageId: ring.Id, Label: ring.Label, Sectors: sectorViews);
             }
 
-            wheelViewByRow[holdRow.RowIndex] = new BindingWheelView(Group: wheel.Group, HoldPageId: wheel.HoldPage, Rings: ringViews);
+            var view = new BindingWheelView(Id: wheel.Id, Group: wheel.Group, HoldPageIds: holdPages, Rings: ringViews, Style: style, Excursion: excursionView);
+
+            foreach (var holdRow in holdRows) {
+                wheelViewByRow[holdRow] = view;
+            }
         }
 
         // Second pass: the per-group command-chord hint lists (shared by every page view of the group), then the rows.

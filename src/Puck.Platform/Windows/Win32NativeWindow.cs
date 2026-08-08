@@ -10,6 +10,8 @@ namespace Puck.Platform.Windows;
 internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSource {
     private const int CwUseDefault = unchecked((int)0x80000000);
     private const int ErrorClassAlreadyExists = 1410;
+    private const int HtClient = 1;
+    private const int IdcArrow = 32512;
     // WM_KEYDOWN/WM_KEYUP lParam bit 24 — set for the right-hand Control/Alt (and numpad Enter), clear for the
     // left-hand ones. Shift carries no such distinction (see MapvkVscToVkEx below).
     private const long ExtendedKeyBit = 0x01000000;
@@ -100,6 +102,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static readonly object RegistrationLock = new();
     private static readonly string WindowClassName = "Puck.Win32NativeWindow";
     private static readonly WndProc WndProcDelegate = StaticWindowProcedure;
+    private static nint ArrowCursorHandle;
     private static nint InstanceHandleField;
     private static bool WindowClassRegistered;
     private readonly IClipboardService m_clipboardService;
@@ -301,8 +304,15 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             }
 
             InstanceHandleField = Kernel32.GetModuleHandle(moduleName: null);
+            ArrowCursorHandle = User32.LoadCursor(instanceHandle: 0, cursorName: IdcArrow);
+
+            if (ArrowCursorHandle == 0) {
+                throw new InvalidOperationException(message: $"LoadCursorW(IDC_ARROW) failed with Win32 error {Marshal.GetLastWin32Error()}.");
+            }
+
             var windowClass = new WindowClassEx {
                 ClassName = WindowClassName,
+                CursorHandle = ArrowCursorHandle,
                 InstanceHandle = InstanceHandleField,
                 Size = (uint)Marshal.SizeOf<WindowClassEx>(),
                 WindowProcedure = WndProcDelegate,
@@ -560,17 +570,26 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
     }
     private nint HandleSetCursor(nint windowHandle, uint message, nint wParam, nint lParam) {
-        if (!m_options.HideMouseCursor) {
-            return User32.DefWindowProc(
-                lParam: lParam,
-                message: message,
-                wParam: wParam,
-                windowHandle: windowHandle
-            );
+        if (m_options.HideMouseCursor) {
+            _ = User32.SetCursor(cursorHandle: 0);
+            return 1;
         }
 
-        _ = User32.SetCursor(cursorHandle: 0);
-        return 1;
+        // LOWORD(lParam) is the WM_NCHITTEST result. Own only HTCLIENT: the non-client frame still belongs to
+        // DefWindowProc so Windows supplies its native edge/corner resize cursors. The explicit arrow assignment is
+        // intentional even though the class carries IDC_ARROW too — a class with no cursor used to leave whatever
+        // process-global cursor happened to be active (commonly the startup wait spinner) unchanged indefinitely.
+        if ((unchecked((ushort)lParam.ToInt64())) == HtClient) {
+            _ = User32.SetCursor(cursorHandle: ArrowCursorHandle);
+            return 1;
+        }
+
+        return User32.DefWindowProc(
+            lParam: lParam,
+            message: message,
+            wParam: wParam,
+            windowHandle: windowHandle
+        );
     }
     private nint HandleCharacterInput(nint windowHandle, nint wParam, nint lParam) {
         var character = checked((char)wParam.ToInt64());
@@ -632,132 +651,39 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             return 0;
         }
 
-        switch (wParam.ToInt64()) {
-            case VkOem3:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backtick));
-                m_suppressNextCharacterInput = true;
-                return 0;
-            case VkBack:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backspace));
-                return 0;
-            case VkEscape:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Escape));
-                return 0;
-            case VkReturn:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Enter));
-                return 0;
-            case VkF1:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F1));
-                return 0;
-            case VkF2:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F2));
-                return 0;
-            case VkF3:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F3));
-                return 0;
-            case VkF4:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F4));
-                return 0;
-            case VkF5:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F5));
-                return 0;
-            case VkF6:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F6));
-                return 0;
-            case VkF7:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F7));
-                return 0;
-            case VkF8:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F8));
-                return 0;
-            case VkF9:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F9));
-                return 0;
-            case VkF10:
-                // F10 alone is ALSO a system key (it activates keyboard menu-navigation mode via WM_SYSKEYDOWN,
-                // the same route that carries Alt+letter mnemonics) — handling it here and returning 0 suppresses
-                // that the same way the Alt+F4/Alt+Space/Alt+letter cases already suppress theirs.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F10));
-                return 0;
-            case VkF11:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F11));
-                return 0;
-            case VkF12:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F12));
-                return 0;
-            case VkUp:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowUp));
-                return 0;
-            case VkDown:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowDown));
-                return 0;
-            case VkLeft:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowLeft));
-                return 0;
-            case VkRight:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowRight));
-                return 0;
-            case VkSpace:
-                // Space is a first-class named key (the world binds it to the jump action lane, held for variable
-                // height). Its WM_CHAR (a literal ' ') still arrives independently — TranslateMessage runs before
-                // dispatch — so typed text keeps flowing to the text pipeline; an unbound Space signal is ignored by
-                // the binding table. Mirrors the letter/arrow keys: down here, up via TryMapNamedKey in HandleKeyUp.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Space));
-                return 0;
-            case VkTab:
-                // Tab is a first-class named key, chorded or plain — bare Tab drives the radial action menu's hold
-                // binding, so its down edge must reach the pipeline exactly as its up edge always has
-                // (TryMapNamedKey maps VkTab unconditionally in HandleKeyUp). Consuming it here also keeps
-                // DefWindowProc from treating it as dialog navigation.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Tab));
-                return 0;
-            case VkControl:
-                // The generic Control VK; the lParam extended-key bit resolves the physical side (set for the
-                // right key, clear for the left — see ExtendedKeyBit's remarks). Was previously unhandled here
-                // and fell to DefWindowProc, so bare Ctrl never reached bindings.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(
-                    key: ((IsExtendedKey(lParam: lParam)) ? KeyCode.ControlRight : KeyCode.ControlLeft)
-                ));
-                return 0;
-            case VkMenu:
-                // Same side resolution as Control. Bare Alt (no chorded key) previously fell through untouched;
-                // consuming it here also suppresses whatever DefWindowProc did with the WM_SYSKEYDOWN it no
-                // longer sees (a bare Alt tap normally arms keyboard menu-navigation mode).
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(
-                    key: ((IsExtendedKey(lParam: lParam)) ? KeyCode.AltRight : KeyCode.AltLeft)
-                ));
-                return 0;
-            case VkShift:
-                // Shift carries no extended-key bit on either side; MapVirtualKey on the scan code is the only
-                // way to resolve which physical key fired — see MapvkVscToVkEx's remarks.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: ResolveShiftSide(lParam: lParam)));
-                return 0;
-            case VkLWin:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.SuperLeft));
-                return 0;
-            case VkRWin:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.SuperRight));
-                return 0;
-            case >= VkA and <= VkZ:
-                // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the
-                // same way it binds Ctrl+C. The letter's WM_CHAR still arrives independently (TranslateMessage runs
-                // in the pump before dispatch), so typed text keeps flowing to the text pipeline; an unbound letter
-                // signal is simply ignored by the binding table. The modifier chord rides along so a consumer (the
-                // console's Ctrl+A/C/X) can distinguish a plain letter from a chorded one without a second binding.
-                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(
-                    character: LetterForVirtualKey(virtualKey: wParam.ToInt64())
-                ) with {
-                    Modifiers = CurrentModifiers(),
-                });
-                return 0;
-            default:
-                return User32.DefWindowProc(
-                    lParam: lParam,
-                    message: WmKeyDown,
-                    wParam: wParam,
-                    windowHandle: windowHandle
-                );
+        var virtualKey = wParam.ToInt64();
+
+        if (virtualKey is >= VkA and <= VkZ) {
+            // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the same
+            // way it binds Ctrl+C. The letter's WM_CHAR still arrives independently, and its modifier chord rides
+            // along so the console can distinguish Ctrl+A/C/X from plain text.
+            m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(
+                character: LetterForVirtualKey(virtualKey: virtualKey)
+            ) with {
+                Modifiers = CurrentModifiers(),
+            });
+
+            return 0;
         }
+
+        // Key-down and key-up resolve through the SAME VK table. Returning 0 also suppresses the native behaviors
+        // of the keys Puck owns (F10/bare Alt menu navigation and Tab dialog traversal included).
+        if (TryMapNamedKey(virtualKey: virtualKey, lParam: lParam, key: out var key)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: key));
+
+            if (key == KeyCode.Backtick) {
+                m_suppressNextCharacterInput = true;
+            }
+
+            return 0;
+        }
+
+        return User32.DefWindowProc(
+            lParam: lParam,
+            message: WmKeyDown,
+            wParam: wParam,
+            windowHandle: windowHandle
+        );
     }
     private nint HandleKeyUp(nint windowHandle, uint message, nint wParam, nint lParam) {
         // Release edges for the named navigation/function/special keys AND the letter keys — a held-key
@@ -787,6 +713,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static char LetterForVirtualKey(long virtualKey) {
         return (char)('a' + (virtualKey - VkA));
     }
+    // The one VK→named-key table both physical edges share. Side-sensitive modifiers derive from the event's
+    // lParam: Control/Alt use the extended bit, while Shift resolves its scan code through MapVirtualKey.
     private static bool TryMapNamedKey(long virtualKey, nint lParam, out KeyCode key) {
         key = virtualKey switch {
             VkOem3 => KeyCode.Backtick,

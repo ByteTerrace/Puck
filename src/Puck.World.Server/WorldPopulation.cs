@@ -1451,7 +1451,7 @@ public sealed class WorldPopulation {
 
             if ((designated >= 0) && (designated < Capacity) && m_entries[designated].Active && (m_entries[designated].Body is { } designatedBody)) {
                 var position = designatedBody.FixedPosition;
-                candidate = new BodySensorTarget(Index: designated, Position: position, DistanceSquared: DistanceSquared(a: self, b: position));
+                candidate = new BodySensorTarget(Index: designated, Position: position, DistanceSquared: (position - self).LengthSquared);
             }
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
             var fixedSource = targetSource.Value;
@@ -1475,7 +1475,7 @@ public sealed class WorldPopulation {
         }
 
         var current = ((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
-            ? new BodySensorTarget(Index: currentTarget, Position: held.FixedPosition, DistanceSquared: DistanceSquared(a: self, b: held.FixedPosition))
+            ? new BodySensorTarget(Index: currentTarget, Position: held.FixedPosition, DistanceSquared: (held.FixedPosition - self).LengthSquared)
             : BodySensorTarget.None;
 
         return new BodyProducerSensors(Candidate: candidate, CurrentTarget: current);
@@ -1485,14 +1485,6 @@ public sealed class WorldPopulation {
         var start = (from + fromOrientation.Rotate(vector: s_localSightOffset));
         var end = (to + toOrientation.Rotate(vector: s_localSightOffset));
         return m_targetField?.LineOfSight(from: start, to: end) ?? false;
-    }
-
-    private static FixedQ4816 DistanceSquared(in FixedVector3 a, in FixedVector3 b) {
-        var dx = (a.X - b.X);
-        var dy = (a.Y - b.Y);
-        var dz = (a.Z - b.Z);
-
-        return ((dx * dx) + (dy * dy) + (dz * dz));
     }
 
     // Activate a simulated entry: re-seed its canonical pose/color/wander from its index, then mint its own body from

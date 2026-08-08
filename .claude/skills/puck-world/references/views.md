@@ -380,14 +380,32 @@ exit retire the drag externally, and the policy stands down on the next tick.
 
 ## The verbs
 
-All in `WorldViewCommandModule` (unbindable) except the wheel trio, which
-lives in `WorldWheelCommandModule` (`player.wheel.ring` and
-`player.wheel.commit` are Bindable — the hold pages' rows dispatch them —
-and refuse by name while no wheel is open; `world.view.wheel` is the
-Immediate read-back: seat, open/closed, group, ring count, the active ring
-and its label, the hovered sector with the command it would commit — or the
-reason nothing is hovered: `dead-center` | `outside` | `no-cursor` — and the
-hub anchor in frame pixels).
+All in `WorldViewCommandModule` (unbindable) except the wheel verbs, which
+live in `WorldWheelCommandModule`. `player.wheel.select` (Axis2D),
+`player.wheel.ring`, `player.wheel.commit`, and `player.wheel.cancel` are
+Bindable ordinary hold-page destinations; selection/ring/commit/cancel
+sources are author data, not hard-coded devices. An explicit cancel latches
+for the rest of the open gesture: later frames cannot re-arm it, the hover
+accent is suppressed, and release cannot dispatch a sector.
+
+`world.view.wheel [player]` is the Immediate read-back. With no argument it
+reads the pointer's seat; `player` selects seat 1–4. An open echo reports
+`id=`, group, ring count, active ring and label, authored
+`pointer=<Disabled|Angle|HitTarget>` and
+`placement=<Pointer|ViewportCenter>` plus
+`ringSelection=<Explicit|Excursion>`, hub center in frame pixels, and the
+hovered sector with the command it would commit. Excursion is radial distance
+from each input device's neutral: Axis2D uses its native magnitude; a spatial
+input captures its first available position in the gesture (including after
+the opening frame) and normalizes travel using the authored
+`spatialTravelFraction`. Hub placement never changes that neutral. A
+`HitTarget + Excursion` pointer chooses its ring from neutral-relative travel
+but still chooses/qualifies its sector against the displayed annulus. When no
+sector is armed, `hover=` carries a stable reason: `no-selection` (no current
+selector), `disabled` (pointer selection author-disabled while a pointer
+location is available), `dead-center`, `outside`, or `cancelled` (the
+gesture's explicit or focus-loss cancellation latch). A closed echo reports
+only the selected player and `open=false`.
 
 | Verb | Routing | Effect |
 |---|---|---|

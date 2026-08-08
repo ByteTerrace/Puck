@@ -738,27 +738,56 @@ successor); the shape is `{family, state, group}`, e.g.
 `{engagement, engaged, engaged}` onto an `engaged` group.
 
 **Wheel rows.** `puck.bindings.v1` also carries an optional `wheels` section
-(`BindingWheelDefinition`: `{group, holdPage, rings}`) — one radial action
-menu per binding GROUP, presented while the group's `holdPage` (a page a
-chord row of the SAME group declares) is the seat's active page: holding the
-chord IS holding the wheel open (the engine default chords every
-wheel-bearing group's hold page on `[tab]` — Tab belongs wholly to the
-wheel; the four `keyboard.tab` command rows it used to carry are retired,
-and the play wheel's Editor sector / the editor and sculpt wheels' Exit and
-Done sectors carry those same acts). Rings are ordinary
-`BindingPageDefinition`s worn as concentric shells (`BindingProfile.Compile`
-bounds: 1–3 rings per wheel, 2–8 sectors per ring, ring page ids sharing the
-document-wide page-id namespace); a SECTOR row narrows the page-entry shape
-to a bare command destination plus label/icon — `source`, `activator`,
-`channel`, `value`, `scale`, `activateOn`, and a non-default `mode` each
-refuse by name, because a committed sector dispatches its command as a
-CONSOLE LINE (the vocabulary gate therefore checks sector existence only,
-never bindability or value kind). Wheels merge across layers on their GROUP,
-a later layer's wheel replacing the earlier one's WHOLESALE (never
-half-merged — a world that re-authors a group's wheel re-authors all of it,
-the Editor sector included); all four shipped worlds author a `play`-group
-wheel (3 rings × 6 sectors) in their `bindingOverlays`. Presentation and the
-live verbs: [views.md](views.md)'s radial-menu section.
+(`BindingWheelDefinition`: `{id, group, holdPages, rings, style}`). `id` is
+profile-unique and is the merge/runtime-continuity identity: several radials
+may share one binding GROUP, and a later layer replaces a re-declared radial
+WHOLESALE by id. `holdPages` is a non-empty list of distinct chord-row page
+ids from that same group. Any one of those pages presents the radial, so an
+author may bind several physical openers to one wheel (Tab and LT, for
+example), while other hold pages in the group present different wheels (LT
+for wheel A and RT for wheel B). Releasing one opener defers commit while
+another hold page still presents the same radial.
+
+Rings are ordinary `BindingPageDefinition`s worn as concentric shells
+(`BindingProfile.Compile` bounds: 1–3 rings per wheel, 2–8 sectors per ring,
+ring page ids sharing the document-wide page-id namespace). A SECTOR row
+narrows the page-entry shape to a command destination plus label/icon and an
+optional constant `value`/`activateOn`; `source`, `activator`, `channel`,
+`scale`, and a non-default `mode` refuse by name. The compiler mints an opaque
+`BindingActivation` for each sector, and commit returns it through
+`InputRouter.Activate` in the originating seat's deterministic lane. The
+vocabulary gate therefore requires every sector command to exist, be
+Bindable, and accept the authored value kind — sectors are not console
+lines.
+
+`style` is optional authoring policy. `pointerSelection` is `Angle` (direction
+alone beyond the dead zone), `HitTarget` (the pointer must remain in the
+authored annulus; reusable by a future touch adapter), or `Disabled`;
+`placement` is `Pointer` (opening pointer position, with viewport-center
+fallback) or `ViewportCenter`. Authors also control dead-zone/ring/grace
+fractions, rotation, clockwise ordering, and the initial ring.
+
+`ringSelection` is `Explicit` (the default: `player.wheel.ring` bindings and
+pointer-wheel notches step the active ring) or `Excursion` (neutral-relative
+selector magnitude chooses it). Excursion requires an `excursion` object:
+`deadZone` is the inclusive magnitude that selects no ring; `thresholds`
+contains exactly N-1 ascending boundaries for N rings; `hysteresis` supplies
+the retained band on both sides of each boundary; and
+`spatialTravelFraction` says what fraction of the seat viewport's smaller
+extent equals pointer/touch magnitude 1. Axis2D magnitude is already
+normalized. The final ring has no outer bound. Each spatial gesture captures
+the first available device position as neutral—even when that position arrives
+after the opening frame—and never moves that origin until close. Placement is
+therefore visual only. With `HitTarget + Excursion`, ring choice uses distance
+from captured device neutral while sector eligibility/direction remains
+relative to the displayed hub; this deliberately permits direct mouse/touch
+targeting and gamepad excursion on the same authored radial.
+
+Selection, ring navigation, commit, and cancel sources are ordinary entries
+on each hold page. The engine default uses Tab and authors right-stick
+selection; the four shipped worlds currently replace the `play-primary`
+radial with one six-sector action ring. Presentation and the live verbs:
+[views.md](views.md)'s radial-menu section.
 
 ## Capacity constants
 

@@ -125,6 +125,31 @@ public sealed class InputRouter {
         }
     }
 
+    /// <summary>Queues an authored interactive-presentation activation into a seat's ordinary deterministic lane.
+    /// The activation is compiler-minted and opaque to the presenter; the resulting entry is deliberately
+    /// unstamped so snapshot construction resolves the seat's current principal exactly like physical input.</summary>
+    /// <param name="slot">The logical seat whose presentation was activated.</param>
+    /// <param name="activation">The compiled binding activation.</param>
+    /// <returns><see langword="false"/> when the command is not registered in this router.</returns>
+    public bool Activate(int slot, BindingActivation activation) {
+        ArgumentNullException.ThrowIfNull(activation);
+
+        if (!m_registry.TryGetId(name: activation.Command, id: out var commandId)) {
+            return false;
+        }
+
+        Enqueue(injection: new CommandInjection(
+            CommandId: commandId,
+            Value: activation.Value,
+            Phase: activation.Phase,
+            Principal: default,
+            Slot: slot,
+            Source: BindingActivation.RadialSource
+        ));
+
+        return true;
+    }
+
     /// <summary>Whether a logical command is currently carried held for a slot — a bound digital pressed and not yet
     /// released, or an analog channel with an active carried sample. The read seam an input-state UI (a binding bar's
     /// pressed chips) lights from, so held truth has ONE owner instead of a parallel tracker per consumer.</summary>
@@ -446,6 +471,7 @@ public sealed class InputRouter {
             dispatch: true,
             phase: injection.Phase,
             principal: injection.Principal,
+            source: injection.Source,
             text: injection.Text,
             value: injection.Value
         ) {

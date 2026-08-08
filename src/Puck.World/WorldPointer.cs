@@ -22,7 +22,8 @@ namespace Puck.World;
 /// deliberate and is why a drained accumulator is not a general read-back — position and buttons, which every
 /// consumer may read freely, are the non-destructive half.</para>
 /// <para>The mouse carries no <see cref="Puck.Commands.InputDeviceId"/> of its own, so it rides whichever seat the
-/// KEYBOARD currently owns; <see cref="WorldPointerSink"/> resolves that slot per event rather than caching it.</para>
+/// KEYBOARD currently owns; <see cref="WorldPointerSlot.Resolve"/> resolves that slot at every use rather than
+/// caching it.</para>
 /// </remarks>
 internal sealed class WorldPointer {
     // 0=left, 1=right, 2=middle — the same index WindowInputEvent.PointerButton carries in Vector.X, held here as

@@ -106,13 +106,11 @@ internal static class WorldDefaultBindings {
     /// <summary>The play group's wheel hold page id (chord: Tab held) — see the class remarks.</summary>
     public const string WheelHoldPageId = "play-wheel";
 
-    /// <summary>The play wheel's ring page ids, innermost first (see <see cref="PlayWheel"/>).</summary>
-    public const string WheelActRingId = "play-wheel-act";
-    /// <summary>The play wheel's middle ring page id.</summary>
-    public const string WheelWorldRingId = "play-wheel-world";
-    /// <summary>The play wheel's outer ring page id.</summary>
-    public const string WheelViewRingId = "play-wheel-view";
+    /// <summary>The play radial's profile-unique presentation id.</summary>
+    public const string PlayWheelId = "play-primary";
 
+    /// <summary>The play wheel's action-ring page id (see <see cref="PlayWheel"/>).</summary>
+    public const string WheelActRingId = "play-wheel-act";
     // Trigger hysteresis: latch at a deliberate squeeze, release only on a clear letoff, so a trigger resting near
     // its threshold never flaps the active page mid-gesture.
     private const float TriggerPress = 0.55f;
@@ -200,8 +198,7 @@ internal static class WorldDefaultBindings {
                         Id: WheelHoldPageId,
                         Entries: [
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
-                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
-                            .. WheelHoldEntries(),
+                            .. WheelHoldEntries(openerSource: InputSources.Keyboard.Tab),
                         ],
                         Label: "Wheel"
                     )
@@ -249,12 +246,15 @@ internal static class WorldDefaultBindings {
     /// notch away from the user), and Tab's release edge firing the commit (see the class remarks on the
     /// chord-latch machinery that makes the release resolve back to this page).</summary>
     /// <returns>The shared hold-page entries.</returns>
-    public static BindingPageEntryDefinition[] WheelHoldEntries() => [
+    public static BindingPageEntryDefinition[] WheelHoldEntries(string openerSource) => [
+        // The aim source is ordinary authoring data. A player layer may replace this source with either stick,
+        // a D-pad adapter, or any future Axis2D provider without changing radial code.
+        new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: WorldWheelCommandModule.SelectCommand),
         RingStep(source: InputSources.Keyboard.ArrowUp, direction: 1f),
         RingStep(source: InputSources.Keyboard.ArrowDown, direction: -1f),
         RingStep(source: InputSources.Gamepad.DpadUp, direction: 1f),
         RingStep(source: InputSources.Gamepad.DpadDown, direction: -1f),
-        new BindingPageEntryDefinition(Source: InputSources.Keyboard.Tab, Command: WorldWheelCommandModule.CommitCommand, ActivateOn: CommandPhase.Completed),
+        new BindingPageEntryDefinition(Source: openerSource, Command: WorldWheelCommandModule.CommitCommand, ActivateOn: CommandPhase.Completed),
     ];
 
     // One ring-cycle row: press edge, direction carried as the constant Axis1D value the player.wheel.ring handler
@@ -269,12 +269,12 @@ internal static class WorldDefaultBindings {
     );
 
     // The play wheel — the engine-default radial the play group presents while Tab holds WheelHoldPageId open.
-    // Three rings of six, innermost first: acts, world read-backs, view read-backs. Every sector commits an
-    // ordinary console line (bare, no arguments), so each verb here must answer a bare invocation; the Editor
+    // One ring of six bindable acts. Every sector is an ordinary compiled command activation in the seat's lane; the Editor
     // sector carries the editor entry Tab used to bind directly.
     private static BindingWheelDefinition PlayWheel() => new(
+        Id: PlayWheelId,
         Group: PlayGroup,
-        HoldPage: WheelHoldPageId,
+        HoldPages: [WheelHoldPageId],
         Rings: [
             new BindingPageDefinition(
                 Id: WheelActRingId,
@@ -282,52 +282,28 @@ internal static class WorldDefaultBindings {
                     Sector(command: EditorCommandModule.EnterCommand, label: "Editor", icon: "edit.place"),
                     Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
                     Sector(command: "world.console", label: "Console", icon: "edit.op"),
-                    Sector(command: "player.bindings", label: "Bindings", icon: "edit.link"),
                     Sector(command: "player.where", label: "Where", icon: "action.target"),
-                    // NOT wire.errors: the registry's text-path built-ins carry no metadata, so a sector naming one
-                    // reads as unregistered at the vocabulary gate and is skipped with a narration.
-                    Sector(command: "world.addons", label: "Addons", icon: "edit.link"),
+                    Sector(command: "player.channels", label: "Channels", icon: "edit.link"),
+                    Sector(command: "player.disengage", label: "Disengage", icon: "edit.exit"),
                 ],
                 Label: "Act"
-            ),
-            new BindingPageDefinition(
-                Id: WheelWorldRingId,
-                Entries: [
-                    Sector(command: "world.status", label: "Status", icon: "action.target"),
-                    Sector(command: "world.state", label: "State", icon: "edit.style"),
-                    Sector(command: "world.rules", label: "Rules", icon: "edit.link"),
-                    Sector(command: "world.grants", label: "Grants", icon: "edit.material"),
-                    Sector(command: "world.attachments", label: "Attach", icon: "edit.place"),
-                    Sector(command: "world.refusals", label: "Refusals", icon: "edit.delete"),
-                ],
-                Label: "World"
-            ),
-            new BindingPageDefinition(
-                Id: WheelViewRingId,
-                Entries: [
-                    Sector(command: "world.view.state", label: "Layout", icon: "edit.style"),
-                    Sector(command: "world.view.pointer", label: "Pointer", icon: "action.target"),
-                    Sector(command: "world.view.orbit", label: "Orbit", icon: "edit.op"),
-                    Sector(command: "world.hud", label: "HUD", icon: "edit.link"),
-                    Sector(command: "world.fps", label: "FPS", icon: "edit.next"),
-                    Sector(command: "world.gpu", label: "GPU", icon: "edit.record"),
-                ],
-                Label: "View"
             ),
         ]
     );
 
     /// <summary>One wheel sector row — a bare command destination plus display metadata, the narrowed page-entry
     /// shape <see cref="BindingWheelDefinition"/> documents.</summary>
-    /// <param name="command">The console-dispatchable command the sector commits.</param>
+    /// <param name="command">The bindable command the sector activates.</param>
     /// <param name="label">The sector's display label.</param>
     /// <param name="icon">The sector's display icon id.</param>
+    /// <param name="value">An optional constant activation value; otherwise active Digital.</param>
     /// <returns>The sector row.</returns>
-    public static BindingPageEntryDefinition Sector(string command, string label, string icon) => new(
+    public static BindingPageEntryDefinition Sector(string command, string label, string icon, CommandValue? value = null) => new(
         Source: null,
         Command: command,
         Label: label,
-        Icon: icon
+        Icon: icon,
+        Value: value
     );
 
     // Selects RosterGroup for every roster state short of active — unjoined, claimed, and pending. ACTIVE ships no

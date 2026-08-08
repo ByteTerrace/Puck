@@ -5,26 +5,30 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-/// <summary>The radial menu facts the <c>world.view.wheel</c> read-back echoes — the last composed frame's
-/// decision, stashed beside the publish so the verb answers exactly what the overlay drew (the
-/// <see cref="WorldCursorStatus"/> convention).</summary>
-/// <param name="Slot">The 0-based seat slot the wheel serves (the pointer's seat).</param>
-/// <param name="Open">Whether a wheel presented this frame.</param>
-/// <param name="Group">The presenting wheel's binding group (empty while closed).</param>
-/// <param name="RingCount">The presenting wheel's ring count (0 while closed).</param>
+/// <summary>The last composed radial facts for one seat — stashed beside the publish so
+/// <c>world.view.wheel</c> answers exactly what the overlay drew (the <see cref="WorldCursorStatus"/>
+/// convention).</summary>
+/// <param name="Slot">The 0-based seat the radial serves.</param>
+/// <param name="Open">Whether a radial presented this frame.</param>
+/// <param name="Id">The presenting radial's profile-unique id (empty while closed).</param>
+/// <param name="Group">The presenting radial's binding group (empty while closed).</param>
+/// <param name="RingCount">The presenting radial's ring count (0 while closed).</param>
 /// <param name="ActiveRing">The 0-based active ring (-1 while closed).</param>
 /// <param name="ActiveRingLabel">The active ring's display label (empty while closed).</param>
 /// <param name="HoverSector">The 0-based hovered sector within the active ring, or -1.</param>
 /// <param name="HoverLabel">The hovered sector's display label (empty with none).</param>
-/// <param name="HoverCommand">The command the hovered sector would commit, or <see langword="null"/>.</param>
+/// <param name="HoverCommand">The command the hovered sector would activate, or <see langword="null"/>.</param>
 /// <param name="HoverReason">Why nothing is hovered (<c>sector</c> when something is): <c>closed</c>,
-/// <c>dead-center</c>, <c>outside</c>, or <c>no-cursor</c>.</param>
-/// <param name="Center">The wheel hub in FRAME pixels (meaningful while open with a known center).</param>
-/// <param name="CenterKnown">Whether the hub is anchored — false until the pointer has reported a position, and
-/// everything cancels until it is.</param>
+/// <c>no-selection</c>, <c>disabled</c>, <c>dead-center</c>, <c>outside</c>, or <c>cancelled</c>.</param>
+/// <param name="PointerSelection">The authored spatial-selection policy in force.</param>
+/// <param name="Placement">The authored hub-placement policy in force.</param>
+/// <param name="RingSelection">The authored explicit/excursion ring-selection policy in force.</param>
+/// <param name="Center">The radial hub in FRAME pixels (meaningful while open).</param>
+/// <param name="CenterKnown">Whether the hub is anchored.</param>
 internal readonly record struct WorldWheelStatus(
     int Slot,
     bool Open,
+    string Id,
     string Group,
     int RingCount,
     int ActiveRing,
@@ -33,363 +37,493 @@ internal readonly record struct WorldWheelStatus(
     string HoverLabel,
     string? HoverCommand,
     string HoverReason,
+    BindingWheelSpatialSelectionMode PointerSelection,
+    BindingWheelPlacement Placement,
+    BindingWheelRingSelectionMode RingSelection,
     Vector2 Center,
     bool CenterKnown
 );
 
 /// <summary>
-/// The radial action menu — held binding pages presenting themselves. Once per produced frame (the overlay's
-/// <c>FeedTick</c>, after <see cref="WorldCursorFeed.Tick"/> published this frame's cursor decision) it asks the
-/// seat's bindings which wheel the ACTIVE page presents (<see cref="WorldSeatBindings.WheelView"/> — non-null
-/// exactly while the seat's held chord keeps a wheel's hold page selected, so holding Tab IS holding the wheel
-/// open), keeps the radial's own presentation state (hub anchor, active ring, hovered sector), and publishes one
-/// <see cref="OverlayWheelFrame"/> for <see cref="WheelWriter"/> to draw. Everything here is presentation/session
-/// state; a sector reaches the simulation only when a commit dispatches its command through the console door
-/// (<see cref="TextCommandSource.Enqueue"/> — the <see cref="WorldEditorMouse"/> discipline), so nothing new enters
-/// simulation.
+/// Per-seat radial presentation over the compiled binding system. It owns only radial interaction state (layout,
+/// aim, ring, hover); opening, selection, ring steps, commit and cancel are ordinary authored bindings. A committed
+/// sector returns its compiler-minted <see cref="BindingActivation"/> to <see cref="InputRouter"/>, so it keeps the
+/// seat's principal, command maps, value kind, phase, and deterministic snapshot path.
 /// </summary>
-/// <remarks>
-/// <para><b>Wheel input.</b> This type is the process's ONE <see cref="IWorldWheelConsumer"/>: every wheel report
-/// banks here (<see cref="OnPointer"/> drains <see cref="WorldPointer.TakeWheel"/> — the marker registration is
-/// what stops <see cref="WorldPointerSink"/>'s own drain-and-discard), and <see cref="Tick"/> spends the bank —
-/// cycling the active ring while open, discarding while closed (free scrolling must not cycle a wheel nobody sees,
-/// and a bank must never be applied in one jump the moment one opens; the open transition ALSO discards, so a
-/// nonzero first read — whatever its provenance — can never pre-cycle a freshly opened wheel).</para>
-/// <para><b>Selection.</b> The hub anchors at the cursor's frame position when the wheel opens (so a Tab TAP —
-/// open and release without aiming — releases over the hub and cancels); the cursor's ANGLE from the hub picks the
-/// sector within the ACTIVE ring (sector 0 at twelve o'clock, clockwise — the <see cref="WheelWriter"/>
-/// convention), and only the dead zone and the outer edge cancel by distance. Ring bands are presentation; the
-/// wheel (or the bound ring-cycle rows) picks the ring, never the cursor's radius.</para>
-/// <para><b>Commit.</b> The hold page binds Tab's release edge to <see cref="WorldWheelCommandModule.CommitCommand"/>
-/// (the press that turned the page latches the row, so the release resolves back to it — the substrate's own
-/// chord-latch machinery); the handler calls <see cref="Commit"/>. The commit decision is re-armed every open frame
-/// and survives the close briefly (<see cref="CommitGraceFrames"/>): the release edge closes the wheel in the same
-/// input fold that queues the commit dispatch, and on a frame the simulation accumulator owes zero ticks the closing
-/// FeedTick can run BEFORE the dispatch's tick applies — a token consumed at first close-observation would
-/// silently cancel every commit landing on such a frame. The grace is counted in observed frames, never wall time,
-/// and a router-synthesized cancellation (focus loss — phase <see cref="CommandPhase.Canceled"/>, the one shape the
-/// dispatch gate lets through besides a real release) revokes it immediately. All state is single-threaded on the
-/// launcher's window-pump thread (the <see cref="WorldEditorMouse"/> contract): the sink's <see cref="OnPointer"/>,
-/// the overlay's <see cref="Tick"/>, and every command handler run there.</para>
-/// </remarks>
 internal sealed class WorldWheelFeed : IWorldWheelConsumer {
-    // The hub geometry, as fractions of the seat viewport's smaller pixel extent — presentation chrome, the
-    // BindingBarLayout/CursorWriter constant discipline (the wheel's CONTENT is authored document data; its chrome
-    // proportions are the writer's own, like the cursor's dot-to-ring ratio).
-    private const float DeadZoneFraction = 0.10f;
-    private const float RingWidthFraction = 0.07f;
-    // A half band of forgiveness past the outer ring before a release reads as "outside".
-    private const float OuterGraceRingFraction = 0.5f;
-    // How many closed frames a commit decision survives — see the class remarks' commit paragraph.
+    // How many CLOSED frames an armed commit decision survives. The release edge closes the radial in the same
+    // input fold that queues the commit, and on a frame the simulation accumulator owes zero ticks the closing
+    // FeedTick can run BEFORE the dispatch's tick applies — a decision dropped at first close-observation would
+    // silently cancel every commit landing on such a frame. Counted in observed frames, never wall time.
     private const int CommitGraceFrames = 2;
 
+    private sealed class SeatState {
+        public BindingWheelView? Wheel;
+        public int ActiveRing;
+        public float RingScroll;
+        public Vector2 Center;
+        public bool CenterKnown;
+        public int AxisExcursionRing = -1;
+        public int SpatialExcursionRing = -1;
+        public BindingWheelGestureState Gesture { get; } = new();
+        public long PointerSequence;
+        public float BankedNotches;
+        public OverlayWheelRing[] RingCache = [];
+        public BindingWheelView? RingCacheSource;
+        public bool CommitArmed;
+        public BindingWheelView? CommitWheel;
+        public int CommitRing;
+        public int CommitSector;
+        public BindingActivation? CommitActivation;
+        public string CommitLabel = string.Empty;
+        public string CommitReason = "closed";
+        public int ClosedFrames;
+        public WorldWheelStatus Status;
+    }
+
     private readonly WorldSeatBindings m_bindings;
-    // LAZY deliberately (the Func<InputRouter> precedent): a commit's dispatch door is TextCommandSource, whose
-    // construction consumes the CommandRegistry, which aggregates WorldWheelCommandModule, which consumes THIS
-    // feed — a direct dependency would cycle the container. Resolved on first commit, long after build.
-    private readonly Func<TextCommandSource> m_console;
-    private readonly WorldCursorFeed m_feed;
+    private readonly WorldCursorFeed m_cursor;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
+    private readonly Func<InputRouter> m_router;
+    private readonly SeatState[] m_state = new SeatState[PlayerRoster.MaxSlots];
     private readonly WheelStore m_store;
+    private readonly OverlayWheelSeat[] m_visible = new OverlayWheelSeat[PlayerRoster.MaxSlots];
     private readonly WorldSeatViewports m_viewports;
-    private readonly OverlayWheelSeat[] m_seats = new OverlayWheelSeat[1];
-
-    // The banked mouse-wheel notches (OnPointer writes, Tick spends — one thread, see the class remarks).
-    private float m_bankedNotches;
-    // The open wheel (null while closed) and its presentation state.
-    private BindingWheelView? m_wheel;
-    private int m_slot;
-    private int m_activeRing;
-    private float m_ringScroll;
-    private Vector2 m_center;
-    private bool m_centerKnown;
-    // The ring-label cache the store frame reuses — rebuilt only when the wheel reference changes.
-    private OverlayWheelRing[] m_ringCache = [];
-    private BindingWheelView? m_ringCacheSource;
-    // The armed commit decision — re-armed every open frame, consumed once, aged out after the close grace.
-    private bool m_commitArmed;
-    private int m_commitSlot;
-    private BindingWheelView? m_commitWheel;
-    private int m_commitRing;
-    private int m_commitSector;
-    private string? m_commitCommand;
-    private string m_commitLabel = string.Empty;
-    private string m_commitReason = "closed";
-    private int m_closedFrames;
-    private WorldWheelStatus m_status = new(Slot: 0, Open: false, Group: string.Empty, RingCount: 0, ActiveRing: -1, ActiveRingLabel: string.Empty, HoverSector: -1, HoverLabel: string.Empty, HoverCommand: null, HoverReason: "closed", Center: Vector2.Zero, CenterKnown: false);
+    private long m_selectionSequence;
 
     /// <summary>Initializes a new instance of the <see cref="WorldWheelFeed"/> class.</summary>
     /// <param name="pointer">The live pointer store — this type is its one registered wheel consumer.</param>
-    /// <param name="roster">The roster the pointer's seat resolves against (the keyboard's seat).</param>
-    /// <param name="bindings">The per-seat bindings whose active page decides which wheel presents.</param>
-    /// <param name="feed">The cursor feed whose published per-frame status anchors the hub and drives hover.</param>
-    /// <param name="viewports">The per-seat viewport publication the wheel's pixel geometry derives from.</param>
+    /// <param name="roster">The roster the pointer's seat resolves against.</param>
+    /// <param name="bindings">The per-seat bindings whose active page decides which radial presents.</param>
+    /// <param name="cursor">The cursor feed whose published status anchors the hub and drives pointer hover.</param>
+    /// <param name="viewports">The per-seat viewport publication the pixel geometry derives from.</param>
     /// <param name="store">The wheel store the overlay reads.</param>
-    /// <param name="console">The console door a committed sector's command dispatches through — lazy, see
-    /// <c>m_console</c>'s remarks.</param>
+    /// <param name="router">The input router a committed sector's activation enters — LAZY, because the command
+    /// registry aggregates <see cref="WorldWheelCommandModule"/>, which consumes this feed; a direct dependency
+    /// would cycle the container.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed feed, WorldSeatViewports viewports, WheelStore store, Func<TextCommandSource> console) {
+    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router) {
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
-        ArgumentNullException.ThrowIfNull(argument: feed);
+        ArgumentNullException.ThrowIfNull(argument: cursor);
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: store);
-        ArgumentNullException.ThrowIfNull(argument: console);
+        ArgumentNullException.ThrowIfNull(argument: router);
 
         m_bindings = bindings;
-        m_console = console;
-        m_feed = feed;
+        m_cursor = cursor;
         m_pointer = pointer;
         m_roster = roster;
+        m_router = router;
         m_store = store;
         m_viewports = viewports;
+
+        for (var slot = 0; (slot < m_state.Length); slot++) {
+            m_state[slot] = new SeatState {
+                Status = ClosedStatus(slot: slot),
+            };
+        }
     }
 
-    /// <summary>The last composed frame's radial facts (the <c>world.view.wheel</c> read-back).</summary>
-    public WorldWheelStatus Status => m_status;
+    /// <summary>The pointer seat's last composed status — what <c>world.view.wheel</c> answers without a seat
+    /// argument.</summary>
+    public WorldWheelStatus Status => StatusFor(slot: WorldPointerSlot.Resolve(roster: m_roster));
+
+    /// <summary>One seat's last composed status.</summary>
+    /// <param name="slot">The 0-based seat slot to read.</param>
+    /// <returns>That seat's status, or a closed status when the slot is out of range.</returns>
+    public WorldWheelStatus StatusFor(int slot) => (((uint)slot < m_state.Length) ? m_state[slot].Status : ClosedStatus(slot: 0));
 
     /// <inheritdoc/>
     public void OnPointer(int slot) {
-        // Bank every wheel report at the point of arrival; Tick decides what the bank means. Draining here (not in
-        // Tick) keeps the accumulator's single-consumer discipline event-shaped, exactly where the sink's own
-        // drain-and-discard used to run.
-        m_bankedNotches += m_pointer.TakeWheel(slot: slot);
-    }
-
-    /// <summary>Advances the radial one produced frame — see the class summary.</summary>
-    public void Tick() {
-        var slot = (m_roster.DeviceSlot(device: PlayerRoster.KeyboardDevice) ?? 0);
-        var wheel = m_bindings.WheelView(slot: slot);
-        var view = m_viewports.Seat(slot: slot);
-        var notches = m_bankedNotches;
-
-        m_bankedNotches = 0f;
-
-        if ((wheel is null) || !view.Present) {
-            // Closed (or nothing to present into): free scrolling cycles nothing — the bank was already taken
-            // above and is simply dropped. The armed commit ages out over the close grace; see the class remarks.
-            m_wheel = null;
-
-            if (m_commitArmed && (++m_closedFrames > CommitGraceFrames)) {
-                m_commitArmed = false;
-            }
-
-            m_status = (m_status with { Slot = slot, Open = false, Group = string.Empty, RingCount = 0, ActiveRing = -1, ActiveRingLabel = string.Empty, HoverSector = -1, HoverLabel = string.Empty, HoverCommand = null, HoverReason = "closed" });
-            m_store.Publish(frame: new OverlayWheelFrame(Seats: ReadOnlyMemory<OverlayWheelSeat>.Empty));
-
+        if ((uint)slot >= m_state.Length) {
             return;
         }
 
-        var status = m_feed.Status;
-        var positionKnown = (status.Reason is not ("no-position" or "no-view"));
+        var state = m_state[slot];
 
-        if (!ReferenceEquals(objA: m_wheel, objB: wheel) || (slot != m_slot)) {
-            // OPEN (or the wheel under an open hold changed — a recompose mid-hold re-opens honestly). The bank is
-            // discarded rather than applied: scrolling done before the wheel existed chose nothing on it.
-            m_wheel = wheel;
-            m_slot = slot;
-            m_activeRing = 0;
-            m_ringScroll = 0f;
-            m_centerKnown = false;
-        } else {
-            m_ringScroll += notches;
+        state.BankedNotches += m_pointer.TakeWheel(slot: slot);
+        state.PointerSequence = ++m_selectionSequence;
+    }
 
-            while (m_ringScroll >= 1f) {
-                m_ringScroll -= 1f;
-                m_activeRing = ((m_activeRing + 1) % wheel.Rings.Count);
-            }
-
-            while (m_ringScroll <= -1f) {
-                m_ringScroll += 1f;
-                m_activeRing = (((m_activeRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
-            }
+    /// <summary>Accepts an authored Axis2D selection binding for a seat.</summary>
+    public void Select(int slot, Vector2 axis) {
+        if ((uint)slot >= m_state.Length) {
+            return;
         }
 
-        if (!m_centerKnown && positionKnown) {
-            // The hub anchors where the cursor first stands while open — at the open itself in the ordinary case,
-            // so a Tab tap releases over the hub and cancels.
-            m_center = status.Frame;
-            m_centerKnown = true;
-        }
+        var state = m_state[slot];
 
-        var ring = wheel.Rings[m_activeRing];
-        var hoverSector = -1;
-        var hoverReason = "no-cursor";
+        state.Gesture.Select(axis: axis, sequence: ++m_selectionSequence);
+    }
 
-        if (m_centerKnown && positionKnown) {
-            var unit = MathF.Min(x: (view.Region.Width * view.Width), y: (view.Region.Height * view.Height));
-            var inner = (unit * DeadZoneFraction);
-            var ringWidth = (unit * RingWidthFraction);
-            var outer = (inner + ((wheel.Rings.Count + OuterGraceRingFraction) * ringWidth));
-            var delta = (status.Frame - m_center);
-            var distance = delta.Length();
+    /// <summary>Composes every open seat's radial once per produced frame.</summary>
+    public void Tick() {
+        var pointerSlot = WorldPointerSlot.Resolve(roster: m_roster);
+        var pointerStatus = m_cursor.Status;
+        var visibleCount = 0;
 
-            if (distance <= inner) {
-                hoverReason = "dead-center";
-            } else if (distance > outer) {
-                hoverReason = "outside";
+        for (var slot = 0; (slot < m_state.Length); slot++) {
+            var state = m_state[slot];
+            var wheel = m_bindings.WheelView(slot: slot);
+            var viewport = m_viewports.Seat(slot: slot);
+
+            if ((wheel is null) || !viewport.Present) {
+                Close(slot: slot, state: state);
+
+                continue;
+            }
+
+            var viewportCenter = new Vector2(
+                x: ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width),
+                y: ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
+            );
+            var pointerAvailable = ((slot == pointerSlot) && (pointerStatus.Reason is not ("no-position" or "no-view")));
+            var unit = MathF.Min(x: (viewport.Region.Width * viewport.Width), y: (viewport.Region.Height * viewport.Height));
+
+            var opened = !ReferenceEquals(objA: state.Wheel, objB: wheel);
+
+            if (opened) {
+                state.Wheel = wheel;
+                state.Gesture.Open();
+                state.ActiveRing = wheel.Style.InitialRing;
+                state.AxisExcursionRing = -1;
+                state.SpatialExcursionRing = -1;
+                state.RingScroll = 0f;
+                state.BankedNotches = 0f;
+                state.Center = BindingWheelGeometry.ResolveOpeningCenter(
+                    placement: wheel.Style.Placement,
+                    pointerAvailable: pointerAvailable,
+                    pointer: pointerStatus.Frame,
+                    viewportCenter: viewportCenter
+                );
+                state.CenterKnown = true;
+            } else if (wheel.Style.RingSelection == BindingWheelRingSelectionMode.Explicit) {
+                ApplyRingScroll(state: state, wheel: wheel);
             } else {
-                // Angle from twelve o'clock, clockwise, sector 0 CENTERED at the top — the writer's own layout
-                // convention, so what is drawn under the cursor is what commits.
-                var span = (MathF.Tau / ring.Sectors.Count);
-                var angle = MathF.Atan2(y: delta.X, x: -delta.Y);
-
-                if (angle < 0f) {
-                    angle += MathF.Tau;
-                }
-
-                hoverSector = ((int)((angle + (span * 0.5f)) / span) % ring.Sectors.Count);
-                hoverReason = "sector";
+                state.BankedNotches = 0f;
             }
+
+            if (pointerAvailable && RequiresSpatialNeutral(wheel: wheel)) {
+                _ = state.Gesture.TryCaptureSpatialNeutral(position: pointerStatus.Frame);
+            }
+
+            var hoverSector = -1;
+            var hoverReason = "no-selection";
+            var center = state.Center;
+            var centerKnown = state.CenterKnown;
+
+            if (state.Gesture.Cancelled) {
+                hoverReason = "cancelled";
+            } else if (state.Gesture.AxisKnown && (state.Gesture.AxisSequence > state.PointerSequence)) {
+                var selection = SelectAxis(state: state, wheel: wheel);
+                hoverSector = selection.Sector;
+                hoverReason = selection.Reason;
+            } else if (pointerAvailable && centerKnown &&
+                (!RequiresSpatialNeutral(wheel: wheel) || state.Gesture.SpatialNeutralKnown)) {
+                var selection = SelectPointer(state: state, wheel: wheel, pointer: pointerStatus.Frame, center: center, unit: unit);
+                hoverSector = selection.Sector;
+                hoverReason = selection.Reason;
+            }
+
+            var ring = wheel.Rings[state.ActiveRing];
+            state.Center = center;
+            state.CenterKnown = centerKnown;
+            Arm(state: state, wheel: wheel, ring: ring, hoverSector: hoverSector, hoverReason: hoverReason);
+            m_visible[visibleCount++] = BuildSeat(state: state, wheel: wheel, viewport: in viewport, hoverSector: hoverSector, unit: unit);
+            state.Status = new WorldWheelStatus(
+                Slot: slot,
+                Open: true,
+                Id: wheel.Id,
+                Group: wheel.Group,
+                RingCount: wheel.Rings.Count,
+                ActiveRing: state.ActiveRing,
+                ActiveRingLabel: (ring.Label ?? ring.PageId),
+                HoverSector: hoverSector,
+                HoverLabel: state.CommitLabel,
+                HoverCommand: state.CommitActivation?.Command,
+                HoverReason: hoverReason,
+                PointerSelection: wheel.Style.PointerSelection,
+                Placement: wheel.Style.Placement,
+                RingSelection: wheel.Style.RingSelection,
+                Center: center,
+                CenterKnown: centerKnown
+            );
         }
 
-        // Re-arm the commit decision with what this frame actually shows — the release consumes exactly what the
-        // player saw.
-        var hovered = ((hoverSector >= 0) ? ring.Sectors[hoverSector] : null);
-
-        m_commitArmed = true;
-        m_commitSlot = slot;
-        m_commitWheel = wheel;
-        m_commitRing = m_activeRing;
-        m_commitSector = hoverSector;
-        m_commitCommand = hovered?.Command;
-        m_commitLabel = (hovered?.Label ?? hovered?.Command ?? string.Empty);
-        m_commitReason = hoverReason;
-        m_closedFrames = 0;
-
-        PublishOpen(view: in view, wheel: wheel, hoverSector: hoverSector);
-        m_status = new WorldWheelStatus(
-            Slot: slot,
-            Open: true,
-            Group: wheel.Group,
-            RingCount: wheel.Rings.Count,
-            ActiveRing: m_activeRing,
-            ActiveRingLabel: (ring.Label ?? ring.PageId),
-            HoverSector: hoverSector,
-            HoverLabel: m_commitLabel,
-            HoverCommand: m_commitCommand,
-            HoverReason: hoverReason,
-            Center: m_center,
-            CenterKnown: m_centerKnown
-        );
+        m_store.Publish(frame: new OverlayWheelFrame(Seats: m_visible.AsMemory(start: 0, length: visibleCount)));
     }
 
     /// <summary>Steps the active ring — the <c>player.wheel.ring</c> handler's whole act.</summary>
     /// <param name="slot">The 0-based seat slot the step targets.</param>
     /// <param name="direction">+1 cycles outward, -1 inward (wrapping).</param>
     /// <param name="activeRing">The resulting 0-based active ring.</param>
-    /// <param name="ringCount">The open wheel's ring count.</param>
+    /// <param name="ringCount">The open radial's ring count.</param>
     /// <param name="ringLabel">The resulting active ring's display label.</param>
-    /// <returns><see langword="false"/> when no wheel is open for the seat (nothing steps).</returns>
-    public bool TryCycleRing(int slot, int direction, out int activeRing, out int ringCount, out string ringLabel) {
+    /// <param name="excursionControlled">Whether refusal means the open radial derives its ring from selector
+    /// excursion rather than explicit ring-step commands.</param>
+    /// <returns><see langword="false"/> when no radial is open or the open radial derives its ring from excursion.</returns>
+    public bool TryCycleRing(int slot, int direction, out int activeRing, out int ringCount, out string ringLabel, out bool excursionControlled) {
         activeRing = -1;
         ringCount = 0;
         ringLabel = string.Empty;
+        excursionControlled = false;
 
-        if ((m_wheel is not { } wheel) || (slot != m_slot)) {
+        if (((uint)slot >= m_state.Length) || (m_state[slot].Wheel is not { } wheel)) {
             return false;
         }
 
-        m_activeRing = (((m_activeRing + Math.Sign(value: direction)) + wheel.Rings.Count) % wheel.Rings.Count);
-        activeRing = m_activeRing;
+        var state = m_state[slot];
+
+        if (wheel.Style.RingSelection == BindingWheelRingSelectionMode.Excursion) {
+            excursionControlled = true;
+
+            return false;
+        }
+
+        state.ActiveRing = (((state.ActiveRing + Math.Sign(value: direction)) + wheel.Rings.Count) % wheel.Rings.Count);
+        activeRing = state.ActiveRing;
         ringCount = wheel.Rings.Count;
-
-        var ring = wheel.Rings[m_activeRing];
-
-        ringLabel = (ring.Label ?? ring.PageId);
+        ringLabel = (wheel.Rings[activeRing].Label ?? wheel.Rings[activeRing].PageId);
 
         return true;
     }
 
-    /// <summary>The commit outcome <see cref="Commit"/> reports.</summary>
-    /// <param name="Armed">Whether an armed decision existed for the seat at all.</param>
-    /// <param name="Dispatched">The dispatched command, or <see langword="null"/> for a cancel.</param>
-    /// <param name="Label">The dispatched sector's display label.</param>
-    /// <param name="Ring">The 0-based ring the commit resolved in.</param>
-    /// <param name="Sector">The 0-based sector, or -1 for a cancel.</param>
-    /// <param name="Reason">The cancel reason (<c>dead-center</c>, <c>outside</c>, <c>no-cursor</c>) — empty on a
-    /// dispatch.</param>
-    public readonly record struct WheelCommitOutcome(bool Armed, string? Dispatched, string Label, int Ring, int Sector, string Reason);
-
-    /// <summary>Consumes the armed commit decision — the <c>player.wheel.commit</c> handler's whole act. A
-    /// dispatched sector's command is enqueued on the console door before this returns.</summary>
+    /// <summary>Commits the last presented sector — the <c>player.wheel.commit</c> handler's whole act. When another
+    /// authored opener still presents the same radial, the release is deferred: the remaining opener owns the
+    /// eventual commit.</summary>
     /// <param name="slot">The 0-based seat slot the commit targets.</param>
-    /// <returns>The outcome (Armed false when no wheel is open, or the grace expired, or the seat differs).</returns>
-    public WheelCommitOutcome Commit(int slot) {
-        if (!m_commitArmed || (slot != m_commitSlot)) {
-            return new WheelCommitOutcome(Armed: false, Dispatched: null, Label: string.Empty, Ring: -1, Sector: -1, Reason: string.Empty);
+    /// <returns>The commit disposition, every failure distinguishable from the others.</returns>
+    public BindingWheelCommitResult Commit(int slot) {
+        if ((uint)slot >= m_state.Length) {
+            return BindingWheelCommitResult.NotArmed();
         }
 
-        m_commitArmed = false;
+        var state = m_state[slot];
 
-        // Both outcomes narrate act-scale on stderr (the [editor.mouse] discipline): a BOUND dispatch's own
-        // CommandResult is deliberately silent on the process streams (physical snapshot entries carry no text —
-        // see SimulationCommandOutputObserver), so without this line a released commit would be pipe-assertable
-        // only through the dispatched verb's own echo, and a cancel not at all.
-        if (m_commitCommand is not { } command) {
-            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} release cancelled ({m_commitReason})");
-
-            return new WheelCommitOutcome(Armed: true, Dispatched: null, Label: string.Empty, Ring: m_commitRing, Sector: -1, Reason: m_commitReason);
+        if (state.Gesture.Cancelled) {
+            return BindingWheelCommitResult.Cancelled(reason: "cancelled", ring: state.CommitRing, sector: -1);
         }
 
-        // The dispatch: the sector's command as an ordinary console line — Console-identified, echoing and
-        // refusing exactly like a typed one.
-        Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} committed ring {(m_commitRing + 1)} sector {(m_commitSector + 1)} '{m_commitLabel}' -> {command}");
-        m_console().Enqueue(line: command);
+        if (!state.CommitArmed) {
+            return BindingWheelCommitResult.NotArmed();
+        }
 
-        return new WheelCommitOutcome(Armed: true, Dispatched: command, Label: m_commitLabel, Ring: m_commitRing, Sector: m_commitSector, Reason: string.Empty);
+        var currentlyOpen = m_bindings.WheelView(slot: slot);
+
+        if ((currentlyOpen is not null) && string.Equals(a: currentlyOpen.Id, b: state.CommitWheel?.Id, comparisonType: StringComparison.Ordinal)) {
+            return BindingWheelCommitResult.Deferred(label: state.CommitLabel, ring: state.CommitRing, sector: state.CommitSector);
+        }
+
+        state.CommitArmed = false;
+
+        if (state.CommitActivation is not { } activation) {
+            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} release cancelled ({state.CommitReason})");
+
+            return BindingWheelCommitResult.Cancelled(reason: state.CommitReason, ring: state.CommitRing, sector: -1);
+        }
+
+        var outcome = BindingWheelCommitResult.Dispatch(
+            router: m_router(),
+            slot: slot,
+            activation: activation,
+            label: state.CommitLabel,
+            ring: state.CommitRing,
+            sector: state.CommitSector
+        );
+
+        if (outcome.Status == BindingWheelCommitStatus.Dispatched) {
+            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} committed ring {(state.CommitRing + 1)} sector {(state.CommitSector + 1)} '{state.CommitLabel}' -> {activation.Command}");
+        }
+
+        return outcome;
     }
 
-    /// <summary>Revokes the armed commit decision without dispatching — the focus-loss cancellation path (the
-    /// router's synthesized <see cref="CommandPhase.Canceled"/> edge reaches the commit handler, which calls this
-    /// instead of <see cref="Commit"/>: an alt-tab mid-hold must never commit a sector).</summary>
+    /// <summary>Latches cancellation for the seat's current gesture — both the author-bound
+    /// <c>player.wheel.cancel</c> act and the router's synthesized focus-loss cancellation (an alt-tab mid-hold must
+    /// never commit a sector). The latch holds until the radial next opens, so no later presentation frame can
+    /// re-arm the decision it cleared.</summary>
     /// <param name="slot">The 0-based seat slot the cancellation targets.</param>
     public void Revoke(int slot) {
-        if (m_commitArmed && (slot == m_commitSlot)) {
-            m_commitArmed = false;
+        if ((uint)slot < m_state.Length) {
+            var state = m_state[slot];
+
+            state.Gesture.Cancel();
+            state.CommitArmed = false;
         }
     }
 
-    private void PublishOpen(in WorldSeatView view, BindingWheelView wheel, int hoverSector) {
-        if (!ReferenceEquals(objA: m_ringCacheSource, objB: wheel)) {
+    private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
+        state.RingScroll += state.BankedNotches;
+        state.BankedNotches = 0f;
+
+        while (state.RingScroll >= 1f) {
+            state.RingScroll -= 1f;
+            state.ActiveRing = ((state.ActiveRing + 1) % wheel.Rings.Count);
+        }
+
+        while (state.RingScroll <= -1f) {
+            state.RingScroll += 1f;
+            state.ActiveRing = (((state.ActiveRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
+        }
+    }
+
+    private static BindingWheelSelection SelectAxis(SeatState state, BindingWheelView wheel) {
+        var vector = state.Gesture.Axis;
+
+        if (wheel.Excursion is not { } excursion) {
+            return BindingWheelGeometry.SelectAxis(vector: vector, sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count, style: wheel.Style);
+        }
+
+        var ring = BindingWheelGeometry.ResolveExcursionRing(vector: vector, excursion: excursion, previousRing: state.AxisExcursionRing);
+        state.AxisExcursionRing = ring;
+
+        if (ring < 0) {
+            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
+        }
+
+        state.ActiveRing = ring;
+
+        return BindingWheelGeometry.SelectDirection(vector: vector, sectorCount: wheel.Rings[ring].Sectors.Count, style: wheel.Style);
+    }
+
+    private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 center, float unit) {
+        var mode = wheel.Style.PointerSelection;
+        var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
+            mode: mode,
+            position: pointer,
+            neutral: state.Gesture.SpatialNeutral,
+            hub: center
+        );
+
+        if ((mode == BindingWheelSpatialSelectionMode.Disabled) || (wheel.Excursion is not { } excursion)) {
+            return BindingWheelGeometry.SelectSpatial(
+                vector: targetingVector,
+                sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count,
+                ringCount: wheel.Rings.Count,
+                style: wheel.Style,
+                mode: mode,
+                unit: unit
+            );
+        }
+
+        var neutralVector = (pointer - state.Gesture.SpatialNeutral);
+        var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(vector: neutralVector, viewportUnit: unit, excursion: excursion);
+        var ring = BindingWheelGeometry.ResolveExcursionRing(vector: normalized, excursion: excursion, previousRing: state.SpatialExcursionRing);
+        state.SpatialExcursionRing = ring;
+
+        if (ring < 0) {
+            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
+        }
+
+        state.ActiveRing = ring;
+
+        return ((mode == BindingWheelSpatialSelectionMode.Angle)
+            ? BindingWheelGeometry.SelectDirection(vector: normalized, sectorCount: wheel.Rings[ring].Sectors.Count, style: wheel.Style)
+            : BindingWheelGeometry.SelectSpatial(
+                vector: targetingVector,
+                sectorCount: wheel.Rings[ring].Sectors.Count,
+                ringCount: wheel.Rings.Count,
+                style: wheel.Style,
+                mode: mode,
+                unit: unit
+            ));
+    }
+
+    private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
+        ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
+            ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
+
+    private static void Arm(SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
+        if (!state.Gesture.CanArm) {
+            state.CommitArmed = false;
+            state.CommitWheel = wheel;
+            state.CommitRing = state.ActiveRing;
+            state.CommitSector = -1;
+            state.CommitActivation = null;
+            state.CommitLabel = string.Empty;
+            state.CommitReason = "cancelled";
+            state.ClosedFrames = 0;
+
+            return;
+        }
+
+        var hovered = ((hoverSector >= 0) ? ring.Sectors[hoverSector] : null);
+
+        state.CommitArmed = true;
+        state.CommitWheel = wheel;
+        state.CommitRing = state.ActiveRing;
+        state.CommitSector = hoverSector;
+        state.CommitActivation = hovered?.Activation;
+        state.CommitLabel = (hovered?.Label ?? hovered?.Command ?? string.Empty);
+        state.CommitReason = hoverReason;
+        state.ClosedFrames = 0;
+    }
+
+    private static OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
+        if (!ReferenceEquals(objA: state.RingCacheSource, objB: wheel)) {
             var rings = new OverlayWheelRing[wheel.Rings.Count];
 
             for (var ringIndex = 0; (ringIndex < rings.Length); ringIndex++) {
                 var ring = wheel.Rings[ringIndex];
-                var sectors = new string[ring.Sectors.Count];
-
-                for (var sectorIndex = 0; (sectorIndex < sectors.Length); sectorIndex++) {
-                    var sector = ring.Sectors[sectorIndex];
-
-                    sectors[sectorIndex] = (sector.Label ?? sector.Command);
-                }
+                var sectors = ring.Sectors.Select(selector: static sector => (sector.Label ?? sector.Command)).ToArray();
 
                 rings[ringIndex] = new OverlayWheelRing(Label: (ring.Label ?? ring.PageId), Sectors: sectors);
             }
 
-            m_ringCache = rings;
-            m_ringCacheSource = wheel;
+            state.RingCache = rings;
+            state.RingCacheSource = wheel;
         }
 
-        var unit = MathF.Min(x: (view.Region.Width * view.Width), y: (view.Region.Height * view.Height));
+        var centerX = (state.CenterKnown ? state.Center.X : ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width));
+        var centerY = (state.CenterKnown ? state.Center.Y : ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height));
 
-        // An unanchored hub (no cursor position yet) presents at the viewport center — everything cancels until
-        // the pointer reports, so the placement is purely visual.
-        var centerX = (m_centerKnown ? m_center.X : ((view.Region.X + (view.Region.Width * 0.5f)) * view.Width));
-        var centerY = (m_centerKnown ? m_center.Y : ((view.Region.Y + (view.Region.Height * 0.5f)) * view.Height));
-
-        m_seats[0] = new OverlayWheelSeat(
-            Viewport: view.Region,
+        return new OverlayWheelSeat(
+            Viewport: viewport.Region,
             CenterX: centerX,
             CenterY: centerY,
-            InnerRadius: (unit * DeadZoneFraction),
-            RingWidth: (unit * RingWidthFraction),
-            ActiveRing: m_activeRing,
+            InnerRadius: (unit * wheel.Style.DeadZoneFraction),
+            RingWidth: (unit * wheel.Style.RingWidthFraction),
+            ActiveRing: state.ActiveRing,
             HoveredSector: hoverSector,
-            Rings: m_ringCache
+            RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
+            Clockwise: wheel.Style.Clockwise,
+            Rings: state.RingCache
         );
-        m_store.Publish(frame: new OverlayWheelFrame(Seats: m_seats.AsMemory(start: 0, length: 1)));
     }
+
+    private static void Close(int slot, SeatState state) {
+        state.Wheel = null;
+        state.Gesture.Close();
+        state.AxisExcursionRing = -1;
+        state.SpatialExcursionRing = -1;
+        state.BankedNotches = 0f;
+
+        if (state.CommitArmed && (++state.ClosedFrames > CommitGraceFrames)) {
+            state.CommitArmed = false;
+        }
+
+        state.Status = ClosedStatus(slot: slot);
+    }
+
+    private static WorldWheelStatus ClosedStatus(int slot) => new(
+        Slot: slot,
+        Open: false,
+        Id: string.Empty,
+        Group: string.Empty,
+        RingCount: 0,
+        ActiveRing: -1,
+        ActiveRingLabel: string.Empty,
+        HoverSector: -1,
+        HoverLabel: string.Empty,
+        HoverCommand: null,
+        HoverReason: "closed",
+        PointerSelection: BindingWheelSpatialSelectionMode.Disabled,
+        Placement: BindingWheelPlacement.ViewportCenter,
+        RingSelection: BindingWheelRingSelectionMode.Explicit,
+        Center: Vector2.Zero,
+        CenterKnown: false
+    );
 }

@@ -2,7 +2,7 @@ namespace Puck.Input;
 
 /// <summary>
 /// Specifies a provider-neutral keyboard key. The OS-specific native windows translate their raw key codes
-/// (Win32 virtual keys, X11/evdev keycodes) into these, and <see cref="WindowInputMapper"/> maps each to its
+/// (Win32 virtual keys, X11/evdev keycodes) into these, and the shared keyboard source map maps each to its
 /// <see cref="InputSources.Keyboard"/> vocabulary entry — the single place a key is named. Named keys only:
 /// letter keys ride <see cref="WindowInputEvent.Character"/>, and typed text rides
 /// <see cref="WindowInputEvent.Text"/>. Control/Shift/Alt/Super each carry distinct left/right members rather

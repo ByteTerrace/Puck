@@ -44,6 +44,8 @@ internal static partial class User32 {
     public static partial bool DestroyWindow(nint windowHandle);
     [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW", SetLastError = true)]
     public static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
+    [LibraryImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = true)]
+    public static partial nint LoadCursor(nint instanceHandle, nint cursorName);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial nint SetCursor(nint cursorHandle);
     [LibraryImport("user32.dll")]

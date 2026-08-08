@@ -34,8 +34,7 @@ internal interface IWorldWheelConsumer : IWorldPointerConsumer {
 /// <remarks>
 /// <para>The mouse carries no <see cref="InputDeviceId"/> of its own — there is no per-mouse device identity to
 /// resolve a slot from, unlike a pad or the keyboard — so every event lands on whichever seat the KEYBOARD
-/// currently owns: <see cref="PlayerRoster.DeviceSlot(InputDeviceId)"/> against
-/// <see cref="PlayerRoster.KeyboardDevice"/>, re-resolved per event rather than cached, so a live
+/// currently owns: <see cref="WorldPointerSlot.Resolve"/>, re-resolved per event rather than cached, so a live
 /// <c>player.assign</c> that moves the keyboard to another seat carries the mouse with it. Falls back to slot 0 in
 /// the unreachable-in-practice case the keyboard is itself unmapped (it is committed to slot 0 from boot and never
 /// leaves).</para>
@@ -89,7 +88,7 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
 
     /// <inheritdoc/>
     public void Observe(in WindowInputEvent inputEvent) {
-        var slot = (m_roster.DeviceSlot(device: PlayerRoster.KeyboardDevice) ?? 0);
+        var slot = WorldPointerSlot.Resolve(roster: m_roster);
 
         switch (inputEvent.Kind) {
             case WindowInputKind.PointerMove:

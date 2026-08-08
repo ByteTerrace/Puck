@@ -10,9 +10,9 @@ namespace Puck.World;
 /// SAME page (a later layer's entries for a source REPLACE the earlier layer's entries for that same source; entries
 /// at new sources append — the per-world overlay's single-lane remap). Rows at new keys append; modifiers union by id
 /// (a later layer overrides a same-id modifier); context rows merge on <c>(family, state)</c> in base-layer order with
-/// appended keys after (see <c>MergeContexts</c>); wheels merge on their group, a later layer's wheel REPLACING the
+/// appended keys after (see <c>MergeContexts</c>); wheels merge on their id, a later layer's wheel REPLACING the
 /// earlier one's WHOLESALE (a wheel is one presentation surface — half-merging two ring sets would present a radial
-/// neither layer authored; a world that re-authors a group's wheel therefore re-authors all of it, the Editor sector
+/// neither layer authored; a world that re-authors a named wheel therefore re-authors all of it, the Editor sector
 /// included). Merging must happen HERE, before compilation: a compiled profile
 /// resolves wholesale per <c>(slot, source)</c> and so cannot override one entry inside a shared page.
 /// </summary>
@@ -31,7 +31,7 @@ public static class WorldBindingComposer {
         var rows = new List<MutableRow>();
         var rowIndexByKey = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var wheels = new List<BindingWheelDefinition>();
-        var wheelIndexByGroup = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var wheelIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         foreach (var layer in layers) {
             if (layer is null) {
@@ -49,7 +49,7 @@ public static class WorldBindingComposer {
             MergeModifiers(into: modifiers, index: modifierIndexById, layer: layer);
             MergeRows(into: rows, index: rowIndexByKey, layer: layer);
             MergeContexts(into: contexts, index: contextIndexByKey, layer: layer);
-            MergeWheels(into: wheels, index: wheelIndexByGroup, layer: layer);
+            MergeWheels(into: wheels, index: wheelIndexById, layer: layer);
         }
 
         if (version is null) {
@@ -112,22 +112,21 @@ public static class WorldBindingComposer {
         }
     }
 
-    // Wheels merge on their GROUP: a later layer's wheel for the same group REPLACES the earlier one's WHOLESALE
-    // (see the class remarks — a wheel is one presentation surface, never half-merged); wheels for new groups
-    // append. The merged order is the base layer's order with appended groups after, matching MergeContexts.
+    // Wheels merge on their ID: a later layer's wheel for the same identity replaces it wholesale; a distinct id
+    // appends even inside the same group, which is how one group authors several radial presentations.
     private static void MergeWheels(List<BindingWheelDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) {
         foreach (var wheel in (layer.Wheels ?? [])) {
-            if (string.IsNullOrEmpty(value: wheel?.Group)) {
+            if (string.IsNullOrEmpty(value: wheel?.Id)) {
                 continue;
             }
 
             if (index.TryGetValue(
-                key: wheel.Group,
+                key: wheel.Id,
                 value: out var existing
             )) {
                 into[existing] = wheel;
             } else {
-                index[wheel.Group] = into.Count;
+                index[wheel.Id] = into.Count;
                 into.Add(item: wheel);
             }
         }

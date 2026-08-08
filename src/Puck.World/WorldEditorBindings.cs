@@ -174,8 +174,8 @@ internal static class WorldEditorBindings {
                 Page: new BindingPageDefinition(
                     Id: WheelHoldPageId,
                     Entries: [
-                        .. StickEntries(),
-                        .. WorldDefaultBindings.WheelHoldEntries(),
+                        .. WheelStickEntries(),
+                        .. WorldDefaultBindings.WheelHoldEntries(openerSource: InputSources.Keyboard.Tab),
                     ],
                     Label: "Wheel"
                 )
@@ -292,8 +292,8 @@ internal static class WorldEditorBindings {
                 Page: new BindingPageDefinition(
                     Id: SculptWheelHoldPageId,
                     Entries: [
-                        .. StickEntries(),
-                        .. WorldDefaultBindings.WheelHoldEntries(),
+                        .. WheelStickEntries(),
+                        .. WorldDefaultBindings.WheelHoldEntries(openerSource: InputSources.Keyboard.Tab),
                     ],
                     Label: "Wheel"
                 )
@@ -307,26 +307,28 @@ internal static class WorldEditorBindings {
     /// <returns>The two wheels, editor first.</returns>
     public static BindingWheelDefinition[] Wheels() => [
         new BindingWheelDefinition(
+            Id: "editor-primary",
             Group: GroupId,
-            HoldPage: WheelHoldPageId,
+            HoldPages: [WheelHoldPageId],
             Rings: [
                 new BindingPageDefinition(
                     Id: WheelRingId,
                     Entries: [
                         WorldDefaultBindings.Sector(command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
                         WorldDefaultBindings.Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
-                        WorldDefaultBindings.Sector(command: EditorCommandModule.CameraToggleCommand, label: "Camera", icon: "edit.op"),
-                        WorldDefaultBindings.Sector(command: "editor.creations", label: "Creations", icon: "edit.duplicate"),
-                        WorldDefaultBindings.Sector(command: "world.view.pointer", label: "Pointer", icon: "action.target"),
-                        WorldDefaultBindings.Sector(command: "world.view.state", label: "Layout", icon: "edit.style"),
+                        WorldDefaultBindings.Sector(command: EditorCommandModule.CameraToggleCommand, label: "Camera", icon: "edit.op", value: CommandValue.Axis(value: 0f)),
+                        WorldDefaultBindings.Sector(command: EditorCreationCommandModule.NextCommand, label: "Creation+", icon: "edit.next"),
+                        WorldDefaultBindings.Sector(command: EditorCreationCommandModule.PrevCommand, label: "Creation-", icon: "edit.prev"),
+                        WorldDefaultBindings.Sector(command: EditorCreationCommandModule.SpawnCommand, label: "Stamp", icon: "edit.duplicate"),
                     ],
                     Label: "Editor"
                 ),
             ]
         ),
         new BindingWheelDefinition(
+            Id: "sculpt-primary",
             Group: SculptGroupId,
-            HoldPage: SculptWheelHoldPageId,
+            HoldPages: [SculptWheelHoldPageId],
             Rings: [
                 new BindingPageDefinition(
                     Id: SculptWheelRingId,
@@ -349,6 +351,12 @@ internal static class WorldEditorBindings {
     private static BindingPageEntryDefinition[] StickEntries() => [
         new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: EditorCommandModule.MoveCommand, Label: "Fly"),
         new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: EditorCommandModule.LookCommand, Label: "Look"),
+    ];
+
+    // A radial is modal only with respect to the controls the author gives it: left stick keeps its ordinary move
+    // binding while right stick is deliberately omitted here and authored by WheelHoldEntries as radial selection.
+    private static BindingPageEntryDefinition[] WheelStickEntries() => [
+        new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: EditorCommandModule.MoveCommand, Label: "Fly"),
     ];
 
     // A press-edge entry.

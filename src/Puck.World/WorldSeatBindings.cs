@@ -504,26 +504,22 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
 
     // One wheel's half of the skip — see SkipUnregisteredWheels.
     private static BindingWheelDefinition? SkipUnregisteredSectors(BindingWheelDefinition wheel, IReadOnlyList<BindingChordDefinition> chords, string? label) {
-        var holdPageSurvives = false;
+        var pageIds = new HashSet<string>(
+            collection: chords.Where(predicate: static row => row.Page is not null).Select(selector: static row => row.Page!.Id),
+            comparer: StringComparer.Ordinal
+        );
+        var survivingHoldPages = wheel.HoldPages.Where(predicate: pageIds.Contains).ToArray();
 
-        foreach (var row in chords) {
-            if ((row.Page is { } page) && string.Equals(a: page.Id, b: wheel.HoldPage, comparisonType: StringComparison.Ordinal)) {
-                holdPageSurvives = true;
-
-                break;
-            }
-        }
-
-        if (!holdPageSurvives) {
+        if (survivingHoldPages.Length == 0) {
             if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel for group \"{wheel.Group}\" skipped — its hold page \"{wheel.HoldPage}\" is not in this composition.");
+                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" skipped — none of its hold pages are in this composition.");
             }
 
             return null;
         }
 
         List<BindingPageDefinition>? keptRings = null;
-        var changed = false;
+        var changed = (survivingHoldPages.Length != wheel.HoldPages.Count);
 
         for (var ringIndex = 0; (ringIndex < wheel.Rings.Count); ringIndex++) {
             var ring = wheel.Rings[ringIndex];
@@ -555,12 +551,12 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
 
             if ((keptSectors?.Count ?? 0) >= BindingWheelDefinition.MinSectorsPerRing) {
                 if (label is not null) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") skipped {dropped.Count} unregistered command{((dropped.Count == 1) ? "" : "s")} ({string.Join(separator: ", ", values: dropped)}) — not registered in this composition.");
+                    Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped {dropped.Count} unregistered command{((dropped.Count == 1) ? "" : "s")} ({string.Join(separator: ", ", values: dropped)}) — not registered in this composition.");
                 }
 
                 keptRings.Add(item: (ring with { Entries = keptSectors! }));
             } else if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") skipped — fewer than {BindingWheelDefinition.MinSectorsPerRing} of its sectors are registered in this composition ({string.Join(separator: ", ", values: dropped)} dropped).");
+                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped — fewer than {BindingWheelDefinition.MinSectorsPerRing} of its sectors are registered in this composition ({string.Join(separator: ", ", values: dropped)} dropped).");
             }
         }
 
@@ -570,13 +566,16 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
 
         if ((keptRings?.Count ?? 0) == 0) {
             if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel for group \"{wheel.Group}\" skipped — none of its rings survive in this composition.");
+                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" skipped — none of its rings survive in this composition.");
             }
 
             return null;
         }
 
-        return (wheel with { Rings = keptRings! });
+        return (wheel with {
+            HoldPages = survivingHoldPages,
+            Rings = (keptRings ?? wheel.Rings),
+        });
     }
 
     // One row's half of the skip: a PAGE keeps its registered entries and loses only the unregistered ones (a mixed

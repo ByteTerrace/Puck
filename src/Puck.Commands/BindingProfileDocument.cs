@@ -20,8 +20,8 @@ namespace Puck.Commands;
 /// group</c>) deriving a seat's active group from published engine state; <see langword="null"/> declares none.
 /// First matching row in document order wins across families; a shadowed later match is reported by the
 /// derivation read-back.</param>
-/// <param name="Wheels">The optional per-group radial action menus (<see cref="BindingWheelDefinition"/>: one wheel
-/// per group, presented while the group's hold page is selected); <see langword="null"/> declares none. Omitted from
+/// <param name="Wheels">The optional named radial presentations (<see cref="BindingWheelDefinition"/>: several may
+/// share a group and each may name several hold pages); <see langword="null"/> declares none. Omitted from
 /// a saved document when <see langword="null"/>, so a document authored before this member existed round-trips
 /// byte-identical.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

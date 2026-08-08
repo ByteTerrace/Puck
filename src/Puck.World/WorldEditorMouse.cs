@@ -103,7 +103,7 @@ internal sealed class WorldEditorMouse {
     /// <summary>Advances the policy one produced frame: derives this frame's left-button edge for the pointer's
     /// seat, acts on it, and follows a live mouse drag with the cursor.</summary>
     public void Tick() {
-        var slot = (m_roster.DeviceSlot(device: PlayerRoster.KeyboardDevice) ?? 0);
+        var slot = WorldPointerSlot.Resolve(roster: m_roster);
 
         // A mouse drag whose seat the pointer no longer rides (the keyboard moved mid-hold) has lost its hand:
         // cancel it — the drag never existed — and forget that slot's edge memory so the new occupant starts clean.

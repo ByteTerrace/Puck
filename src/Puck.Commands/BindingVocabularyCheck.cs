@@ -173,15 +173,22 @@ public static class BindingVocabularyCheck {
             return;
         }
 
-        // The wheel sectors' vocabulary half: a sector commits its command as a CONSOLE LINE (never through the
-        // binding dispatch machinery), so existence is the whole check — bindability and value kind are dispatch-path
-        // properties a console line does not have. The structural gate (BindingProfile.Compile) already narrowed the
-        // sector shape to a bare command destination.
+        // Radial sectors are ordinary compiled binding activations. They therefore obey the same existence,
+        // bindability, and value-kind contract as a physical page entry; only the trigger is supplied by the
+        // presenter's sector gesture rather than a provider source.
         foreach (var wheel in (document.Wheels ?? [])) {
             foreach (var ring in (wheel?.Rings ?? [])) {
                 foreach (var sector in (ring?.Entries ?? [])) {
-                    if (!string.IsNullOrEmpty(value: sector.Command) && (command(arg: sector.Command) is null)) {
-                        errors.Add(item: $"wheel ring \"{ring!.Id}\" (group \"{wheel!.Group}\") commits \"{sector.Command}\", which names no registered command");
+                    if (string.IsNullOrEmpty(value: sector.Command)) {
+                        continue;
+                    }
+
+                    if (command(arg: sector.Command) is not { } declared) {
+                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which names no registered command");
+                    } else if (declared.Bindability != CommandBindability.Bindable) {
+                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which is not bindable");
+                    } else if ((sector.Value?.Kind ?? CommandValueKind.Digital) != declared.ValueKind) {
+                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: (sector.Value?.Kind ?? CommandValueKind.Digital))} to \"{sector.Command}\", which takes {Word(kind: declared.ValueKind)}");
                     }
                 }
             }

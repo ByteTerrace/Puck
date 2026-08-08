@@ -3,19 +3,21 @@ namespace Puck.Input.Lighting;
 /// <summary>
 /// Translates a HID Keyboard/Keypad usage (usage page <c>0x07</c>) — the value a LampArray lamp declares as its
 /// input binding, i.e. <em>which key it lights</em> — into Puck's provider-neutral vocabulary: a
-/// <see cref="KeyCode"/> (letters and digits ride a character) and the matching
+/// <see cref="KeyCode"/> (letters ride a character) and the matching
 /// <see cref="InputSources.Keyboard"/> source string a binding table targets. This is the seam that lets the
-/// lighting layer color a key by the command bound to it without a per-device key map.
+/// lighting layer color a key by the command bound to it without a per-device key map; the final key-to-source
+/// translation is shared with live window input through <see cref="KeyboardSourceMap"/>.
 /// </summary>
 public static class KeyboardUsageMap {
     /// <summary>The HID Keyboard/Keypad usage page.</summary>
     public const ushort KeyboardUsagePage = 0x07;
 
     /// <summary>
-    /// Resolves a HID keyboard usage to a <see cref="KeyCode"/>. Letter and digit keys resolve to
+    /// Resolves a HID keyboard usage to a <see cref="KeyCode"/>. Letter keys resolve to
     /// <see cref="KeyCode.Letter"/> and set <paramref name="character"/> to the key's character (mirroring how the
     /// window seam carries letters on <see cref="WindowInputEvent.Character"/>); named keys resolve to their
-    /// <see cref="KeyCode"/> and leave <paramref name="character"/> as <c>'\0'</c>.
+    /// <see cref="KeyCode"/> and leave <paramref name="character"/> as <c>'\0'</c>. Digit usages do not map: the
+    /// engine exposes letters, not printable characters generally, as bindable physical controls.
     /// </summary>
     /// <param name="usage">The HID keyboard usage (page <c>0x07</c>).</param>
     /// <param name="key">When this method returns <see langword="true"/>, the resolved key.</param>
@@ -27,16 +29,6 @@ public static class KeyboardUsageMap {
         switch (usage) {
             case >= 0x04 and <= 0x1D: // Keyboard a..z
                 character = ((char)('a' + (usage - 0x04)));
-                key = KeyCode.Letter;
-
-                return true;
-            case >= 0x1E and <= 0x26: // Keyboard 1..9
-                character = ((char)('1' + (usage - 0x1E)));
-                key = KeyCode.Letter;
-
-                return true;
-            case 0x27: // Keyboard 0
-                character = '0';
                 key = KeyCode.Letter;
 
                 return true;
@@ -54,6 +46,10 @@ public static class KeyboardUsageMap {
                 return true;
             case 0x2B: // Keyboard Tab
                 key = KeyCode.Tab;
+
+                return true;
+            case 0x2C: // Keyboard Spacebar
+                key = KeyCode.Space;
 
                 return true;
             case 0x35: // Keyboard Grave Accent and Tilde (the console toggle)
@@ -139,29 +135,6 @@ public static class KeyboardUsageMap {
             return false;
         }
 
-        source = key switch {
-            KeyCode.Letter => InputSources.Keyboard.Letter(letter: character),
-            KeyCode.Enter => InputSources.Keyboard.Enter,
-            KeyCode.Escape => InputSources.Keyboard.Escape,
-            KeyCode.Backspace => InputSources.Keyboard.Backspace,
-            KeyCode.Tab => InputSources.Keyboard.Tab,
-            KeyCode.Backtick => InputSources.Keyboard.Backtick,
-            KeyCode.ArrowUp => InputSources.Keyboard.ArrowUp,
-            KeyCode.ArrowDown => InputSources.Keyboard.ArrowDown,
-            KeyCode.ArrowLeft => InputSources.Keyboard.ArrowLeft,
-            KeyCode.ArrowRight => InputSources.Keyboard.ArrowRight,
-            >= KeyCode.F1 and <= KeyCode.F12 => InputSources.Keyboard.Function(number: ((key - KeyCode.F1) + 1)),
-            KeyCode.ControlLeft => InputSources.Keyboard.ControlLeft,
-            KeyCode.ControlRight => InputSources.Keyboard.ControlRight,
-            KeyCode.ShiftLeft => InputSources.Keyboard.ShiftLeft,
-            KeyCode.ShiftRight => InputSources.Keyboard.ShiftRight,
-            KeyCode.AltLeft => InputSources.Keyboard.AltLeft,
-            KeyCode.AltRight => InputSources.Keyboard.AltRight,
-            KeyCode.SuperLeft => InputSources.Keyboard.SuperLeft,
-            KeyCode.SuperRight => InputSources.Keyboard.SuperRight,
-            _ => string.Empty,
-        };
-
-        return (source.Length != 0);
+        return KeyboardSourceMap.TryGetSource(key: key, character: character, source: out source);
     }
 }

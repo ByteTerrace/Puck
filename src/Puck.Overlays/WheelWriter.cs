@@ -125,8 +125,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             var span = (MathF.Tau / sectorCount);
 
             for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
-                // Sector k is CENTERED at k·span clockwise from twelve o'clock — the host's selection convention.
-                var angle = (sectorIndex * span);
+                // Layout policy is authored with the radial. The host uses the identical transform for selection.
+                var angle = (seat.RotationRadians + ((seat.Clockwise ? 1f : -1f) * sectorIndex * span));
                 var labelX = (seat.CenterX + (MathF.Sin(x: angle) * centerline));
                 var labelY = (seat.CenterY - (MathF.Cos(x: angle) * centerline));
                 var label = sectors[sectorIndex];

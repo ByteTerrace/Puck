@@ -15,15 +15,19 @@ public readonly record struct OverlayWheelRing(
 /// <summary>One seat's presented radial action menu, scoped to its viewport rect. Center and radii are PIXELS in
 /// full-frame space; the seat's clip rect confines them, exactly as the drawn cursor's records are.</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
-/// <param name="CenterX">The wheel hub x, px — where the cursor stood when the wheel opened.</param>
+/// <param name="CenterX">The wheel hub x, px — either the opening pointer position or the viewport center, as
+/// authored by the radial.</param>
 /// <param name="CenterY">The wheel hub y, px.</param>
 /// <param name="InnerRadius">The dead-zone radius, px — the innermost ring band starts here (a release inside it
 /// cancels, so the hub is drawn quiet).</param>
 /// <param name="RingWidth">One ring band's radial width, px — ring k occupies
 /// [InnerRadius + k·RingWidth, InnerRadius + (k+1)·RingWidth).</param>
 /// <param name="ActiveRing">The 0-based active ring (the one the cursor's angle selects within).</param>
-/// <param name="HoveredSector">The 0-based hovered sector within the active ring, or <c>-1</c> when the cursor
-/// stands in the dead zone, outside the outer ring, or nowhere known — the ACCENT highlight.</param>
+/// <param name="HoveredSector">The 0-based hovered sector within the active ring, or <c>-1</c> when the active
+/// selection input is in its dead zone, outside an authored hit-target ring, or nowhere known — the ACCENT
+/// highlight.</param>
+/// <param name="RotationRadians">Sector-zero rotation clockwise from twelve o'clock.</param>
+/// <param name="Clockwise">Whether sector indices advance clockwise.</param>
 /// <param name="Rings">The rings, innermost first.</param>
 public readonly record struct OverlayWheelSeat(
     NormalizedRect Viewport,
@@ -33,6 +37,8 @@ public readonly record struct OverlayWheelSeat(
     float RingWidth,
     int ActiveRing,
     int HoveredSector,
+    float RotationRadians,
+    bool Clockwise,
     ReadOnlyMemory<OverlayWheelRing> Rings
 );
 

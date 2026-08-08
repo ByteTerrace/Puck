@@ -29,6 +29,8 @@ namespace Puck.Commands;
 /// </param>
 /// <param name="Text">The original simulation-command line, when the injection came from console text. Preserved in
 /// the snapshot so argument-bearing verbs execute at tick time.</param>
+/// <param name="Source">The logical authored source for a compiler-minted presentation activation, or
+/// <see langword="null"/> for console/peer injections without a binding source.</param>
 internal readonly record struct CommandInjection(
     ushort CommandId,
     CommandValue Value,
@@ -36,7 +38,8 @@ internal readonly record struct CommandInjection(
     CommandPrincipal Principal,
     int Slot = 0,
     ulong CaptureTick = 0UL,
-    string? Text = null
+    string? Text = null,
+    string? Source = null
 ) {
     /// <summary>Whether applying this local live injection releases <see cref="TextCommandSource"/>'s deferred-mutation
     /// drain barrier. This is process-local coordination, not deterministic snapshot identity.</summary>
