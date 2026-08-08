@@ -1,6 +1,6 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Launcher;
-using Puck.Scene;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -18,23 +18,37 @@ namespace Puck.World;
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
 /// <remarks>SAVED-BYTES-ONLY (the default policy): capture composes the snapshot the writer serializes; it never mutates
-/// the in-memory definition or the journal (a save is a snapshot, not a mutation). The fold is exactly IDEMPOTENT on a
-/// freshly booted world — live session state equals the document defaults at boot — so the ouroboros round-trip (load→save→load
-/// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
-/// whether the live session has since diverged from the loaded document, reported by <c>world.status</c> at verb time.</remarks>
+/// the in-memory definition or the journal (a save is a snapshot, not a mutation). Every OTHER dimension this class
+/// folds is exactly IDEMPOTENT on a freshly booted, untouched world — live session state equals the document defaults
+/// at boot — so the ouroboros round-trip (load→save→load byte-identity) still holds for those; <c>state</c>'s
+/// advancing-row settle (below) is the one dimension that is NOT idempotent at boot, and honestly so — SOME ticks have
+/// always elapsed by the time a save can be requested at all, so a document carrying an advancing row settles to a
+/// slightly larger value even on an otherwise-untouched world, never to the exact bytes it loaded from.
+/// <see cref="DescribeDrift"/> is the honest cheap witness of whether the live session has since diverged from the
+/// loaded document, reported by <c>world.status</c> at verb time; it does not (and need not) cover this dimension, since
+/// an advancing row is EXPECTED to keep moving regardless of any save.
+/// <para><b>Advancing state settles at save too (owner ruling, 2026-08-06).</b> A row/cell's <c>WorldStateAdvance</c>
+/// epoch is SESSION-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
+/// FROZEN until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
+/// 0. <see cref="CaptureState"/> folds every advancing row's slot cell AND every advancing KEYED cell's own base into
+/// what it reads AT the save tick, and resets the projected epoch to 0, so tick 0 of the NEXT session already reads
+/// that value and keeps advancing immediately. Projection only: the LIVE document's own base/epoch is never
+/// touched, exactly like every other dimension this class folds.</para></remarks>
 internal static class WorldSessionCapture {
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
     /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
-    /// and <see cref="WorldDefinition.Audio"/>'s master gain. The transient census COUNT is not folded (R-C).</summary>
+    /// <see cref="WorldDefinition.Audio"/>'s master gain, and every advancing <see cref="WorldDefinition.State"/> row/cell
+    /// settled at <paramref name="tick"/> (see this type's remarks). The transient census COUNT is not folded (R-C).</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table (census + peer-source default).</param>
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
+    /// <param name="tick">The server's completed tick — the instant <c>state</c>'s advancing rows/cells settle at.</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
@@ -53,57 +67,120 @@ internal static class WorldSessionCapture {
             Patches = CapturePatches(patches: definition.Patches),
             Audio = CaptureAudio(audio: audio, defaults: definition.Audio),
             Host = CaptureHost(host: definition.Host, pacing: pacing),
+            State = CaptureState(rows: definition.State, tick: tick),
         });
+    }
+
+    // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
+    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (WorldStateCell.Advance)
+    // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
+    // WorldStateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
+    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A row
+    // with nothing advancing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own "nothing
+    // drifted, hand back the original list" idiom.
+    private static IReadOnlyList<WorldStateRow> CaptureState(IReadOnlyList<WorldStateRow> rows, ulong tick) {
+        if (rows.Count == 0) {
+            return rows;
+        }
+
+        List<WorldStateRow>? captured = null;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var settledRow = SettleRow(row: row, tick: tick);
+
+            if (ReferenceEquals(objA: settledRow, objB: row)) {
+                continue;
+            }
+
+            captured ??= new List<WorldStateRow>(collection: rows);
+            captured[index] = settledRow;
+        }
+
+        return ((IReadOnlyList<WorldStateRow>?)captured ?? rows);
+    }
+    private static WorldStateRow SettleRow(WorldStateRow row, ulong tick) {
+        // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
+        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance
+        // beside a keyed cells array in the first place).
+        if (row.Advance is { } rowAdvance) {
+            var slot = row.Cells![0];
+            var settledValue = rowAdvance.ComputeCurrentValue(row: row, baseValue: slot.Value, currentTick: tick);
+
+            return (row with {
+                Advance = (rowAdvance with { EpochTick = 0 }),
+                Cells = [(slot with { Value = settledValue })],
+            });
+        }
+
+        if (row.Cells is not { Count: > 0 } cells) {
+            return row;
+        }
+
+        List<WorldStateCell>? settledCells = null;
+
+        for (var index = 0; (index < cells.Count); index++) {
+            var cell = cells[index];
+
+            if (cell.Advance is not { } cellAdvance) {
+                continue;
+            }
+
+            settledCells ??= new List<WorldStateCell>(collection: cells);
+            settledCells[index] = (cell with {
+                Value = cellAdvance.ComputeCurrentValue(row: row, baseValue: cell.Value, currentTick: tick),
+                Advance = (cellAdvance with { EpochTick = 0 }),
+            });
+        }
+
+        return ((settledCells is null) ? row : (row with { Cells = settledCells }));
     }
 
     // The audio-asset twins of CaptureCreations: every tune/patch row re-crosses its ONE canonicalize pipeline so
     // the persisted doc + hash come from the SAME canonical result — idempotent at compose time, drift-proof on disk.
-    private static IReadOnlyList<WorldTune> CaptureTunes(IReadOnlyList<WorldTune> tunes) {
-        if (tunes.Count == 0) {
-            return tunes;
-        }
-
-        var captured = new List<WorldTune>(capacity: tunes.Count);
-
-        foreach (var tune in tunes) {
-            var canonical = Puck.Authoring.AudioCanonicalizer.Canonicalize(document: tune.Document, source: tune.Id);
-
-            captured.Add(item: (tune with { Document = canonical.Document, Hash = canonical.Hash }));
-        }
-
-        return captured;
-    }
-
-    private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) {
-        if (patches.Count == 0) {
-            return patches;
-        }
-
-        var captured = new List<WorldPatch>(capacity: patches.Count);
-
-        foreach (var patch in patches) {
-            var canonical = Puck.Authoring.SynthPatchCanonicalizer.Canonicalize(document: patch.Document, source: patch.Id);
-
-            captured.Add(item: (patch with { Document = canonical.Document, Hash = canonical.Hash }));
-        }
-
-        return captured;
-    }
+    private static IReadOnlyList<WorldTune> CaptureTunes(IReadOnlyList<WorldTune> tunes) =>
+        CaptureCanonicalAssets(
+            assets: tunes,
+            id: static tune => tune.Id,
+            document: static tune => tune.Document,
+            canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(document: document, source: source),
+            replace: static (tune, canonical) => (tune with { Document = canonical.Document, Hash = canonical.Hash }));
+    private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) =>
+        CaptureCanonicalAssets(
+            assets: patches,
+            id: static patch => patch.Id,
+            document: static patch => patch.Document,
+            canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(document: document, source: source),
+            replace: static (patch, canonical) => (patch with { Document = canonical.Document, Hash = canonical.Hash }));
 
     // The world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
     // doc + hash come from the SAME CanonicalCreation. Rows are already canonical at compose time, so this is exactly
     // idempotent (no drift dimension) — it exists so the SAVED file's pin can never diverge from its embedded bytes.
-    private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) {
-        if (creations.Count == 0) {
-            return creations;
+    private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) =>
+        CaptureCanonicalAssets(
+            assets: creations,
+            id: static creation => creation.Id,
+            document: static creation => creation.Document,
+            canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(document: document, source: source),
+            replace: static (creation, canonical) => (creation with { Document = canonical.Document, Hash = canonical.Hash }));
+
+    /// <summary>Owns canonical document and hash capture for every persisted asset-row family.</summary>
+    private static IReadOnlyList<TAsset> CaptureCanonicalAssets<TAsset, TDocument>(
+        IReadOnlyList<TAsset> assets,
+        Func<TAsset, string> id,
+        Func<TAsset, TDocument> document,
+        Func<TDocument, string, Puck.Forge.Authoring.CanonicalDocument<TDocument>> canonicalize,
+        Func<TAsset, Puck.Forge.Authoring.CanonicalDocument<TDocument>, TAsset> replace) {
+        if (assets.Count == 0) {
+            return assets;
         }
 
-        var captured = new List<WorldCreation>(capacity: creations.Count);
+        var captured = new List<TAsset>(capacity: assets.Count);
 
-        foreach (var creation in creations) {
-            var canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: creation.Document, source: creation.Id);
+        foreach (var asset in assets) {
+            var canonical = canonicalize(arg1: document(arg: asset), arg2: id(arg: asset));
 
-            captured.Add(item: (creation with { Document = canonical.Document, Hash = canonical.Hash }));
+            captured.Add(item: replace(arg1: asset, arg2: canonical));
         }
 
         return captured;
@@ -206,7 +283,7 @@ internal static class WorldSessionCapture {
         return captured;
     }
 
-    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.link.set).
+    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.row.set links).
     // When the binder holds no runtime links, the document's own Links carries forward unchanged, so declared links not
     // yet established at boot are preserved rather than dropped.
     private static IReadOnlyList<WorldScreenLink> CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
@@ -249,11 +326,10 @@ internal static class WorldSessionCapture {
 
         return false;
     }
-
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         foreach (var screen in screens) {
             if (binder.TryReadMachineInsert(index: screen.Index, engine: out var engine, contentPath: out var contentPath, options: out var options) &&
-                (screen.Source is not WorldScreenSource.Machine machine ||
+                ((screen.Source is not WorldScreenSource.Machine machine) ||
                  !string.Equals(a: machine.Engine, b: engine, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.ContentPath, b: contentPath, comparisonType: StringComparison.Ordinal) ||
                  !string.Equals(a: machine.Options, b: options, comparisonType: StringComparison.Ordinal))) {
@@ -271,8 +347,8 @@ internal static class WorldSessionCapture {
 
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
-    // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives in Puck.Scene (out of this scope), so
-    // the reverse mapping is computed here against its forward table.
+    // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives in Puck.Abstractions (out of this
+    // scope), so the reverse mapping is computed here against its forward table.
     private static WorldRenderScaleTier NearestRenderScaleTier(float scale) {
         var best = WorldRenderScaleTier.Native;
         var bestDelta = float.MaxValue;

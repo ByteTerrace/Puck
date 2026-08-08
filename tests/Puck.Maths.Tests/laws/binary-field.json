@@ -1,0 +1,707 @@
+[
+  {
+    "Id": "binary-field.product-and-reduction-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Reduce"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsReduced"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ReductionTail"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryFields.Degree8/16/32/64/128\u0027s Degree and ReductionTail, read off the shipped fields row by row",
+        "Against": "Subjects.BinaryFieldCatalogModuli \u2014 (8, 0x1B), (16, 0x2B), (32, 0x8D), (64, 0x1B), (128, 0x87)",
+        "Shared": "",
+        "Citation": "the standard minimum-weight irreducible at each degree, tabulated in src/Puck.Maths/FiniteFields/README.md\u0027s BinaryFields table and outside this tree; Swan\u0027s theorem forbids a trinomial at every degree that is a multiple of eight, which every one of these is, so a weight-five pentanomial is the floor. The degree-64 tail COINCIDING with the degree-8 tail is the published pattern rather than a transcription error, and the pair is compared row by row so a copied row would fail",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Multiply at all five catalog fields, on operands folded to the field by Subjects.BinaryFieldElement",
+        "Against": "Oracles.BinaryFieldProduct at the PUBLISHED degree and tail \u2014 schoolbook carryless multiply into a double-width polynomial then bit-by-bit reduction from the top, in BigInteger. The published pair rather than the field\u0027s own readers is what makes a wrong catalog constant visible: read off the field, the same wrong tail would flow into both sides. EXACT on both sides \u2014 this wing rounds nowhere \u2014 so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Multiply at a modulus DRAWN FROM THE OPERAND STREAM \u2014 a degree in [1, width] and an odd tail below t^degree, at every one of the five carriers",
+        "Against": "Oracles.BinaryFieldProduct at that same drawn pair. This is where the degree-below-the-carrier-width path is swept: the low mask built by right-shifting all-ones, the split at the degree and the iterated tail fold all behave differently there, and the catalog fields \u2014 every one of which has degree equal to its carrier\u0027s width \u2014 never reach it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Reduce on an UNREDUCED carrier value at the drawn modulus, at every one of the five carriers",
+        "Against": "Oracles.BinaryFieldReduce \u2014 schoolbook long division against the modulus MATERIALIZED IN FULL, leading term included. The subject never materializes t^degree: it stores only the tail and folds the high part by multiplying it BY the tail. A dropped leading term, a Split that returned its value unshifted, or a fold loop unrolled to one pass all diverge here on the first drawn modulus that needs a second pass. ENVELOPE, measured rather than assumed: ReduceWide\u0027s low mask is deliberately built by right-shifting all-ones instead of as (1 \u003C\u003C degree) \u2212 1, and rebuilding it the second way is NOT falsifiable through the public surface, because Split short-circuits at degree == width and returns before the mask is read \u2014 the mutation is inert at every carrier. That construction is belt and braces rather than load bearing, and this law says so instead of implying it is pinned",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsReduced answers the raw\u0027s own high-bit test at every drawn degree and is unconditionally true where the degree equals the carrier\u0027s width; Reduce is the identity on an already-reduced element; and Reduce(t^degree) is exactly the ReductionTail wherever the degree leaves room for that value, which is the defining congruence the whole tail representation rests on. ENVELOPE: at degree == width the t^degree probe is unrepresentable in the carrier and is not made. ENVELOPE: in Domains.Vectors\u0027 single-lane edge phase every other lane is cleared, so a 128-bit operand assembled from two lanes carries a zero half there and the drawn modulus lands on degree 1, tail 1 \u2014 GF(2), which the wing builds on every cyclic-incidence run and is a real instantiation rather than a degenerate one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.axioms-at-five-carriers",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsReduced"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Degree"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the field axioms hold BIT-FOR-BIT at all five carriers and at a modulus drawn from the operand stream: commutativity, associativity, distributivity, both identities, the annihilator, addition as its own inverse, Square as Multiply(a, a) \u2014 the wing\u0027s \u0027no separate squaring kernel on any tier\u0027 invariant stated as an observable \u2014 and Frobenius additivity, which is what licenses SquareRoot being repeated squaring. Everything here is EXACT: nothing rounds, saturates or approximates anywhere in the wing, so condition (B) does not arise at all \u2014 there is no rounding substrate for the two sides to share, and \u0027they agree because they round alike\u0027 is not a reading this statement admits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and it is the point of this case\u0027s shape: the axioms hold under ANY legal modulus, so agreement here pins the ARITHMETIC and never the modulus. A reduction that consistently used the wrong irreducible would satisfy every line above. What pins the modulus is binary-field.product-and-reduction-vs-oracle\u0027s published-constant and oracle legs and binary-field.irreducibility-vs-trial-division; this case is what catches a product wrong in a way no single oracle comparison would isolate \u2014 a non-associative fold, a distributivity break at a carry edge, an identity that moves at one degree",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.multiplicative-group-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Divide"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Exponentiate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "SquareRoot"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Inverse at all five catalog fields",
+        "Against": "Oracles.BinaryFieldProduct(value, inverse) == 1 in BigInteger \u2014 a CERTIFICATE rather than a recomputation, and a complete one: a field has exactly one inverse per non-zero element, so the product being one identifies the answer uniquely. Reached without exponentiating anything, where the subject reaches it as value^(2^degree \u2212 2). EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Inverse at the degree-8 and degree-16 catalog fields",
+        "Against": "Oracles.BinaryFieldInverse \u2014 the EXTENDED EUCLIDEAN almost-inverse loop over BigInteger polynomials, a wholly different derivation from the Itoh\u2013Tsujii Frobenius addition chain the subject walks; its step budget\u0027s exhaustion is a NAMED failure naming the modulus rather than a spin. ENVELOPE: this second derivation runs at the two narrow catalog degrees at Default and at all five at deep.binary-field-multiplicative-group; at degrees 32, 64 and 128 the certificate leg above is what stands, and it is complete for the value even though it is not a second derivation of it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Divide and BinaryField\u003CT\u003E.SquareRoot at all five catalog fields",
+        "Against": "Oracles.BinaryFieldProduct: the quotient re-multiplied by the divisor must return the dividend, and the root squared must return the argument, both in BigInteger. Stated as certificates rather than as Divide == Multiply(left, Inverse(right)) or SquareRoot == Degree \u2212 1 squarings, either of which would transcribe the subject\u0027s own body and prove only that it was copied faithfully",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.Exponentiate at the degree-8 catalog field over the CONTIGUOUS exponents zero through thirteen",
+        "Against": "Oracles.BinaryFieldRepeatedProduct \u2014 the SEQUENTIAL fold, one ordinary product per unit of exponent, against the subject\u0027s square-and-multiply walk over the exponent\u0027s binary expansion. Different schedules, so a mis-stepped square-and-multiply cannot agree by construction; contiguous rather than sparse because every exponent through thirteen exercises a different schedule and the fold costs one product per step either way. ENVELOPE: the fold runs at one degree and to thirteen at Default; deep.binary-field-multiplicative-group runs it at all five catalog degrees",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Exponentiate at the multiplicative group order \u2014 value^(2^k \u2212 1) == One and value^(2^k \u2212 2) == Inverse(value) for every non-zero value at k = 8, 16, 32 and 64",
+        "Against": "Subjects.BinaryFieldGroupOrders \u2014 255, 65535, 4294967295, ulong.MaxValue",
+        "Shared": "",
+        "Citation": "Lagrange\u0027s theorem: the multiplicative group of GF(2^k) has order 2^k \u2212 1, so every non-zero element raised to it is the identity. The wing README states the degree-8 reading (Exponentiate(0x03, 255) == 1) for a structural reason rather than a coincidental one, and this leg is that reading generalized to every accelerated degree. ENVELOPE: degree 128 has NO row, because 2^128 \u2212 1 does not fit the ulong exponent Exponentiate takes. The orders are WRITTEN OUT rather than computed as (1UL \u003C\u003C k) \u2212 1UL, whose shift count at k = 64 is masked back to zero in C#",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Exponentiate(value, order \u2212 1)",
+        "Against": "Inverse(value), on the same operand, at four degrees",
+        "Shared": "BinaryFieldKernels.Multiply \u2014 the IDENTICAL member, reached from Exponentiate\u0027s square-and-multiply loop (BinaryFieldKernels.cs:205,209) and from Inverse\u0027s addition chain (cs:239,248,259). Both sides are EXACT over GF(2), so condition (B) is vacuous: there is no rounding substrate to share",
+        "Citation": "legs 1 and 2 of this same case pin Inverse independently in BigInteger on the same operand stream, and binary-field.product-and-reduction-vs-oracle pins Multiply against Oracles.BinaryFieldProduct at all five catalog degrees",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Exponentiate(value, 0) is One at every swept operand and at Zero \u2014 the documented degenerate case, and the one a naive square-and-multiply gets wrong \u2014 and Inverse and Divide refuse a zero divisor with DivideByZeroException at all five carriers. The refusal ladder is a SEPARATE fixed claim running once per run rather than once per swept operand, and honestly so: both guards read only the divisor, so no dividend can change either answer, and a caught exception costs some forty microseconds that a per-operand ladder would spend four hundred times over for one bit of information. A zero divisor is substituted with one identically in subject and oracle so every sampled pair reaches a defined comparison; the zero DIVIDEND is not substituted and is swept, so Divide(0, w) == 0 falls to the certificate leg above",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.regions-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "AddRegion"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ScaleRegion"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ScaleRegionInPlace"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "MultiplyAccumulateRegion"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ReductionTail"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsReduced"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ScaleRegion, MultiplyAccumulateRegion and ScaleRegionInPlace at BinaryFields.Degree8 and BinaryFields.Degree16, over twenty lengths from zero through 259 crossed with four scalars \u2014 the annihilator, the identity, the ReductionTail (which makes the tail fold maximally active) and the densest element",
+        "Against": "Oracles.BinaryFieldProduct element by element, in BigInteger. These are the ONLY two carriers the region-scaling ladder\u0027s vector rungs reach \u2014 byte-wide elements reach all seven rungs and sixteen-bit elements the three affine ones \u2014 so this is where a shared-nothing region expectation is worth paying for. Leg 2 of this same case builds its expectation from the field\u0027s OWN Multiply and says so (shared-substrate:delegation-twin), and binary-field.region-lengths-vs-scalar-rung compares one shipped rung against another; this leg is the one whose expectation is formed in BigInteger with the subject nowhere inside it, which is what makes it independent evidence rather than carriage",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "ScaleRegion, MultiplyAccumulateRegion and ScaleRegionInPlace at BinaryFields.Degree32, Degree64 and Degree128 over the same ladder",
+        "Against": "the elementwise expectation built from the same field\u0027s Multiply",
+        "Shared": "BinaryField\u003CT\u003E.Multiply \u2014 the identical member the region\u0027s own scalar rung calls (BinaryFieldKernels.cs:472,479). Carriage only: what this proves is the loop, the length arithmetic and the accumulate mask, never the product",
+        "Citation": "leg 1 of this same case pins the region product classically at the two carriers that have a vector rung at all; at these three widths every length runs MultiplyAccumulateRegionScalar and nothing else, so there is no second implementation to disagree with. The first sixty-five indices additionally take the BigInteger oracle here \u2014 which covers every ladder length through 65 \u2014 so the wide carriers are not left on carriage alone",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the aliasing contract, stated as arithmetic rather than as a permission: an exactly aliased ScaleRegion equals the in-place form; an exactly aliased MultiplyAccumulateRegion leaves Multiply(Add(One, scalar), value) at every index, which holds only if every rung loads its source before storing its destination at the same offset; AddRegion onto itself zeroes the region. A shifted overlap is refused with ArgumentException naming \u0027source\u0027, at all three validating members, and ScaleRegionInPlace validates nothing because it passes one span as both sides. Each length row additionally requires the element one past the region to be untouched",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "AddRegion is degree-independent, and it is stated where that is not vacuous: at a degree-9 field over the sixteen-bit carrier, on content that violates every OTHER region member\u0027s reduced-operand precondition by construction \u2014 the claim body counts the unreduced elements and fails if the ladder does not reach its own operand class. At a catalog field the statement would say nothing, because degree equals width there and every packed value is already reduced. It is the wing\u0027s one region member outside the scaling ladder, and this is the statement that would catch it acquiring a reduction",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the length-mismatch refusal is an ArgumentOutOfRangeException naming the PUBLIC parameter \u0027source\u0027, at all three validating members and in BOTH directions of mismatch \u2014 a shorter source and a longer one \u2014 and it lands before anything is written: the eight-element buffer carries distinct content and every element is compared back after each refused call. The name is intentional rather than inherited: the refusal is thrown explicitly, because the throw helper it used to run captured the caller-argument expression of ValidateRegion\u0027s first argument and reported the literal string \u0027source.Length\u0027, which is a property expression and not a parameter of any public member. This statement REPLACES the doc gap that pinned that string; the three members\u0027 XML docs now name source, and the shifted-overlap refusal already did",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "FromModulus"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ReductionTail"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsReduced"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Reduce"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the whole admission surface at all five carriers and five degrees each \u2014 degree one, degree two, half the width, one below the width and the width itself: Create succeeds, Degree and ReductionTail read back exactly what was passed, IsReduced answers correctly at One, at Zero, at the degree\u0027s all-ones mask and at t^degree, and Reduce(t^degree) is the ReductionTail. The degree == width row is the one the representation exists for: a degree-k modulus needs k \u002B 1 bits and would not fit the carrier, which is why the leading term is implicit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder, each row asserting the exception TYPE and the ParamName: an unsupported carrier (char and nuint, both of which satisfy the IBinaryInteger/IUnsignedNumber constraint and neither of which is one of the five fixed widths \u2014 nuint is eight bytes wide on this target, so it would otherwise look exactly like ulong to CarrierBitCount) is refused with NotSupportedException BEFORE the degree is looked at; a degree below one or above the carrier\u0027s width names \u0027degree\u0027; an even tail \u2014 a zero constant term, where t divides the modulus and the quotient is not a field \u2014 names \u0027reductionTail\u0027; a tail with a coefficient at or above the degree names \u0027reductionTail\u0027, and that check is SKIPPED at degree == width, where nothing can sit above it. FromModulus refuses the zero polynomial and the degree-zero constant with ArgumentOutOfRangeException naming \u0027modulus\u0027 \u2014 the same shared range rule Create runs, asserted EXACTLY so the ArgumentException base cannot stand in \u2014 and its carrier check still precedes the degree rules, so an unsupported carrier reports NotSupportedException from both factories",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromModulus\u0027s two DERIVED refusals name \u0027modulus\u0027, the one parameter its caller supplied: a modulus whose degree exceeds the carrier\u0027s width throws ArgumentOutOfRangeException naming \u0027modulus\u0027, and a modulus with a zero constant term throws ArgumentException naming \u0027modulus\u0027. The counterexample reads the offending name back rather than reporting a bare boolean. The same rows are what pins the two factories APART: Create\u0027s own degree and tail refusals still name \u0027degree\u0027 and \u0027reductionTail\u0027, so the shared validation core is reporting the name it was handed rather than one set of names having swallowed the other. This statement REPLACES the doc gap that pinned the leaked names; FromModulus\u0027s XML doc attributed both conditions to modulus all along, and the code now agrees with it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the five catalog fields\u0027 identity",
+        "Against": "Create(8, 0x1B), Create(16, 0x2B), Create(32, 0x8D), Create(64, 0x1B), Create(128, 0x87), compared by record equality against BinaryFields.Degree8/16/32/64/128",
+        "Shared": "",
+        "Citation": "the standard minimum-weight irreducibles at those degrees, tabulated in src/Puck.Maths/FiniteFields/README.md. The two top rows also carry a load-bearing structural fact: BinaryPolynomial\u0027s packed carrier tops out at degree 63, so Degree64 and Degree128 are reachable ONLY through Create, and the round-trip ladder below shows FromModulus reaching degree 63 and no further",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromModulus round-trips the leading-term strip: for a committed ladder of degrees through 63 with odd tails, FromModulus of (t^degree \u002B tail) reports that degree and that tail exactly. ENVELOPE: BinaryPolynomial\u0027s own packed-bits constructor and Bits reader are INPUTS here rather than subjects \u2014 this case could not catch either of them being wrong, so neither is cited, and both answer to polynomial.additive-group-and-accessors",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a DEFAULT-INITIALIZED field REFUSES its whole semantic surface with InvalidOperationException, at all five supported carriers and at an unassigned array element of each: One, Zero, Add, AddRegion, Divide, Exponentiate, Inverse, IsIrreducible, IsReduced, Multiply, MultiplyAccumulateRegion, Reduce, ScaleRegion, ScaleRegionInPlace, Square and SquareRoot, each named in the failure text so a member that quietly answers is reported as itself. Every one of these previously returned a PLAUSIBLE answer at degree zero \u2014 the truncated carryless product, an identity Reduce, an identity SquareRoot from a loop handed \u22121, and a successful Inverse(One) \u2014 none of which is arithmetic in GF(2^k). Degree and ReductionTail are deliberately outside the policy and still read zero, and this case asserts that the default value therefore stays comparable and that a CONSTRUCTED field is untouched: it answers, both identities read back, and record equality still reads the degree and the tail rather than any encoding of them. PRINTABILITY is asserted on ToString at both ends: a hand-written PrintMembers prints the degree and the tail alone, so a default value formats as its raw state instead of throwing from a guarded identity, and a constructed field renders no identity as if it were carried state",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the same refusal at an UNSUPPORTED carrier: default(BinaryField\u003Cchar\u003E) refuses Multiply, Add, Inverse, IsIrreducible and One with the SAME InvalidOperationException. That carrier has no constructed state at all \u2014 Create rejects it with NotSupportedException before the degree is read \u2014 so the uninitialized diagnosis is the only thing its default value can say, and the policy makes it say exactly what the five supported carriers say rather than reaching degree-independent members undiagnosed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.irreducibility-vs-trial-division",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003Cbyte\u003E.IsIrreducible at EVERY one of the 255 legal degree-1-through-8 moduli",
+        "Against": "Oracles.BinaryPolynomialIsIrreducible \u2014 exhaustive trial division by every polynomial of degree one through half the modulus\u0027s own, in BigInteger. The definition against the Ben-Or/Rabin criterion: the subject squares the indeterminate degree times and takes gcds of t^(2^i) \u002B t against the modulus through a bespoke first Euclid step that never materializes the modulus, and the oracle just divides. Exhaustive rather than sampled, so this is a TOTAL statement over that whole range and not a probe. EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the count of constructible irreducible moduli the sweep above finds at each degree from one through eight",
+        "Against": "Subjects.BinaryIrreducibleCounts \u2014 2, 1, 2, 3, 6, 9, 18, 30 \u2014 with the degree-one entry taken as one",
+        "Shared": "",
+        "Citation": "OEIS A001037, the number of monic irreducible polynomials of each degree over GF(2) \u2014 Gauss\u0027s necklace count, an external property of the ring itself. The published degree-one entry is 2 and the sweep can only find 1, because t has a zero constant term and Create refuses it; every irreducible of degree two or above has a non-zero constant term, so those rows are the published values unchanged. An implementation that is self-consistently wrong still cannot reproduce a published property of GF(2)[t]. The table is the binary-polynomial family\u0027s own, reused rather than copied",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible() at all five catalog fields",
+        "Against": "true at every one",
+        "Shared": "",
+        "Citation": "the standard minimum-weight irreducibles at degrees 8, 16, 32, 64 and 128, tabulated in src/Puck.Maths/FiniteFields/README.md. The catalog deliberately does NOT validate irreducibility at construction \u2014 the README says the constants are not trusted on their word and expect an external gate \u2014 and Post\u0027s binary-field stage re-proves the same five at run time",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible() at t^degree \u002B 1 for degree 8, 16, 32, 64 and 128",
+        "Against": "false at every one",
+        "Shared": "",
+        "Citation": "the Frobenius identity in characteristic two: t^(2^k) \u002B 1 = (t \u002B 1)^(2^k), so the modulus is a perfect power and maximally reducible. ENVELOPE: this is the ONLY negative statement this suite makes at degrees 32, 64 and 128 \u2014 the trial-division oracle\u0027s divisor space doubles with every degree and is out of reach above the teens, so the positive statement at the wide degrees rests on the published constants plus Post\u0027s binary-field stage, and deep.binary-field-irreducible-census is where the exhaustive agreement is carried further",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE on a branch that cannot be falsified, measured rather than assumed: the kernel\u0027s closing \u0060power == indeterminate\u0060 test \u2014 Rabin\u0027s t^(2^degree) \u2261 t condition \u2014 is UNREACHABLE as a decision, because the loop above it runs the STRENGTHENED Ben-Or form over every exponent through half the degree, and every reducible modulus has an irreducible factor of degree at most half its own, so the greatest-common-divisor arm has already returned false by the time that test is read. Replacing it with a bare \u0060true\u0060 moves no answer over the 255 moduli here or the 8190 the binary-polynomial family sweeps; the only legal degree-one modulus is t \u002B 1, which is irreducible either way. This law pins the DECISION, not that closing guard, and says so rather than implying the guard is covered",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.wide-degree-irreducibility-certificates",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField\u003CT\u003E.IsIrreducible at degrees 32, 64 and 128 \u2014 the Ben-Or/Rabin criterion in BinaryFieldKernels \u2014 on the catalog modulus at each degree and on the first FURTHER modulus the subject accepts there, taken over the 128-bit carrier",
+        "Against": "an exact multiplicative-ORDER certificate in BigInteger: an element a of the quotient ring with a^(2^d \u2212 1) = 1 and a^((2^d \u2212 1)/p) not 1 at every prime p dividing 2^d \u2212 1. Its order is then 2^d \u2212 1 EXACTLY, so its powers are that many distinct units of a ring holding 2^d elements one of which is zero \u2014 every non-zero element therefore inverts, the quotient IS a field, and the modulus is irreducible. A COMPLETE proof and not a probe, and it shares nothing with the subject: no Frobenius exponentiation, no greatest common divisor, no carrier, no split, no reduction tail folded the subject\u0027s way \u2014 only Oracles.BinaryFieldProduct and a square-and-multiply schedule over BigInteger. This is the statement the wide degrees never had: trial division, the oracle every narrow irreducibility law answers to, has a divisor space that doubles with the degree and cannot be run at 32 at all",
+        "Shared": "",
+        "Citation": "the prime divisors are the published Fermat-number factorizations, 2^32 + 1 = 641 x 6700417 and 2^64 + 1 = 274177 x 67280421310721; the catalog tails 0x8D, 0x1B and 0x87 are the standard minimum-weight irreducibles tabulated in src/Puck.Maths/FiniteFields/README.md. NEITHER is trusted here \u2014 the last structural leg of this case re-multiplies every factorization and re-proves every factor prime before a certificate reads it, and the tails are decided by the certificate rather than accepted",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible at the same three degrees on moduli that are REDUCIBLE by construction \u2014 five shapes per degree: a linear factor against everything else, the balanced split (a perfect SQUARE, both factors being the same polynomial there), and three off-centre splits",
+        "Against": "the construction itself. Each modulus is the carryless PRODUCT of two non-constant polynomials, formed by Oracles.CarrylessProduct in BigInteger, so the reference verdict follows from how the operand was built and no decision procedure is consulted anywhere. Before a row is used the claim body requires the product to have landed on the intended degree with a non-zero constant term, so a construction that silently degenerated reddens the case rather than emptying it. These are the first negative statements this suite makes at 32, 64 and 128 beyond the single perfect power t^d + 1, whose reducibility follows from the Frobenius identity and which is one operand",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "IsIrreducible at degrees 32 and 64 over the 128-bit carrier, where the degree sits strictly BELOW the carrier width \u2014 a different mask, a different split and a different fold from the degree == width case the five catalog fields alone reach",
+        "Against": "the same decision at the same degree over its own uint or ulong carrier, at every modulus this case touches: the catalog tail, every scanned tail whether accepted or rejected, and every reducible construction",
+        "Shared": "the irreducibility decision in BinaryFieldKernels \u2014 ONE generic body specialized at two widths, so agreement proves the width plumbing and never the criterion. Both sides are exact over GF(2), so condition (B) is vacuous: there is no rounding substrate to share",
+        "Citation": "legs 1 and 2 of this same case, which pin the criterion itself at BOTH verdicts and at all three degrees against evidence that runs no decision at all",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ACCEPTING arm is exercised rather than merely available: the claim body counts the moduli the subject accepts per degree and fails below a floor of one. A subject that called every modulus reducible would satisfy the negative leg outright and leave the certificate leg quantified over nothing, and the counter is what makes that a red rather than a green",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the certificate\u0027s own basis, re-derived rather than transcribed: each published prime list is multiplied back and required to equal 2^d \u2212 1 exactly, and every listed factor is re-proved prime by trial division \u2014 up to 67280421310721, whose divisor scan reaches 8.2 million. A composite listed as prime would admit an element of SMALLER order to the certificate and quietly weaken every positive verdict in this case, so the check runs once before any certificate is taken",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.wide-degree-irreducibility-sweep",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible over the first SIXTEEN THOUSAND odd tails at each of degrees 32, 64 and 128, with EVERY modulus the subject accepts certified rather than only the first \u2014 hundreds of accepting verdicts per degree where the Default sibling takes two",
+        "Against": "the same exact multiplicative-ORDER certificate in BigInteger that binary-field.wide-degree-irreducibility-certificates uses, run once per accepted modulus. What scale buys here is the accepting arm: one wrong accept anywhere in the scanned band is a counterexample, where the Default sibling could only see it if it happened to fall on the catalog tail or the first accepted row",
+        "Shared": "",
+        "Citation": "the same published Fermat-number factorizations, re-multiplied and re-proved prime in the body before any certificate reads them",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible on sixty reducible-by-construction moduli per degree \u2014 the five factor shapes crossed with twelve interior coefficient patterns",
+        "Against": "the construction: each is the carryless product of two non-constant polynomials formed in BigInteger, so the reference verdict is derived without the subject. The rejecting arm at twelve times the Default sibling\u0027s width",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "IsIrreducible at degrees 32 and 64 over the 128-bit carrier, at EVERY one of the sixteen thousand scanned tails and every construction",
+        "Against": "the same decision over the degree\u0027s own uint or ulong carrier",
+        "Shared": "the irreducibility decision in BinaryFieldKernels \u2014 one generic body specialized at two widths, so agreement proves the width plumbing and never the criterion; exact on both sides, so condition (B) is vacuous",
+        "Citation": "legs 1 and 2 of this same case, and binary-field.wide-degree-irreducibility-certificates, which make the criterion\u0027s own statement",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and it is a tier requirement rather than a stylistic one: this case consumes NO Domain. Its whole operand basis \u2014 the tail scan, the split ladder and the coefficient patterns \u2014 is written inline in the claim body, because an Exhaustive case that drew from a domain would advance the frontier counter its Default sibling reads and slide that sibling\u0027s operands as a side effect of a sweep having been run",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the accepting arm carries a floor of EIGHT accepted moduli per degree here rather than the Default sibling\u0027s one, and the published factorizations are re-multiplied and re-proved prime by trial division before any certificate is taken, exactly as at Default",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

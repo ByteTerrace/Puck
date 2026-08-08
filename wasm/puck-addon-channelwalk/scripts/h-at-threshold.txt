@@ -1,0 +1,33 @@
+# Case H (GREEN half of the boundary pair): ceiling pinned EXACTLY AT the world's pinned `trigger` threshold
+# (0.75 = raw 49152). At baseline h=0, composed = min(contributed, ceiling) = min(65536, 49152) = 49152, which
+# meets the threshold's ">=" comparison exactly — a RISING edge (folded/quantized flips to 1), held FLAT for the
+# whole ~1s press window (never repeating/flickering — a steady folded=1 the entire time, not a single pulse),
+# then a FALLING edge back to 0 once channelwalk's own press window closes.
+#
+# Companion to scripts/h-below-threshold.txt (ceiling one raw unit lower — 49151 — which never crosses). Together
+# these are the literal "threshold - 1 raw -> no edge; exactly threshold -> rising edge, held steady; release ->
+# falling edge" triple the task asks for, realized on the pool ceiling rather than a raw contributed value (see
+# that script's header, and the crate README, for why the latter is not constructible on a Binary channel).
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+replay.status
+world.wait 5
+world.grant addon:channelwalk drive body:0 budget:60 channels:trigger
+world.grant seat1 drive body:0 channels:trigger ceiling:0.75
+world.wait 60
+player.channels 1
+# ticks_since_drive ~510 (early inside the press window). Expect: trigger composed=1(65536), clamped=no.
+# The ceiling does NOT bite here, and that is the point of this pair rather than a failure: a Binary
+# composition act arrives as a held-channel press, never as an intent delta, so the pool arithmetic is
+# handed nothing to clamp. See README "Finding 2" for the call sites. This script and h-below-threshold
+# read IDENTICALLY on either side of the ceiling; that identity IS the observation.
+world.wait 450
+player.channels 1
+# ticks_since_drive ~560 (still inside the window, ~150 ticks later): expect the IDENTICAL folded=1 reading —
+# steady, not flickering or re-firing.
+world.wait 40
+player.channels 1
+# ticks_since_drive ~810 (past the press window close): expect folded=0 again — the falling edge.
+world.wait 300
+player.channels 1
+world.grants seat1

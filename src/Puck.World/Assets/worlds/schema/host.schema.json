@@ -1,0 +1,106 @@
+{
+  "description": "The host-section defaults \u2014 how the world asks to be PRESENTED (window/backend/present/pacing/ timing/genlock \u2014 see WorldHostDefaults). The CLI window/backend flags override it at boot (a deployment surface laid over the author\u0027s intent).",
+  "type": "object",
+  "properties": {
+    "presentation": {
+      "description": "Which boot shape the world composes \u2014 see WorldHostPresentation. Defaults to Windowed, so every world authored before this field existed boots byte-identically; the --headless CLI flag reflects None for a single run without editing the document.",
+      "enum": [
+        "Windowed",
+        "None"
+      ]
+    },
+    "backend": {
+      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto."
+    },
+    "width": {
+      "description": "The window client width in pixels.",
+      "type": "integer"
+    },
+    "height": {
+      "description": "The window client height in pixels.",
+      "type": "integer"
+    },
+    "surfaceFormat": {
+      "description": "The swapchain surface format (Unknown is rejected by the validator)."
+    },
+    "fullscreen": {
+      "description": "Whether the window enters borderless fullscreen when first shown.",
+      "type": "boolean"
+    },
+    "presentMode": {
+      "description": "The swapchain presentation algorithm.",
+      "enum": [
+        "Vsync",
+        "Mailbox",
+        "Immediate",
+        "Adaptive"
+      ]
+    },
+    "targetHertz": {
+      "description": "The boot present-pacing target in Hz; 0 selects automatic display pacing. The world.target live lever owns \u0022now\u0022 thereafter.",
+      "type": "number"
+    },
+    "exitAfterSeconds": {
+      "description": "Seconds before the world auto-exits; 0 runs until the window is closed.",
+      "type": "integer"
+    },
+    "rayQuery": {
+      "description": "Whether the SDF renderer may use the ray-query hardware path.",
+      "type": "boolean"
+    },
+    "timing": {
+      "description": "Whether GPU per-pass timing boots armed; the world.timing live lever owns it thereafter.",
+      "type": "boolean"
+    },
+    "genlock": {
+      "description": "The external-clock election policy, consumed at boot by the clock registry (which tolerates an unknown source id): null for the launcher\u0027s automatic election, or a non-whitespace source id / off. SHAPE-only validation (null or non-whitespace); the registry, not the validator, interprets the id.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "listen": {
+      "description": "The TCP listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. SHAPE-only validation (null or a non-whitespace host:port pair); Server.WorldTcpHost is what actually parses and binds it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "backendDraw": {
+      "description": "The backend choice\u0027s authored-randomness facet, or null for an ordinary literal Backend. A BOOT-ONLY site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, CLEARS this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted TEXT source over the backend TOKENS (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses BY NAME. Drawing the NAME rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a CLASS, so presence is honestly observable here, unlike CapacityDraw\u0027s struct-typed site.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "default": null
+        },
+        "generator": {
+          "$ref": "./common.schema.json#/$defs/WorldGenerator"
+        },
+        "timing": {
+          "$ref": "./common.schema.json#/$defs/WorldDrawTiming"
+        }
+      },
+      "additionalProperties": false,
+      "default": null
+    }
+  },
+  "required": [
+    "presentation",
+    "backend",
+    "width",
+    "height",
+    "surfaceFormat",
+    "fullscreen",
+    "presentMode",
+    "targetHertz",
+    "exitAfterSeconds",
+    "rayQuery",
+    "timing",
+    "genlock",
+    "listen"
+  ],
+  "additionalProperties": false
+}

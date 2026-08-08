@@ -1,0 +1,752 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "motion": {
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
+    "maxSmoothError": 3
+  },
+  "water": {
+    "level": 0
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        0,
+        -3,
+        0
+      ]
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        2,
+        -3,
+        0
+      ]
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        0,
+        -3,
+        2
+      ]
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        2,
+        -3,
+        2
+      ]
+    }
+  ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "screens": [],
+  "cameras": [],
+  "population": {
+    "capacity": 128,
+    "reconnectGraceTicks": 720,
+    "seatActivation": [
+      "Eager",
+      "OnDemand",
+      "OnDemand",
+      "OnDemand"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "wander"
+    },
+    "seatSpawns": [
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4"
+    ],
+    "distribution": {
+      "region": {
+        "$type": "disc",
+        "radius": 14,
+        "sampleCount": 124
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
+    },
+    "peerVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "seatVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "peerColors": {
+      "name": "additive",
+      "offset": -4,
+      "step": 0.618034
+    }
+  },
+  "inputHold": {
+    "ceilingTicks": 120,
+    "lowerAfterTicks": 60,
+    "defaultTicks": 0,
+    "equalizeByDefault": true,
+    "participants": []
+  },
+  "targetRegisters": [
+    {
+      "name": "target",
+      "maximumRange": 50,
+      "maximumHalfAngleDegrees": 30,
+      "requiresLineOfSight": true
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveForward"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    },
+    {
+      "name": "pitch",
+      "shape": "Bipolar",
+      "role": "Pitch"
+    },
+    {
+      "name": "roll",
+      "shape": "Bipolar",
+      "role": "Roll"
+    },
+    {
+      "name": "burst",
+      "shape": "Binary",
+      "composition": true
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "swim",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputeSwimTargetVelocity",
+        "ShapePlanarVelocity",
+        "RunActionTriggers",
+        "ApplyBuoyancyAndSurface",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "wander",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceWanderIntent"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "diver",
+      "bodyMotionProgram": "swim",
+      "motion": {
+        "$type": "swim",
+        "thrustSpeed": 3.2,
+        "turnSpeed": 2.2,
+        "verticalThrustFraction": 0.75,
+        "response": [
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "AtSurface"
+            },
+            "engageRate": 9,
+            "releaseRate": 5
+          },
+          {
+            "engageRate": 7,
+            "releaseRate": 3.5
+          }
+        ],
+        "buoyancy": 0.5,
+        "maxRiseSpeed": 2.4,
+        "maxSinkSpeed": 3,
+        "surfaceSettleRate": 6,
+        "floatDepth": 1,
+        "sprintMultiplier": 1.5,
+        "sprintChannel": "burst",
+        "moveFrame": "World",
+        "facingSnap": true,
+        "thrustSpeedEnvelope": {
+          "min": 3.2,
+          "max": 3.2
+        }
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.3,
+            "softRadius": 16,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0,
+            "turnWave": 0,
+            "upWave": 0,
+            "pitchWave": 0,
+            "rollTurn": 0,
+            "pressThreshold": 0,
+            "altitudeBase": -4,
+            "altitudeRange": 3
+          },
+          "channels": {}
+        }
+      },
+      "actions": {},
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.35
+      }
+    }
+  ],
+  "defaultSeatKit": "diver",
+  "assignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 1,
+      "step": 0
+    },
+    "rows": []
+  },
+  "addons": [],
+  "bindingOverlays": [
+    {
+      "id": "dive-base",
+      "document": {
+        "version": "puck.bindings.v1",
+        "modifiers": [],
+        "chords": [
+          {
+            "group": "play",
+            "chord": [],
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "burst",
+                  "activateOn": null,
+                  "label": "Burst",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "burst",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "burst",
+                  "activateOn": null,
+                  "label": "Burst",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "burst",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                }
+              ],
+              "label": null,
+              "icon": null
+            },
+            "command": null
+          }
+        ],
+        "wheels": [
+          {
+            "group": "play",
+            "holdPage": "play-wheel",
+            "rings": [
+              {
+                "id": "play-wheel-act",
+                "entries": [
+                  { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
+                  { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
+                  { "source": null, "command": "world.console", "label": "Console", "icon": "edit.op" },
+                  { "source": null, "command": "player.bindings", "label": "Bindings", "icon": "edit.link" },
+                  { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
+                  { "source": null, "command": "world.addons", "label": "Addons", "icon": "edit.link" }
+                ],
+                "label": "Act",
+                "icon": null
+              },
+              {
+                "id": "play-wheel-world",
+                "entries": [
+                  { "source": null, "command": "world.status", "label": "Status", "icon": "action.target" },
+                  { "source": null, "command": "world.state", "label": "State", "icon": "edit.style" },
+                  { "source": null, "command": "world.portals", "label": "Portals", "icon": "edit.link" },
+                  { "source": null, "command": "world.players", "label": "Players", "icon": "action.target" },
+                  { "source": null, "command": "world.looks", "label": "Looks", "icon": "edit.material" },
+                  { "source": null, "command": "world.refusals", "label": "Refusals", "icon": "edit.delete" }
+                ],
+                "label": "World",
+                "icon": null
+              },
+              {
+                "id": "play-wheel-view",
+                "entries": [
+                  { "source": null, "command": "world.view.state", "label": "Layout", "icon": "edit.style" },
+                  { "source": null, "command": "world.view.pointer", "label": "Pointer", "icon": "action.target" },
+                  { "source": null, "command": "world.view.orbit", "label": "Orbit", "icon": "edit.op" },
+                  { "source": null, "command": "world.hud", "label": "HUD", "icon": "edit.link" },
+                  { "source": null, "command": "world.fps", "label": "FPS", "icon": "edit.next" },
+                  { "source": null, "command": "world.gpu", "label": "GPU", "icon": "edit.record" }
+                ],
+                "label": "View",
+                "icon": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "endpoint": null,
+    "userId": null,
+    "discoveryEndpoint": null
+  },
+  "creations": [
+    {
+      "id": "basin",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "basin",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.24,
+              "y": 0.36,
+              "z": 0.42
+            },
+            "emissive": 0,
+            "specular": 0.1,
+            "shininess": 8
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "floor",
+            "type": "Plane",
+            "position": {
+              "x": 0,
+              "y": -12,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          },
+          {
+            "id": 1,
+            "name": "wall-north",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": -6,
+              "z": -20.75
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 82.894737,
+              "y": 17.763158,
+              "z": 1.973684
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          },
+          {
+            "id": 2,
+            "name": "wall-south",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": -6,
+              "z": 20.75
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 82.894737,
+              "y": 17.763158,
+              "z": 1.973684
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          },
+          {
+            "id": 3,
+            "name": "wall-west",
+            "type": "Box",
+            "position": {
+              "x": -30.75,
+              "y": -6,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1.973684,
+              "y": 17.763158,
+              "z": 52.631579
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          },
+          {
+            "id": 4,
+            "name": "wall-east",
+            "type": "Box",
+            "position": {
+              "x": 30.75,
+              "y": -6,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1.973684,
+              "y": 17.763158,
+              "z": 52.631579
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "c24b174039498e215eddd172fbf7e90906267da7c451a18362403372252226ee"
+    }
+  ],
+  "placements": [
+    {
+      "id": "basin",
+      "creationId": "basin",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    }
+  ],
+  "authoring": {
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 4
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  },
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "presentation": "Windowed",
+    "backend": "auto",
+    "width": 1920,
+    "height": 1080,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": true,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "views": {
+    "seatRig": {
+      "motion": {
+        "$type": "orbit",
+        "distance": 5.2497619,
+        "yaw": 0,
+        "pitch": 0.3097029,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          0.6,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "smoothRate": 4
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 129,
+      "step": 0
+    },
+    "rows": []
+  },
+  "links": [],
+  "grants": [],
+  "hud": {
+    "defaults": {
+      "enabled": true,
+      "cursor": {
+        "hoverRadius": 40,
+        "sizePx": 9,
+        "role": "Phosphor"
+      }
+    },
+    "panels": []
+  },
+  "state": [],
+  "schema": "puck.world.def.v1",
+  "documentId": "dive",
+  "playerDefaults": {
+    "identities": [
+      {
+        "id": "amber",
+        "name": "amber",
+        "color": "#ED8530"
+      },
+      {
+        "id": "cobalt",
+        "name": "cobalt",
+        "color": "#3373D9"
+      },
+      {
+        "id": "moss",
+        "name": "moss",
+        "color": "#4CBD52"
+      },
+      {
+        "id": "violet",
+        "name": "violet",
+        "color": "#A359D6"
+      }
+    ],
+    "neutralColor": "#8C8C8C",
+    "colorSequence": {
+      "name": "additive",
+      "offset": 0,
+      "step": 0.618034
+    },
+    "saturation": 0.65,
+    "value": 0.85,
+    "colorSearchLimit": 64,
+    "noseFactor": 0.35,
+    "pickerThreshold": 0.6,
+    "pickerNeutralColor": "#8C8C8C",
+    "pickerNeutralBlend": 0.5,
+    "seatLook": {
+      "yawSensitivity": 0.001,
+      "pitchSensitivity": 0.001,
+      "invertYaw": false,
+      "invertPitch": false,
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "arming": "RightButton",
+      "worldAxes": false
+    }
+  }
+}

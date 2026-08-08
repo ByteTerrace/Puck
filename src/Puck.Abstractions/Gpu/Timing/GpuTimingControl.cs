@@ -11,7 +11,7 @@ namespace Puck.Abstractions.Gpu;
 /// The <see cref="Shared"/> instance is the single arming authority every scattered timing toggle collapsed onto.
 /// Precedence, highest first: a PROGRAMMATIC <see cref="SetArmed"/> (the bench harness arms it at suite start and
 /// restores the prior state at suite end, and the LIVE console switches — the demo's gpu.timing / Puck.World's
-/// world.timing — flip it mid-session) &gt; the run document's <c>host.timing</c> field (seeded at composition) &gt;
+/// world.timing — flip it mid-session) &gt; the world document's <c>host</c> section (seeded at composition) &gt;
 /// the engine node's construction seed (the lowest tier — a <see cref="TrySeed"/> that claims the control only when
 /// nothing above has). A monotonically increasing <see cref="Version"/> — bumped whenever the armed state actually
 /// changes — lets a reader re-resolve derived state only on an actual change.
@@ -48,7 +48,7 @@ public sealed class GpuTimingControl {
         Volatile.Write(location: ref m_version, value: (Volatile.Read(location: ref m_version) + 1U));
     }
 
-    /// <summary>Seeds the armed state from a lower-precedence source (run document <c>host.timing</c>, then the engine
+    /// <summary>Seeds the armed state from a lower-precedence source (the world document's <c>host</c> section, then the engine
     /// node's construction seed) — applied ONLY if nothing has claimed the control yet, so the FIRST seed in precedence
     /// order wins and a programmatic <see cref="SetArmed"/> always overrides. Idempotent and thread-safe: every seed
     /// site may call it, the first claim sticks.</summary>

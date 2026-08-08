@@ -1,0 +1,4 @@
+{
+  "description": "The kit row (by name) every seat body constructs from.",
+  "type": "string"
+}

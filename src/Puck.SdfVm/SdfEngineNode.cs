@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Capture;
+using Puck.Recording.Capture;
 using Puck.Hosting;
 
 namespace Puck.SdfVm;
@@ -51,7 +52,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         long BindingsTicks,
         long SubmitFrameTicks
     ) {
-        public long TotalTicks => CaptureFrameTicks + SetupTicks + ScreenPublishTicks + ViewRenderTicks + BindingsTicks + SubmitFrameTicks;
+        public long TotalTicks => (((((CaptureFrameTicks + SetupTicks) + ScreenPublishTicks) + ViewRenderTicks) + BindingsTicks) + SubmitFrameTicks);
     }
 
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
@@ -79,10 +80,11 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
-    private readonly IServiceProvider m_serviceProvider;
+    private readonly SdfViewGpuServices m_services;
     private readonly uint m_width;
     private bool m_captured;
     private byte[]? m_capturedPixels;
+    private bool m_captureUnavailable;
     private Surface[] m_childSurfaces = [];
     private string? m_debugCapturePath;
     private IGpuDeviceContext? m_deviceContext;
@@ -113,7 +115,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
-    /// <param name="serviceProvider">The application service provider (resolves the neutral GPU compute factories; the device comes from the host context).</param>
+    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this node forwards
+    /// to its offscreen engine — resolved once at the composition root and stashed unchanged (the device itself
+    /// still comes from the host context each frame).</param>
     /// <param name="frameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
@@ -175,8 +179,8 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, bool? timingEnabled = null, bool? rayQueryEnabled = null, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
-        ArgumentNullException.ThrowIfNull(serviceProvider);
+    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, bool? timingEnabled = null, bool? rayQueryEnabled = null, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
         if (
@@ -206,7 +210,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         m_screenSources = ((screenSources is null) ? EmptyScreenSources : new Dictionary<int, Func<nint>>(collection: screenSources));
         m_screenLights = ((screenLights is null) ? EmptyScreenLights : new Dictionary<int, Func<Vector3>>(collection: screenLights));
         m_screenSurfaceTransforms = ((screenSurfaceTransforms is null) ? EmptyScreenSurfaceTransforms : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms));
-        m_serviceProvider = serviceProvider;
+        m_services = services;
         m_timingEnabled = timingEnabled;
         m_width = width;
 
@@ -252,11 +256,41 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
     }
 
+    /// <inheritdoc/>
+    public string? PendingCapturePath => m_debugCapturePath;
+
     /// <summary>Arms a one-shot debug capture: the NEXT produced frame is read back and written to
     /// <paramref name="path"/> — the runtime sibling of the <c>--capture</c> startup flag (the debug-page verb).</summary>
     /// <param name="path">The PNG path to write (the caller creates the directory).</param>
     public void RequestCapture(string path) {
         m_debugCapturePath = path;
+    }
+
+    // Puck.Recording is an optional subsystem (screenshots/recording), not part of the render contract: an environment
+    // that blocks or cannot load its assembly (an Application Control / code-integrity policy, a missing deployment
+    // file) must not take the render loop down with it. WriteCapturePngCore is the ONLY member touching the
+    // Puck.Recording-typed PngEncoder.Write call, kept non-inlined so the CLR only needs to resolve and load
+    // Puck.Recording.dll when this exact method is JITted — i.e. lazily, on the first actual capture request, not on
+    // every produced frame. TryWriteCapturePng's try/catch sits at the CALL SITE one frame up: a failure to load the
+    // assembly surfaces as an exception thrown BY that call (the callee never got to run), which is exactly where a
+    // surrounding try/catch can observe and report it.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void WriteCapturePngCore(string path, byte[] rgba, int width, int height) {
+        PngEncoder.Write(height: height, path: path, rgba: rgba, width: width);
+    }
+
+    // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Recording.
+    // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
+    private static bool TryWriteCapturePng(string path, byte[] rgba, int width, int height) {
+        try {
+            WriteCapturePngCore(path: path, rgba: rgba, width: width, height: height);
+
+            return true;
+        } catch (Exception exception) when ((exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException)) {
+            Console.Error.WriteLine(value: $"[capture] WARNING: Puck.Recording is unavailable ({exception.GetType().Name}: {exception.Message}) — frame capture skipped, render continues without it.");
+
+            return false;
+        }
     }
 
     /// <summary>Reads the previous frame's per-pass GPU times through the live engine (a passthrough of
@@ -275,6 +309,12 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         return (m_engine?.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frame) ?? false);
     }
+
+    /// <summary>Reads the MOST RECENT produced frame's per-frame instance-grid rebuild CPU cost through the live engine
+    /// (a passthrough of <see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>) — the CPU-bound counterpart
+    /// to <see cref="TryReadPassTimings"/>'s GPU pass timings. <see langword="null"/> before the engine is built or
+    /// when the live program's instance grid is invariant (no per-frame rebuild).</summary>
+    public double? LastInstanceGridRebuildMilliseconds => m_engine?.LastInstanceGridRebuildMilliseconds;
 
     /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
     /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>, mirroring the <see cref="TryReadPassTimings"/> forwarder) — the
@@ -437,17 +477,17 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         if (
             (m_capturePath is not null) &&
             !m_captured &&
+            !m_captureUnavailable &&
             (m_produceFrameIndex > CaptureDelayFrames())
         ) {
             // Retain a copy of the readback (the readback buffer is reused across calls) so a parity gate can diff
             // two backends' output without a second GPU read.
             m_capturedPixels = m_engine.ReadPixels().ToArray();
-            PngEncoder.Write(
-                height: (int)m_height,
-                path: m_capturePath,
-                rgba: m_capturedPixels,
-                width: (int)m_width
-            );
+
+            if (!TryWriteCapturePng(path: m_capturePath, rgba: m_capturedPixels, width: (int)m_width, height: (int)m_height)) {
+                m_captureUnavailable = true;
+            }
+
             m_captured = true;
         }
 
@@ -455,13 +495,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         if (m_debugCapturePath is { } debugCapturePath) {
             m_debugCapturePath = null;
 
-            PngEncoder.Write(
-                height: (int)m_height,
-                path: debugCapturePath,
-                rgba: m_engine.ReadPixels().ToArray(),
-                width: (int)m_width
-            );
-            Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {debugCapturePath}");
+            if (m_captureUnavailable) {
+                // The latch spares a doomed assembly load per frame, but a request dropped for it still has to be
+                // said out loud: the requester was told a path and no file is coming.
+                Console.Error.WriteLine(value: $"[debug] capture skipped, Puck.Recording is unavailable — no file written to {debugCapturePath}");
+            } else if (TryWriteCapturePng(path: debugCapturePath, rgba: m_engine.ReadPixels().ToArray(), width: (int)m_width, height: (int)m_height)) {
+                Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {debugCapturePath}");
+            } else {
+                m_captureUnavailable = true;
+            }
         }
 
         // Gate the [world-timing] digest on the live arming state (not just availability): a disarmed frame wrote no
@@ -535,8 +577,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
 
         // One cohesive compute-services bundle instead of resolving each granular factory; the granular interfaces
-        // are still registered for a node that needs only one of them.
-        m_gpu ??= (IGpuComputeServices)m_serviceProvider.GetService(serviceType: typeof(IGpuComputeServices))!;
+        // are still registered for a node that needs only one of them. Forwarded unchanged from the composition
+        // root's SdfViewGpuServices (unit 6b's constructor-chain round) rather than re-resolved here.
+        m_gpu ??= m_services.Gpu;
         m_deviceContext = gpuDevice;
 
         // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen envelope —
@@ -560,13 +603,13 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             }
         }
 
-        // GPU performance counters, LIVE-ARMED: always resolve the timing seam when the backend registered it (resolved
-        // granularly — timing is not part of the always-on bundle). The engine creates its rotating pools lazily on the
-        // first ARMED frame and consults GpuTimingControl.Shared per frame, so bench.run / the gpu.timing switch turn
-        // it on mid-session with no rebuild — the resolved host.timing toggle only SEEDS that control (see the
-        // constructor). Absent the seam the backend simply cannot time.
-        var timingFactory = (m_serviceProvider.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory);
-        var timingRecorder = (m_serviceProvider.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder);
+        // GPU performance counters, LIVE-ARMED: always USE the timing seam when the backend registered it (it is part
+        // of the eagerly-resolved SdfViewGpuServices bundle now, not resolved granularly here). The engine creates its
+        // rotating pools lazily on the first ARMED frame and consults GpuTimingControl.Shared per frame, so bench.run
+        // / the gpu.timing switch turn it on mid-session with no rebuild — the resolved host.timing toggle only SEEDS
+        // that control (see the constructor). Absent the seam the backend simply cannot time.
+        var timingFactory = m_services.TimingFactory;
+        var timingRecorder = m_services.TimingRecorder;
 
         m_engine = new SdfWorldEngine(
             device: gpuDevice,

@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
@@ -175,16 +177,13 @@ internal sealed class LinkGameReplayStage : IPostStage {
         return null;
     }
     private static ulong FrameHash(AdvancedGamingBrickMachine machine) {
-        var hash = 0xCBF29CE484222325ul;
+        var hash = Fnv1aHash.Create();
 
         foreach (var pixel in machine.Framebuffer) {
-            hash = ((hash ^ (pixel & 0xFFu)) * 0x100000001B3ul);
-            hash = ((hash ^ ((pixel >> 8) & 0xFFu)) * 0x100000001B3ul);
-            hash = ((hash ^ ((pixel >> 16) & 0xFFu)) * 0x100000001B3ul);
-            hash = ((hash ^ ((pixel >> 24) & 0xFFu)) * 0x100000001B3ul);
+            hash.Add(value: pixel);
         }
 
-        return hash;
+        return hash.Value;
     }
 
     // Accumulates link-probe evidence from repeated side-effect-free SIOCNT/SIOMULTI peeks across one console's run.

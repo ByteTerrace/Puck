@@ -1,0 +1,64 @@
+{
+  "description": "The placement INSTANCE rows (default empty) \u2014 creations stamped by reference (see WorldPlacement).",
+  "type": "array",
+  "items": {
+    "description": "One placement INSTANCE row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The row\u0027s stable string id (its mutation address).",
+        "type": "string"
+      },
+      "creationId": {
+        "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
+        "type": "string"
+      },
+      "position": {
+        "description": "The stamp position, world space. INERT (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+      },
+      "yawDegrees": {
+        "description": "The stamp yaw about \u002BY, degrees. Same ATTACH caveat as Position.",
+        "type": "number"
+      },
+      "scale": {
+        "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+        "type": "number"
+      },
+      "distribution": {
+        "$ref": "./common.schema.json#/$defs/WorldDistribution"
+      },
+      "mirror": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementMirror"
+      },
+      "emission": {
+        "$ref": "./common.schema.json#/$defs/WorldEmission"
+      },
+      "solid": {
+        "$ref": "./common.schema.json#/$defs/WorldSolid"
+      },
+      "inhabit": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementInhabit"
+      },
+      "faceSources": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementFaceList"
+      },
+      "region": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementRegion"
+      },
+      "attach": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementAttach"
+      }
+    },
+    "required": [
+      "id",
+      "creationId",
+      "position",
+      "yawDegrees",
+      "scale"
+    ],
+    "additionalProperties": false
+  }
+}

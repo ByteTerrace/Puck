@@ -11,14 +11,14 @@ namespace Puck.Recording.Session;
 /// </summary>
 internal sealed class FrameSlotQueue {
     internal sealed class Slot {
-        public required byte[] Pixels { get; init; }
-        public int Width { get; set; }
-        public int Height { get; set; }
         public SurfaceFormat Format { get; set; }
-        public long TimestampNanoseconds { get; set; }
+        public int Height { get; set; }
+        public int Length { get; set; }
+        public required byte[] Pixels { get; init; }
         public long SessionTimeNanoseconds { get; set; }
         public long SimTimeNanoseconds { get; set; }
-        public int Length { get; set; }
+        public long TimestampNanoseconds { get; set; }
+        public int Width { get; set; }
     }
 
     private readonly int m_capacity;

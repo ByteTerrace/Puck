@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 using ITimer = Puck.HumbleGamingBrick.Interfaces.ITimer;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -26,8 +27,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class LinkChurnStage : IPostStage {
     private const ulong BudgetStep = 256;
-    private const ulong FnvOffsetBasis = 0xCBF29CE484222325ul;
-    private const ulong FnvPrime = 0x100000001B3ul;
     private const byte IdleDelay = 64;
     private const byte MasterSendBase = 0x10;
     private const ushort SerialControlAddress = 0xFF02;
@@ -259,17 +258,17 @@ internal sealed class LinkChurnStage : IPostStage {
     // Kept as a mutable class so the same accumulators survive being re-attached to a fresh port after a churn.
     private sealed class TrafficTally {
         public int Completions;
-        public ulong Hash = FnvOffsetBasis;
+        public Fnv1aHash Hash = Fnv1aHash.Create();
         public int MasterSends;
 
         public void OnComplete(byte value) {
             ++Completions;
-            Hash = ((Hash ^ value) * FnvPrime);
+            Hash.Add(value: value);
         }
         public void OnSend(byte value) =>
             ++MasterSends;
         public SideTraffic ToTraffic() =>
-            new(Completions: Completions, Hash: Hash, MasterSends: MasterSends);
+            new(Completions: Completions, Hash: Hash.Value, MasterSends: MasterSends);
     }
     private readonly record struct BoundaryProbe(
         bool Idle,

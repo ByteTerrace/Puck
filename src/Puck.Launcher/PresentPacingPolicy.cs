@@ -103,8 +103,8 @@ public static class PresentPacingPolicy {
         }
 
         var advertisedCeiling = (
-            (timing.VariableRefresh.Support == VariableRefreshSupport.Supported) &&
-            (timing.VariableRefresh.Range is { } range) ?
+            ((timing.VariableRefresh.Support == VariableRefreshSupport.Supported) &&
+            (timing.VariableRefresh.Range is { } range)) ?
             range.MaximumHertz :
             null
         );

@@ -1,0 +1,52 @@
+{
+  "description": "The named per-body target registers and their designation envelopes.",
+  "type": "array",
+  "items": {
+    "description": "One authored per-body target register and the envelope a designation into it must satisfy.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The game-authored register name.",
+        "type": "string"
+      },
+      "maximumRange": {
+        "description": "The greatest designation distance.",
+        "type": "number"
+      },
+      "maximumHalfAngleDegrees": {
+        "description": "The widest accepted body-forward cone.",
+        "type": "number"
+      },
+      "requiresLineOfSight": {
+        "description": "Whether solid world geometry must leave the segment unobstructed.",
+        "type": "boolean"
+      },
+      "rangeState": {
+        "description": "An optional durable counter slot supplying the player\u0027s requested range.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "halfAngleState": {
+        "description": "An optional durable counter slot supplying the player\u0027s requested cone half-angle.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "maximumRange",
+      "maximumHalfAngleDegrees",
+      "requiresLineOfSight"
+    ],
+    "additionalProperties": false
+  }
+}

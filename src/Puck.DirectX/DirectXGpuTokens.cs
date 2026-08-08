@@ -37,7 +37,7 @@ public sealed class DirectXTimingPoolState {
 /// <see cref="IGpuPipeline.DescriptorSetLayoutHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXPipelineLayout {
+public sealed class DirectXPipelineLayout : IDisposable {
     public nint PsoHandle;
     public nint RootSignatureHandle;
     public int DescriptorTableParamIndex = -1;
@@ -52,6 +52,30 @@ public sealed class DirectXPipelineLayout {
     /// the chosen index values — the binding index is a logical id, not a heap offset. The root signature's range
     /// offsets and the descriptor allocator's writes both go through this map, keeping them in lockstep.</summary>
     public uint[] SlotByBinding = [];
+
+    internal static DirectXPipelineLayout CreateForParameters(bool hasDescriptorTable, GpuPushConstantBinding? pushConstantBinding) {
+        var hasRootConstants = (pushConstantBinding is not null);
+        var layout = new DirectXPipelineLayout();
+
+        if (hasDescriptorTable) {
+            layout.DescriptorTableParamIndex = 0;
+            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
+        } else {
+            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
+        }
+
+        if (hasRootConstants) {
+            layout.RootConstantsCount = ((pushConstantBinding!.Size + 3) / 4);
+        }
+
+        return layout;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        DirectXConstants.Release(pointer: ref PsoHandle);
+        DirectXConstants.Release(pointer: ref RootSignatureHandle);
+    }
 }
 
 /// <summary>

@@ -15,10 +15,13 @@ public readonly record struct ConsolePanelLine(
 /// <param name="Visible">Whether the console panel is shown (hidden = the writer emits nothing).</param>
 /// <param name="Lines">The output history, oldest first; the writer shows the trailing lines that fit.</param>
 /// <param name="Input">The in-progress input line (rendered on the bottom row after the prompt).</param>
+/// <param name="Selected">Whether the whole <see cref="Input"/> line is selected (Ctrl+A) — the writer paints a
+/// highlight rect behind it instead of the insertion caret.</param>
 public readonly record struct ConsolePanelFrame(
     bool Visible,
     IReadOnlyList<ConsolePanelLine> Lines,
-    string Input
+    string Input,
+    bool Selected
 );
 
 /// <summary>The read seam <see cref="ConsolePanelWriter"/> consumes; the host's console mirror is the writer.</summary>

@@ -1,0 +1,95 @@
+{
+  "description": "The hud section \u2014 the world-scope HUD panel rows plus their defaults (see WorldHudSection). PRESENTATION-ONLY: overlay geometry and bindings, never simulation state. Defaults to Default (enabled, no authored panels) \u2014 byte-identical boot behavior for every world authored before this section existed.",
+  "type": "object",
+  "properties": {
+    "defaults": {
+      "description": "The section defaults.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Whether the world-scope HUD panels render at all \u2014 a world-level kill switch independent of any individual panel\u0027s row (a diegetic reveal gate can flip this without editing every panel).",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "The drawn pointer cursor\u0027s presentation policy, or null to fall back to Default (the optional-section null-coalesce convention). Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to the default.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "hoverRadius": {
+              "description": "The cursor ray\u0027s hover reach in world units \u2014 how far into the world a pointer resolves a hovered row.",
+              "type": "number"
+            },
+            "sizePx": {
+              "description": "The drawn cursor\u0027s ring radius, pixels.",
+              "type": "number"
+            },
+            "role": {
+              "description": "The bare cursor\u0027s palette role; hover lights the accent tier regardless.",
+              "enum": [
+                "TextPrimary",
+                "TextDim",
+                "Accent",
+                "Phosphor"
+              ]
+            }
+          },
+          "required": [
+            "hoverRadius",
+            "sizePx",
+            "role"
+          ],
+          "additionalProperties": false,
+          "default": null
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "panels": {
+      "description": "Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "type": "array",
+      "items": {
+        "description": "One HUD panel row \u2014 a stable id (unique within the section), a normalized VIEWPORT rect in screen space, which band it draws in, its chrome style, and its child elements. WorldMutation.UpsertHudPanel carries the whole row (elements included) as ONE cross-row transaction boundary; WorldMutation.UpsertHudElement/ WorldMutation.RemoveHudElement read-modify-write a single element within an already-declared panel.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The panel\u0027s stable id (unique within the section \u2014 the world.row.set hud.panels/world.row.remove hud.panels mutation address).",
+            "type": "string"
+          },
+          "rect": {
+            "$ref": "./common.schema.json#/$defs/WorldHudRect"
+          },
+          "layer": {
+            "$ref": "./common.schema.json#/$defs/WorldHudLayer"
+          },
+          "style": {
+            "$ref": "./common.schema.json#/$defs/WorldHudPanelStyle"
+          },
+          "elements": {
+            "$ref": "./common.schema.json#/$defs/WorldHudElementList"
+          }
+        },
+        "required": [
+          "id",
+          "rect",
+          "layer",
+          "style",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "defaults",
+    "panels"
+  ],
+  "additionalProperties": false
+}

@@ -1,6 +1,6 @@
 using System.Numerics;
-using Puck.Cameras;
-using Puck.Compositing;
+using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.SdfVm;
 
@@ -74,8 +74,9 @@ public sealed record SdfFrame(
     /// <summary>Disables the soft-shadow GRID CULL (default <see langword="false"/> = the cull is ON). With the cull ON
     /// the world lit path gathers each lit pixel's shadow-ray grid neighborhood and marches only those instances —
     /// bit-identical to the flat all-instances shadow but far cheaper on spread scenes. Setting this <see langword="true"/> forces
-    /// the flat all-instances march: the ground-truth reference the Post <c>world-shadow-cull</c> gate matches and the
-    /// A/B lever's OFF state (the <c>sdf.shadowcull</c> verb). Rides the screen-light buffer's grid-object-params row's
+    /// the flat all-instances march: the ground-truth reference for the cull, and the A/B lever's OFF state (the
+    /// <c>sdf.shadowcull</c> verb). The <c>world-shadow-cull</c> gate that compared the two left the build on
+    /// 2026-08-02, so cull-equals-flat is now checked only by flipping the verb. Rides the screen-light buffer's grid-object-params row's
     /// reserved <c>.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's
     /// <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays ON.</summary>
     public bool DisableShadowCull { get; init; }
@@ -157,17 +158,45 @@ public sealed record SdfFrame(
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldFarBoundDisabled</c> / <c>SdfFarFieldParams</c>);
     /// an unset frame uploads 0 and the far bound stays ON.</summary>
     public bool DisableFarBound { get; init; }
-    /// <summary>A/B lever for the F2 SHADOW LIGHT-SIDE EARLY EXIT (perf plan Phase 5.1). Default
-    /// <see langword="false"/> keeps the exit ACTIVE — the shipped behavior: <c>softShadow</c> returns its running
-    /// result the moment the remaining reach provably cannot darken it further under the field's along-ray 1-Lipschitz
-    /// bound (<c>ShadowSharpness·(clearanceTrue − remaining) &gt;= result·reach</c>), paying fewer shadow steps. Set
-    /// <see langword="true"/> to run the full shadow step budget/reach exactly as pre-F2 — the paired-run "off" side.
-    /// A MARCH-PATH change (solidity + parity families), not bit-identical: the Aaltonen parabola estimator can undershoot
-    /// past the exit point (its worst case is unbounded below), so skipping it can leave a pixel brighter than the full
-    /// march but never brighter than the true penumbra. Rides the far-field row's <c>.y</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldShadowFarExitDisabled</c> / <c>SdfFarFieldParams</c>);
-    /// an unset frame uploads 0 and the exit stays ON.</summary>
-    public bool DisableShadowFarExit { get; init; }
+    /// <summary>A/B lever for the SHADOW LIGHT-SIDE ESCAPE EXIT. Default <see langword="false"/> keeps the exit
+    /// ACTIVE — the shipped behavior: each of <c>areaShadowVisibility</c>'s binary rays stops the moment its
+    /// de-scaled clearance exceeds the remaining reach, at which point the field's along-ray 1-Lipschitz bound proves
+    /// no occluder can lie ahead. Set <see langword="true"/> to run the full shadow step budget/reach — the paired-run
+    /// "off" side.</summary>
+    /// <remarks>
+    /// The exit is now BIT-IDENTICAL, not march-path. Under the retired closest-approach parabola the estimator had a
+    /// continuum of outputs and could undershoot past the exit point, so skipping the remainder could brighten a
+    /// pixel; a binary visibility test has two outputs and the Lipschitz bound rules the occluded one out exactly.
+    /// Flipping this lever must therefore not move a single pixel. Rides the far-field row's <c>.y</c> lane (KEEP IN
+    /// SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldShadowEscapeExitDisabled</c> /
+    /// <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the exit stays ON.
+    /// </remarks>
+    public bool DisableShadowEscapeExit { get; init; }
+    /// <summary>The area-light shadow estimator's SAMPLE INDEX: which point of the digital net every pixel draws this
+    /// frame.</summary>
+    /// <remarks>
+    /// <para>
+    /// This MUST be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and NEVER from
+    /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas. The sampler
+    /// is stateless and seekable precisely so that a replay at tick N draws the identical set of sun-disc directions;
+    /// sourcing this from a wall-clock quantity throws that away and makes the shadows a per-run quantity.
+    /// </para>
+    /// <para>
+    /// It is folded into the engine's frame signature, so the cadence gate can never skip a frame whose sample index
+    /// moved.
+    /// </para>
+    /// </remarks>
+    public uint SampleIndex { get; init; }
+    /// <summary>A/B lever (and kill switch) for TEMPORAL ACCUMULATION of the area-light shadow estimator. Default
+    /// <see langword="false"/> keeps accumulation ON — the shipped behavior: each frame's
+    /// <c>ShadowSamplesPerPixel</c>-sample estimate is folded into the reprojected previous value by an integer moving
+    /// average, which is what turns a three-level stochastic estimate into a smooth penumbra. Set
+    /// <see langword="true"/> to shade the raw per-frame estimate with no history read and no history write.</summary>
+    /// <remarks>
+    /// The "off" side is deliberately noisy — it is the paired-run A/B side and what a gate pins when it needs a frame
+    /// to be a pure function of its own inputs rather than of the frames before it. It is not a quality tier.
+    /// </remarks>
+    public bool DisableShadowAccumulation { get; init; }
     /// <summary>Enables the CADENCE GATE (perf plan Phase 6.1): a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame SKIPS the
     /// mask/beam/cull-args/views compute passes and re-composites from the retained views output — pixel-identical to a

@@ -13,6 +13,14 @@ public enum WorldAudioEmitterKind {
     Bed,
 }
 
+/// <summary>The fixed-point point-emitter attenuation law.</summary>
+public enum WorldAudioAttenuationCurve : byte {
+    /// <summary>Smoothstep over squared distance.</summary>
+    Smoothstep,
+    /// <summary>Linear falloff over distance.</summary>
+    Linear,
+}
+
 /// <summary>Selects which channel of a stereo source an emitter taps. Mono sources (the synth) degenerate every
 /// selector to <see cref="Mix"/> — documented, never rejected.</summary>
 public enum WorldAudioChannel {
@@ -77,6 +85,7 @@ public readonly record struct WorldAudioListener(FixedVector3 Position, FixedCom
 /// <param name="MinRadius">Full-gain support: inside this distance attenuation is 1 (a bed's inner radius).</param>
 /// <param name="MaxRadius">The finite support edge: at or beyond this distance the emitter is CULLED — finite
 /// support IS the cull. Must exceed <paramref name="MinRadius"/>.</param>
+/// <param name="Curve">The attenuation law within the support band.</param>
 /// <param name="FadeFrames">Bed presence slew bound: the per-block coefficient change is limited to full scale per
 /// this many frames (0 = unbounded). Points ignore it — the block ramp already bounds their slew.</param>
 /// <param name="GainQ16">The base gain, Q16 (65536 = unity).</param>
@@ -88,6 +97,7 @@ public readonly record struct WorldAudioEmitter(
     FixedVector3 Position,
     FixedQ4816 MinRadius,
     FixedQ4816 MaxRadius,
+    WorldAudioAttenuationCurve Curve,
     int FadeFrames,
     int GainQ16,
     WorldAudioChannel Channel,

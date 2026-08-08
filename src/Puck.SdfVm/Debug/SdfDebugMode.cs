@@ -22,7 +22,8 @@ public sealed class SdfDebugMode {
     private bool m_useFdNormals;
     private int m_gridRevision;
     // The carve-bake handoff revision: bumped whenever a planner (the debug pool's or the bench's) adopts/releases a
-    // brick, so the frame source rebuilds the takeover program to emit (or drop) that SampledRegion. Part of Revision.
+    // brick, so the frame source rebuilds the takeover program to emit (or drop) that SampledRegion. One component of
+    // WriteRevision's vector.
     private int m_bakeRevision;
 
     /// <summary>The debug scene the <c>sdf.*</c> verbs mutate (shape, op stack, floor, lift).</summary>
@@ -69,10 +70,24 @@ public sealed class SdfDebugMode {
         return packed;
     }
 
-    /// <summary>The content revision the frame source rebuilds on — the debug scene's revision plus the bench's (so a
-    /// bench config change forces a program rebuild exactly as a scene edit does) plus the gallery's (an exhibit
-    /// enter/advance/jump/off rebuilds the program to that exhibit) plus the grid-cull toggle's.</summary>
-    public int Revision => ((((m_scene.Revision + m_bench.Revision) + m_gallery.Revision) + m_gridRevision) + m_bakeRevision);
+    /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
+    /// <see cref="Puck.SdfVm.ISdfSceneEmitter.RevisionComponentCount"/> forwards for this mode's emitter adapter.</summary>
+    public const int RevisionComponentCount = 5;
+
+    /// <summary>Writes the content counters the frame source rebuilds on: the debug scene's, the bench's (so a bench
+    /// config change forces a program rebuild exactly as a scene edit does), the gallery's (an exhibit
+    /// enter/advance/jump/off rebuilds the program to that exhibit), the grid-cull toggle's, and the carve-bake
+    /// handoff's — SIDE BY SIDE, never added together. Handing the host one sum would let two counters moving in
+    /// opposite directions by the same amount cancel and hold a stale takeover program; the host compares componentwise
+    /// precisely so no addition on this path can hide a change (see <see cref="Puck.SdfVm.ISdfSceneEmitter.WriteRevision"/>).</summary>
+    /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
+    public void WriteRevision(Span<int> destination) {
+        destination[0] = m_scene.Revision;
+        destination[1] = m_bench.Revision;
+        destination[2] = m_gallery.Revision;
+        destination[3] = m_gridRevision;
+        destination[4] = m_bakeRevision;
+    }
 
     /// <summary>Whether the mode's takeover programs pack the uniform-grid instance cull (default ON — the production
     /// path). OFF packs a DISABLED grid so the beam takes the flat per-instance fallback over the same instances — the
@@ -249,7 +264,8 @@ public sealed class SdfDebugMode {
 
     /// <summary>Drives the carve-bake settle planner one produced frame against the live engine (carve-bake plan §3/§4):
     /// while a bench run is up the bench's carves planner advances (settle 0), otherwise the interactive debug pool's
-    /// (settle 120). A handoff (a bin adopting or releasing a brick) bumps <see cref="Revision"/> so the frame source
+    /// (settle 120). A handoff (a bin adopting or releasing a brick) bumps the carve-bake component of
+    /// <see cref="WriteRevision"/> so the frame source
     /// rebuilds the takeover program to emit (or drop) the SampledRegion. No-op while the mode is down — nothing owns
     /// the screen to bake for. Called from the host's <see cref="Puck.SdfVm.ISdfFrameSource.AdvanceBricks"/> forwarder.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request).</param>

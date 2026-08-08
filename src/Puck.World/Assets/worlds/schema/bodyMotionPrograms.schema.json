@@ -1,0 +1,136 @@
+{
+  "description": "The versioned fixed-phase body motion programs kits select by name.",
+  "type": "array",
+  "items": {
+    "description": "An authored fixed-phase body motion program.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The stable name kits use to select the program.",
+        "type": "string"
+      },
+      "version": {
+        "description": "The instruction-set version.",
+        "type": "string"
+      },
+      "kind": {
+        "description": "The declared program profile that gates operations and registers.",
+        "enum": [
+          "Motion",
+          "Producer",
+          null
+        ]
+      },
+      "operations": {
+        "description": "The selected domain operations; their phases are intrinsic and cannot be reordered.",
+        "type": "array",
+        "items": {
+          "description": "Identifies a body motion program instruction from the closed domain-operation vocabulary.",
+          "enum": [
+            "SenseNearestInCone",
+            "ProduceWanderIntent",
+            "ProduceAttendIntent",
+            "FaceSensorTarget",
+            "ResolveYawAttitudeAndPlanarFrame",
+            "IntegrateLocalAttitude",
+            "ComputePlanarTargetVelocity",
+            "ComputeLocalTargetVelocity",
+            "ComputeSwimTargetVelocity",
+            "ShapePlanarVelocity",
+            "SnapYawToPlanarIntent",
+            "ResolveVehicleFrame",
+            "ShapeVehicleVelocity",
+            "RunActionTriggers",
+            "ApplyVerticalGravity",
+            "ApplyVerticalDecay",
+            "ApplyBuoyancyAndSurface",
+            "IntegratePlanarAndVerticalVelocity",
+            "IntegrateScratchVelocity",
+            "CommitPose",
+            "SetVerticalVelocity",
+            "ScaleVerticalVelocity",
+            "PlanarImpulse",
+            "SetState",
+            "AddState",
+            "StartTimer",
+            "Designate",
+            "Generate"
+          ]
+        }
+      },
+      "target": {
+        "description": "The single source supplying the program\u0027s target, when it uses target-aware operations.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "Selects the nearest member of Scope inside a body-forward cone.",
+            "properties": {
+              "$type": {
+                "const": "sensed"
+              },
+              "scope": {
+                "description": "The population subset considered.",
+                "enum": [
+                  "Seats",
+                  "Bodies"
+                ]
+              },
+              "range": {
+                "description": "The cone\u0027s maximum world-space distance.",
+                "type": "number"
+              },
+              "halfAngleDegrees": {
+                "description": "The cone half-angle in degrees.",
+                "type": "number"
+              },
+              "requiresLineOfSight": {
+                "description": "Whether solid world geometry must leave the segment unobstructed.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "scope",
+              "range",
+              "halfAngleDegrees",
+              "requiresLineOfSight"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "Reads the named target register owned by the body running the producer.",
+            "properties": {
+              "$type": {
+                "const": "designated"
+              },
+              "register": {
+                "description": "The authored Name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "register"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "version",
+      "kind",
+      "operations"
+    ],
+    "additionalProperties": false
+  }
+}

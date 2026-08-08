@@ -2,11 +2,10 @@ namespace Puck.Commands;
 
 /// <summary>
 /// An observation-only, fixed-capacity ring buffer of per-tick command activity — the console-addressable shape of
-/// the same raw material the determinism machinery already computes internally (see
-/// <see cref="DeterminismHarness"/> / <see cref="HashTrace"/>, which fold a scripted record/replay check into the
-/// identical "per tick: what ran, what did the hash do" shape). Records, per tick: which commands dispatched (as
-/// short caller-formatted text — see <see cref="RecordCommand"/>) and an OPTIONAL state-hash bracket. Nothing here
-/// is read by simulation code and nothing it stores feeds a hash: recording a tick has zero effect on determinism.
+/// the same raw material a tick already produces internally (per tick: what ran, what did the hash do — see
+/// <see cref="HashTrace"/>). Records, per tick: which commands dispatched (as short caller-formatted text — see
+/// <see cref="RecordCommand"/>) and an OPTIONAL state-hash bracket. Nothing here is read by simulation code and
+/// nothing it stores feeds a hash: recording a tick has zero effect on determinism.
 /// <para>
 /// Zero steady-state allocation: the ring array and every slot's fixed command list are allocated once, at
 /// construction, and reused forever (a sealed slot is overwritten in place, never replaced). The per-call cost is a

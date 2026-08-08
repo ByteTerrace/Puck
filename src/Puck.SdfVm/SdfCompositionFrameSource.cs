@@ -12,13 +12,16 @@ public interface ISdfFrameDresser {
     /// <param name="program">This frame's program (freshly rebuilt this call, or the same instance as last call when
     /// the composed content revision hasn't changed — compare by reference against a previous frame's
     /// <see cref="SdfFrame.Program"/> to detect a real change, exactly like <see cref="SdfFrame.ProgramChanged"/>).</param>
-    /// <param name="transforms">This frame's packed dynamic-transform buffer (every registered emitter's slots).</param>
+    /// <param name="transforms">This frame's packed dynamic-transform buffer (every registered emitter's slots) — the
+    /// host's OWN buffer, handed over as the concrete array rather than a read-only view because a dresser typically
+    /// retains it past this call (an offscreen view pass rendering the same world after capture) and passes it to
+    /// span-taking consumers. Never mutated by the host until the next <see cref="ISdfFrameSource.CaptureFrame"/>.</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
     /// <param name="deltaSeconds">The presentation frame delta in seconds.</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> toward the current fixed simulation tick.</param>
     /// <returns>The frame to render.</returns>
-    SdfFrame Dress(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 }
 
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into ONE <see cref="ISdfFrameSource"/> — the
@@ -44,9 +47,15 @@ public interface ISdfFrameDresser {
 /// contract (see <see cref="ISdfSceneEmitter"/>) can never exceed what the probe measured.
 /// </para>
 /// <para>
-/// REBUILD TRIGGER: the composed program rebuilds only when the SUM of every emitter's <see cref="ISdfSceneEmitter.Revision"/>
-/// changes since the last build (or on the first call) — an emitter that never changes (the default <c>Revision =&gt; 0</c>)
-/// never forces a rebuild on its own.
+/// REBUILD TRIGGER: the composed program rebuilds only when some emitter's revision components
+/// (<see cref="ISdfSceneEmitter.WriteRevision"/>) differ ELEMENTWISE from what that emitter reported when the held
+/// program was built (or on the first call) — an emitter that never changes (the default
+/// <c>RevisionComponentCount =&gt; 0</c>) never forces a rebuild on its own. The comparison is against the whole
+/// FLATTENED vector of every emitter's every counter rather than any combined number, because a revision can move DOWN
+/// (one is assigned from a server-supplied snapshot value): two counters moving in opposite directions by the same
+/// amount would cancel in any sum and hold a stale program, and any digest would only make that collision improbable
+/// rather than impossible. This is why the contract hands over COMPONENTS and not a single number — a per-emitter
+/// aggregate would just relocate the same cancellation one level down, where the host cannot see it.
 /// </para></summary>
 public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly IReadOnlyList<ISdfSceneEmitter> m_emitters;
@@ -54,7 +63,17 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly ISdfFrameDresser m_dresser;
     private readonly DynamicTransform[] m_transforms;
     private SdfProgram? m_program;
-    private int m_builtRevision = int.MinValue;
+    // Where each emitter's revision components start inside the two flattened vectors below — Count + 1 entries, so
+    // emitter i owns [m_revisionOffsets[i], m_revisionOffsets[i + 1]) and the last entry is the total length. Sized
+    // once at construction from each emitter's RevisionComponentCount, which its contract pins for the emitter's life.
+    private readonly int[] m_revisionOffsets;
+    // The components as they stood when the program currently held in m_program was built. No sentinel is needed:
+    // m_program is null until the first build, and that null is what forces it.
+    private readonly int[] m_builtRevisions;
+    // This frame's freshly-read components, and the STAGING half of the built record: captured before a build, promoted
+    // into m_builtRevisions only once that build has returned. See CaptureRevisions/CaptureFrame for why both halves
+    // of that ordering are load-bearing.
+    private readonly int[] m_pendingRevisions;
     private float m_time;
     private float m_interpolationAlpha;
 
@@ -73,8 +92,10 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         m_emitters = [.. emitters];
         m_dresser = dresser;
         m_slotBases = new int[m_emitters.Count];
+        m_revisionOffsets = new int[(m_emitters.Count + 1)];
 
         var slotCursor = 0;
+        var revisionCursor = 0;
 
         for (var index = 0; (index < m_emitters.Count); index++) {
             if (m_emitters[index] is not { } emitter) {
@@ -83,8 +104,15 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
             m_slotBases[index] = slotCursor;
             slotCursor += Math.Max(val1: 0, val2: emitter.DynamicSlotCount);
+            // Both counts are read exactly ONCE, here, and both are contract-pinned for the emitter's lifetime — an
+            // emitter that grew a component later would silently overrun the slice this layout handed it.
+            m_revisionOffsets[index] = revisionCursor;
+            revisionCursor += Math.Max(val1: 0, val2: emitter.RevisionComponentCount);
         }
 
+        m_revisionOffsets[m_emitters.Count] = revisionCursor;
+        m_builtRevisions = new int[revisionCursor];
+        m_pendingRevisions = new int[revisionCursor];
         m_transforms = new DynamicTransform[slotCursor];
 
         var probe = BuildProgram(context: new SdfEmitContext(Probe: true, Time: 0f, RenderOrigin: Vector3.Zero, ParkPosition: ParkPosition, SlotBase: 0));
@@ -116,11 +144,24 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         m_time += MathF.Max(x: deltaSeconds, y: 0f);
         m_interpolationAlpha = interpolationAlpha;
 
-        var revision = AggregateRevision();
+        // Captured BEFORE the build, deliberately, and into PENDING rather than straight into the built record. Both
+        // halves of that are load-bearing, against two different failures:
+        //
+        //   BEFORE the build — because these are the revisions the program is built FROM. Were an emitter's Emit ever
+        //   to bump its own revision inputs mid-build, capturing afterwards would record the post-bump values and
+        //   silently absorb a change the built program does not reflect. Capturing first leaves it visible next frame.
+        //
+        //   Into PENDING — because a build can THROW. Writing the built record up front would leave it claiming the
+        //   held program was built from revisions no program was ever built from, and since the compare then sees no
+        //   movement, the stale program is held indefinitely: one failed build turns into permanently frozen geometry.
+        //   Promotion below happens only once BuildProgram has returned, so a throw leaves the record describing the
+        //   program actually held and the next frame retries the rebuild.
+        var moved = CaptureRevisions();
 
-        if ((m_program is null) || (revision != m_builtRevision)) {
+        if ((m_program is null) || moved) {
             m_program = BuildProgram(context: new SdfEmitContext(Probe: false, Time: m_time, RenderOrigin: Vector3.Zero, ParkPosition: ParkPosition, SlotBase: 0, InterpolationAlpha: interpolationAlpha));
-            m_builtRevision = revision;
+
+            Array.Copy(sourceArray: m_pendingRevisions, destinationArray: m_builtRevisions, length: m_builtRevisions.Length);
         }
 
         PackTransforms();
@@ -128,14 +169,46 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         return m_dresser.Dress(program: m_program, transforms: m_transforms, width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
     }
 
-    private int AggregateRevision() {
-        var sum = 0;
+    // THE REBUILD TRIGGER, and it must not be able to CANCEL — reading this frame's components into m_pendingRevisions
+    // and reporting whether any of them moved, in one pass.
+    //
+    // CANCELLATION IS WHAT THIS SHAPE EXISTS TO KILL, and it has to be killed at the SOURCE, not layered over. An
+    // elementwise compare of one number PER EMITTER is not enough while that number is itself a sum: not every counter
+    // feeding it is monotonic (at least one is assigned from a server-supplied snapshot value and can move DOWN), so a
+    // server revision falling by k while a sibling rises by k leaves that emitter's element unchanged, no rebuild
+    // happens, and the frame renders silently stale geometry — the same defect, one level in. So emitters hand over
+    // their COMPONENTS (ISdfSceneEmitter.WriteRevision) and this compares the flattened vector of all of them: with no
+    // addition anywhere on the path, there is nothing left that can cancel. Impossible BY COMPARISON, not improbable
+    // by hashing. Never re-fold any part of this into a sum, and never trade it for a digest — a digest reintroduces a
+    // collision this shape does not have, and a per-emitter aggregate reintroduces the one just removed.
+    //
+    // Both arrays are sized once at construction against the defensively-copied emitter list, so the layout is fixed
+    // for the instance's life and this allocates nothing; the indexed loop avoids an interface enumerator, and the
+    // span slice hands each emitter exactly its own range. It deliberately does NOT stop at the first difference: the
+    // whole pending vector must be filled, because a promotion after the build copies all of it.
+    private bool CaptureRevisions() {
+        var moved = false;
 
-        foreach (var emitter in m_emitters) {
-            sum += emitter.Revision;
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            var start = m_revisionOffsets[index];
+            var length = (m_revisionOffsets[(index + 1)] - start);
+
+            if (length == 0) {
+                continue;
+            }
+
+            var components = m_pendingRevisions.AsSpan(start: start, length: length);
+
+            m_emitters[index].WriteRevision(destination: components);
+
+            for (var component = 0; (component < length); component++) {
+                if (components[component] != m_builtRevisions[(start + component)]) {
+                    moved = true;
+                }
+            }
         }
 
-        return sum;
+        return moved;
     }
     private void PackTransforms() {
         Array.Fill(array: m_transforms, value: new DynamicTransform(Position: ParkPosition, Orientation: Quaternion.Identity));

@@ -8,7 +8,14 @@ namespace Puck.Overlays;
 /// editor semantics for free: selection lights the ACCENT tier, a live change shimmer the HELD tier. Pure record
 /// emission; no GPU types (a surface is a writer, never a new shader).
 /// </summary>
-public sealed class EditorGizmoWriter {
+public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
+    /// <summary>The projected chips one seat draws. The host admits the nearest rows to the camera up to this
+    /// count; anything past it is refused at the gizmo channel's own boundary, attributed.</summary>
+    public const int MaxChipsPerSeat = 16;
+
+    // A viewport eased/shrunk to nothing has nowhere to place a chip — the guard the bar and the HUD both apply
+    // before opening a clip scope on the region.
+    private const float MinRegionExtent = 0.05f;
     // The gizmo plate half-extent, px — deliberately below the binding bar's reference chip so a gizmo reads as a
     // marker in the world, not a pressable control.
     private const float PlateHalf = 12f;
@@ -28,6 +35,8 @@ public sealed class EditorGizmoWriter {
 
     /// <summary>Emits this frame's per-seat gizmo records, when a snapshot has been published.</summary>
     /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
     public void Emit(OverlayFrameBuilder builder) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
@@ -37,19 +46,23 @@ public sealed class EditorGizmoWriter {
 
         var seats = frame.Seats.Span;
 
-        for (var index = 0; (index < seats.Length); index++) {
-            EmitSeat(builder: builder, seat: in seats[index]);
-        }
+        OverlaySeatLoop.Emit(builder: builder, seats: seats, writerName: nameof(EditorGizmoWriter), writer: this);
     }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) {
         var chips = seat.Chips.Span;
+        var region = seat.Viewport;
 
-        if (chips.Length == 0) {
+        if ((chips.Length == 0) || ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent))) {
             return;
         }
 
-        var region = seat.Viewport;
+        var chipCount = Math.Min(val1: chips.Length, val2: MaxChipsPerSeat);
+
+        if (chipCount < chips.Length) {
+            // Each chip writes its ring and its plate; a refused chip loses both.
+            builder.NoteRefused(elements: ((chips.Length - chipCount) * 2), textWords: 0);
+        }
 
         builder.BeginClip(
             h: (region.Height * builder.Height),
@@ -58,7 +71,7 @@ public sealed class EditorGizmoWriter {
             y: (region.Y * builder.Height)
         );
 
-        foreach (ref readonly var chip in chips) {
+        foreach (ref readonly var chip in chips[..chipCount]) {
             // The bed's presence ring first (under its own chip): the projected support radius as a translucent
             // hairline circle in the selection-aware hue.
             if (chip.RingRadiusPx > 0f) {
@@ -89,4 +102,7 @@ public sealed class EditorGizmoWriter {
 
         builder.EndClip();
     }
+
+    void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
+        EmitSeat(builder: builder, seat: in seat);
 }

@@ -7,12 +7,12 @@ namespace Puck.Scripting;
 /// </summary>
 /// <param name="DefaultFuelPerTick">The per-tick fuel budget an addon without its own override runs under.</param>
 /// <param name="MaxStackBytes">The guest execution stack ceiling in bytes.</param>
-/// <param name="MaxCommandRecords">The maximum number of 24-byte command records the host accepts per tick.</param>
-public readonly record struct ScriptingEngineOptions(long DefaultFuelPerTick, int MaxStackBytes, int MaxCommandRecords) {
+/// <param name="MaxOutCells">The maximum number of 32-byte output cells the host accepts per tick.</param>
+public readonly record struct ScriptingEngineOptions(long DefaultFuelPerTick, int MaxStackBytes, int MaxOutCells) {
     /// <summary>Gets the locked deterministic preset drawn from <see cref="AddonAbi"/>'s frozen budgets.</summary>
     public static ScriptingEngineOptions Deterministic => new(
         DefaultFuelPerTick: AddonAbi.DefaultFuelPerTick,
-        MaxCommandRecords: AddonAbi.MaxCommandRecords,
+        MaxOutCells: AddonAbi.MaxOutCells,
         MaxStackBytes: AddonAbi.MaxStackBytes
     );
 }

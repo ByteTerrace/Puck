@@ -8,7 +8,7 @@ namespace Puck.Abstractions.Machines;
 /// composition root; the host keeps the registry, never the concrete engine type.
 /// </summary>
 public interface IScreenMachineEngine {
-    /// <summary>Gets the engine's stable identifier — a short kebab-case token (e.g. <c>gaming-brick</c>) a run document
+    /// <summary>Gets the engine's stable identifier — a short kebab-case token (e.g. <c>gaming-brick</c>) a world document
     /// or an insert verb names, and the key the host registry looks the engine up by.</summary>
     string Id { get; }
 

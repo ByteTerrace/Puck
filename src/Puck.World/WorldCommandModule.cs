@@ -1,57 +1,62 @@
 using System.Globalization;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Launcher;
-using Puck.Scene;
 using Puck.SdfVm;
-using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
-/// The world's own console surface — its performance readouts (<c>world.fps</c>, <c>world.gpu</c>), the participant
-/// tables (<c>world.players</c>, <c>world.devices</c>), the declared-row tables (<c>world.screens</c>,
-/// <c>world.cameras</c>), and the graphics options (shadows, ambient occlusion, render
-/// scale, an FPS target, a quality preset) — all live console verbs, each echoing the current value when called with no
-/// argument. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>), not through an
-/// environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
+/// The world's own PRESENTATION console surface — its performance readouts (<c>world.fps</c>, <c>world.gpu</c>), the
+/// declared-row tables (<c>world.screens</c>, <c>world.cameras</c>), and the graphics options (shadows, ambient
+/// occlusion, render scale, an FPS target, a quality preset) — all live console verbs, each echoing the current value
+/// when called with no argument. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
+/// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
+/// <c>world.devices</c>, <c>world.population</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe,
+/// registered in core either way. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>),
+/// not through an environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, PlayerRoster roster, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, WorldEngagement engagement, IServerLink link) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadows",
             description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: ShadowEcho(settings: settings));
                 }
 
                 if (!TryParseShadowReach(text: args[0], reach: out var reach)) {
-                    return new CommandResult(Output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]");
                 }
+
+                var crowdRadius = settings.ShadowCrowdRadius;
 
                 if (args.Count >= 2) {
                     if (!float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || (radius < 0f) || (radius > 100f)) {
-                        return new CommandResult(Output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]") { IsError = true };
+                        return CommandResult.Error(output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]");
                     }
 
-                    settings.ShadowCrowdRadius = radius;
+                    crowdRadius = radius;
                 }
 
-                settings.ShadowReach = reach;
-
-                return new CommandResult(Output: ShadowEcho(settings: settings));
+                // The echo formats INSIDE SubmitLever's completion — after the lever has applied (or been refused),
+                // never a live read taken separately and possibly before that.
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.Shadows, a: reach, b: crowdRadius, formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings)));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.ao",
             description: "Toggles ambient occlusion engine-wide, live (no rebuild): world.ao [on|off] — no argument echoes the current state. AO darkens creases and contact seams; turning it off skips the per-lit-pixel occlusion march (a small GPU saving, see world.gpu).",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion ? "on" : "off")}]");
                 }
@@ -59,18 +64,17 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var on = ParseOnOff(token: args[0]);
 
                 if (on is not { } resolved) {
-                    return new CommandResult(Output: $"[world.ao: unknown state '{args[0]}' — on|off]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.ao: unknown state '{args[0]}' — on|off]");
                 }
 
-                settings.AmbientOcclusion = resolved;
-
-                return new CommandResult(Output: $"[world.ao: {(resolved ? "on" : "off")}]");
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusion, a: (resolved ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion ? "on" : "off")}]"));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.far-field",
             description: "Toggles the far-field termination optimizations live (no rebuild) — the isolators for the owner's paired A/B: world.far-field [on|off|status] moves BOTH lanes together; world.far-field bound [on|off] is the F1 beam-published per-tile far bound (output-identical, skips empty-sky march steps); world.far-field shadow [on|off] is the F2 soft-shadow light-side early exit (a march-path change). No argument (or 'status') echoes both. Both ship ON; 'off' is the paired-run baseline.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
                     return new CommandResult(Output: FarFieldEcho(settings: settings));
                 }
@@ -78,34 +82,51 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // Lane-scoped form: world.far-field bound|shadow on|off.
                 if (args.Is(index: 0, value: "bound") || args.Is(index: 0, value: "shadow")) {
                     if ((args.Count < 2) || (ParseOnOff(token: args[1]) is not { } laneState)) {
-                        return new CommandResult(Output: $"[world.far-field: expected '{args[0].ToString().ToLowerInvariant()} on|off']") { IsError = true };
+                        return CommandResult.Error(output: $"[world.far-field: expected '{args[0].ToString().ToLowerInvariant()} on|off']");
                     }
 
                     if (args.Is(index: 0, value: "bound")) {
-                        settings.FarBound = laneState;
-                    }
-                    else {
-                        settings.ShadowFarExit = laneState;
+                        SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.FarBound, a: (laneState ? 1.0 : 0.0));
+                    } else {
+                        SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowFarExit, a: (laneState ? 1.0 : 0.0));
                     }
 
+                    // Read AFTER the lever above has applied (or been refused) — loopback drains it inline, so this
+                    // is not a stale/racing read.
                     return new CommandResult(Output: FarFieldEcho(settings: settings));
                 }
 
                 // Bare form: world.far-field on|off drives BOTH lanes.
                 if (ParseOnOff(token: args[0]) is not { } bothState) {
-                    return new CommandResult(Output: $"[world.far-field: unknown '{args.Tail(0)}' — on|off|status, or bound|shadow on|off]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status, or bound|shadow on|off]");
                 }
 
-                settings.FarBound = bothState;
-                settings.ShadowFarExit = bothState;
+                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.FarBound, a: (bothState ? 1.0 : 0.0));
 
-                return new CommandResult(Output: FarFieldEcho(settings: settings));
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowFarExit, a: (bothState ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings)));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.shadow.accumulate",
+            description: "Toggles the area-light shadow estimator's TEMPORAL ACCUMULATION live (no rebuild): world.shadow.accumulate [on|off|status]. On (the default) folds each frame's two sun-disc samples into the reprojected previous value, which is what makes the penumbra smooth; off shades the raw per-frame estimate and is deliberately stippled — an A/B isolator, not a quality tier.",
+            handler: (context, args) => {
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return new CommandResult(Output: ShadowAccumulationEcho(settings: settings));
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } state) {
+                    return CommandResult.Error(output: $"[world.shadow.accumulate: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                }
+
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowAccumulation, a: (state ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: ShadowAccumulationEcho(settings: settings)));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadow-mask",
             description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses exact per-pixel grid gathers below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeShadowMask());
                 }
@@ -114,27 +135,24 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (args.Is(index: 0, value: "auto")) {
                     mode = ShadowMaskMode.Auto;
-                }
-                else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "gather")) {
+                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "gather")) {
                     mode = ShadowMaskMode.ExactGather;
-                }
-                else if (args.Is(index: 0, value: "camera") || args.Is(index: 0, value: "camera-tile") || args.Is(index: 0, value: "tile")) {
+                } else if (args.Is(index: 0, value: "camera") || args.Is(index: 0, value: "camera-tile") || args.Is(index: 0, value: "tile")) {
                     mode = ShadowMaskMode.CameraTile;
                 }
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
                 }
 
-                settings.ShadowMask = resolved;
-
-                return new CommandResult(Output: DescribeShadowMask());
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowMask, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeShadowMask()));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.ao-quality",
             description: "Selects the ambient-occlusion sampler live: world.ao-quality [auto|exact|fast]. auto keeps the three-rung quality ladder below 16 simulated stand-ins and uses the calibrated one-sample contact path at the 16/64/128 fleet tiers; exact and fast force either side for visual/performance A/B.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeAmbientOcclusionQuality());
                 }
@@ -143,27 +161,24 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (args.Is(index: 0, value: "auto")) {
                     mode = AmbientOcclusionMode.Auto;
-                }
-                else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
+                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
                     mode = AmbientOcclusionMode.Exact;
-                }
-                else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
+                } else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
                     mode = AmbientOcclusionMode.Fast;
                 }
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
-                settings.AmbientOcclusionQuality = resolved;
-
-                return new CommandResult(Output: DescribeAmbientOcclusionQuality());
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusionQuality, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality()));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadow-march",
             description: "Selects the soft-shadow marcher live: world.shadow-march [auto|exact|fast]. auto keeps the exact 48-step, 12-unit path below 16 simulated stand-ins and uses the bounded-cost 16-step, 6-unit near-field path at the 16/64/128 fleet tiers; exact and fast force either side for visual/performance A/B.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeShadowMarch());
                 }
@@ -172,24 +187,21 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (args.Is(index: 0, value: "auto")) {
                     mode = ShadowMarchMode.Auto;
-                }
-                else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
+                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
                     mode = ShadowMarchMode.Exact;
-                }
-                else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
+                } else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
                     mode = ShadowMarchMode.Fast;
                 }
 
                 if (mode is not { } resolved) {
-                    return new CommandResult(Output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
-                settings.ShadowMarch = resolved;
-
-                return new CommandResult(Output: DescribeShadowMarch());
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowMarch, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeShadowMarch()));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.view-refresh",
             description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh [1..8]. 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count).",
             handler: (_, args) => {
@@ -198,7 +210,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if (!args.TryInt(index: 0, value: out var divisor) || (divisor < 1) || (divisor > 8)) {
-                    return new CommandResult(Output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']") { IsError = true };
+                    return CommandResult.Error(output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']");
                 }
 
                 screens.SetViewRefreshDivisor(divisor: divisor);
@@ -207,11 +219,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.debug-view",
             description: "Selects the live SDF diagnostic output for every World camera: world.debug-view [off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot]. Depth is the primary-march-only performance probe; off restores final shading.",
             handler: (_, args) => {
                 if (renderProbe.Node is not { } node) {
-                    return new CommandResult(Output: "[world.debug-view: renderer not built yet]") { IsError = true };
+                    return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
                 }
 
                 if (args.Count == 0) {
@@ -219,7 +232,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 }
 
                 if ((args.Count != 1) || !DebugViewModes.TryParse(name: args[0].ToString(), mode: out var mode)) {
-                    return new CommandResult(Output: $"[world.debug-view: unknown mode '{args.Tail(0)}' — {string.Join(separator: '|', value: DebugViewModes.Names)}]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(separator: '|', value: DebugViewModes.Names)}]");
                 }
 
                 node.DebugMode = mode;
@@ -228,68 +241,68 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.render-scale",
             description: "Sets internal SDF resolution live (no rebuild): world.render-scale [native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%]. Every player view renders at that fraction and the compositor reconstructs it to output resolution using world.upscale-sharpness; native is the bit-exact copy path. Numeric values make fine-grained 120 FPS sweeps possible.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: settings.RenderScale)} | named: {WorldRenderScaleTiers.ValidNames} | numeric: 12.5%..100%]");
                 }
 
                 if (!TryParseRenderScale(text: args[0], scale: out var scale)) {
-                    return new CommandResult(Output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
                 }
 
-                settings.RenderScale = scale;
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.RenderScale, a: scale, formatEcho: () => {
+                    var liveScale = settings.RenderScale;
+                    var pixelPercent = (int)Math.Round(a: ((liveScale * liveScale) * 100f));
 
-                var pixelPercent = (int)Math.Round(a: ((scale * scale) * 100f));
-
-                return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: scale)} — ~{pixelPercent}% of native internal pixels; measure GPU cost with world.gpu]");
+                    return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: liveScale)} — ~{pixelPercent}% of native internal pixels; measure GPU cost with world.gpu]");
+                });
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.upscale-sharpness",
             description: "Sets reduced-resolution reconstruction continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. Zero is the four-tap bilinear fast path; any positive value enables clamped Catmull-Rom and blends toward it; native render scale ignores this setting.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]");
                 }
 
                 if (!TryParseUpscaleSharpness(text: args[0], sharpness: out var sharpness)) {
-                    return new CommandResult(Output: $"[world.upscale-sharpness: invalid '{args[0]}' — bilinear|balanced|sharp, 0..1, or 0%..100%]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.upscale-sharpness: invalid '{args[0]}' — bilinear|balanced|sharp, 0..1, or 0%..100%]");
                 }
 
-                settings.UpscaleSharpness = sharpness;
-
-                return new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: sharpness)}]");
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.UpscaleSharpness, a: sharpness, formatEcho: () => new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]"));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.target",
             description: "Sets the continuous presentation target live: world.target [<hz>|display]. <hz> is any positive finite number, capped by the effective display ceiling. 'display' (or 'vrr') uses verified VRR bounds when advertised and otherwise the active signal timing. Presentation only; present-mode switching remains a boot option.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]");
                 }
 
                 if (args.Is(index: 0, value: "display") || args.Is(index: 0, value: "vrr")) {
-                    pacing.SetTargetHertz(targetHertz: 0.0);
-
-                    return new CommandResult(Output: $"[world.target: {DescribeTarget(target: 0.0)}]");
+                    return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.TargetHertz, a: 0.0, section: WorldSection.Host, formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]"));
                 }
 
-                if (!double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var hz) || !double.IsFinite(hz) || (hz <= 0.0)) {
-                    return new CommandResult(Output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]") { IsError = true };
+                if (!double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var hz) || !double.IsFinite(d: hz) || (hz <= 0.0)) {
+                    return CommandResult.Error(output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]");
                 }
 
-                pacing.SetTargetHertz(targetHertz: hz);
-
-                return new CommandResult(Output: $"[world.target: {DescribeTarget(target: hz)}]");
+                // The echo formats INSIDE the completion — after the lever has applied (or been refused).
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.TargetHertz, a: hz, section: WorldSection.Host, formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]"));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
             description: "Applies a graphics PRESET that bundles the individual levers, live: world.quality low|medium|high — no argument echoes the current settings. low = shadows off, ao off, render-scale half; medium = shadows medium, ao on, render-scale three-quarter; high = shadows high, ao on, render-scale native. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
@@ -298,17 +311,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // preset table applies immediately: look the named tier up and write its three levers into the live
                 // settings.
                 if (server.Definition.Render.Preset(name: args[0].ToString()) is not { } preset) {
-                    return new CommandResult(Output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
                 }
 
-                settings.ShadowReach = ShadowTiers.Scale(tier: preset.Shadows);
-                settings.AmbientOcclusion = preset.AmbientOcclusion;
-                settings.RenderScale = WorldRenderScaleTiers.Scale(tier: preset.RenderScale);
+                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.Shadows, a: ShadowTiers.Scale(tier: preset.Shadows), b: settings.ShadowCrowdRadius);
+                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusion, a: (preset.AmbientOcclusion ? 1.0 : 0.0));
 
-                return new CommandResult(Output: DescribeQuality());
+                // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
+                // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
+                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.RenderScale, a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale), formatEcho: () => new CommandResult(Output: DescribeQuality()));
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.timing",
             description: "Arms per-pass GPU timing engine-wide, live (no restart, no magic env var): world.timing [on|off] — no argument echoes the armed state. On lights BOTH the GPU per-pass digest (readable with world.gpu) and the launcher's CPU frame-timing hub; performance metrics are a first-class citizen here.",
             handler: (_, args) => {
@@ -319,7 +334,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var on = ParseOnOff(token: args[0]);
 
                 if (on is not { } resolved) {
-                    return new CommandResult(Output: $"[world.timing: unknown state '{args[0]}' — on|off]") { IsError = true };
+                    return CommandResult.Error(output: $"[world.timing: unknown state '{args[0]}' — on|off]");
                 }
 
                 GpuTimingControl.Shared.SetArmed(armed: resolved);
@@ -328,106 +343,26 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Unbindable,
             name: "world.gpu",
             description: "Echoes the previous frame's per-pass GPU milliseconds — the whole-frame total plus each render pass (mask/beam/cull-args/views/composite) — read live off the renderer. Arm it first with world.timing on; the metrics are first-class, no env var needed.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: DescribeGpu())
         );
         yield return CommandDefinition.WithWireArgs(
-            name: "world.population",
-            description: "Sets how many SIMULATED network stand-ins the world renders behind the four local seats, and how they behave between scripted tapes — the network-population simulator: world.population [count] [idle|wander] (tokens are order-independent; no argument echoes both). A bare integer 0..124 sets the active stand-in COUNT; a bare 'idle'/'wander' sets the BEHAVIOR. It answers 'what do N real people cost to render' by drawing that many avatars TODAY, before any wire exists — the up-to-128-player scale (16/64/128 tiers) proven as a render cost. Behavior 'wander' (default) has the stand-ins gently drift as a living crowd; 'idle' makes them hold still between player.run tape segments so a SCRIPTED CORPUS is the sole driver of entries 5..128 — the remote-server stand-in posture the 128-player stdin proof pipes. A count past the LIVE ceiling (the authored networkPlayers admission cap, further narrowed by any inhabitant physically occupying the top of the peer slice) is CLAMPED to it, not refused — and the echo then leads with a 'requested N, GRANTED M' line, so a script reads the count it actually got. Arm world.timing on and read world.gpu to measure.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: DescribePopulation());
-                }
-
-                int? count = null;
-                IntentSource? behavior = null;
-
-                // Order-independent tokens: each is either a bare integer count or a bare idle/wander keyword. A repeat
-                // of either lane, or an unrecognized token, is rejected whole so a typo never half-applies. WireArgs has
-                // no enumerator (a ref struct can't back foreach's pattern here without one) — walk it by index instead.
-                for (var index = 0; (index < args.Count); index++) {
-                    if (args.Is(index: index, value: "idle")) {
-                        if (behavior is not null) {
-                            return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]") { IsError = true };
-                        }
-
-                        behavior = IntentSource.Idle;
-
-                        continue;
-                    }
-
-                    if (args.Is(index: index, value: "wander")) {
-                        if (behavior is not null) {
-                            return new CommandResult(Output: $"[world.population: behavior given twice — one of idle|wander]") { IsError = true };
-                        }
-
-                        behavior = IntentSource.Wander;
-
-                        continue;
-                    }
-
-                    if (!args.TryInt(index: index, value: out var parsed) || (parsed < 0) || (parsed > WorldPopulation.MaxPopulationSimulated)) {
-                        return new CommandResult(Output: $"[world.population: unknown token '{args[index]}' — a count 0..{WorldPopulation.MaxPopulationSimulated} and/or idle|wander]") { IsError = true };
-                    }
-
-                    if (count is not null) {
-                        return new CommandResult(Output: $"[world.population: count given twice — one integer 0..{WorldPopulation.MaxPopulationSimulated}]") { IsError = true };
-                    }
-
-                    count = parsed;
-                }
-
-                // The census and peer source are session requests to the authoritative server (synchronous
-                // request/reply), so the echo below reads the applied state. An explicit idle/wander token sets the
-                // peer-source DEFAULT and sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity
-                // player.control does not survive the global flip; a count alone leaves existing peers' sources be.
-                // A census beyond the live ceiling is CLAMPED, not refused — the ceiling is the tighter of the authored
-                // networkPlayers admission cap and the inhabitant floor, and shrinking to fit is the right behavior. But
-                // the clamp used to be silent behind a success echo, so a script could believe it summoned a crowd it
-                // never got: the echo now leads with requested-vs-granted whenever the two differ.
-                string? clamp = null;
-
-                if (count is { } resolvedCount) {
-                    var granted = link.SubmitSession(request: new SessionRequest.SetPopulation(Principal: WorldPrincipal.Console, Count: resolvedCount)).AssignedIndex;
-
-                    if (granted != resolvedCount) {
-                        clamp = $"[world.population: requested {resolvedCount}, GRANTED {granted} — clamped to the live ceiling ({population.SimulatedCeiling}: the networkPlayers admission cap under {population.MaxSimulated} free peer slots)]\n";
-                    }
-                }
-
-                if (behavior is { } resolvedBehavior) {
-                    _ = link.SubmitSession(request: new SessionRequest.SetPeerSource(Principal: WorldPrincipal.Console, Source: resolvedBehavior));
-                }
-
-                return new CommandResult(Output: (clamp + DescribePopulation()));
-            },
-            routing: CommandRouting.Simulation
-        );
-        yield return CommandDefinition.Verb(
-            name: "world.players",
-            description: "Lists the roster's four slots — joined/empty, each joined slot's profile, state (active/PENDING), owned devices (or origin), and pose (p<N> name state(devices) pos=(x, z) yaw=d°) — plus the population line (local seats + simulated stand-ins). Every player is a networked player; a local pad or the keyboard is just one at zero latency.",
-            valueKind: CommandValueKind.Digital,
-            handler: _ => new CommandResult(Output: DescribePlayers())
-        );
-        yield return CommandDefinition.Verb(
-            name: "world.devices",
-            description: "Lists every input device seen this session by its stable token (kbd, pad1, pad2, …) in first-seen order and the player it currently drives (p<N> or unassigned). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
-            valueKind: CommandValueKind.Digital,
-            handler: _ => new CommandResult(Output: roster.DescribeDevices())
-        );
-        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.screens",
             description: "Lists every declared diegetic screen, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), and its engage policy (engageable|fixed). No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.cameras",
-            description: "Lists every declared placeable camera, one segment each — name, anchor (entity:<index> | entityLeaf:<index>/<role> | placement:<id>[/<shape>] | group:<count|all> | none), rig kind (chase|firstPerson|orbit|lookAt|dolly), and render dimensions <width>x<height>. No argument; the camera-table twin of world.screens — the read-back proving a world.camera.set landed and that world.undo took it away. A query — its listing always echoes, even under wire.ack quiet.",
+            description: "Lists every declared placeable camera with its anchor, independent motion and aim policies, and render dimensions. No argument; the camera-table twin of world.screens.",
             handler: CamerasHandler
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Unbindable,
             name: "world.fps",
             description: "Echoes the measured frame rate over the recent window — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target. The world's reference desktop contract is 120 FPS under VRR.",
             valueKind: CommandValueKind.Digital,
@@ -435,7 +370,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var (averageFps, worstFps, frameCount) = frameRate.Summarize();
 
                 if (frameCount == 0) {
-                    return new CommandResult(Output: "[world.fps: no frames sampled yet]") { IsError = true };
+                    return CommandResult.Error(output: "[world.fps: no frames sampled yet]");
                 }
 
                 var target = pacing.TargetHertz;
@@ -456,9 +391,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // piped proof can assert the test-pattern screen is bound and the None screen stays unbound (procedural fallback).
     private CommandResult ScreensHandler(CommandContext context, WireArgs args) {
         if (args.Count != 0) {
-            return new CommandResult(Output: "[world.screens: no arguments — lists every declared screen]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[world.screens: no arguments — lists every declared screen]");
         }
 
         // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly.
@@ -475,8 +408,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             var bound = (screens.CurrentHandle(index: screen.Index) != 0);
             // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
             // proof regexes are undisturbed.
-            var engaged = engagement.PlayersOn(screenIndex: screen.Index);
-            var engagedText = ((engaged.Count > 0) ? $" engaged:{string.Join(separator: "+", values: engaged.Select(selector: static n => $"p{n}"))}" : "");
+            var engaged = server.Engagement.PlayersOn(screenIndex: screen.Index);
+            var engagedText = ((engaged.Count > 0)
+                ? $" engaged:{string.Join(separator: "+", values: engaged.Select(selector: static entry => (entry.Capture ? $"p{entry.Display}" : $"p{entry.Display}(mirror)")))}"
+                : "");
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -492,9 +427,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // new row narrates honestly. A query (not AcknowledgementOnly): its listing always surfaces.
     private CommandResult CamerasHandler(CommandContext context, WireArgs args) {
         if (args.Count != 0) {
-            return new CommandResult(Output: "[world.cameras: no arguments — lists every declared camera]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[world.cameras: no arguments — lists every declared camera]");
         }
 
         var cameras = server.Definition.Cameras;
@@ -522,22 +455,28 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private static string CameraAnchorKind(WorldAnchor? anchor) {
         return anchor switch {
             WorldAnchor.Entity entity => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entity:{entity.Index}"),
-            WorldAnchor.EntityLeaf leaf => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entityLeaf:{leaf.Index}/{leaf.Leaf}"),
+            WorldAnchor.EntityPart part => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entityPart:{part.Index}/{part.PartId}"),
             WorldAnchor.Placement placement => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=placement:{placement.PlacementId}{((placement.ShapeId is { } shape) ? $"/{shape}" : "")}"),
             WorldAnchor.Group group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=group:{((group.Indices is { } indices) ? indices.Count.ToString(provider: CultureInfo.InvariantCulture) : "all")}"),
             _ => "anchor=none",
         };
     }
 
-    // The rig keyword for a camera's declared framing — the same closed vocabulary as the row's $type discriminator.
-    private static string CameraRigKind(WorldRig rig) {
-        return rig switch {
-            WorldRig.Chase => "rig=chase",
-            WorldRig.FirstPerson => "rig=firstPerson",
-            WorldRig.Orbit => "rig=orbit",
-            WorldRig.LookAt => "rig=lookAt",
-            _ => "rig=dolly",
+    // Camera motion and aim are independent closed vocabularies.
+    private static string CameraRigKind(WorldCameraRig rig) {
+        var motion = rig.Motion switch {
+            WorldCameraMotion.Follow => "follow",
+            WorldCameraMotion.Orbit => "orbit",
+            WorldCameraMotion.Static => "static",
+            _ => "track",
         };
+        var aim = rig.Aim switch {
+            WorldCameraAim.Anchor => "anchor",
+            WorldCameraAim.Forward => "forward",
+            _ => "worldPoint",
+        };
+
+        return $"motion={motion} aim={aim}";
     }
 
     // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against.
@@ -551,7 +490,32 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             _ => "none",
         };
     }
+    // The world.shadow.accumulate echo.
+    private static string ShadowAccumulationEcho(WorldRenderSettings settings) {
+        return $"[world.shadow.accumulate: {(settings.ShadowAccumulation ? "on" : "off")}]";
+    }
+
     // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
+    // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
+    // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
+    // world.target passes Host explicitly.
+    private void SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
+        link.SubmitSessionLever(
+            lever: new WorldSessionLever(Section: section, Kind: kind, A: a, B: b),
+            principal: principal
+        );
+    }
+
+    // Overload wired to the completion model: SubmitSessionLever is fire-and-forget (it carries no completion of its
+    // own — the accept/reject outcome is already reported loud on stderr and through WorldServer.EchoTap), but the
+    // console echo must still read the settings/pacing service ONLY after the lever has actually applied (or been
+    // refused). Over loopback DeliverSessionLever runs synchronously inside SubmitSessionLever, so formatEcho is
+    // invoked immediately after the submit call returns — never before it, and never from a stale prior read.
+    private CommandResult SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
+        SubmitLever(principal: principal, kind: kind, a: a, b: b, section: section);
+
+        return formatEcho();
+    }
     private static string ShadowEcho(WorldRenderSettings settings) {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##}]");
     }
@@ -585,21 +549,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion ? "on" : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
     }
-
     private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
         if (text.Equals(other: "off", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             reach = 0f;
-        }
-        else if (text.Equals(other: "low", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (text.Equals(other: "low", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             reach = 0.25f;
-        }
-        else if (text.Equals(other: "medium", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (text.Equals(other: "medium", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             reach = 0.5f;
-        }
-        else if (text.Equals(other: "high", comparisonType: StringComparison.OrdinalIgnoreCase) || text.Equals(other: "on", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (text.Equals(other: "high", comparisonType: StringComparison.OrdinalIgnoreCase) || text.Equals(other: "on", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             reach = 1f;
-        }
-        else {
+        } else {
             reach = float.NaN;
         }
 
@@ -614,7 +573,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out reach)) {
+        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out reach, s: token, style: NumberStyles.Float)) {
             return false;
         }
 
@@ -622,9 +581,8 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             reach /= 100f;
         }
 
-        return float.IsFinite(f: reach) && (reach >= 0f) && (reach <= 1f);
+        return (float.IsFinite(f: reach) && (reach >= 0f) && (reach <= 1f));
     }
-
     private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
         if (WorldRenderScaleTiers.TryParse(name: text.ToString(), tier: out var tier)) {
             scale = WorldRenderScaleTiers.Scale(tier: tier);
@@ -639,7 +597,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out scale)) {
+        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out scale, s: token, style: NumberStyles.Float)) {
             return false;
         }
 
@@ -647,20 +605,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             scale /= 100f;
         }
 
-        return float.IsFinite(f: scale) && (scale >= 0.125f) && (scale <= 1f);
+        return (float.IsFinite(f: scale) && (scale >= 0.125f) && (scale <= 1f));
     }
-
     private static bool TryParseUpscaleSharpness(ReadOnlySpan<char> text, out float sharpness) {
         if (text.Equals(other: "bilinear", comparisonType: StringComparison.OrdinalIgnoreCase) || text.Equals(other: "off", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             sharpness = 0f;
-        }
-        else if (text.Equals(other: "balanced", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (text.Equals(other: "balanced", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             sharpness = 0.5f;
-        }
-        else if (text.Equals(other: "sharp", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        } else if (text.Equals(other: "sharp", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             sharpness = 1f;
-        }
-        else {
+        } else {
             sharpness = float.NaN;
         }
 
@@ -675,7 +629,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out sharpness)) {
+        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out sharpness, s: token, style: NumberStyles.Float)) {
             return false;
         }
 
@@ -683,9 +637,8 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             sharpness /= 100f;
         }
 
-        return float.IsFinite(f: sharpness) && (sharpness >= 0f) && (sharpness <= 1f);
+        return (float.IsFinite(f: sharpness) && (sharpness >= 0f) && (sharpness <= 1f));
     }
-
     private static string RenderScaleName(float scale) {
         foreach (var tier in Enum.GetValues<WorldRenderScaleTier>()) {
             if (MathF.Abs(x: (scale - WorldRenderScaleTiers.Scale(tier: tier))) <= (0.5f / 255f)) {
@@ -695,7 +648,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(scale * 100f):0.#}%");
     }
-
     private static string UpscaleSharpnessName(float sharpness) {
         if (MathF.Abs(x: sharpness) <= 0.0001f) {
             return "bilinear";
@@ -711,79 +663,42 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(sharpness * 100f):0.#}%");
     }
+    private string DescribeShadowMask() =>
+        DescribeAdaptiveQuality(
+            verb: "world.shadow-mask",
+            modes: settings.ShadowMask switch {
+                ShadowMaskMode.ExactGather => ("exact", false),
+                ShadowMaskMode.CameraTile => ("camera-tile", true),
+                _ => ("auto", (bool?)null),
+            },
+            exact: "exact",
+            fast: "camera-tile");
+    private string DescribeShadowMarch() =>
+        DescribeAdaptiveQuality(
+            verb: "world.shadow-march",
+            modes: settings.ShadowMarch switch {
+                ShadowMarchMode.Exact => ("exact", false),
+                ShadowMarchMode.Fast => ("fast", true),
+                _ => ("auto", (bool?)null),
+            },
+            exact: "exact",
+            fast: "fast");
+    private string DescribeAmbientOcclusionQuality() =>
+        DescribeAdaptiveQuality(
+            verb: "world.ao-quality",
+            modes: settings.AmbientOcclusionQuality switch {
+                AmbientOcclusionMode.Exact => ("exact", false),
+                AmbientOcclusionMode.Fast => ("fast", true),
+                _ => ("auto", (bool?)null),
+            },
+            exact: "exact",
+            fast: "fast");
 
-    private string DescribeShadowMask() {
-        var configured = settings.ShadowMask switch {
-            ShadowMaskMode.ExactGather => "exact",
-            ShadowMaskMode.CameraTile => "camera-tile",
-            _ => "auto",
-        };
-        var resolved = (settings.ShadowMask switch {
-            ShadowMaskMode.ExactGather => false,
-            ShadowMaskMode.CameraTile => true,
-            _ => (population.SimulatedCount >= 16),
-        }) ? "camera-tile" : "exact";
+    /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
+    private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
+        var resolved = ((modes.Fast ?? (population.SimulatedCount >= 16)) ? fast : exact);
 
-        return $"[world.shadow-mask: {configured} → {resolved} | simulated={population.SimulatedCount}]";
-    }
-
-    private string DescribeShadowMarch() {
-        var configured = settings.ShadowMarch switch {
-            ShadowMarchMode.Exact => "exact",
-            ShadowMarchMode.Fast => "fast",
-            _ => "auto",
-        };
-        var resolved = (settings.ShadowMarch switch {
-            ShadowMarchMode.Exact => false,
-            ShadowMarchMode.Fast => true,
-            _ => (population.SimulatedCount >= 16),
-        }) ? "fast" : "exact";
-
-        return $"[world.shadow-march: {configured} → {resolved} | simulated={population.SimulatedCount}]";
-    }
-
-    private string DescribeAmbientOcclusionQuality() {
-        var configured = settings.AmbientOcclusionQuality switch {
-            AmbientOcclusionMode.Exact => "exact",
-            AmbientOcclusionMode.Fast => "fast",
-            _ => "auto",
-        };
-        var resolved = (settings.AmbientOcclusionQuality switch {
-            AmbientOcclusionMode.Exact => false,
-            AmbientOcclusionMode.Fast => true,
-            _ => (population.SimulatedCount >= 16),
-        }) ? "fast" : "exact";
-
-        return $"[world.ao-quality: {configured} → {resolved} | simulated={population.SimulatedCount}]";
-    }
-
-    // The world.players readout: the roster's four slots plus the population line spliced in as a trailing segment.
-    // roster.Describe() ends with ']', so drop it (the [..^1] slice) and re-close after the population segment.
-    private string DescribePlayers() {
-        var players = roster.Describe();
-        var local = roster.Count;
-        var simulated = population.SimulatedCount;
-
-        return $"{players[..^1]} | population: {local} local + {simulated} network = {(local + simulated)}/{WorldPopulation.MaxPopulation}]";
-    }
-
-    // The world.population readout: the active simulated count, the between-tapes behavior, and the total avatar load on
-    // the renderer. LOOPBACK-ONLY: the population reads here (and in the Describe*/auto-tier echoes above) are
-    // in-process; a socket transport replaces them with a link query the server composes.
-    private string DescribePopulation() {
-        var local = roster.Count;
-        var simulated = population.SimulatedCount;
-        var behavior = (population.DefaultPeerSource switch {
-            IntentSource.Idle => "idle",
-            IntentSource.Wander => "wander",
-            _ => "live",
-        });
-        var workload = WorldAvatarCatalog.ActiveWorkload(isActive: population.IsActive);
-        // The per-kit census derives its names and counts from the definition rows, in row order.
-        var counts = population.ActiveKitCounts();
-        var kits = string.Join(separator: " ", values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}"));
-
-        return $"[world.population: {simulated} network-human stand-ins active (0..{WorldPopulation.MaxPopulationSimulated}), behavior {behavior} | {local} local + {simulated} = {(local + simulated)}/{WorldPopulation.MaxPopulation} avatars rendered | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+        return $"[{verb}: {modes.Configured} → {resolved} | simulated={population.SimulatedCount}]";
     }
 
     // The world.gpu readout: the previous frame's per-pass GPU ms, read live off the render probe's engine node.

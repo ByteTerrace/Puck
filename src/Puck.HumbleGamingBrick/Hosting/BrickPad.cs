@@ -8,9 +8,6 @@ namespace Puck.HumbleGamingBrick;
 /// pass through as well. The face/system buttons map by position: South→A, East→B, Start→Start, Back→Select. The right
 /// stick and triggers have no console equivalent and are ignored.</summary>
 internal static class BrickPad {
-    // The deflection the digital d-pad registers a direction at — the analog stick's quantization threshold (a partial
-    // deflection reads as no press). The left stick's Y is forward/up, X is right, matching MachinePadState.
-    private const float StickThreshold = 0.5f;
 
     /// <summary>Maps a normalized pad image to the brick's joypad image.</summary>
     /// <param name="pad">The neutral controller image.</param>
@@ -19,15 +16,15 @@ internal static class BrickPad {
         var buttons = JoypadButtons.None;
 
         // Directions: the left stick quantized to the d-pad, plus any explicit d-pad bits already on the image.
-        if ((pad.LeftStick.Y >= StickThreshold) || pad.Buttons.HasFlag(flag: MachineButtons.DpadUp)) {
+        if ((pad.LeftStick.Y >= MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadUp)) {
             buttons |= JoypadButtons.Up;
-        } else if ((pad.LeftStick.Y <= -StickThreshold) || pad.Buttons.HasFlag(flag: MachineButtons.DpadDown)) {
+        } else if ((pad.LeftStick.Y <= -MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadDown)) {
             buttons |= JoypadButtons.Down;
         }
 
-        if ((pad.LeftStick.X >= StickThreshold) || pad.Buttons.HasFlag(flag: MachineButtons.DpadRight)) {
+        if ((pad.LeftStick.X >= MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadRight)) {
             buttons |= JoypadButtons.Right;
-        } else if ((pad.LeftStick.X <= -StickThreshold) || pad.Buttons.HasFlag(flag: MachineButtons.DpadLeft)) {
+        } else if ((pad.LeftStick.X <= -MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadLeft)) {
             buttons |= JoypadButtons.Left;
         }
 

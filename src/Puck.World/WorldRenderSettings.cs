@@ -1,73 +1,6 @@
-using Puck.Scene;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
-
-/// <summary>The engine-wide soft-shadow quality tier. <see cref="High"/> is the full reach and <see cref="Off"/> the
-/// cheapest; <see cref="Low"/> and <see cref="Medium"/> shorten the shadow reach (both the gather cull cone and the
-/// march ceiling — one shared length) between them.</summary>
-internal enum ShadowTier {
-    /// <summary>No soft shadows (the single most expensive shading term skipped).</summary>
-    Off,
-
-    /// <summary>Soft shadows at QUARTER reach (<c>ShadowDistanceScale</c> 0.25) — only near contact shadows survive.</summary>
-    Low,
-
-    /// <summary>Soft shadows at HALF reach (<c>ShadowDistanceScale</c> 0.5) — far shadows fade, mid shadows stay.</summary>
-    Medium,
-
-    /// <summary>The full 1.0 shadow reach (<c>ShadowDistanceScale</c> 0, the engine default).</summary>
-    High,
-}
-
-/// <summary>Named facades over the continuous soft-shadow reach used at runtime.</summary>
-internal static class ShadowTiers {
-    public static float Scale(ShadowTier tier) => tier switch {
-        ShadowTier.Off => 0f,
-        ShadowTier.Low => 0.25f,
-        ShadowTier.Medium => 0.5f,
-        _ => 1f,
-    };
-
-    /// <summary>The nearest named <see cref="ShadowTier"/> to a continuous soft-shadow reach — the reverse of
-    /// <see cref="Scale"/>, used when <c>world.save</c> folds the live reach back into the document's tiered
-    /// <see cref="WorldRenderDefaults.Shadows"/> boot default. Round-trips exactly for the four tier scales (0/.25/.5/1);
-    /// a continuous authoring override quantizes to its closest tier (the document holds only tiers).</summary>
-    public static ShadowTier Tier(float reach) {
-        var best = ShadowTier.High;
-        var bestDelta = float.MaxValue;
-
-        foreach (var tier in Enum.GetValues<ShadowTier>()) {
-            var delta = MathF.Abs(x: (reach - Scale(tier: tier)));
-
-            if (delta < bestDelta) {
-                best = tier;
-                bestDelta = delta;
-            }
-        }
-
-        return best;
-    }
-
-    public static string Name(float reach) {
-        if (MathF.Abs(x: reach) <= 0.0001f) {
-            return "off";
-        }
-
-        if (MathF.Abs(x: (reach - 0.25f)) <= 0.0001f) {
-            return "low";
-        }
-
-        if (MathF.Abs(x: (reach - 0.5f)) <= 0.0001f) {
-            return "medium";
-        }
-
-        if (MathF.Abs(x: (reach - 1f)) <= 0.0001f) {
-            return "high";
-        }
-
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{(reach * 100f):0.#}%");
-    }
-}
 
 /// <summary>The soft-shadow candidate-mask policy. <see cref="Auto"/> keeps exact gathers for small sessions and uses
 /// the camera-tile approximation at the declared fleet tiers; the other values are live profiling/authoring overrides.</summary>
@@ -110,6 +43,7 @@ internal sealed class WorldRenderSettings {
     private float m_upscaleSharpness;
     private bool m_farBound;
     private bool m_shadowFarExit;
+    private bool m_shadowAccumulation;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
     /// render-lever boot defaults (<see cref="WorldRenderDefaults"/>), copied into the live, mutable settings the
@@ -129,6 +63,7 @@ internal sealed class WorldRenderSettings {
         UpscaleSharpness = defaults.UpscaleSharpness;
         FarBound = true;
         ShadowFarExit = true;
+        ShadowAccumulation = true;
     }
 
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
@@ -144,7 +79,7 @@ internal sealed class WorldRenderSettings {
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the
-    /// per-instance <see cref="Puck.SdfVm.DynamicTransform.CastsSoftShadow"/> lane <see cref="Client.WorldFrameSource"/> computes
+    /// per-instance <see cref="Puck.SdfVm.DynamicTransform.CastsSoftShadow"/> lane <see cref="Client.WorldSceneEmitter"/> computes
     /// per frame, so no rebuild). 0 = only the local seats cast; a value ≥ the world's diameter = everyone casts. Bounding
     /// who casts is how the population scales, since soft shadows dominate the GPU cost.</summary>
     public float ShadowCrowdRadius { get => m_shadowCrowdRadius; set { m_shadowCrowdRadius = value; m_revision++; } }
@@ -186,6 +121,14 @@ internal sealed class WorldRenderSettings {
     /// <summary>Whether the soft-shadow light-side early exit is active (default <see langword="true"/>). Set
     /// <see langword="false"/> (via <c>world.far-field shadow off</c>) to run the full shadow step budget/reach — a
     /// march-path change, session state, not durable config. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowFarExit"/> lane <see cref="Client.WorldFrameSource"/> inverts each frame.</summary>
+    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowEscapeExit"/> lane <see cref="Client.WorldFrameSource"/> inverts each frame.</summary>
     public bool ShadowFarExit { get => m_shadowFarExit; set { m_shadowFarExit = value; m_revision++; } }
+
+    /// <summary>Whether the area-light shadow estimator's TEMPORAL ACCUMULATION is active (default
+    /// <see langword="true"/>). Set <see langword="false"/> (via <c>world.shadow.accumulate off</c>) to shade each
+    /// frame's raw two-sample stochastic estimate directly — deliberately noisy, an A/B isolator rather than a quality
+    /// tier. Session state, never durable config. Rides the per-frame
+    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowAccumulation"/> lane <see cref="Client.WorldFrameSource"/> inverts
+    /// each frame, so no rebuild.</summary>
+    public bool ShadowAccumulation { get => m_shadowAccumulation; set { m_shadowAccumulation = value; m_revision++; } }
 }

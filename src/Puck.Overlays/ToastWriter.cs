@@ -18,6 +18,14 @@ public sealed class ToastWriter {
     public const int MaxMessageChars = 44;
     /// <summary>The wrapped lines the chip grows to.</summary>
     public const int MaxMessageLines = 4;
+    /// <summary>The <see cref="OkLabel"/>/<see cref="ErrorLabel"/> literals' shared character count — the ONE
+    /// source <see cref="OverlayChannelLeases"/> reads for its text-word reservation. The label's <c>WriteText</c>
+    /// call clamps to this constant, so an edit to either literal that forgets to update it truncates (reported,
+    /// never silent) instead of quietly overrunning the reservation.</summary>
+    public const int LabelChars = 2;
+
+    private const string OkLabel = "OK";
+    private const string ErrorLabel = "ER";
     // Lifetime and fade in DETERMINISTIC engine ticks (content tick, never wall clock).
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
     private static readonly ulong FadeTicks = (ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond);
@@ -25,6 +33,10 @@ public sealed class ToastWriter {
     private readonly IOverlayToastSource m_source;
     private ulong m_firstTicks;
     private int m_sequenceSeen;
+
+    static ToastWriter() {
+        System.Diagnostics.Debug.Assert(condition: ((OkLabel.Length == LabelChars) && (ErrorLabel.Length == LabelChars)), message: "ToastWriter's OkLabel/ErrorLabel length drifted from LabelChars — update LabelChars (and OverlayChannelLeases' ToastTextWords, which reads it) to match.");
+    }
 
     /// <summary>Initializes a new instance of the <see cref="ToastWriter"/> class.</summary>
     /// <param name="source">The toast snapshot source.</param>
@@ -98,11 +110,12 @@ public sealed class ToastWriter {
 
         builder.WriteRect(alpha: alpha, h: icon, radius: DesignTokens.Radius.Radius1, role: OverlayColorRole.SurfaceInset, w: icon, x: iconX, y: iconY);
 
-        var label = (toast.IsError ? "ER" : "OK");
+        var label = (toast.IsError ? ErrorLabel : OkLabel);
 
         builder.WriteText(
             alpha: alpha,
             cellHeight: microCell,
+            maxChars: LabelChars,
             role: stateRole,
             text: label,
             x: (iconX + ((icon - builder.TextWidth(chars: label.Length, cellHeight: microCell)) * 0.5f)),

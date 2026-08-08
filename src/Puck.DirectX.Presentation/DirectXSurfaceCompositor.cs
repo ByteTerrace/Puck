@@ -8,7 +8,6 @@ using Puck.DirectX.Interop;
 using Puck.DirectX.Messages;
 using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -402,16 +401,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         if (m_blitLayoutToken.IsAllocated) {
             var layout = (DirectXPipelineLayout)m_blitLayoutToken.Target!;
 
-            if (0 != layout.PsoHandle) {
-                _ = ((IUnknown*)layout.PsoHandle)->Release();
-                layout.PsoHandle = 0;
-            }
-
-            if (0 != layout.RootSignatureHandle) {
-                _ = ((IUnknown*)layout.RootSignatureHandle)->Release();
-                layout.RootSignatureHandle = 0;
-            }
-
+            layout.Dispose();
             m_blitLayoutToken.Free();
         }
 
@@ -427,34 +417,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         }
     }
 
-    private static D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_CPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_CPU_DESCRIPTOR_HANDLE*, void>)vtable[GetCpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
-    private static D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_GPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
-    private static void Release(ref nint pointer) {
-        if (0 != pointer) {
-            _ = ((IUnknown*)pointer)->Release();
-            pointer = 0;
-        }
-    }
     // Whether this adapter/display supports variable-refresh tearing (needed before requesting an ALLOW_TEARING
     // swap chain for Immediate present). False when the factory predates IDXGIFactory5 or the feature is off.
     private static bool SupportsTearing(IDXGIFactory4* factory) {
@@ -727,33 +689,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             pStaticSamplers = &staticSampler,
         };
 
-        ID3DBlob* sigBlob = null;
-        ID3DBlob* errBlob = null;
-
-        try {
-            PInvoke.D3D12SerializeRootSignature(
-                Version: D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1,
-                pRootSignature: in rootSigDesc,
-                ppBlob: &sigBlob,
-                ppErrorBlob: &errBlob
-            ).ThrowIfFailed(operation: "D3D12SerializeRootSignature");
-
-            void* rootSig;
-            var rootSigIid = ID3D12RootSignature.IID_Guid;
-
-            device->CreateRootSignature(
-                0,
-                sigBlob->GetBufferPointer(),
-                sigBlob->GetBufferSize(),
-                in rootSigIid,
-                out rootSig
-            );
-
-            return (nint)rootSig;
-        } finally {
-            if (sigBlob is not null) { _ = sigBlob->Release(); }
-            if (errBlob is not null) { _ = errBlob->Release(); }
-        }
+        return DirectXRootSignatures.Create(device: device, description: in rootSigDesc);
     }
     private static nint CreateBlitPso(
         ID3D12Device* device,

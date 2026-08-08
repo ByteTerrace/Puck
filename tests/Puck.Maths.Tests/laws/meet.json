@@ -1,0 +1,186 @@
+[
+  {
+    "Id": "meet.associative",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "meet is associative on every shipped attenuation carrier — MeetMask64 (bitwise AND), MeetQuantity64 (minimum) and the product closed at mask times quantity — over full-width edge/random/frontier lane triples reinterpreted as raw bits, so a delegation chain folds to one envelope however it is bracketed; together with meet.commutative this is what makes the chain's fold order-free",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.attenuation-never-widens",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": ".ctor" },
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Bits" },
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": ".ctor" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Amount" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": ".ctor" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "First" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Second" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "THE SECURITY PROPERTY of the attenuation pipeline, both halves of the greatest-lower-bound statement: Meet(a, b) is at most a and at most b on every shipped carrier, so no attenuation step can widen authority; and any common lower bound of the operands is at most the meet, so attenuation discards nothing both operands allow — the values are constructed from raw lanes and read back through Bits/Amount/First/Second, so a constructor-to-property misroute is observable here too",
+        "Against": "order spellings independent of the subjects: the mask order is a per-bit shift-walk subset test that never forms the masked-complement expression MeetMask64.IsAtMost is written as, the quantity order is the ulong carrier's primitive numeric comparison, and the greatest-half witnesses are manufactured from raw lane arithmetic rather than by any subject member",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.bottom-absorbing",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Bottom" },
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Bottom" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Bottom" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Bottom absorbs the meet on both sides, on every shipped attenuation carrier, over full-width edge/random/frontier lanes: a revoked link — the empty mask, the zero quantity, the pair of both — collapses the whole delegation chain to nothing, whichever side it arrives on; a meet mutated toward union or maximum fails here even though it keeps idempotence, commutativity and associativity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.commutative",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "meet is commutative on every shipped attenuation carrier over full-width edge/random/frontier lane pairs: the two envelopes of a delegation step contribute symmetrically, so which side authored a restriction cannot change what survives the fold — the case a product meet that silently drops one operand's component fails first",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.idempotent",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "meet is idempotent on every shipped attenuation carrier over full-width edge/random/frontier lanes: an envelope folded with itself is bit-identically unchanged, so repeating a link in a delegation chain attenuates nothing further — a meet mutated toward any mixing operation (XOR, addition, averaging) fails here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.order-agrees-with-meet",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "IsAtMost" },
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "IsAtMost" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "IsAtMost" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the shipped order predicate decides exactly the meet's order on every carrier — a.IsAtMost(b) if and only if Meet(a, b) == a — over the sampled pair plus comparable pairs manufactured through the meet itself, so both truth values are exercised every sweep; both sides of the equivalence are subject members, and the external anchor is meet.attenuation-never-widens, which pins the meet against independently spelled orders, so this coherence transfers that pin onto IsAtMost",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.product-composes-componentwise",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": ".ctor" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "First" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Second" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Bottom" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Top" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "IsAtMost" },
+      { "Type": "Puck.Maths.IMeetSemilattice`1", "Name": "Bottom" },
+      { "Type": "Puck.Maths.IMeetSemilattice`1", "Name": "Top" },
+      { "Type": "Puck.Maths.IMeetSemilattice`1", "Name": "Meet" },
+      { "Type": "Puck.Maths.IMeetSemilattice`1", "Name": "IsAtMost" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the composition law — a product of meet-semilattices is a meet-semilattice, componentwise: the closed product's Meet, Top, Bottom and IsAtMost each project onto the component carriers' own operations (the order as the conjunction of component orders), and the construction stacks, a product nested inside a product projecting the same way one level up; every projection dispatches through IMeetSemilattice's static abstracts, so this is also where interface dispatch is pinned — component-carrier defects are NOT catchable here (they would appear on both sides) and stand at the other meet.* cases, which sweep the product carrier directly and so transfer the semilattice laws to composed envelopes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "meet.top-identity",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Top" },
+      { "Type": "Puck.Maths.MeetMask64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Top" },
+      { "Type": "Puck.Maths.MeetQuantity64", "Name": "Meet" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Top" },
+      { "Type": "Puck.Maths.MeetProduct`2", "Name": "Meet" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Top is a two-sided identity for the meet on every shipped attenuation carrier, over full-width edge/random/frontier lanes: an unrestricted link in a delegation chain attenuates nothing, so a chain's fold can start from Top without biasing the result — a meet mutated toward union or maximum fails here even though it keeps idempotence, commutativity and associativity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

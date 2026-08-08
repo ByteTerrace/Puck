@@ -1,0 +1,23 @@
+{
+  "skill_name": "gaming-bricks",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fix an SM83 STOP timing bug that appears only when an interrupt is already pending, without splitting behavior into separate GB and GBC CPU implementations.",
+      "expected_output": "Works in the shared Humble SM83 core with a ConsoleModel capability only if hardware requires it, preserves integer timing and pad-byte semantics, checks the documented SingleStepTests STOP oracle conflict, adds or updates a self-checking Humble Post stage, iterates with a focused filter, and runs the unfiltered Humble Release battery while reporting asset skips.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Implement the GBA multiplayer SIOCNT partner-ready status needed by a commercial link game.",
+      "expected_output": "Verifies the current AgbSerialController and LinkGameReplayStage limitation, derives SD/SI status from modeled cable-partner presence without ambient state, preserves replay and snapshot determinism, updates the commercial stage when the limitation changes, and runs the Advanced Tier A and Tier C paths plus the unfiltered Release battery.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A mooneye PPU timing ROM fails after changing the mode-0 interrupt delay by one dot. Diagnose and verify the correction.",
+      "expected_output": "Treats the mode transition, STAT visibility, interrupt, VRAM and OAM locks, LY comparison pulse, and fetcher order as a coupled contract; uses --stat-trace and --render only as diagnostics; checks the relevant acceptance stage; avoids tuning one constant in isolation; and finishes with the unfiltered Humble Release battery.",
+      "files": []
+    }
+  ]
+}

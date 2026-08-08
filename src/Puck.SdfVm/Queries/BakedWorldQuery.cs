@@ -4,13 +4,13 @@ namespace Puck.SdfVm.Queries;
 
 /// <summary>
 /// Pure fixed-point <see cref="IWorldQuery"/> over a baked <see cref="WorldQueryArtifact"/> — the query-namespace
-/// generalization of <c>Puck.Demo.Overworld.FixedWalkGrid</c> (adds the heightfield layer and the cast/overlap
-/// verbs the walk grid never needed; the blocked-bitmap semantics are the SAME "out of bounds reads as not
-/// blocked" contract). Every answer carries <see cref="WorldQueryConfidence.Bounded"/> — a baked artifact is
+/// generalization of a flat walk grid, adding the heightfield layer and the cast/overlap verbs a walk grid never
+/// needed, and keeping its "out of bounds reads as not blocked" blocked-bitmap
+/// contract. Every answer carries <see cref="WorldQueryConfidence.Bounded"/> — a baked artifact is
 /// resolution-quantized by construction, never sub-cell-exact. Assumes every position lies in a single
-/// <see cref="WorldCoord3"/> cell (cell 0,0,0 — true for anything room/arena scale); a caller spanning multiple
+/// <see cref="FixedPosition"/> cell (cell 0,0,0 — true for anything room/arena scale); a caller spanning multiple
 /// 2^20-unit cells must normalize positions into the SAME cell before querying (this provider reads only
-/// <c>.Local</c>, matching every other room-scale fixed-point consumer in the demo).
+/// <c>.Local</c>, matching every other room-scale fixed-point consumer).
 /// </summary>
 public sealed class BakedWorldQuery : IWorldQuery {
     private readonly WorldQueryArtifact m_artifact;
@@ -29,7 +29,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
     public QueryCapabilities Capabilities => new(HasBlocked: m_artifact.HasBlocked, HasHeightfield: m_artifact.HasHeightfield, HasOccupancy: false);
 
     /// <inheritdoc/>
-    public bool TryGroundHeight(WorldCoord3 position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
+    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
 
         if (!m_artifact.HasHeightfield || !TryCellIndex(x: position.Local.X, z: position.Local.Z, cellIndex: out var cellIndex)) {
@@ -56,7 +56,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
     }
 
     /// <inheritdoc/>
-    public bool Overlap(WorldCoord3 center, FixedQ4816 radius) {
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
         if (!m_artifact.HasBlocked) {
             return false;
         }
@@ -65,7 +65,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
     }
 
     /// <inheritdoc/>
-    public bool LineOfSight(WorldCoord3 from, WorldCoord3 to) {
+    public bool LineOfSight(FixedPosition from, FixedPosition to) {
         if (!m_artifact.HasBlocked) {
             return true;
         }
@@ -94,18 +94,18 @@ public sealed class BakedWorldQuery : IWorldQuery {
     }
 
     /// <inheritdoc/>
-    public bool Raycast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
+    public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
         March(origin: origin, dir: dir, maxDist: maxDist, radius: FixedQ4816.Zero, hit: out hit);
 
     /// <inheritdoc/>
-    public bool SphereCast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
+    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
         March(origin: origin, dir: dir, maxDist: maxDist, radius: radius, hit: out hit);
 
     // A single stepped march shared by Raycast (radius == 0) and SphereCast (radius > 0): steps in CELL-SIZE
     // increments along the normalized direction, testing the blocked bitmap (padded by radius for the sphere case)
     // and the heightfield (a sample below its cell's authored ground counts as a hit on the ground plane). Integer
     // step COUNT, fixed-point step math throughout — deterministic, no trig.
-    private bool March(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
+    private bool March(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
         hit = default;
 
         var direction = dir.Normalize();
@@ -129,7 +129,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
                     Distance: traveled,
                     Material: -1,
                     Normal: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero),
-                    Point: WorldCoord3.FromLocal(local: position)
+                    Point: FixedPosition.FromLocal(local: position)
                 );
 
                 return true;
@@ -205,8 +205,8 @@ public sealed class BakedWorldQuery : IWorldQuery {
             return false;
         }
 
-        var columnLong = FloorDiv(dividend: (x.Value - m_artifact.OriginXRaw), divisor: m_artifact.CellSizeRaw);
-        var rowLong = FloorDiv(dividend: (z.Value - m_artifact.OriginZRaw), divisor: m_artifact.CellSizeRaw);
+        var columnLong = (x.Value - m_artifact.OriginXRaw).FloorDivide(divisor: m_artifact.CellSizeRaw);
+        var rowLong = (z.Value - m_artifact.OriginZRaw).FloorDivide(divisor: m_artifact.CellSizeRaw);
 
         if ((columnLong < 0L) || (columnLong >= m_artifact.Width) || (rowLong < 0L) || (rowLong >= m_artifact.Height)) {
             return false;
@@ -216,11 +216,5 @@ public sealed class BakedWorldQuery : IWorldQuery {
         row = (int)rowLong;
 
         return true;
-    }
-    private static long FloorDiv(long dividend, long divisor) {
-        var quotient = (dividend / divisor);
-        var remainder = (dividend % divisor);
-
-        return (((remainder != 0L) && ((remainder < 0L) != (divisor < 0L))) ? (quotient - 1L) : quotient);
     }
 }

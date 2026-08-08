@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Puck.Maths;
 
 namespace Puck.Commands;
 
@@ -16,22 +17,34 @@ namespace Puck.Commands;
 /// sample each tick so route-style consumers receive the continuous value. Text is
 /// transient. Dispatch is <em>not</em> performed here — the
 /// router only produces the deterministic per-tick state; the consumer runs handlers from the snapshot.
-/// Pre-resolved commands (a console / STDIN line, a peer, an AI) enter through <see cref="Inject"/> and fold into
-/// the same lanes as captured signals, in one deterministic capture order — so command-line input is recorded and
-/// replayed by the same machinery, with no separate path.
+/// Pre-resolved commands (a console / STDIN line, a peer, an AI) enter through a
+/// <see cref="CommandInjectionSink"/> — one per producer, each bound to its own principal at construction — and fold
+/// into the same lanes as captured signals, in one deterministic capture order, so command-line input is recorded and
+/// replayed by the same machinery with no separate path.
+/// <para>THE MIXER IS ALSO THE PRINCIPAL DOOR. Every entry leaves this type carrying a
+/// <see cref="CommandPrincipal"/>: an injected entry keeps the one its sink was constructed with, and every captured
+/// entry is stamped from <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is
+/// never turned into a seat principal here — a claimed slot may be answering to a peer or a guest module, so only the
+/// host's roster can say who it is.</para>
 /// </remarks>
-public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
+public sealed class InputRouter {
     private readonly IInputBindings m_bindings;
     private readonly IChordEdgeSource? m_chordEdges;
     private readonly Lock m_captureGate = new();
     private readonly List<Captured> m_captured = [];
+    private readonly CommandInjectionSink m_consoleTextSink;
     // Simulation-thread scratch retained across ticks. Idle snapshots then allocate nothing; active snapshots allocate
     // only their immutable output. Capture remains independently protected by m_captureGate.
     private readonly List<Captured> m_due = [];
     private readonly IInputClock? m_clock;
     private readonly HashSet<HeldControl> m_heldControls = [];
     private readonly Dictionary<int, Dictionary<ushort, CommandEntry>> m_heldBySlot = [];
+    // A BindingEntryMode.Toggle latch, keyed by (slot, commandId) — the destination's flip state, independent of
+    // which physical control (or device) toggled it. Lives here, not in Puck.World.Server: the sim reads a plain
+    // held channel either way (see BindingEntryMode's remarks).
+    private readonly Dictionary<(int Slot, ushort CommandId), bool> m_toggleLatches = [];
     private readonly IInputSlotResolver? m_inputSlotResolver;
+    private readonly ICommandPrincipalResolver m_principalResolver;
     private readonly CommandRegistry m_registry;
     private readonly Func<InputDeviceId, int> m_slotResolver;
     private readonly Dictionary<int, List<CommandEntry>> m_workingBySlot = [];
@@ -47,45 +60,62 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
     /// <summary>Initializes a new instance of the <see cref="InputRouter"/> class.</summary>
     /// <param name="registry">The registry that interns command ids and gates by map.</param>
     /// <param name="bindings">The slot-aware binding resolver (per-player mappings layered over a default).</param>
+    /// <param name="principalResolver">Answers who is acting through a slot. Required: the mixer stamps every captured
+    /// entry from it and must never synthesize an identity of its own.</param>
     /// <param name="slotResolver">Maps a device to a logical player slot; defaults to a single local slot (<c>0</c>).</param>
     /// <param name="clock">The shared capture clock used to stamp an injected command that arrives without an explicit capture tick; optional.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="registry"/> or <paramref name="bindings"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="bindings"/>, or
+    /// <paramref name="principalResolver"/> is <see langword="null"/>.</exception>
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
+        ICommandPrincipalResolver principalResolver,
         Func<InputDeviceId, int>? slotResolver = null,
         IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(bindings);
+        ArgumentNullException.ThrowIfNull(principalResolver);
         ArgumentNullException.ThrowIfNull(registry);
 
         m_bindings = bindings;
         m_chordEdges = (bindings as IChordEdgeSource);
         m_clock = clock;
+        m_principalResolver = principalResolver;
         m_registry = registry;
         m_slotResolver = (slotResolver ?? (static _ => 0));
+        // The console text door, built once here so nothing outside can mint one bound to a principal of its choosing.
+        // Slot 0 is the local lane a console impulse rides; the Console principal is what makes it NOT that seat.
+        m_consoleTextSink = new CommandInjectionSink(router: this, principal: CommandPrincipal.Console, slot: 0);
     }
 
     /// <summary>Initializes an input router whose device-to-slot resolver supports side-effect-free probing followed by
     /// an explicit commit after a binding is accepted.</summary>
     /// <param name="registry">The registry that interns command ids and gates by map.</param>
     /// <param name="bindings">The slot-aware binding resolver.</param>
+    /// <param name="principalResolver">Answers who is acting through a slot.</param>
     /// <param name="slotResolver">The transactional device-to-slot resolver.</param>
     /// <param name="clock">The shared capture clock; optional.</param>
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
+        ICommandPrincipalResolver principalResolver,
         IInputSlotResolver slotResolver,
         IInputClock? clock = null
     ) : this(
         registry: registry,
         bindings: bindings,
+        principalResolver: principalResolver,
         slotResolver: (slotResolver ?? throw new ArgumentNullException(paramName: nameof(slotResolver))).ResolveSlot,
         clock: clock
     ) {
         m_inputSlotResolver = slotResolver;
         slotResolver.DeviceSlotChanging += ReleaseHeld;
     }
+
+    /// <summary>The console/STDIN text door's injection sink — the one a <see cref="CommandRegistry"/> is wired to
+    /// through <see cref="CommandRegistry.RouteSimulationTo"/>. Bound to <see cref="CommandPrincipal.Console"/> at
+    /// construction, so a submitted line acts as the console and cannot be made to act as anything else.</summary>
+    public CommandInjectionSink ConsoleTextSink => m_consoleTextSink;
 
     /// <summary>Appends a captured input signal. Thread-safe — backends call this from device I/O threads and the window pump.</summary>
     /// <param name="signal">The timestamped input signal to capture.</param>
@@ -116,16 +146,23 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
     }
 
     /// <summary>Queues one deterministic cancellation per carried logical command, then clears every carried digital
-    /// and analog value. Hosts call this on focus loss because platforms do not guarantee release events afterward.</summary>
+    /// and analog value, AND releases every slot's chord/modifier state (<see cref="IInputBindings.ResetAll"/>).
+    /// Hosts call this on focus loss because platforms do not guarantee release events afterward — a swallowed
+    /// modifier release is the same hazard as a swallowed command release, just invisible to <c>m_heldBySlot</c>
+    /// because a bare page modifier need not be bound to any command.</summary>
     public void ReleaseHeld() {
         var cancellations = new List<CommandInjection>();
 
         foreach (var (slot, held) in m_heldBySlot) {
             foreach (var entry in held.Values) {
+                // Unstamped on purpose: a synthesized release belongs to the SLOT that held the input, so the
+                // snapshot build resolves its principal like any other captured entry rather than freezing whoever
+                // was acting when the hold began.
                 cancellations.Add(item: new CommandInjection(
                     CommandId: entry.CommandId,
                     Value: CommandValue.Inactive(kind: entry.Value.Kind),
                     Phase: CommandPhase.Canceled,
+                    Principal: default,
                     Slot: slot
                 ));
             }
@@ -133,8 +170,74 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
 
         m_heldControls.Clear();
         m_heldBySlot.Clear();
+        m_toggleLatches.Clear();
+        m_bindings.ResetAll();
 
         QueueCancellations(cancellations: cancellations, discardCapturedSignals: true);
+    }
+
+    /// <summary>Clears ONE slot's held commands and <see cref="BindingEntryMode.Toggle"/> latches — the input-layer
+    /// half of a deliberate, full "stop": queues one deterministic cancellation per carried command (so a held
+    /// channel's handler actually RUNS its release, exactly as a physical release would — see
+    /// <see cref="CommandRegistry.ApplySnapshot"/>'s <c>Dispatch</c> gate), and drops every toggle latch the slot
+    /// carries so a later press starts fresh rather than reading as "already on".</summary>
+    /// <remarks>
+    /// Distinct from <see cref="ReleaseHeld()"/> (every slot, wired to OS focus loss) and the private per-DEVICE
+    /// overload (a disconnect): this is the per-SLOT seam a caller reaches for on a NAMED, deliberate stop — never
+    /// wired implicitly. Deliberately narrow: it does NOT touch <see cref="IInputBindings"/> chord/modifier state
+    /// (<see cref="PagedInputBindings.Reset(int)"/> is that seam, and no caller of THIS method needs it) and does
+    /// NOT discard already-captured signals for the slot (a signal in flight when the stop runs is not this
+    /// method's business to judge).
+    /// </remarks>
+    /// <param name="slot">The logical player slot to clear.</param>
+    /// <returns>The number of TOGGLE latches this slot carried in the ON state and cleared — 0 when the slot had
+    /// none latched. A caller with a user-facing "totality" echo (a panic verb) should fold this into its own
+    /// tally rather than let a toggled-on channel a stop clears go unaccounted for.</returns>
+    public int ClearSlotHeld(int slot) {
+        var latchKeysToRemove = new List<(int Slot, ushort CommandId)>();
+        var clearedLatches = 0;
+
+        foreach (var (key, isOn) in m_toggleLatches) {
+            if (key.Slot != slot) {
+                continue;
+            }
+
+            latchKeysToRemove.Add(item: key);
+
+            if (isOn) {
+                clearedLatches++;
+            }
+        }
+
+        foreach (var key in latchKeysToRemove) {
+            _ = m_toggleLatches.Remove(key: key);
+        }
+
+        _ = m_heldControls.RemoveWhere(match: control => (control.Slot == slot));
+
+        var cancellations = new List<CommandInjection>();
+
+        if (m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        )) {
+            foreach (var entry in held.Values) {
+                // Unstamped: same reasoning as ReleaseHeld's own cancellations — the slot owns the identity.
+                cancellations.Add(item: new CommandInjection(
+                    CommandId: entry.CommandId,
+                    Value: CommandValue.Inactive(kind: entry.Value.Kind),
+                    Phase: CommandPhase.Canceled,
+                    Principal: default,
+                    Slot: slot
+                ));
+            }
+
+            _ = m_heldBySlot.Remove(key: slot);
+        }
+
+        QueueCancellations(cancellations: cancellations, discardCapturedSignals: false);
+
+        return clearedLatches;
     }
 
     private void ReleaseHeld(InputDeviceId device) {
@@ -176,22 +279,24 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
 
             _ = held.Remove(key: affectedCommand.CommandId);
+            _ = m_toggleLatches.Remove(key: (affectedCommand.Slot, affectedCommand.CommandId));
 
             if (held.Count == 0) {
                 _ = m_heldBySlot.Remove(key: affectedCommand.Slot);
             }
 
+            // Unstamped: same reasoning as the focus-loss release above — the slot owns the identity, not the hold.
             cancellations.Add(item: new CommandInjection(
                 CommandId: affectedCommand.CommandId,
                 Value: CommandValue.Inactive(kind: entry.Value.Kind),
                 Phase: CommandPhase.Canceled,
+                Principal: default,
                 Slot: affectedCommand.Slot
             ));
         }
 
         QueueCancellations(cancellations: cancellations, discardCapturedSignals: false);
     }
-
     private void QueueCancellations(List<CommandInjection> cancellations, bool discardCapturedSignals) {
         if ((cancellations.Count == 0) && !discardCapturedSignals) {
             return;
@@ -223,8 +328,10 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         }
     }
 
-    /// <inheritdoc/>
-    public void Inject(in CommandInjection injection) {
+    // Queues one pre-resolved command. INTERNAL, and reachable only through a CommandInjectionSink: the injection's
+    // principal and lane are the sink's construction-time facts, so there is no signature here a caller could hand a
+    // principal of its own choosing to.
+    internal void Enqueue(in CommandInjection injection) {
         // An injection's effect mutates the simulation, so it must attribute to a fixed-step tick. An explicit
         // capture tick (a deterministic script / replay harness) is honored; otherwise the shared capture clock
         // stamps it now, exactly as a backend stamps a physical signal — making console input share one timeline
@@ -239,7 +346,12 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>Produces the snapshot for <paramref name="tick"/> from captured input.</summary>
+    /// <param name="tick">The fixed-step tick to produce input for.</param>
+    /// <param name="windowEndTick">
+    /// The engine-tick time at which this tick's window closes. Captured input whose
+    /// <see cref="InputSignal.CaptureTick"/> precedes it is consumed; later-stamped input waits for a future tick.
+    /// </param>
     public CommandSnapshot SnapshotForTick(ulong tick, ulong windowEndTick) {
         // Take this tick's due signals (CaptureTick before the window close), leaving later-stamped signals for
         // a future tick. Total order: capture time, then the unique capture sequence — deterministic for a given
@@ -275,6 +387,16 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             working.Sort(comparison: static (left, right) => left.CommandId.CompareTo(value: right.CommandId));
         }
 
+        // Scheduled edges (a Tapped row activator's deferred release — see IChordEdgeSource.DrainScheduledEdges)
+        // fold in BEFORE this tick's own due signals are processed, so anything scheduled DURING that processing
+        // below cannot be seen by this call — only by the NEXT tick's. That ordering alone is what makes the
+        // release land exactly one tick after its press with no clock or tick arithmetic involved.
+        if (m_chordEdges is not null) {
+            foreach (var (slot, edge) in m_chordEdges.DrainScheduledEdges()) {
+                ApplyChordEdge(workingBySlot: m_workingBySlot, slot: slot, device: default, edge: in edge);
+            }
+        }
+
         foreach (var captured in due) {
             if (captured.Signal is InputSignal signal) {
                 ApplySignal(workingBySlot: m_workingBySlot, signal: signal);
@@ -283,7 +405,7 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
         }
 
-        return Build(tick: tick, workingBySlot: m_workingBySlot);
+        return Build(tick: tick, workingBySlot: m_workingBySlot, principalResolver: m_principalResolver);
     }
 
     private List<Captured> DrainDue(ulong windowEndTick) {
@@ -319,12 +441,13 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         var working = WorkingFor(workingBySlot: workingBySlot, slot: injection.Slot);
 
         working.Add(item: new CommandEntry(
-            CommandId: injection.CommandId,
-            Device: default,
-            Dispatch: true,
-            Phase: injection.Phase,
-            Text: injection.Text,
-            Value: injection.Value
+            commandId: injection.CommandId,
+            device: default,
+            dispatch: true,
+            phase: injection.Phase,
+            principal: injection.Principal,
+            text: injection.Text,
+            value: injection.Value
         ) {
             CompletesTextSubmission = injection.CompletesTextSubmission,
         });
@@ -354,13 +477,14 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
 
         var assignedSlot = false;
         var acceptedBinding = false;
+        // A held-channel entry conventionally authors a PAIR of bindings on the same source (ActivateOn: null for
+        // the press/active edge, ActivateOn: Completed for the release edge — see BindingPageEntryDefinition), so
+        // one physical signal reaches a Toggle-mode command TWICE. The latch must flip exactly ONCE per signal —
+        // this remembers the flip's resolved phase per command id so the second binding reuses it instead of
+        // flipping again (which would net a silent no-op).
+        Dictionary<ushort, CommandPhase>? toggleFlipsThisSignal = null;
 
         foreach (var binding in bindings) {
-            // A binding answers exactly its chord unless it explicitly accepts incidental modifiers.
-            if (!binding.AnyModifiers && (binding.RequiredModifiers != signal.Modifiers)) {
-                continue;
-            }
-
             if (!m_registry.TryGetId(
                 name: binding.Command,
                 id: out var commandId
@@ -377,16 +501,47 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
                 acceptedBinding = true;
             }
 
-            var value = (binding.Value ?? signal.Value);
+            var value = ResolveValue(binding: in binding, signal: in signal);
             var working = WorkingFor(workingBySlot: workingBySlot, slot: slot);
-            var phase = signal.Phase;
-            var dispatch = ((binding.ActivateOn is { } required)
-                ? (signal.Phase == required)
-                : (signal.Phase is CommandPhase.Started or CommandPhase.Active));
-            var heldControl = new HeldControl(Slot: slot, Device: signal.DeviceId, Source: signal.Source, CommandId: commandId);
             var isDigital = (value.Kind == CommandValueKind.Digital);
+            var phase = signal.Phase;
+
+            // A Toggle-mode binding never reads the physical control's own phase directly: a press FLIPS the
+            // latch and the flip's direction becomes the effective phase every line below reasons about (Started
+            // when turning on, Completed when turning off); the physical release/active phases that would
+            // otherwise re-drive this logic are ignored outright — the latch, not the control, owns "held" now.
+            // Gated on the SIGNAL's own kind, not `isDigital` (the DESTINATION's resolved value kind): a channel
+            // destination's ChannelScale always resolves to Axis1D (see ResolveValue), even from a digital source,
+            // so `isDigital` alone would never see Toggle mode's primary case — a digital key toggling a channel.
+            if ((signal.Value.Kind == CommandValueKind.Digital) && (binding.Mode == BindingEntryMode.Toggle)) {
+                if (signal.Phase != CommandPhase.Started) {
+                    continue;
+                }
+
+                if (toggleFlipsThisSignal?.TryGetValue(key: commandId, value: out var memoized) ?? false) {
+                    phase = memoized;
+                } else {
+                    var latchKey = (slot, commandId);
+                    var turningOn = !m_toggleLatches.GetValueOrDefault(key: latchKey);
+
+                    m_toggleLatches[latchKey] = turningOn;
+                    phase = (turningOn ? CommandPhase.Started : CommandPhase.Completed);
+                    (toggleFlipsThisSignal ??= [])[commandId] = phase;
+                }
+            }
+
+            var dispatch = ((binding.ActivateOn is { } required)
+                ? (phase == required)
+                : (phase is CommandPhase.Started or CommandPhase.Active));
+            var heldControl = new HeldControl(Slot: slot, Device: signal.DeviceId, Source: signal.Source, CommandId: commandId);
             var wasCommandHeld = (isDigital && IsCommandHeld(slot: slot, commandId: commandId));
-            var active = ((signal.Phase is CommandPhase.Started or CommandPhase.Active) && value.IsActive && (signal.Text is null));
+            var active = ((phase is CommandPhase.Started or CommandPhase.Active) && value.IsActive && (signal.Text is null));
+
+            if ((binding.Mode == BindingEntryMode.Toggle) && !active) {
+                // The toggle-off transition: the flip already decided this is a release, independent of the live
+                // signal's own value (a toggle-off arrives ON a fresh PRESS, so signal.Value still reads active).
+                value = CommandValue.Inactive(kind: value.Kind);
+            }
 
             if (isDigital) {
                 if (active) {
@@ -410,12 +565,13 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
 
             var entry = new CommandEntry(
-                CommandId: commandId,
-                Device: signal.DeviceId,
-                Dispatch: dispatch,
-                Phase: phase,
-                Value: value,
-                AssignedSlot: assignedSlot
+                commandId: commandId,
+                device: signal.DeviceId,
+                dispatch: dispatch,
+                phase: phase,
+                source: signal.Source,
+                value: value,
+                assignedSlot: assignedSlot
             );
 
             working.Add(item: entry);
@@ -444,6 +600,43 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
         }
     }
+    // The dispatched value for one bound signal: an ordinary binding's Value is an UNCONDITIONAL override (or null,
+    // meaning pass the signal through verbatim) — untouched here. A channel destination's ChannelScale is instead
+    // applied by the signal's OWN value kind, never guessed from nullability (the B2 fix): a digital source (a key)
+    // has no magnitude, so the declared scale IS the whole contribution; an analog (Axis1D) source's contribution is
+    // its own sample TIMES the scale, via FixedQ4816's multiply (nearest, ties to even) — never the scale replacing
+    // the sample. Any other live kind bound to a channel (no current binding does this) falls back to the constant,
+    // matching the pre-fix behavior rather than inventing an untested multiply shape.
+    private static CommandValue ResolveValue(in CommandBinding binding, in InputSignal signal) {
+        if (binding.ChannelScale is not { } channelScale) {
+            return (binding.Value ?? signal.Value);
+        }
+
+        if (binding.Component is { } component) {
+            // An axis-component source decomposes an Axis2D sample into one scalar component BEFORE the exact same
+            // scale multiply the Axis1D branch below applies — the live stick magnitude feeds the channel instead
+            // of falling back to the constant scale (the gap a bare Axis2D source hits).
+            if (signal.Value.Kind != CommandValueKind.Axis2D) {
+                return CommandValue.Axis(value: channelScale);
+            }
+
+            var axis2 = signal.Value.AsAxis2D;
+            var componentSample = ((component == AxisComponent.X) ? axis2.X : axis2.Y);
+            var componentFixed = FixedQ4816.FromDouble(value: componentSample);
+            var componentScale = FixedQ4816.FromDouble(value: channelScale);
+
+            return CommandValue.Axis(value: (float)(double)(componentFixed * componentScale));
+        }
+
+        if (signal.Value.Kind != CommandValueKind.Axis1D) {
+            return CommandValue.Axis(value: channelScale);
+        }
+
+        var sample = FixedQ4816.FromDouble(value: signal.Value.AsAxis1D);
+        var scale = FixedQ4816.FromDouble(value: channelScale);
+
+        return CommandValue.Axis(value: (float)(double)(sample * scale));
+    }
     // Folds one synthesized chord-command edge into the slot's lane. The press carries held bookkeeping (so
     // IsCommandHeld lights and focus-loss cancellation covers a chord-held command); the release clears it. The
     // command-availability gate matches the bound path — an inactive-map command's chord is inert, not an error.
@@ -456,20 +649,27 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         }
 
         var entry = new CommandEntry(
-            CommandId: commandId,
-            Device: device,
-            Dispatch: edge.Dispatch,
-            Phase: edge.Phase,
-            Value: edge.Value
+            commandId: commandId,
+            device: device,
+            dispatch: edge.Dispatch,
+            phase: edge.Phase,
+            value: edge.Value
         );
 
         WorkingFor(workingBySlot: workingBySlot, slot: slot).Add(item: entry);
 
+        // A MOMENTARY press (a Tapped activator's completion — see BindingChordEdge.Momentary) touches neither
+        // branch below: it must not be marked held (there is nothing sustaining it — its own release is already
+        // scheduled one tick later), and it must not run the release-side removal either (it never marked
+        // anything to remove, and nothing else's held entry should be disturbed by an edge that isn't a real
+        // Completed transition).
         if (edge.Phase == CommandPhase.Started) {
-            HeldFor(slot: slot)[commandId] = (entry with {
-                Dispatch = false,
-                Phase = CommandPhase.Active,
-            });
+            if (!edge.Momentary) {
+                HeldFor(slot: slot)[commandId] = (entry with {
+                    Dispatch = false,
+                    Phase = CommandPhase.Active,
+                });
+            }
         } else if (m_heldBySlot.TryGetValue(
             key: slot,
             value: out var held
@@ -481,7 +681,7 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
         }
     }
-    private static CommandSnapshot Build(ulong tick, Dictionary<int, List<CommandEntry>> workingBySlot) {
+    private static CommandSnapshot Build(ulong tick, Dictionary<int, List<CommandEntry>> workingBySlot, ICommandPrincipalResolver principalResolver) {
         if (workingBySlot.Count == 0) {
             return CommandSnapshot.Empty(tick: tick);
         }
@@ -506,21 +706,29 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
             }
 
             var entries = ImmutableArray.CreateBuilder<CommandEntry>(initialCapacity: working.Count);
+            // THE STAMP. Ask the host who is acting through this lane — once per lane, because the answer is a
+            // property of the slot, not of the entry. A slot may be claimed by a peer or a guest module, so the slot
+            // number is never turned into a seat here.
+            var lanePrincipal = principalResolver.PrincipalOf(slot: slot);
 
             // Entry order is semantic: held state is emitted first in command-id order, then due signals/injections in
             // their deterministic capture order. In particular, repeated console verbs in one host frame must remain
             // repeated and FIFO — collapsing by command id would silently drop scripted tape segments.
             foreach (var entry in working) {
-                entries.Add(item: entry);
+                // An injected entry already carries the identity its sink was BOUND to (the console door rides slot 0
+                // without becoming that seat); everything captured is stamped from the lane.
+                entries.Add(item: (entry.Principal.IsStamped
+                    ? entry
+                    : (entry with { Principal = lanePrincipal, })));
             }
 
-            lanes.Add(item: new CommandLane(Entries: entries.DrainToImmutable(), Slot: slot));
+            lanes.Add(item: new CommandLane(entries: entries.DrainToImmutable(), slot: slot));
         }
 
         // Order lanes by slot for a deterministic snapshot layout.
         lanes.Sort(comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
 
-        return new CommandSnapshot(Lanes: lanes.DrainToImmutable(), Tick: tick);
+        return new CommandSnapshot(lanes: lanes.DrainToImmutable(), tick: tick);
     }
     private static List<CommandEntry> WorkingFor(Dictionary<int, List<CommandEntry>> workingBySlot, int slot) {
         if (!workingBySlot.TryGetValue(

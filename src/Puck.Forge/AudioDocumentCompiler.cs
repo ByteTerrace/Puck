@@ -1,4 +1,4 @@
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.Forge.Framework;
 
 namespace Puck.Forge;
@@ -27,13 +27,13 @@ public static class AudioDocumentCompiler {
     /// step's registers with no new trigger — realized as a rest with the prior duty/envelope so the DAC stays as it
     /// was; "OFF" silences the voice), and the stream ends with the terminator byte the driver rewinds its loop on.
     /// </summary>
-    /// <param name="document">The normalized document (see <see cref="AudioDocumentStore.Load"/>).</param>
+    /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <returns>The music-loop stream bytes, <see cref="SoundTables.MusicLoopTableName"/>'s exact grammar.</returns>
     public static byte[] CompileMusicLoop(AudioDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
         var stream = new List<byte>();
-        var patterns = (document.Patterns ?? throw new ArgumentException(message: "The document has no patterns (was it normalized by AudioDocumentStore.Load?).", paramName: nameof(document)));
+        var patterns = (document.Patterns ?? throw new ArgumentException(message: "The document has no patterns (was it normalized by AudioCanonicalizer.Normalize?).", paramName: nameof(document)));
         var order = (document.Order ?? throw new ArgumentException(message: "The document has no play order (was it normalized?).", paramName: nameof(document)));
         var frames = (byte)Math.Clamp(value: (document.Tempo ?? AudioDocument.DefaultTempo), max: 255, min: 1);
         var lastDuty = DutyBits[2];
@@ -52,7 +52,7 @@ public static class AudioDocumentCompiler {
 
     /// <summary>Compiles a named effect's rows into a pulse-1 or noise stream (its <see cref="AudioEffectDocument.Voice"/>
     /// selects the register layout), terminated with the effect terminator (mutes the channel).</summary>
-    /// <param name="effect">The normalized effect (see <see cref="AudioDocumentStore.Load"/>).</param>
+    /// <param name="effect">The normalized effect (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <param name="frames">Frames per row (the document's <see cref="AudioDocument.Tempo"/>).</param>
     /// <returns>The effect stream bytes.</returns>
     public static byte[] CompileEffect(AudioEffectDocument effect, int frames) {

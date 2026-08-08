@@ -1,0 +1,776 @@
+{
+  "description": "The world\u0027s locomotion kits \u2014 one row per way of moving (see WorldKit); the Assignment policy distributes entities across the rows.",
+  "type": "array",
+  "items": {
+    "description": "One locomotion kit \u2014 a world-definition row naming a way of moving: the body motion program it runs under, the motion model its bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a row of this data, never an engine enum; the census echo prints these names.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The kit\u0027s kebab-case name (the census echo token).",
+        "type": "string"
+      },
+      "bodyMotionProgram": {
+        "description": "The name of the body motion program the kit\u0027s bodies execute.",
+        "type": "string"
+      },
+      "motion": {
+        "description": "The locomotion model the kit\u0027s bodies compile (a seat\u0027s profile speeds still override its speed fields) \u2014 see WorldMotionModel.",
+        "type": "object",
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "Contact-solved locomotion: vertical velocity integrates gravity and is resolved against the world contact field, planar velocity is response-shaped toward the commanded target, and sprint/frame/facing read as described below \u2014 the ops family WorldBody\u0027s grounded operations (ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, ShapePlanarVelocity, SnapYawToPlanarIntent, ApplyVerticalGravity) read. The world\u0027s free body motion program (full 6DOF, no ground pin) also authors this arm today: its ops read only MoveSpeed/TurnSpeed/RiseGravity (as a symmetric bleed rate, via ApplyVerticalDecay) \u2014 a strict subset \u2014 so Grounded is a superset every existing op family can be validated against; the fields a program\u0027s ops don\u0027t touch stay authored-but-inert for that kit, same as before this seam existed.",
+            "properties": {
+              "$type": {
+                "const": "grounded"
+              },
+              "moveSpeed": {
+                "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+                "type": "number"
+              },
+              "turnSpeed": {
+                "description": "Turn speed in radians per second (the profileless fallback counterpart to MoveSpeed).",
+                "type": "number"
+              },
+              "riseGravity": {
+                "description": "The downward acceleration while rising (u/s\u00B2) \u2014 the floaty top of the arc.",
+                "type": "number"
+              },
+              "fallGravity": {
+                "description": "The downward acceleration while falling (u/s\u00B2) \u2014 the snappy descent (heavier than the rise).",
+                "type": "number"
+              },
+              "maxFallSpeed": {
+                "description": "The terminal fall speed the descent is clamped to (u/s).",
+                "type": "number"
+              },
+              "response": {
+                "description": "The velocity-response table (see MotionResponse) \u2014 SIM-AFFECTING. The empty table snaps planar velocity instantly.",
+                "type": "array",
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                }
+              },
+              "sprintMultiplier": {
+                "description": "The held-sprint speed multiplier, applied while SprintChannel reads held; 1 is a no-op.",
+                "type": "number"
+              },
+              "sprintChannel": {
+                "description": "The declared channel name a body reads HELD (not edge-triggered \u2014 a continuous multiplier, unlike the press/release ActionSpec vocabulary) to apply SprintMultiplier, or null (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside every other kit-channel name, by Compile \u2014 an unresolvable name (validator-refused already) reads as \u0022no sprint\u0022 rather than throwing.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "moveFrame": {
+                "description": "Which frame MoveForward/MoveStrafe resolve in. Heading (the default, the world\u0027s historical tank controls) rotates the commanded planar target by the body\u0027s OWN integrated heading. World takes the two channels as ALREADY-WORLD-FRAME axes \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
+                "enum": [
+                  "Heading",
+                  "World"
+                ],
+                "default": "Heading"
+              },
+              "facingSnap": {
+                "description": "Under World only: whether the body\u0027s facing SNAPS to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather than holding its heading. Ignored under Heading, where facing IS the integrated heading by construction. false is the default (tank facing).",
+                "type": "boolean",
+                "default": false
+              },
+              "moveSpeedEnvelope": {
+                "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "min": {
+                    "description": "The least admitted value (inclusive).",
+                    "type": "number"
+                  },
+                  "max": {
+                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "declaredSprintChannel": {
+                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "declaredMoveFrame": {
+                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+              }
+            },
+            "required": [
+              "moveSpeed",
+              "turnSpeed",
+              "riseGravity",
+              "fallGravity",
+              "maxFallSpeed",
+              "response",
+              "sprintMultiplier"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "Anisotropic body-frame locomotion \u2014 the racing-vehicle arm the ResolveVehicleFrame/ ShapeVehicleVelocity operations read. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its own authored rate \u2014 what separates a vehicle from Grounded, whose isotropic planar shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with reversing travel. One row serves the ground, hover, and air variants: a contact-pinned variant pairs this arm with a program keeping ApplyVerticalGravity (grounded-style vertical ownership and ramp ballistics), a flying variant pairs it with ApplyVerticalDecay and a positive PitchRate so climb emerges from the pitched facing.",
+            "properties": {
+              "$type": {
+                "const": "vehicle"
+              },
+              "topSpeed": {
+                "description": "The forward speed (u/s) full throttle converges on.",
+                "type": "number"
+              },
+              "reverseTopSpeed": {
+                "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
+                "type": "number"
+              },
+              "accel": {
+                "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
+                "type": "number"
+              },
+              "brake": {
+                "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
+                "type": "number"
+              },
+              "coastDrag": {
+                "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
+                "type": "number"
+              },
+              "grip": {
+                "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
+                "type": "number"
+              },
+              "steerRate": {
+                "description": "The yaw rate (rad/s) at full steering authority.",
+                "type": "number"
+              },
+              "steerReferenceSpeed": {
+                "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
+                "type": "number"
+              },
+              "steerFalloff": {
+                "description": "The fraction of full steering authority remaining at TopSpeed, in [0, 1]; authority falls linearly from the reference speed.",
+                "type": "number"
+              },
+              "pitchRate": {
+                "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
+                "type": "number"
+              },
+              "riseGravity": {
+                "description": "The upward-motion gravity (u/s\u00B2) \u2014 the contact-pinned variant\u0027s arc top, and the flying variant\u0027s vertical-impulse bleed rate (via ApplyVerticalDecay).",
+                "type": "number"
+              },
+              "fallGravity": {
+                "description": "The falling gravity (u/s\u00B2) under ApplyVerticalGravity.",
+                "type": "number"
+              },
+              "maxFallSpeed": {
+                "description": "The terminal fall speed (u/s) under ApplyVerticalGravity.",
+                "type": "number"
+              },
+              "driftGrip": {
+                "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while DriftChannel reads held \u2014 the deliberate low-traction state. Required positive when a drift channel is declared; ignored without one.",
+                "type": "number",
+                "default": 0
+              },
+              "driftSteerScale": {
+                "description": "The steering-authority multiplier while drifting (the tightened drift arc).",
+                "type": "number",
+                "default": 1
+              },
+              "boostMultiplier": {
+                "description": "The TopSpeed multiplier while BoostChannel reads held; 1 is a no-op. The timed item boost is planarImpulse, not this.",
+                "type": "number",
+                "default": 1
+              },
+              "driftChannel": {
+                "description": "The declared channel name read HELD to drift, or null for a kit that cannot drift. Resolved to an ordinal once by Compile.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "boostChannel": {
+                "description": "The declared channel name read HELD to boost, or null for a kit with no held boost. Resolved through the same held-channel seam as SprintChannel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "topSpeedEnvelope": {
+                "description": "The racing-integrity clamp: the inclusive bound the resolved base TopSpeed is pinned to at resolve time \u2014 a live world.row.set kits retune (deliberately admitted even PAST the bound; WorldDefinitionValidator checks only the envelope\u0027s own shape, never that TopSpeed already sits inside it \u2014 the clamp exists precisely to catch a retune the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any future per-seat vehicle stat resolve, both pass through it, or null (the default) for no bound. BoostMultiplier multiplies AFTER this clamp, never before \u2014 the envelope pins the base top speed, boost rides on top, the SAME sprint-after-clamp precedent MoveSpeedEnvelope established for the grounded arm. The vehicle arm\u0027s resolve deliberately never reads a seated profile\u0027s speed (a kart\u0027s speed is the kit\u0027s), so this is the ONLY seat-time clamp the vehicle arm has \u2014 unlike the grounded arm\u0027s envelope, which bounds a FALLBACK a separate live profile read can diverge from, so grounded\u0027s own baseline IS still required to sit inside its own bound. See MotionScalarEnvelope.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "min": {
+                    "description": "The least admitted value (inclusive).",
+                    "type": "number"
+                  },
+                  "max": {
+                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "declaredSprintChannel": {
+                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "declaredMoveFrame": {
+                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+              }
+            },
+            "required": [
+              "topSpeed",
+              "reverseTopSpeed",
+              "accel",
+              "brake",
+              "coastDrag",
+              "grip",
+              "steerRate",
+              "steerReferenceSpeed",
+              "steerFalloff",
+              "pitchRate",
+              "riseGravity",
+              "fallGravity",
+              "maxFallSpeed"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "Submerged locomotion in the world\u0027s standing-water medium (the water section, which a kit declaring this arm REQUIRES): 3D thrust in the body\u0027s yaw frame with an explicit vertical channel, planar velocity converged through the response table (thrust against water drag \u2014 the engage rate is thrust authority, the release rate is the drag coast), and ONE vertical channel owned end to end by the surface stage \u2014 the medium\u0027s own drift/settle folded into the commanded thrust target before that same response-row convergence runs, so nothing else writes vertical velocity independently. The ops family: ResolveYawAttitudeAndPlanarFrame, ComputeSwimTargetVelocity, ShapePlanarVelocity, ApplyBuoyancyAndSurface, IntegratePlanarAndVerticalVelocity. The body\u0027s attitude stays a pure yaw rotation. Aim-directed diving is the SEAT\u0027s composition, and ONLY under World (MoveFrame): the rendered camera\u0027s elevation splits the COMMANDED FORWARD into planar and vertical channels client-side (the same determinism seam MoveFrame documents), never a camera pose entering the sim. The explicit MoveUp channel this splits INTO is orthogonal to that composition and stays live regardless of MoveFrame \u2014 a body dives on raw MoveUp input alone with no aim-composed seat at all.",
+            "properties": {
+              "$type": {
+                "const": "swim"
+              },
+              "thrustSpeed": {
+                "description": "Peak swim speed in world units per second \u2014 the profileless fallback (a seated player reads its live profile\u0027s move speed instead, exactly as MoveSpeed does).",
+                "type": "number"
+              },
+              "turnSpeed": {
+                "description": "Turn speed in radians per second (the profileless fallback counterpart).",
+                "type": "number"
+              },
+              "verticalThrustFraction": {
+                "description": "The fraction of ThrustSpeed the vertical channel commands \u2014 swimmers climb and dive slower than they cruise. 1 is fully isotropic thrust.",
+                "type": "number"
+              },
+              "response": {
+                "description": "The velocity-response table (see MotionResponse) \u2014 SIM-AFFECTING, read for BOTH the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row.",
+                "type": "array",
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                }
+              },
+              "buoyancy": {
+                "description": "The medium\u0027s idle vertical DRIFT VELOCITY (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
+                "type": "number"
+              },
+              "maxRiseSpeed": {
+                "description": "The terminal ascent speed (u/s) the vertical channel is clamped to.",
+                "type": "number"
+              },
+              "maxSinkSpeed": {
+                "description": "The terminal descent speed (u/s) the vertical channel is clamped to.",
+                "type": "number"
+              },
+              "surfaceSettleRate": {
+                "description": "The proportional settle GAIN (1/s) toward the float line, applied inside the bob band and above it (breach recovery): the medium\u0027s target velocity there is the displacement from the line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.",
+                "type": "number"
+              },
+              "floatDepth": {
+                "description": "How far below the waterline (world units) the body ORIGIN rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in IS the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body ON THE FLOOR instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
+                "type": "number"
+              },
+              "sprintMultiplier": {
+                "description": "The held-burst speed multiplier applied while SprintChannel reads held; 1 is a no-op. Scales the whole thrust vector, vertical included.",
+                "type": "number"
+              },
+              "sprintChannel": {
+                "description": "The declared channel name read HELD for the burst, or null (the default) for a kit with no burst \u2014 the same resolution path SprintChannel documents.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "moveFrame": {
+                "description": "Which frame MoveForward/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
+                "enum": [
+                  "Heading",
+                  "World"
+                ],
+                "default": "Heading"
+              },
+              "facingSnap": {
+                "description": "Under World only: snap facing to the commanded planar direction each tick carrying input, as FacingSnap documents.",
+                "type": "boolean",
+                "default": false
+              },
+              "thrustSpeedEnvelope": {
+                "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "min": {
+                    "description": "The least admitted value (inclusive).",
+                    "type": "number"
+                  },
+                  "max": {
+                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "declaredSprintChannel": {
+                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "declaredMoveFrame": {
+                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+              }
+            },
+            "required": [
+              "thrustSpeed",
+              "turnSpeed",
+              "verticalThrustFraction",
+              "response",
+              "buoyancy",
+              "maxRiseSpeed",
+              "maxSinkSpeed",
+              "surfaceSettleRate",
+              "floatDepth",
+              "sprintMultiplier"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "producers": {
+        "description": "Producer parameter maps keyed by authored producer-program name.",
+        "type": "object",
+        "additionalProperties": {
+          "description": "One kit\u0027s named arguments for an authored producer program.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "scalars": {
+              "description": "Fixed-point scalar arguments keyed by instruction-defined name.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "channels": {
+              "description": "Authored channel arguments keyed by instruction-defined name.",
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": [
+            "scalars",
+            "channels"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "actions": {
+        "description": "The kit\u0027s composition bindings, keyed by declared CHANNEL NAME (validated against the world\u0027s channel table \u2014 a kit naming an undeclared channel is a dead name; a declared composition channel with no entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal.",
+        "type": "object",
+        "additionalProperties": {
+          "description": "A lane\u0027s full binding: the press trigger and the release trigger. What a channel DOES is this data \u2014 the engine implements only the facts, predicates, and effects.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "onPress": {
+              "description": "The rising-edge trigger, or null.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "gate": {
+                  "$ref": "./common.schema.json#/$defs/ActionPredicate3"
+                },
+                "latchSeconds": {
+                  "description": "How long a press stays pending waiting for the gate. 0 means THIS TICK ONLY \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise \u2014 which is what this field always documented and, until the latch arithmetic was corrected, never did (a zero latch made the press unreachable, since the fire condition demanded a strictly positive latch). Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is REFUSED by name at validation rather than parsed and discarded.",
+                  "type": "number"
+                },
+                "effects": {
+                  "$ref": "./common.schema.json#/$defs/ActionEffectList"
+                }
+              },
+              "required": [
+                "gate",
+                "latchSeconds",
+                "effects"
+              ],
+              "additionalProperties": false
+            },
+            "onRelease": {
+              "description": "The falling-edge trigger (evaluated immediately, never latched), or null.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "gate": {
+                  "$ref": "./common.schema.json#/$defs/ActionPredicate3"
+                },
+                "latchSeconds": {
+                  "description": "How long a press stays pending waiting for the gate. 0 means THIS TICK ONLY \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise \u2014 which is what this field always documented and, until the latch arithmetic was corrected, never did (a zero latch made the press unreachable, since the fire condition demanded a strictly positive latch). Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is REFUSED by name at validation rather than parsed and discarded.",
+                  "type": "number"
+                },
+                "effects": {
+                  "$ref": "./common.schema.json#/$defs/ActionEffectList"
+                }
+              },
+              "required": [
+                "gate",
+                "latchSeconds",
+                "effects"
+              ],
+              "additionalProperties": false
+            },
+            "state": {
+              "description": "Named persistent state declarations used by this action and shared by matching names across the kit.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "Declares one named persistent state slot shared by the kit\u0027s actions.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "name": {
+                    "description": "The stable slot name predicates and effects reference.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "Whether the slot stores a counter or a remaining timer.",
+                    "enum": [
+                      "Counter",
+                      "Timer"
+                    ]
+                  },
+                  "initial": {
+                    "description": "The initial counter value or timer duration in seconds.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "resetFact": {
+                    "description": "An optional body fact that resets the slot to Initial while it holds.",
+                    "enum": [
+                      "Grounded",
+                      "Airborne",
+                      "Rising",
+                      "Falling",
+                      "AffectedBy",
+                      "Submerged",
+                      "AtSurface",
+                      null
+                    ],
+                    "default": null
+                  },
+                  "lifetime": {
+                    "description": "Where the slot survives.",
+                    "enum": [
+                      "Ephemeral",
+                      "Durable"
+                    ],
+                    "default": "Ephemeral"
+                  },
+                  "playerWritable": {
+                    "description": "Whether the identity driving the body may submit a value for the slot.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "envelope": {
+                    "description": "The visited world\u0027s admitted effective values. Required for a player-writable slot.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "required": [
+                      "$type"
+                    ],
+                    "anyOf": [
+                      {
+                        "description": "An inclusive numeric interval.",
+                        "properties": {
+                          "$type": {
+                            "const": "range"
+                          },
+                          "minimum": {
+                            "description": "The least admitted value.",
+                            "type": "number"
+                          },
+                          "maximum": {
+                            "description": "The greatest admitted value.",
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "minimum",
+                          "maximum"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "description": "A closed numeric set. Values are authored labels encoded in the slot\u0027s deterministic numeric domain.",
+                        "properties": {
+                          "$type": {
+                            "const": "set"
+                          },
+                          "values": {
+                            "description": "The admitted values.",
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "required": [
+                          "values"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "default": null
+            },
+            "onFact": {
+              "description": "Engine-fact-triggered effect lists evaluated independently of channel edges.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "An authored effect list fired by one engine fact pulse \u2014 gated and edged by the SAME ActionTriggerMode vocabulary a world rule uses.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "fact": {
+                    "description": "The fact that fires the rule.",
+                    "enum": [
+                      "Grounded",
+                      "Airborne",
+                      "Rising",
+                      "Falling",
+                      "AffectedBy",
+                      "Submerged",
+                      "AtSurface"
+                    ]
+                  },
+                  "effects": {
+                    "description": "The effects applied in order.",
+                    "type": "array",
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/ActionEffect"
+                    }
+                  },
+                  "gate": {
+                    "description": "An additional predicate that must hold beside Fact, or null for none. Before this existed a fact trigger was ungated \u2014 the only trigger channel in the engine that could not narrow, which forced authors to spend a whole extra action lane on a condition.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "required": [
+                      "$type"
+                    ],
+                    "anyOf": [
+                      {
+                        "$ref": "./common.schema.json#/$defs/Now"
+                      },
+                      {
+                        "$ref": "./common.schema.json#/$defs/Recently"
+                      },
+                      {
+                        "$ref": "./common.schema.json#/$defs/CompareState"
+                      },
+                      {
+                        "$ref": "./common.schema.json#/$defs/TimerElapsed"
+                      },
+                      {
+                        "$ref": "./common.schema.json#/$defs/All2"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "mode": {
+                    "description": "Whether the trigger fires every tick the condition holds (Level, the historical behaviour and the default) or once per crossing (Edge). The condition is Fact AND Gate together \u2014 an edge trigger re-arms only when that conjunction stops holding.",
+                    "enum": [
+                      "Level",
+                      "Edge"
+                    ],
+                    "default": "Level"
+                  }
+                },
+                "required": [
+                  "fact",
+                  "effects"
+                ],
+                "additionalProperties": false
+              },
+              "default": null
+            }
+          },
+          "required": [
+            "onPress",
+            "onRelease"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "collider": {
+        "description": "The kit\u0027s body volume solved against the world contact field, or null for a kit with no volume (never solved against the field). Omitted from the wire when null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "A sphere resting on the body root.",
+            "properties": {
+              "$type": {
+                "const": "sphere"
+              },
+              "radius": {
+                "description": "The sphere radius.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "radius"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A capsule whose lower sphere rests on the body root.",
+            "properties": {
+              "$type": {
+                "const": "capsule"
+              },
+              "endpoint": {
+                "description": "The body-local vector from the lower sphere center to the upper sphere center."
+              },
+              "radius": {
+                "description": "The capsule radius.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "endpoint",
+              "radius"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "An oriented box resting on the body root before its local rotation is applied.",
+            "properties": {
+              "$type": {
+                "const": "box"
+              },
+              "halfExtents": {
+                "description": "The positive half-extents."
+              },
+              "rotation": {
+                "description": "The body-local orientation.",
+                "type": "object",
+                "properties": {
+                  "isIdentity": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "halfExtents",
+              "rotation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "The finite primitive bounds emitted by a creation, composed into one compound body collider.",
+            "properties": {
+              "$type": {
+                "const": "fromCreation"
+              },
+              "creationId": {
+                "description": "The referenced Id.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "creationId"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "bodyMotionProgram",
+      "motion",
+      "producers",
+      "actions"
+    ],
+    "additionalProperties": false
+  }
+}

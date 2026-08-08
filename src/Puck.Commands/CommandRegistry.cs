@@ -9,29 +9,36 @@ namespace Puck.Commands;
 /// commands are driven, queried, and gated.
 /// </summary>
 /// <remarks>
-/// The registry exposes four cooperating facets over the same set of definitions:
+/// The registry exposes three cooperating facets over the same set of definitions:
 /// <list type="bullet">
-/// <item><description><b>Sources.</b> Producers registered with <see cref="AddSource"/> are pulled each frame by <see cref="Collect"/>, pushing per-frame <see cref="CommandSignal"/>s that are gated by the active command maps.</description></item>
-/// <item><description><b>Text.</b> <see cref="Submit"/> parses a line and runs the matching handler. This path performs no I/O and is never gated by command maps.</description></item>
-/// <item><description><b>Polling.</b> <see cref="GetValue"/> returns the current frame's value for a command, for continuous consumers.</description></item>
-/// <item><description><b>Maps.</b> <see cref="ActivateMap"/> and <see cref="DeactivateMap"/> control modality; only commands in an active map accept pushed signals.</description></item>
+/// <item><description><b>Snapshots.</b> <see cref="ApplySnapshot"/> dispatches one fixed-step tick's entries, gated by the active command maps. The <see cref="InputRouter"/>'s mixer is the only producer of those snapshots, and every entry it produces carries a door-stamped <see cref="CommandPrincipal"/>.</description></item>
+/// <item><description><b>Text.</b> <see cref="Submit"/> parses a line and runs the matching handler as <see cref="CommandPrincipal.Console"/>. This path performs no I/O and is never gated by command maps.</description></item>
+/// <item><description><b>Maps.</b> <see cref="ActivateMap"/> and <see cref="DeactivateMap"/> control modality; only commands in an active map dispatch from a snapshot.</description></item>
 /// </list>
-/// A typical frame calls <see cref="BeginFrame"/> to clear the previous frame's values, then
-/// <see cref="Collect"/> to pull every registered source.
+/// There is no fourth door: dispatch requires a <see cref="CommandContext"/>, which only this type and the mixer can
+/// build, and <see cref="Definitions"/> hands out <see cref="CommandMetadata"/> rather than an invocable handler.
 /// </remarks>
-public sealed class CommandRegistry : ICommandSink {
+public sealed class CommandRegistry {
     private readonly HashSet<string> m_activeMaps = new(comparer: StringComparer.OrdinalIgnoreCase) { CommandMaps.Global };
     private readonly Dictionary<string, CommandDefinition> m_byName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Command, CommandDefinition> m_byTextCommand = [];
+    // The registry's own verb names, declared once because they are used TWICE — to construct the built-in Command and
+    // to claim the name against module collision. Two hand-transcribed copies would let a rename guard a name nothing
+    // dispatches, silently reopening the fast-path hijack the claim exists to prevent.
+    private const string HelpCommandName = "help";
+    private const string WireAckCommandName = "wire.ack";
+    private const string WireErrorsCommandName = "wire.errors";
+
     private readonly Command m_helpCommand = new(
-        name: "help",
+        name: HelpCommandName,
         description: "Lists the available commands."
     );
     private readonly ICommandObserver[] m_observers;
     private readonly RootCommand m_root = new(description: "Puck commands.");
-    private readonly List<ICommandSource> m_sources = [];
-    private readonly Dictionary<string, CommandValue> m_state = new(comparer: StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, CommandValue> m_held = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // The public read-only face of the registered set, materialized once at construction: a listing verb and the
+    // binding vocabulary read these facts, and neither is handed anything invocable.
+    private readonly CommandMetadata[] m_metadata;
+    private readonly FrozenDictionary<string, CommandMetadata> m_metadataByName;
     // Interned command identity: a stable ushort id per command, assigned by ordinal-sorting the canonical
     // names so the id↔name mapping is identical on every machine. This is the command's deterministic,
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
@@ -77,7 +84,8 @@ public sealed class CommandRegistry : ICommandSink {
     private int m_rejections;
     // The deterministic-input sink a Simulation-class submitted command is folded into instead of running inline;
     // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
-    private ICommandInjectionSink? m_injectionSink;
+    // The sink carries its OWN bound principal — this field never chooses one.
+    private CommandInjectionSink? m_injectionSink;
     // TextCommandSource uses this as a FIFO barrier: after it submits a deferred simulation mutation, later
     // Immediate-routed stdin lines stay queued until the mutation's snapshot has actually applied. Further
     // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order.
@@ -89,6 +97,9 @@ public sealed class CommandRegistry : ICommandSink {
     /// <summary>The cap on whitespace-delimited tokens the fast path handles from a <see langword="stackalloc"/> buffer;
     /// a line with more falls through to the full parse. Far above any real console verb's token count.</summary>
     private const int MaxFastPathTokens = 16;
+    // The attributed owner name for the registry's own built-in command names (help, wire.ack, wire.errors) in the
+    // ClaimName ledger — so a colliding module's error message names the true owner rather than an empty module list.
+    private const string BuiltInOwnerName = "CommandRegistry";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
@@ -107,13 +118,34 @@ public sealed class CommandRegistry : ICommandSink {
             ? []
             : ((observers as ICommandObserver[]) ?? observers.ToArray()));
 
+        // Attribution for the loud-failure name guard below: which owner first claimed a given command
+        // name/alias. Ctor-scoped — the registry is immutable once built, so nothing after this loop can
+        // introduce a new collision. The registry's own built-ins claim their names FIRST, so a module that
+        // declares e.g. "wire.errors" collides and throws exactly like colliding with another module.
+        var claimedBy = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        ClaimName(name: HelpCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
+        ClaimName(name: WireAckCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
+        ClaimName(name: WireErrorsCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
+
         foreach (var module in modules) {
+            var moduleName = module.GetType().Name;
+
             foreach (var definition in module.GetCommands()) {
+                // The loud-completeness gate for the bindability axis: a registration that declared nothing would
+                // otherwise land on whichever member sits at 0, silently deciding whether an authority verb is
+                // reachable from a binding page. Refuse it BY NAME instead — this is a composition-root error.
+                if (definition.Bindability == CommandBindability.Unspecified) {
+                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares no bindability. Every registration must pass CommandBindability.Bindable or CommandBindability.Unbindable.");
+                }
+
                 m_root.Subcommands.Add(item: definition.TextCommand);
                 m_byTextCommand[definition.TextCommand] = definition;
+                ClaimName(name: definition.Name, owner: moduleName, claimedBy: claimedBy);
                 m_byName[definition.Name] = definition;
 
                 foreach (var alias in definition.Aliases) {
+                    ClaimName(name: alias, owner: moduleName, claimedBy: claimedBy);
                     m_byName[alias] = definition;
                     definition.TextCommand.Aliases.Add(item: alias);
                 }
@@ -125,7 +157,7 @@ public sealed class CommandRegistry : ICommandSink {
         // The wire's own control verb, beside help: `wire.ack [on|quiet]` reports or flips the acknowledgement mode.
         m_wireAckCommand = new Command(
             description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like player.where still echo); no argument reports the current mode.",
-            name: "wire.ack"
+            name: WireAckCommandName
         ) {
             m_wireAckArgument,
         };
@@ -134,7 +166,7 @@ public sealed class CommandRegistry : ICommandSink {
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
             description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, a handler's failure result, or a deferred refusal a host raised a tick after accepting the line): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
-            name: "wire.errors"
+            name: WireErrorsCommandName
         ) {
             m_wireErrorsArgument,
         };
@@ -172,12 +204,39 @@ public sealed class CommandRegistry : ICommandSink {
         m_fastPath = fastPath.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         m_fastPathAlt = m_fastPath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
+        // The fast path is the TEXT door, so its one reused context is stamped Console like every other text dispatch.
         m_fastContext = new CommandContext(
-            Parse: null,
-            Phase: CommandPhase.Completed,
-            Registry: this,
-            Value: s_digitalImpulse
+            parse: null,
+            phase: CommandPhase.Completed,
+            principal: CommandPrincipal.Console,
+            registry: this,
+            value: s_digitalImpulse
         );
+
+        m_metadata = m_byTextCommand.Values
+            .Select(selector: static definition => definition.Metadata)
+            .OrderBy(keySelector: static metadata => metadata.Name, comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        var metadataByName = new Dictionary<string, CommandMetadata>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, definition) in m_byName) {
+            metadataByName[name] = definition.Metadata;
+        }
+
+        m_metadataByName = metadataByName.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Fails loudly when a command name or alias is claimed by more than one owner — a module, or the registry's
+    // own built-ins (see BuiltInOwnerName). A name is a unique identity — construction is a composition-root
+    // error, so a second claim (even by the same module registering itself twice) is a bug in how modules were
+    // assembled, never the silent last-writer-wins `m_byName[name] = definition` used to allow.
+    private static void ClaimName(string name, string owner, Dictionary<string, string> claimedBy) {
+        if (claimedBy.TryGetValue(key: name, value: out var existingOwner)) {
+            throw new InvalidOperationException(message: $"Command name '{name}' is registered by both {existingOwner} and {owner}.");
+        }
+
+        claimedBy[name] = owner;
     }
 
     /// <summary>Whether accepted-command acks are echoed. <see langword="false"/> once <c>wire.ack quiet</c> is set — a
@@ -197,6 +256,29 @@ public sealed class CommandRegistry : ICommandSink {
 
         return m_idByName.TryGetValue(key: name, value: out id);
     }
+    /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
+    /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
+    /// Covers exactly the names <see cref="TryGetId"/> can dispatch (module-registered commands and their aliases;
+    /// the registry's own text-path built-ins are never bindable and never answer here).</summary>
+    /// <param name="name">The command name or alias to resolve.</param>
+    /// <param name="metadata">When this method returns, the command's declared facts, or the default when the name
+    /// is unknown.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> names a registered command; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public bool TryGetMetadata(string name, out CommandMetadata metadata) {
+        ArgumentNullException.ThrowIfNull(name);
+
+        return m_metadataByName.TryGetValue(key: name, value: out metadata);
+    }
+
+    /// <summary>Gets the distinct registered commands' declared facts, ordinal-sorted by name — the affordance manifest
+    /// source a listing verb (e.g. <c>world.affordances</c>) emits as data. Excludes the registry's own text-path
+    /// built-ins (<c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>), which are never bindable.</summary>
+    /// <remarks>METADATA, never a handler. A caller that could reach a definition's handler could invoke an authority
+    /// verb with a context of its own making, which would be a dispatch door beside the stamped ones; describing the
+    /// vocabulary must not confer the ability to drive it.</remarks>
+    public IReadOnlyList<CommandMetadata> Definitions => m_metadata;
+
     /// <summary>Gets the canonical name for an interned command id.</summary>
     /// <param name="id">The interned id, in <c>[0, <see cref="CommandCount"/>)</c>.</param>
     /// <returns>The command's canonical name.</returns>
@@ -348,32 +430,6 @@ public sealed class CommandRegistry : ICommandSink {
 
         _ = m_activeMaps.Add(item: map);
     }
-    /// <summary>Clears all transient per-frame command values, then re-seeds the held ones.</summary>
-    /// <remarks>Call once at the start of each frame, before <see cref="Collect"/>.</remarks>
-    public void BeginFrame() {
-        m_state.Clear();
-
-        // Re-seed held digital inputs so a continuous consumer polling GetValue sees them asserted every frame
-        // they remain down, without the source re-pushing them. Handlers do not re-run — only the value is set.
-        foreach (var held in m_held) {
-            m_state[held.Key] = held.Value;
-        }
-    }
-    /// <summary>Clears all held digital values so nothing stays asserted.</summary>
-    /// <remarks>
-    /// Call on focus loss: when the window is not focused, key/button releases are not delivered, so a value
-    /// held down at the moment focus was lost would otherwise stay stuck until the input is pressed and
-    /// released again.
-    /// </remarks>
-    public void ReleaseHeld() {
-        m_held.Clear();
-    }
-    /// <summary>Pulls the current frame's activations from every registered source, in registration order.</summary>
-    public void Collect() {
-        foreach (var source in m_sources) {
-            source.Collect(sink: this);
-        }
-    }
     /// <summary>Removes a command map from the active set.</summary>
     /// <param name="map">The name of the map to deactivate. <see cref="CommandMaps.Global"/> is always active and cannot be removed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="map"/> is <see langword="null"/>.</exception>
@@ -388,21 +444,6 @@ public sealed class CommandRegistry : ICommandSink {
             _ = m_activeMaps.Remove(item: map);
         }
     }
-    /// <summary>Gets the current frame's value for a command.</summary>
-    /// <param name="name">The name of the command to read.</param>
-    /// <param name="kind">The value kind to assign to the result when the command has no value this frame.</param>
-    /// <returns>The command's value for the current frame, or an inactive value of <paramref name="kind"/> if none was recorded.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
-    public CommandValue GetValue(string name, CommandValueKind kind) {
-        ArgumentNullException.ThrowIfNull(name);
-
-        return (m_state.TryGetValue(
-            key: name,
-            value: out var value
-        )
-            ? value
-            : CommandValue.Inactive(kind: kind));
-    }
     /// <summary>Determines whether a command map is currently active.</summary>
     /// <param name="map">The name of the map to test.</param>
     /// <returns><see langword="true"/> if the map is active; otherwise <see langword="false"/>.</returns>
@@ -412,7 +453,7 @@ public sealed class CommandRegistry : ICommandSink {
 
         return m_activeMaps.Contains(item: map);
     }
-    /// <summary>Determines whether a source-driven command id currently belongs to an active map.</summary>
+    /// <summary>Determines whether a snapshot-driven command id currently belongs to an active map.</summary>
     /// <param name="commandId">The interned command id.</param>
     /// <returns><see langword="true"/> when the command exists and its map is active.</returns>
     internal bool IsSourceCommandActive(ushort commandId) {
@@ -444,15 +485,17 @@ public sealed class CommandRegistry : ICommandSink {
             (definition.Routing == CommandRouting.Simulation));
     }
     /// <summary>
-    /// Applies one fixed-step tick's <see cref="CommandSnapshot"/>: records each command's value for polling
-    /// (<see cref="GetValue"/>) and dispatches edge handlers, gated by the active command maps. This is the
-    /// snapshot-driven peer of the per-render-frame <see cref="Collect"/> path; the <see cref="InputRouter"/>
-    /// owns held-folding, so this never touches the registry's own held state.
+    /// Applies one fixed-step tick's <see cref="CommandSnapshot"/>: dispatches edge handlers, gated by the
+    /// active command maps. The <see cref="InputRouter"/> owns held-folding, so this never touches held state, and
+    /// each entry's <see cref="CommandEntry.Principal"/> — stamped by the mixer or by the injecting sink — becomes
+    /// the handler's <see cref="CommandContext.Principal"/> verbatim.
+    /// <para>This stays PUBLIC (the launcher's fixed-step pump is a different assembly) because the argument is what
+    /// is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
+    /// <see cref="CommandEntry"/> are all internal to construct, so the only snapshot a caller can obtain is one the
+    /// mixer built. Narrowing this method instead would have left the forgeable value type in a caller's hands.</para>
     /// </summary>
     /// <param name="snapshot">The tick's input snapshot to apply.</param>
     public void ApplySnapshot(in CommandSnapshot snapshot) {
-        m_state.Clear();
-
         if (snapshot.Lanes.IsDefaultOrEmpty) {
             return;
         }
@@ -468,6 +511,7 @@ public sealed class CommandRegistry : ICommandSink {
                         ApplySubmittedSimulation(
                             line: line,
                             expectedCommandId: entry.CommandId,
+                            principal: entry.Principal,
                             slot: lane.Slot,
                             completesTextSubmission: entry.CompletesTextSubmission
                         );
@@ -489,21 +533,21 @@ public sealed class CommandRegistry : ICommandSink {
                     continue;
                 }
 
-                m_state[name] = entry.Value;
-
                 if (!entry.Dispatch) {
                     continue;
                 }
 
                 var context = new CommandContext(
-                    DeviceId: entry.Device,
-                    Parse: null,
-                    Phase: entry.Phase,
-                    Registry: this,
-                    Slot: lane.Slot,
-                    Text: null,
-                    Value: entry.Value,
-                    AssignedSlot: entry.AssignedSlot
+                    assignedSlot: entry.AssignedSlot,
+                    deviceId: entry.Device,
+                    parse: null,
+                    phase: entry.Phase,
+                    principal: entry.Principal,
+                    registry: this,
+                    slot: lane.Slot,
+                    source: entry.Source,
+                    text: null,
+                    value: entry.Value
                 );
 
                 _ = Dispatch(
@@ -514,8 +558,9 @@ public sealed class CommandRegistry : ICommandSink {
         }
     }
     // Executes a simulation-routed text command from its tick snapshot. Submit already parsed and identified the line
-    // before injection; parsing again here recreates the handler's ordinary text context without re-routing it.
-    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, int slot, bool completesTextSubmission) {
+    // before injection; parsing again here recreates the handler's ordinary text context without re-routing it. The
+    // principal rides the entry rather than being re-derived: the door that queued the line already stamped it.
+    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPrincipal principal, int slot, bool completesTextSubmission) {
         try {
             var parseResult = m_root.Parse(commandLine: line);
 
@@ -533,12 +578,13 @@ public sealed class CommandRegistry : ICommandSink {
 
             var value = (definition.ValueSelector?.Invoke(arg: parseResult) ?? ImpulseValue(kind: definition.ValueKind));
             var context = new CommandContext(
-                Parse: parseResult,
-                Phase: CommandPhase.Completed,
-                Registry: this,
-                Slot: slot,
-                Text: line,
-                Value: value
+                parse: parseResult,
+                phase: CommandPhase.Completed,
+                principal: principal,
+                registry: this,
+                slot: slot,
+                text: line,
+                value: value
             );
 
             // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
@@ -552,64 +598,6 @@ public sealed class CommandRegistry : ICommandSink {
             }
         }
     }
-    /// <summary>
-    /// Records a signal's value as the command's value for the current frame and runs the command's
-    /// handler.
-    /// </summary>
-    /// <param name="signal">The activation to process.</param>
-    /// <remarks>
-    /// The signal is ignored if it names an unknown command or if the command's map is not active. This
-    /// map check is the modality gate that distinguishes source-driven activation from the text path.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">The signal's <see cref="CommandSignal.Name"/> is <see langword="null"/>.</exception>
-    public void Push(CommandSignal signal) {
-        ArgumentNullException.ThrowIfNull(signal.Name);
-
-        if (!m_byName.TryGetValue(
-            key: signal.Name,
-            value: out var definition
-        )) {
-            return;
-        }
-
-        if (!m_activeMaps.Contains(item: definition.Map)) {
-            return;
-        }
-
-        m_state[signal.Name] = signal.Value;
-
-        // A held digital input persists its polled value until released; a release (or cancel) clears it, so a
-        // continuous consumer can poll "is it down" across frames. The dispatch gate below keeps the handler
-        // firing only on the edges the binding answers, so a held key never re-runs a press-driven handler.
-        if (
-            (signal.Phase == CommandPhase.Started) &&
-            signal.Value.IsActive &&
-            (signal.Text is null)
-        ) {
-            m_held[signal.Name] = signal.Value;
-        } else if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
-            _ = m_held.Remove(key: signal.Name);
-        }
-
-        if (!signal.Dispatch) {
-            return;
-        }
-
-        var context = new CommandContext(
-            DeviceId: signal.DeviceId,
-            Parse: null,
-            Phase: signal.Phase,
-            Registry: this,
-            Text: signal.Text,
-            Value: signal.Value
-        );
-
-        _ = Dispatch(
-            context: in context,
-            definition: definition
-        );
-    }
-
     /// <summary>Runs a command's handler and notifies every observer of the dispatch.</summary>
     /// <param name="context">The invocation state passed to the handler.</param>
     /// <param name="definition">The command being dispatched.</param>
@@ -637,21 +625,16 @@ public sealed class CommandRegistry : ICommandSink {
 
         return result;
     }
-    /// <summary>Registers a producer to be pulled on each <see cref="Collect"/>.</summary>
-    /// <param name="source">The source to register. Sources are pulled in registration order.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public void AddSource(ICommandSource source) {
-        ArgumentNullException.ThrowIfNull(source);
-
-        m_sources.Add(item: source);
-    }
     /// <summary>
     /// Routes <see cref="CommandRouting.Simulation"/>-class submitted commands to a deterministic input sink instead
     /// of running them inline — the seam that makes a console / STDIN line drive the simulation deterministically.
     /// </summary>
-    /// <param name="sink">The sink (the host's <see cref="InputRouter"/>) folded-into per tick; <see langword="null"/> restores inline execution.</param>
-    /// <remarks>Wire this only on the host's live console-driving registry; an unwired registry runs every submitted command inline.</remarks>
-    public void RouteSimulationTo(ICommandInjectionSink? sink) {
+    /// <param name="sink">The console text door's sink (<see cref="InputRouter.ConsoleTextSink"/>), folded-into per
+    /// tick; <see langword="null"/> restores inline execution.</param>
+    /// <remarks>Wire this only on the host's live console-driving registry; an unwired registry runs every submitted
+    /// command inline. The sink's principal is fixed at ITS construction, so nothing here (or at a call site) chooses
+    /// what a submitted line acts as.</remarks>
+    public void RouteSimulationTo(CommandInjectionSink? sink) {
         m_injectionSink = sink;
     }
     /// <summary>Parses a command line, runs the matching handler, and returns its transcript output.</summary>
@@ -665,7 +648,7 @@ public sealed class CommandRegistry : ICommandSink {
     /// <remarks>
     /// This path is never gated by command maps; it is the deliberate console entry point. A
     /// <see cref="CommandRouting.Simulation"/> command is injected into the per-tick <see cref="CommandSnapshot"/>
-    /// (so it is tick-aligned, recorded, and replayed) when a sink is wired via <see cref="RouteSimulationTo"/>;
+    /// (so it is tick-aligned and applied deterministically) when a sink is wired via <see cref="RouteSimulationTo"/>;
     /// otherwise — and for every <see cref="CommandRouting.Immediate"/> command — the handler runs inline.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
@@ -710,9 +693,6 @@ public sealed class CommandRegistry : ICommandSink {
 
             if ((tokenCount > 0) && m_fastPathAlt.TryGetValue(key: line.AsSpan(range: tokenRanges[0]), value: out var fast)) {
                 var argRanges = tokenRanges[1..tokenCount];
-
-                m_state[fast.Name] = s_digitalImpulse;
-
                 var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
                 var result = fast.WireArgsHandler!(
                     arg1: m_fastContext,
@@ -767,9 +747,13 @@ public sealed class CommandRegistry : ICommandSink {
                 m_pendingSimulationSubmissions++;
 
                 try {
-                    sink.Inject(injection: new CommandInjection(CommandId: commandId, Value: value, Phase: CommandPhase.Started, Text: line) {
-                        CompletesTextSubmission = true,
-                    });
+                    sink.Inject(
+                        commandId: commandId,
+                        value: value,
+                        phase: CommandPhase.Started,
+                        text: line,
+                        completesTextSubmission: true
+                    );
                 } catch {
                     m_pendingSimulationSubmissions--;
 
@@ -779,15 +763,14 @@ public sealed class CommandRegistry : ICommandSink {
                 return CommandResult.None;
             }
 
-            m_state[definition.Name] = value;
-
             // The text path returns its result to the caller, so it is not observed (the caller displays
-            // it); observers exist for the source-driven path, which has no return value to inspect.
+            // it); observers exist for the snapshot-driven path, which has no return value to inspect.
             var result = definition.Handler(arg: new CommandContext(
-                Parse: parseResult,
-                Phase: CommandPhase.Completed,
-                Registry: this,
-                Value: value
+                parse: parseResult,
+                phase: CommandPhase.Completed,
+                principal: CommandPrincipal.Console,
+                registry: this,
+                value: value
             ));
 
             // Apply the same quiet-mode ack suppression the fast path does, so a quoted or many-token wire line (which

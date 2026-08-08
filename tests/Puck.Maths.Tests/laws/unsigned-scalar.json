@@ -1,0 +1,1433 @@
+[
+  {
+    "Id": "unsigned-scalar.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Multiply \u2014 the branchless UInt128 truncate-then-correct ties-to-even rounder at UFixedQ4816.cs:117-128",
+        "Against": "Oracles.UnsignedFixedProduct \u2192 Oracles.RoundDyadicUnsigned at shift 16 over BigInteger, reduced by Oracles.WrapToUnsignedRaw. The oracle forms the whole product in arbitrary width and rounds it ONCE; it never truncates to sixty-four bits and never rebuilds a correction from a discarded low word, so it shares no code and no rounding substrate with the subject. ENVELOPE: none \u2014 the operand fold Subjects.UnsignedRaw is a BIJECTION on the sixty-four-bit word, so the exhaustive edge square sweeps 576 pairs including every unsigned seam (MaxValue at \u22121, the order split at long.MinValue, the largest integral raw at \u221265536, the top rounding tie at \u221232768) and the subject\u0027s wrap point sits INSIDE the statement rather than beside it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.div-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Division \u2014 the truncating DivideUnchecked kernel plus the r versus d \u2212 r ties-to-even correction at UFixedQ4816.cs:153-165",
+        "Against": "Oracles.UnsignedFixedQuotient \u2192 Oracles.RoundRationalTiesToEven, which rounds the exact rational (raw_x\u00B72\u00B9\u2076)/raw_y in BigInteger by comparing 2r against d \u2014 a DIFFERENT route to the same predicate, and one the carrier cannot take because 2r would leave it \u2014 and reduces once by Oracles.WrapToUnsignedRaw. ENVELOPE: Subjects.UnsignedDivisor substitutes one for a zero divisor, so the value statement runs over every OTHER operand pair and the refusal is pinned by unsigned-scalar.construction-and-refusals. ENVELOPE: DivideUnchecked has two branches and only one runs per host \u2014 on x64 the X86Base.X64.DivRem path runs whenever (raw_x \u003E\u003E 48) \u003C raw_y and the UInt128 fallback otherwise, both reached by the edge square; on a non-x64 host the hardware branch is unwitnessed and the fallback carries the whole statement",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits. Laws.PureScalarBinary states the scope out loud \u2014 it observes hidden mutable state or an operand-independent result and nothing else, and is NOT the cross-run/cross-machine determinism contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.unchecked-kernels-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MultiplyUnchecked"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "DivideUnchecked"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.MultiplyUnchecked(x, y, out remainder) \u2014 the truncating UInt128 kernel at UFixedQ4816.cs:434-442",
+        "Against": "an inline BigInteger pair in Subjects.UnsignedUncheckedKernelsExact: the quotient is Oracles.WrapToUnsignedRaw of the exact product shifted right by sixteen and the remainder is that product modulo 2\u00B9\u2076, both EXACT on both sides, so condition (B) drops out and the statement is purely the truncation-and-wrap policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.DivideUnchecked(x, y, out remainder) \u2014 the hardware/UInt128 truncating kernel at UFixedQ4816.cs:321-346",
+        "Against": "an inline BigInteger pair in Subjects.UnsignedUncheckedKernelsExact: the quotient is Oracles.WrapToUnsignedRaw of the floored exact rational (raw_x\u00B72\u00B9\u2076)/raw_y and the remainder is that dividend modulo the divisor, exact on both sides. ENVELOPE: Subjects.UnsignedDivisor substitutes one for a zero divisor; the refusal is pinned by unsigned-scalar.construction-and-refusals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "the two-argument MultiplyUnchecked and DivideUnchecked overloads",
+        "Against": "their three-argument siblings on the same operands",
+        "Shared": "the ENTIRE body \u2014 UFixedQ4816.cs:448-453 and 348-353 are a call to the out-parameter overload with a discard, so agreement proves the wiring and never the arithmetic",
+        "Citation": "the arithmetic is pinned by legs 1 and 2 of this same case, on the same swept operands",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "UFixedQ4816.op_Multiply and op_Division",
+        "Against": "their own unchecked kernels plus the ties-to-even correction re-derived from the reported remainder in BigInteger, inline in Subjects.UnsignedUncheckedKernelsExact",
+        "Shared": "MultiplyUnchecked and DivideUnchecked \u2014 the IDENTICAL members, which the rounding operators literally call (UFixedQ4816.cs:118-122 and 153-157). The leg pins the DOCUMENTED contract that \u0027the rounding operator builds on the remainder reported here\u0027 and nothing about the product or the quotient itself. ENVELOPE: the arithmetic of the two rounding operators is pinned independently by unsigned-scalar.mul-vs-oracle and unsigned-scalar.div-vs-oracle, on this same domain key at the same frontier index",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the reported remainders are in range at every swept pair: the multiply remainder is below one whole unit and the divide remainder is strictly below the divisor, so neither can silently carry a bit the correction would misread",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.wrapping-algebra-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Increment"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Decrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_UnaryPlus"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_OnesComplement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_BitwiseAnd"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_BitwiseOr"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_ExclusiveOr"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_LeftShift"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_RightShift"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_UnsignedRightShift"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Addition and op_Subtraction",
+        "Against": "Oracles.WrapToUnsignedRaw over the exact BigInteger sum and difference, inline in Subjects.UnsignedWrappingAlgebraExact \u2014 EXACT on both sides, so condition (B) drops out entirely and the statement is purely the modulo-2\u2076\u2074 wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Increment, op_Decrement and op_UnaryNegation",
+        "Against": "Oracles.WrapToUnsignedRaw over exactA \u00B1 2\u00B9\u2076 and \u2212exactA in BigInteger \u2014 exact on both sides. Unlike the signed sibling there is NO asymmetric minimum here: the negation wraps at every non-zero raw and fixes only zero",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_OnesComplement",
+        "Against": "(2\u2076\u2074 \u2212 1 \u2212 exactA) in BigInteger, inline in Subjects.UnsignedWrappingAlgebraExact \u2014 exact on both sides, and deliberately written as a subtraction rather than as BigInteger\u0027s own complement, whose two\u0027s-complement convention is not this carrier\u0027s",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_BitwiseAnd, op_BitwiseOr and op_ExclusiveOr",
+        "Against": "the arbitrary-width BigInteger bit operations over the same non-negative exacts, inline in the same claim \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_LeftShift, op_RightShift and op_UnsignedRightShift at a count derived from the second operand",
+        "Against": "Oracles.WrapToUnsignedRaw of (exactA shifted left) and the plain BigInteger right shift, inline in the same claim \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Modulus",
+        "Against": "BigInteger.Remainder over the same raws, inline in the same claim \u2014 exact on both sides, and the raw-level remainder IS the fixed-point remainder because both operands carry the same 2\u207B\u00B9\u2076 scale. ENVELOPE: Subjects.UnsignedDivisor substitutes one for a zero divisor; the refusal is pinned by unsigned-scalar.construction-and-refusals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "op_UnaryPlus is the identity at every swept raw \u2014 the only member of the family whose whole contract is that it moves nothing",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the right shift and the unsigned right shift are ONE map on this carrier, as the doc claims, at every swept raw and every shift count \u2014 the statement that has no counterpart in the signed sibling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the shift count is taken MODULO sixty-four by the carrier\u0027s own shift semantics: a \u003C\u003C 64 == a, a \u003C\u003C 65 == a \u003C\u003C 1, and likewise for both right shifts. The three shift operators' XML docs and the wing README's UFixedQ4816 section now state the masking out loud, mirroring the unit fractions' mod-thirty-two sentence, and this leg holds them to it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the De Morgan pair holds at the carrier: the complement of a conjunction is the disjunction of the complements, and dually",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "addition and subtraction are exact inverses under wrapping \u2014 (a \u002B b) \u2212 b == a at every swept pair, including the pairs that wrap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.checked-operators-refuse",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedAddition"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedDecrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedDivision"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedIncrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedMultiply"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedSubtraction"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedUnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Increment"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Decrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_CheckedAddition, op_CheckedSubtraction, op_CheckedIncrement and op_CheckedDecrement",
+        "Against": "the exact BigInteger sum, difference and \u00B12\u00B9\u2076 step, inline in Subjects.UnsignedCheckedOperatorsRefuse: the operator must ANSWER that value when it lies in [0, 2\u2076\u2074) and REFUSE with an OverflowException when it does not \u2014 exact on both sides, so condition (B) drops out and the case fails on a wrong refusal as readily as on a wrong answer",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_CheckedMultiply \u2014 the full-width UInt128 rounder at UFixedQ4816.cs:134-147",
+        "Against": "Oracles.RoundToEvenUnits of the exact BigInteger product at shift 16, UNWRAPPED so representability is decided before any reduction; the operator must answer it below 2\u2076\u2074 and refuse at or above",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_CheckedDivision \u2014 the full-width UInt128 rounder at UFixedQ4816.cs:172-185",
+        "Against": "Oracles.RoundRationalTiesToEven of the exact rational (raw_x\u00B72\u00B9\u2076)/raw_y, UNWRAPPED; the operator must answer it below 2\u2076\u2074 and refuse at or above. ENVELOPE: Subjects.UnsignedDivisor substitutes one for a zero divisor, whose DivideByZeroException is pinned by unsigned-scalar.construction-and-refusals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "op_CheckedUnaryNegation answers exactly at zero and REFUSES at every other swept raw, which is the whole of its contract on an unsigned carrier \u2014 there is no representable non-zero negation to get wrong. ENVELOPE: the answering side is ONE operand, which the committed edge set guarantees is drawn and which unsigned-scalar.construction-and-refusals pins by name",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "each checked operator on the pairs where it answers",
+        "Against": "its wrapping sibling on the same pair",
+        "Shared": "the ties-to-even correction SHAPE, written twice at two widths \u2014 UFixedQ4816.cs:123-125 (64-bit, after the truncating kernel) against 139-144 (128-bit, before the checked narrowing) for the multiply, and 158-161 against 176-181 for the divide. No code is shared; the RULE is. ENVELOPE: each side\u0027s arithmetic is pinned independently against BigInteger in this same claim and by unsigned-scalar.mul-vs-oracle and unsigned-scalar.div-vs-oracle, so what this leg adds is the agreement of the two widths and never the rule itself",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "no checked operator both answers and throws, and none throws anything but an OverflowException on the swept pairs: the claim catches OverflowException specifically, so any other escape fails the case at the runner",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.saturating-and-selection-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "AddSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "SubtractSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Epsilon"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxMagnitude"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxMagnitudeNumber"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MinMagnitude"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MinMagnitudeNumber"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.AddSaturating",
+        "Against": "the minimum of the exact BigInteger sum and 2\u2076\u2074 \u2212 1, inline in Subjects.UnsignedSaturatingAndSelectionExact \u2014 EXACT on both sides, (B) drops out. The endpoint is MaxValue, where the closed unit interval\u0027s is One",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.SubtractSaturating",
+        "Against": "the maximum of the exact BigInteger difference and zero, inline in the same claim \u2014 exact on both sides. The floor is MinValue, which on this carrier IS zero",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Max and UFixedQ4816.Min",
+        "Against": "BigInteger.Max and BigInteger.Min over the same NON-NEGATIVE exacts, inline in the same claim \u2014 exact on both sides, and the arbitrary-width comparison is the UNSIGNED order by construction, which is the point",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Clamp over a value and a sorted bound pair drawn from three independent swept raws",
+        "Against": "the composed BigInteger minimum-of-maximum over the same exacts, inline in the same claim \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "MaxMagnitude, MaxMagnitudeNumber, MinMagnitude and MinMagnitudeNumber",
+        "Against": "Max and Min on the same pair",
+        "Shared": "the ENTIRE body \u2014 UFixedQ4816.GenericMath.cs:35-38 are four one-line calls to Max and Min, which is correct because magnitude IS value on an unsigned carrier, so agreement proves the wiring and never the selection",
+        "Citation": "Max and Min are pinned against BigInteger by the third leg of this same case, on the same swept operands",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Clamp REFUSES an inverted range with an ArgumentException \u2014 the platform\u0027s Math.Clamp guard, which no XML doc on this member mentions; the claim asserts the exception type only, since that guard names no parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Abs is the identity at every swept raw, and there is no unrepresentable magnitude anywhere on this carrier \u2014 the signed sibling\u0027s MinValue asymmetry has no counterpart here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is neutral for both saturating operations, MaxValue absorbs the saturating sum and MinValue absorbs the saturating difference",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "neither saturating operation ever wraps: the saturating sum is at least its addend and the saturating difference at most its minuend, at every swept pair",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.integer-decomposition-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Truncate"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Fractional"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Floor",
+        "Against": "the raw less its remainder modulo one whole unit, in BigInteger, inline in Subjects.UnsignedIntegerDecompositionExact \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Truncate",
+        "Against": "the SAME BigInteger expression, computed in its own right rather than compared with Floor\u0027s answer, so the member is pinned independently and the coincidence below is a separate statement",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Fractional",
+        "Against": "that remainder modulo one whole unit, in BigInteger, inline in the same claim \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Ceiling \u2014 the checked add-then-mask at UFixedQ4816.cs:292-293",
+        "Against": "the floor plus a whole unit wherever the fraction is non-zero, in BigInteger: the member must ANSWER it below 2\u2076\u2074 and REFUSE with an OverflowException at or above, which happens exactly in the top integer band",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Round \u2014 the branchless ties-to-even integer rounder at UFixedQ4816.cs:459-468",
+        "Against": "Oracles.RoundToEvenUnits of the raw at shift 16, scaled back by 2\u00B9\u2076 and left UNWRAPPED so representability is decided before any reduction; the member must answer it below 2\u2076\u2074 and refuse at or above",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the decomposition is exact and total: the floor plus the fractional part recovers the raw at every swept value, with no wrap anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Truncate and Floor coincide at every swept raw, as the doc claims \u2014 the statement that exists only because this carrier has no negative side",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at every raw whose fraction is zero both integer maps that can refuse are the identity instead: Ceiling and Round each return the value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the integer maps are ordered wherever Ceiling and Round answer \u2014 floor \u2264 rounding \u2264 ceiling \u2014 and the ceiling exceeds the floor by zero or by exactly one whole unit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the claim visits the top integer band on EVERY case whatever the domain drew: the largest integral raw, the first raw whose ceiling leaves the type, the last raw whose rounding does not, the top tie whose rounding does, and both extremes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.order-and-comparison-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_LessThanOrEqual"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.CompareTo(UFixedQ4816)",
+        "Against": "the sign of BigInteger.Compare over the same NON-NEGATIVE exacts \u2014 exact on both sides, and the arbitrary-width order IS the unsigned order, which is precisely where a signed reading would diverge",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816\u0027s four relational operators",
+        "Against": "the same BigInteger.Compare order, inline in Subjects.UnsignedOrderAndComparisonExact",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.CompareTo(object) on a boxed comparand",
+        "Against": "the same BigInteger.Compare order \u2014 the boxed route must report the identical order as the typed one and as the arbitrary-width comparison",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the order is UNSIGNED: every raw carrying the top bit sorts ABOVE every raw that does not, which the sweep reaches at the committed edge raws long.MinValue and long.MaxValue and which is the one comparison the signed sibling answers the other way",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the comparison is antisymmetric and reflexive at every swept pair, and equality agrees with a zero comparison",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MinValue is a least element and MaxValue a greatest one at every swept raw, with no value below zero anywhere on this carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.number-predicates-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsCanonical"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsComplexNumber"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsEvenInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsFinite"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsImaginaryNumber"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsInfinity"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsNaN"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsNegative"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsNegativeInfinity"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsNormal"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsOddInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsPositive"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsPositiveInfinity"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsRealNumber"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsSubnormal"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.IsZero, IsNormal, IsInteger, IsEvenInteger and IsOddInteger",
+        "Against": "inline BigInteger predicates in Subjects.UnsignedNumberPredicatesExact \u2014 the raw is zero, the raw is non-zero, the raw is divisible by one whole unit, and that conjoined with the parity of the whole-unit count \u2014 read from exact divisibility rather than from a bit mask, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the twelve constant classifiers are CONSTANT over the whole sweep, and each is the value the format admits: IsCanonical, IsFinite, IsRealNumber and IsPositive hold everywhere, while IsNegative, IsNaN, IsInfinity, IsPositiveInfinity, IsNegativeInfinity, IsComplexNumber, IsImaginaryNumber and IsSubnormal hold nowhere. IsPositive holding AT ZERO is the platform\u0027s own convention for an unsigned carrier \u2014 byte.IsPositive and its siblings return true unconditionally \u2014 and the XML docs on these members are silent, so the fact is derived from the format and pinned here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three integrality classifiers partition: IsInteger is exactly the disjunction of IsEvenInteger and IsOddInteger, and the two are never both true",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsZero and IsNormal are exact complements at every swept raw, and IsZero agrees with equality against Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsNegative is false at every swept raw INCLUDING the whole top-bit band, which is the classifier the signed sibling answers the other way and the reason this family exists",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FractionBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IntegerBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "TotalBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Radix"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Epsilon"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "DivideUnchecked"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedAddition"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedDecrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedDivision"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedIncrement"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedMultiply"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedSubtraction"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_CheckedUnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared layout is one fact: FractionBitCount is sixteen, IntegerBitCount forty-eight, TotalBitCount sixty-four, the first two sum to the third, and Radix is two",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the declared constants One, MaxValue and Epsilon",
+        "Against": "BigInteger.Pow over the declared Radix and bit counts, inline in Subjects.UnsignedConstructionAndRefusals \u2014 One is the radix to the fraction bit count, MaxValue the radix to the total bit count less one, Epsilon exactly one raw \u2014 so the constants and the layout cannot drift apart",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the zero family is ONE value: Zero has raw zero, MinValue equals Zero, AdditiveIdentity equals Zero and the default value equals Zero. MinValue being ZERO rather than a negative extreme is this family\u0027s defining difference from the signed sibling, and MultiplicativeIdentity equalling One completes the pair",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the eighteen-raw construction ladder \u2014 both extremes, the fraction seams either side of the half and of the sixteen-bit boundary, the top of the integer range, the bit that separates unsigned order from signed, and the three raws at the Ceiling and Round seam \u2014 round-trips bit for bit through FromRawBits, through the primary constructor, and back out through Value, and the two routes agree",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.FromInteger over a whole-number ladder",
+        "Against": "the whole number shifted left by sixteen in BigInteger, inline in the same claim \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromInteger REFUSES every whole number above 2\u2074\u2078 \u2212 1 with an ArgumentOutOfRangeException naming the \u0027value\u0027 parameter, and admits 2\u2074\u2078 \u2212 1 itself",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the boxed comparison contract: a null comparand sorts first, self compares zero, and a foreign type raises an ArgumentException naming the \u0027obj\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a zero divisor is REFUSED with a DivideByZeroException at all five division entry points \u2014 the wrapping and checked division operators, the remainder operator, and both DivideUnchecked overloads \u2014 which is the \u003Cexception\u003E tag all five now carry: unchecked names the range check, never the divisor",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Ceiling and Round seam is exact at the top of the range: Ceiling answers itself at the largest integral raw and REFUSES one raw above it, and Round answers that same raw at fraction 0x7FFF while REFUSING at fraction 0x8000, where the tie rounds UP because the integer part 2\u2074\u2078 \u2212 1 is odd",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every checked operator REFUSES at its named corner \u2014 MaxValue plus Epsilon, Zero minus Epsilon, incrementing MaxValue, decrementing Zero, negating Epsilon, MaxValue times two and MaxValue over Epsilon \u2014 while negating Zero answers Zero, the one value the checked negation admits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.double-seam",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Explicit"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.FromDouble over the nineteen-row double ladder \u2014 both saturations, not-a-number, both infinities, the negatives including the one whose scaled value rounds to negative zero, the smallest positive double, the exactly-representable interior points, three half-ULP ties, the exact saturation boundary 2\u2074\u2078 \u2212 2\u207B\u2075 whose scaled value IS the declared maximum, its successor 2\u2074\u2078 which is not, and the one inexact input",
+        "Against": "Subjects.UnsignedFromDoubleLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the IEEE-754 binary64 layout and the 2\u207B\u00B9\u2076 grid, sharing no code and no substrate with the subject; every row\u0027s expectation is a compile-time constant, so no floating-point arithmetic runs inside the law",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816\u0027s explicit conversion to double over the eleven-row raw ladder, compared on exact bit patterns",
+        "Against": "Subjects.UnsignedToDoubleLadder, a constant expectation table read through BitConverter.DoubleToUInt64Bits",
+        "Shared": "",
+        "Citation": "hand-derived from the definition raw\u00B72\u207B\u00B9\u2076: the ulong-to-double conversion rounds to nearest even and the scale by 2\u207B\u00B9\u2076 is exact, so every raw below 2\u2075\u00B3 converts exactly, 2\u2075\u00B3 \u002B 1 is a tie resolved DOWN to 2\u2075\u00B3, 2\u2075\u00B3 \u002B 3 a tie resolved UP to 2\u2075\u00B3 \u002B 4, and 2\u2076\u2074 \u2212 1 rounds up to 2\u2076\u2074 where the spacing is 2048. Shares no code with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the double seam is a round trip below 2\u2075\u00B3: FromDouble of the converted double returns the original value at every ladder raw under that bound, which separates the documented precision loss at large magnitudes from an error",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two saturations are exact rather than nearest-representable clamps: FromDouble reaches MaxValue itself, which a double clamp alone cannot, because the largest double below 2\u2076\u2074 is 2048 raw units short of it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.text-round-trip",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "TryParse"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.TryFormat and ToString \u2014 the digit-at-a-time renderer at UFixedQ4816.cs:672-713 that never routes through double",
+        "Against": "Oracles.ExactDyadicDecimal at shift 16, which derives the digits from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger \u2014 a deliberately different derivation, exact on both sides. The SAME oracle the closed unit interval\u0027s rendering law uses, at this family\u0027s scale",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all four Parse and all four TryParse overloads, on the text the subject itself rendered",
+        "Against": "the original raw, whose exact decimal expansion Oracles.ExactDyadicDecimal independently produced: the parse must recover it bit for bit. Every /2\u00B9\u2076 fraction terminates within sixteen digits, so the round trip is EXACT and TOTAL over the whole carrier, with no representation event on either leg",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two parse surfaces agree on well-formed unsigned text: the default overloads and the NumberStyles overloads at NumberStyles.Number \u2014 a strict superset of the default grammar \u2014 return the same raw, and the string overloads return what the span overloads return",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat\u0027s three destination cases are exact: an exactly sized span succeeds and reports the full length, an oversized span writes the same prefix and reports the same length, and a span one character short returns false and reports zero characters written",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat accepts an empty format, \u0027G\u0027 and \u0027g\u0027 identically and REFUSES any other specifier with a FormatException \u2014 a refusal rather than a false return, which is the ISpanFormattable convention",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a non-\u0027.\u0027 decimal separator is substituted in place and the reported length adjusts for the separator\u0027s OWN width, at a single-character separator and at a multi-character one, and on an integral value whose rendering carries no separator at all \u2014 the three branches of UFixedQ4816.cs:603-633. Every provider is built inside the law, so no ambient culture is read",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unsigned-scalar.text-ladder-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "TryParse"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "both parse surfaces over a literal ladder \u2014 the trivial values, the exact half, the two quantization ties resolved to even, the sticky-discarded-digit tie that rounds UP, leading and trailing white space, the exact rendering of MaxValue, and the two signed spellings the unsigned grammar admits (an explicit plus, and a negative zero)",
+        "Against": "Subjects.UnsignedParseLadder, a constant (text, raw) expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the definition raw == roundTiesToEven(decimal value \u00B7 2\u00B9\u2076) together with FixedPointText\u0027s documented sticky rule that a non-zero digit discarded past the seventeen-digit fraction prefix breaks a tie upward; no expectation is captured from the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same literal ladder",
+        "Against": "Subjects.UnsignedQuantizedLiteral \u2192 Oracles.RoundRationalTiesToEven over the exact rational the literal\u0027s own digits name, scaled by 2\u00B9\u2076 \u2014 a route that never forms the subject\u0027s seventeen-digit fraction prefix, its reduced denominator 2\u00B75\u00B9\u2077, or its sticky flag. This is what makes the constant table an agreement rather than a transcription of the kernel\u0027s own answers",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the default surface speaks the BCL unsigned grammar: \u0027\u002B1\u0027 answers one and \u0027-0\u0027 answers Zero on all eight entry points, while a negative MAGNITUDE (\u0027-1\u0027, \u0027-0.00001\u0027) is refused \u2014 folded into this surface\u0027s single FormatException verdict \u2014 where the styles surface reports the same two as OverflowException",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a negative literal whose significand is all zeros is NOT a refusal on either surface: \u0027-0\u0027 is accepted as Zero, because the all-zero significand short-circuits before the unsigned range check ever sees a magnitude",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two surfaces DIVERGE at the exact top of the range, which is what the rejectExactOutOfRange flag exists for: the exact rendering of MaxValue is accepted by both, while the same literal carrying one further non-zero digit is REFUSED by the default surface and ACCEPTED as MaxValue by the styles surface, because only the default surface tests the prefix numerator against the maximum BEFORE rounding",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the surfaces diverge across the whole BOTTOM band (−2⁻¹⁷, 0) by the same mechanism: the default surface refuses '-0.000007' and the exact half-ULP '-0.00000762939453125' (which ties to even onto raw zero) before rounding, while the styles surface rounds first and ANSWERS Zero for both with no OverflowException at all — and '-1e-30' under NumberStyles.Float succeeds as Zero the same way — where '-0.00001', the first magnitude whose rounding is nonzero, is refused by BOTH surfaces; this is the divergence the wing README's Text paragraph now names at both ends",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "out-of-range and malformed text are refused with the documented distinction: the default surface reports EVERY refusal as a FormatException, while the styles surface separates an out-of-range value (OverflowException) from unparseable text (FormatException); a null string raises an ArgumentNullException naming \u0027s\u0027 from both string overloads, and TryParse returns false leaving the default value in every one of those cases",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the styled Parse preserves the decimal-overflow distinction its own comment claims: a literal above decimal.MaxValue surfaces as an OverflowException from the RE-ENTERED platform parser rather than as a FormatException, even though the exact pass classified it as merely invalid",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

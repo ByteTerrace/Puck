@@ -39,7 +39,7 @@ internal static class BessDiagnostic {
     }
 
     private static int RunExport(string[] args) {
-        var outPath = ArgValue(args: args, name: "--bess-export");
+        var outPath = CommandLineArguments.Value(args: args, name: "--bess-export");
 
         if (string.IsNullOrEmpty(value: outPath)) {
             Console.WriteLine(value: "  [SKIP] --bess-export: no output path given");
@@ -51,7 +51,7 @@ internal static class BessDiagnostic {
             return 2;
         }
 
-        var framesArg = ArgValue(args: args, name: "--frames");
+        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
         var frames = (((framesArg is not null) && int.TryParse(s: framesArg, result: out var parsedFrames)) ? parsedFrames : DefaultExportFrames);
 
         using var source = PostMachine.Build(model: model, rom: rom);
@@ -124,7 +124,7 @@ internal static class BessDiagnostic {
         return allRejectedCleanly;
     }
     private static int RunImport(string[] args) {
-        var filePath = ArgValue(args: args, name: "--bess-import");
+        var filePath = CommandLineArguments.Value(args: args, name: "--bess-import");
 
         if (string.IsNullOrEmpty(value: filePath) || !File.Exists(path: filePath)) {
             Console.WriteLine(value: $"  [SKIP] --bess-import: file not found at {filePath}");
@@ -149,7 +149,7 @@ internal static class BessDiagnostic {
     // --rom <path> selects the cartridge (model inferred from its header); absent, the synthetic Tier-A cartridge on
     // Dmg. Returns false (with a printed [SKIP]) when --rom names a missing file.
     private static bool TryResolveRom(string[] args, out byte[] rom, out string romLabel, out ConsoleModel model) {
-        var romPath = ArgValue(args: args, name: "--rom");
+        var romPath = CommandLineArguments.Value(args: args, name: "--rom");
 
         if (string.IsNullOrEmpty(value: romPath)) {
             rom = SyntheticRom.Create();
@@ -174,15 +174,6 @@ internal static class BessDiagnostic {
         model = (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80))) ? ConsoleModel.Cgb : ConsoleModel.Dmg);
 
         return true;
-    }
-    private static string? ArgValue(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
     }
     // Prints a note that no headless cross-emulator round trip is available: a reference emulator's prebuilt tester
     // binary accepts only a ROM, boot ROM, battery save, and render target — no savestate-import flag — so a BESS file

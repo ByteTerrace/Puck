@@ -21,19 +21,36 @@ public sealed class CompiledBindingProfile {
     private readonly Dictionary<string, int> m_modifierIndexBySource;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
+    private readonly Dictionary<int, BindingWheelView> m_wheelViewByRow;
 
-    // One compiled chord row: exactly one of (Table, View) — the page meaning — or Command is present.
+    // One compiled chord row: exactly one of (Table, View) — the page meaning — or Command is present. A PAGE
+    // meaning row may additionally carry row-scoped Activators — entries whose trigger is an ordered sequence
+    // (BindingActivatorDefinition) rather than a plain Source, so they are excluded from Table and evaluated
+    // out-of-band by PagedInputBindings' own RowActivatorTracker per (activator, slot).
     internal sealed record CompiledChordRow(
         int GroupIndex,
         int[] Chord,
         IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>>? Table,
         BindingPageView? View,
-        CompiledChordCommand? Command
+        CompiledChordCommand? Command,
+        IReadOnlyList<CompiledActivatorEntry>? Activators = null
     );
 
     // A command row's precomputed edge payloads: the press fires the command with PressValue, the release clears
     // it with ReleaseValue (an inactive value of the same kind); DispatchRelease mirrors HoldRelease.
     internal sealed record CompiledChordCommand(
+        string Command,
+        bool DispatchRelease,
+        CommandValue PressValue,
+        CommandValue ReleaseValue
+    );
+
+    // A compiled row activator: the same press/release edge payload shape as CompiledChordCommand, plus the
+    // sequence/mode/timeout a RowActivatorTracker resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across
+    // the whole compiled profile) a slot's per-activator tracker array is keyed by.
+    internal sealed record CompiledActivatorEntry(
+        int ActivatorIndex,
+        BindingActivatorDefinition Activator,
         string Command,
         bool DispatchRelease,
         CommandValue PressValue,
@@ -47,7 +64,9 @@ public sealed class CompiledBindingProfile {
         Dictionary<string, int> groupIndexByName,
         CompiledChordRow[] rows,
         int[] restingRowByGroup,
-        int[][] commandRowsByGroup
+        int[][] commandRowsByGroup,
+        int activatorCount,
+        Dictionary<int, BindingWheelView> wheelViewByRow
     ) {
         m_commandRowsByGroup = commandRowsByGroup;
         m_groupIndexByName = groupIndexByName;
@@ -56,7 +75,13 @@ public sealed class CompiledBindingProfile {
         m_modifiers = modifiers;
         m_restingRowByGroup = restingRowByGroup;
         m_rows = rows;
+        m_wheelViewByRow = wheelViewByRow;
+        ActivatorCount = activatorCount;
     }
+
+    /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
+    /// slot's lazily-populated <see cref="RowActivatorTracker"/> array is allocated to.</summary>
+    public int ActivatorCount { get; }
 
     /// <summary>Gets the index of the DEFAULT group — the first chord row's group, the group a fresh slot resolves in.</summary>
     public int DefaultGroupIndex => 0;
@@ -135,6 +160,24 @@ public sealed class CompiledBindingProfile {
     /// <param name="rowIndex">A page-meaning row index.</param>
     internal BindingPageView ViewOf(int rowIndex) {
         return m_rows[rowIndex].View!;
+    }
+
+    /// <summary>Gets the wheel a page row presents while selected — the row is some wheel's hold page — or
+    /// <see langword="null"/> for every other row.</summary>
+    /// <param name="rowIndex">A page-meaning row index.</param>
+    internal BindingWheelView? WheelOfRow(int rowIndex) {
+        return (m_wheelViewByRow.TryGetValue(
+            key: rowIndex,
+            value: out var wheel
+        )
+            ? wheel
+            : null);
+    }
+
+    /// <summary>Gets a page row's row activators, or an empty list when it declares none.</summary>
+    /// <param name="rowIndex">A page-meaning row index.</param>
+    internal IReadOnlyList<CompiledActivatorEntry> ActivatorsOf(int rowIndex) {
+        return (((IReadOnlyList<CompiledActivatorEntry>?)m_rows[rowIndex].Activators) ?? []);
     }
 
     /// <summary>Attempts to resolve a source to the modifier it drives.</summary>

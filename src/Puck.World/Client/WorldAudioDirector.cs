@@ -12,7 +12,9 @@ namespace Puck.World.Client;
 
 /// <summary>One seat's resolved view-camera pose for the listener policy — filled by the frame source from the SAME
 /// rig resolution the seat renders through (the editor rig when the seat edits), so "focus" listens where the active
-/// view looks.</summary>
+/// view looks. That rig anchors on the seat's PERCEIVED body (<see cref="WorldPerceptionAnchor"/> — the bound body,
+/// or the routed body while possessing), so the listener follows a possession anchor swap by construction, together
+/// with the camera.</summary>
 /// <param name="Joined">Whether the seat is joined this frame.</param>
 /// <param name="Eye">The resolved camera eye, world space.</param>
 /// <param name="Forward">The resolved camera forward (eye → target), world space.</param>
@@ -25,8 +27,8 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// STABLE emitter ids — diff-by-key: a property edit keeps its id (the mixer's coefficient ramps survive), an
 /// identity change (kind, anchor kind, source identity, or the referenced asset's content HASH — the restart
 /// discriminator) releases the id and re-enters from silence. <see cref="Publish"/> resolves each emitter's pose per
-/// produced frame — entity roots from the snapshot view, entity LEAVES from the frame's real packed transforms
-/// (<see cref="WorldAvatarCatalog.LeafPose"/> — the gait-swung pose, not the rest-offset approximation), placements
+/// produced frame — entity roots from the snapshot view, entity parts from the active look's published transform
+/// slots, and placements
 /// from the stamped transform (the animator's current frame for animated rows) — and publishes a
 /// <see cref="WorldAudioSnapshot"/> over a ≥4-deep slab rotation.
 /// </summary>
@@ -70,9 +72,6 @@ internal sealed class WorldAudioDirector {
     /// <summary>The default per-publish clock advance for cue aging: one 240 Hz sim step (the offline drivers'
     /// cadence — one publish per mixed 200-frame block). The live frame source passes its real presentation delta.</summary>
     public const float DefaultPublishDeltaSeconds = (1f / 240f);
-
-    private const ulong Fnv64OffsetBasis = 14695981039346656037UL;
-    private const ulong Fnv64Prime = 1099511628211UL;
 
     private readonly WorldClient? m_client;
     private readonly WorldStampPool? m_animator;
@@ -235,7 +234,7 @@ internal sealed class WorldAudioDirector {
                 Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
             }
 
-            // largechange-01: validate the WHOLE derived plan against the mixer's bounded registries at the compose
+            // Validate the WHOLE derived plan against the mixer's bounded registries at the compose
             // boundary — the patch set (per-emitter synth voices) and the distinct external-source identities the plan
             // taps — so an overfull registry is a loud, contained warn here rather than a silent drop the mixer only
             // discovers row-by-row at bind time.
@@ -255,7 +254,7 @@ internal sealed class WorldAudioDirector {
 
     /// <summary>Resolves this frame's listener and emitter poses and publishes one snapshot from the slab rotation.
     /// Returns the published snapshot (the offline driver mixes it directly).</summary>
-    /// <param name="transforms">The frame's packed dynamic transforms (empty headless — leaf anchors then resolve
+    /// <param name="transforms">The frame's packed dynamic transforms (empty headless — entity-part anchors then resolve
     /// absent).</param>
     /// <param name="seats">The per-slot resolved view-camera poses (the listener policy's candidates).</param>
     /// <param name="deltaSeconds">The clock advance since the previous publish — ages the transient cue pool. The
@@ -301,9 +300,10 @@ internal sealed class WorldAudioDirector {
                 _ = slab.TryAddEmitter(emitter: new WorldAudioEmitter(
                     Id: plan.Id,
                     Kind: plan.Kind,
-                    Position: ToFixed(value: position),
+                    Position: FixedVector3.FromVector3(value: position),
                     MinRadius: plan.MinRadius,
                     MaxRadius: plan.MaxRadius,
+                    Curve: plan.Curve,
                     FadeFrames: plan.FadeFrames,
                     GainQ16: plan.GainQ16,
                     Channel: plan.Channel,
@@ -410,7 +410,7 @@ internal sealed class WorldAudioDirector {
             for (var index = 0; (index < m_plan.Count); index++) {
                 var plan = m_plan[index];
 
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? " " : " | ")}{plan.Id} {plan.Key} {((plan.Kind == WorldAudioEmitterKind.Bed) ? "bed" : "point")} {SourceToken(source: plan.Source)} {ChannelToken(channel: plan.Channel)} gain={((double)plan.GainQ16 / 65536.0):0.###} min={((double)plan.MinRadius):0.###} max={((double)plan.MaxRadius):0.###}");
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? " " : " | ")}{plan.Id} {plan.Key} {((plan.Kind == WorldAudioEmitterKind.Bed) ? "bed" : "point")} {SourceToken(source: plan.Source)} {ChannelToken(channel: plan.Channel)} gain={((double)plan.GainQ16 / 65536.0):0.###} min={((double)plan.MinRadius):0.###} max={((double)plan.MaxRadius):0.###} curve={CurveToken(curve: plan.Curve)}");
             }
 
             return builder.Append(value: ']').ToString();
@@ -418,21 +418,27 @@ internal sealed class WorldAudioDirector {
     }
 
     /// <summary>The <c>speaker.state</c> echo — the LIVE per-row status joining <c>audio.state</c>'s device facts:
-    /// for every derived SPEAKER row its kind, source token, binding status (bound / silent-with-reason / faulted),
-    /// the last published resolved position (or <c>unresolved</c> for an absent anchor), and whether the listener
-    /// currently sits inside its finite support (<c>inMix</c>); then the live transient-cue tail (token + remaining
-    /// life). Live facts move frame to frame — a proof asserts presence/shape, never exact poses.</summary>
+    /// for every derived SPEAKER row AND every placement EMISSION facet (the two point-position facts a live pose
+    /// can drive; a placement's ATTACH facet is what makes the latter move) its kind, source token, binding status
+    /// (bound / silent-with-reason / faulted), the last published resolved position (or <c>unresolved</c> for an
+    /// absent anchor — the verdict for an inactive attach carrier too, since an unresolvable anchor is an absent
+    /// emitter), and whether the listener currently sits inside its finite support (<c>inMix</c>); then the live
+    /// transient-cue tail (token + remaining life). Live facts move frame to frame — a proof asserts presence/shape,
+    /// never exact poses.</summary>
     public string DescribeSpeakerState() {
         lock (m_gate) {
             var builder = new StringBuilder(value: "[speaker.state:");
             var wrote = false;
 
             foreach (var plan in m_plan) {
-                if (!plan.Key.StartsWith(value: "speaker:", comparisonType: StringComparison.Ordinal)) {
+                var isSpeaker = plan.Key.StartsWith(value: "speaker:", comparisonType: StringComparison.Ordinal);
+                var isEmission = plan.Key.StartsWith(value: "placement:", comparisonType: StringComparison.Ordinal);
+
+                if (!isSpeaker && !isEmission) {
                     continue;
                 }
 
-                var name = plan.Key["speaker:".Length..];
+                var name = (isSpeaker ? plan.Key["speaker:".Length..] : plan.Key);
                 var position = (plan.LastResolved
                     ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"({plan.LastPosition.X:0.0},{plan.LastPosition.Y:0.0},{plan.LastPosition.Z:0.0})")
                     : "unresolved");
@@ -458,13 +464,12 @@ internal sealed class WorldAudioDirector {
     // One speaker row's live binding status: what its source identity resolves to RIGHT NOW (under the gate).
     private string SourceStatus(in WorldAudioSourceKey source) => source.Kind switch {
         WorldAudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source.Slot) ? "bound" : "silent(no-machine)"),
-        WorldAudioSourceKind.Tune => ((source.Id is { } tuneId && m_tuneHosts.ContainsKey(key: tuneId))
+        WorldAudioSourceKind.Tune => (((source.Id is { } tuneId) && m_tuneHosts.ContainsKey(key: tuneId))
             ? "bound"
             : ((m_mixer is null) ? "silent(no-device)" : "silent(no-tune)")),
         WorldAudioSourceKind.Synth => (((source.Id is { } patchId) && HasPatch(patchId: patchId)) ? "bound" : "faulted(no-patch)"),
         _ => "silent(no-source)",
     };
-
     private bool HasPatch(string patchId) {
         foreach (var (id, _) in m_patchSet) {
             if (string.Equals(a: id, b: patchId, comparisonType: StringComparison.Ordinal)) {
@@ -516,25 +521,19 @@ internal sealed class WorldAudioDirector {
             }
         }
     }
-
     private void DeriveEmissionFacets(WorldDefinition definition, WorldAudioDefaults audio) {
-        foreach (var row in definition.Scene.Rows) {
-            if (row.Emission is { } emission) {
-                AdmitEmission(key: $"scene:{row.Id}", anchor: EmitterAnchor.FixedPoint(position: row.Center), emission: emission, audio: audio, definition: definition);
-            }
-        }
-
         foreach (var placement in definition.Placements) {
             if (placement.Emission is { } emission) {
-                // Root-only under Repeat (documented on WorldPlacement): the emission binds the placement root.
-                AdmitEmission(key: $"placement:{placement.Id}", anchor: EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: null, staticPosition: placement.Position), emission: emission, audio: audio, definition: definition);
+                // Root-only under Pattern (documented on WorldPlacement): the emission binds the placement root.
+                // isAttached tells TryResolvePosition to go SILENT rather than fall back to the row's inert static
+                // Position when the attach target is not live this frame.
+                AdmitEmission(key: $"placement:{placement.Id}", anchor: EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: null, staticPosition: placement.Position, isAttached: (placement.Attach is not null)), emission: emission, audio: audio, definition: definition);
             }
         }
     }
-
     private void DeriveCreationSounds(WorldDefinition definition, WorldAudioDefaults audio) {
         foreach (var placement in definition.Placements) {
-            if ((WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) ||
+            if ((WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) ||
                 (creation.Document.Behavior?.Sounds is not { Count: > 0 } sounds)) {
                 continue;
             }
@@ -551,6 +550,7 @@ internal sealed class WorldAudioDirector {
                     Anchor = EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: sound.ShapeId, staticPosition: WorldAnchorGeometry.StaticShapePosition(placement: placement, creation: creation, shapeId: sound.ShapeId)),
                     MinRadius = FixedQ4816.Zero,
                     MaxRadius = FixedQ4816.FromDouble(value: (sound.Radius ?? audio.DefaultSpeakerRadius)),
+                    Curve = CurveOf(token: audio.DefaultCurve),
                     FadeFrames = 0,
                     GainQ16 = GainQ16(gain: (sound.Level ?? 1f)),
                     Channel = WorldAudioChannel.Mix,
@@ -559,7 +559,6 @@ internal sealed class WorldAudioDirector {
             }
         }
     }
-
     private EmitterPlan PointPlan(string key, EmitterAnchor anchor, WorldSpeakerAttenuation? attenuation, WorldAudioDefaults audio, int gain, WorldAudioChannel channel, WorldAudioSourceKey source) => new() {
         Key = key,
         Kind = WorldAudioEmitterKind.Point,
@@ -568,12 +567,12 @@ internal sealed class WorldAudioDirector {
         // support edge — a full-gain inner band is a bed concept.
         MinRadius = FixedQ4816.Zero,
         MaxRadius = FixedQ4816.FromDouble(value: (attenuation?.Radius ?? audio.DefaultSpeakerRadius)),
+        Curve = CurveOf(token: (attenuation?.Curve ?? audio.DefaultCurve)),
         FadeFrames = 0,
         GainQ16 = gain,
         Channel = channel,
         Source = source,
     };
-
     private void AdmitEmission(string key, EmitterAnchor anchor, WorldEmission emission, WorldAudioDefaults audio, WorldDefinition definition) {
         Admit(plan: new EmitterPlan {
             Key = key,
@@ -581,6 +580,7 @@ internal sealed class WorldAudioDirector {
             Anchor = anchor,
             MinRadius = FixedQ4816.Zero,
             MaxRadius = FixedQ4816.FromDouble(value: (emission.Radius ?? audio.DefaultSpeakerRadius)),
+            Curve = CurveOf(token: audio.DefaultCurve),
             FadeFrames = 0,
             GainQ16 = GainQ16(gain: emission.Level),
             Channel = WorldAudioChannel.Mix,
@@ -612,7 +612,7 @@ internal sealed class WorldAudioDirector {
             // The seed folds the key and the identity signature: the same authored content reproduces the voice bit
             // for bit; a content change re-seeds with the new identity. Gain stays unity — the emitter's own gain
             // spatializes; a voice gain here would double-scale.
-            SubmitTrigger(patchId: patchId, seed: (Fnv64(text: plan.Key) ^ signature), gainQ16: 65536, emitterId: plan.Id);
+            SubmitTrigger(patchId: patchId, seed: Fnv64(text: plan.Key) ^ signature, gainQ16: 65536, emitterId: plan.Id);
         }
 
         m_plan.Add(item: plan);
@@ -679,7 +679,7 @@ internal sealed class WorldAudioDirector {
                 // Voice gain stays unity — the transient emitter's own gain carries the cue level; a voice gain here
                 // would double-scale. The seed folds the token with a session ordinal:
                 // repeated cues of one event get distinct noise streams.
-                SubmitTrigger(patchId: row.PatchId, seed: (Fnv64(text: eventToken) ^ ++m_cueOrdinal), gainQ16: 65536, emitterId: id);
+                SubmitTrigger(patchId: row.PatchId, seed: Fnv64(text: eventToken) ^ ++m_cueOrdinal, gainQ16: 65536, emitterId: id);
             }
         }
     }
@@ -698,12 +698,11 @@ internal sealed class WorldAudioDirector {
     /// fall back to the listener placement — honest, documented).</summary>
     /// <param name="mutation">The mutation the edit echo answered, or <see langword="null"/>.</param>
     public static Vector3? MutationSite(WorldMutation? mutation) => mutation switch {
-        WorldMutation.UpsertSceneRow upsert => upsert.Row.Center,
         WorldMutation.UpsertScreen upsert => upsert.Screen.Origin,
         WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
-        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => upsert.Camera.Offset,
+        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => WorldCameraRigCompiler.AuthoredPosition(motion: upsert.Camera.Rig.Motion),
         _ => null,
     };
 
@@ -751,7 +750,6 @@ internal sealed class WorldAudioDirector {
 
         return WorldAudioMixer.FramesPerSimStep;
     }
-
     private void EvictNearestExpiry() {
         var victim = 0;
 
@@ -776,23 +774,25 @@ internal sealed class WorldAudioDirector {
 
         var elapsedFrames = ((long)MathF.Round(x: (MathF.Max(x: deltaSeconds, y: 0f) * WorldAudioMixer.SampleRate)));
 
-        for (var index = (m_transients.Count - 1); index >= 0; index--) {
+        for (var index = (m_transients.Count - 1); (index >= 0); index--) {
             var transient = m_transients[index];
             var position = slab.Listener.Position;
             var minRadius = FixedQ4816.Zero;
             var maxRadius = m_defaultCueRadius;
+            var curve = CurveOf(token: (m_definition?.Audio.DefaultCurve ?? WorldAudioDefaults.CurveSmoothstep));
 
             switch (transient.Placement) {
                 case CuePlacement.AtSite:
-                    position = ToFixed(value: transient.Site);
+                    position = FixedVector3.FromVector3(value: transient.Site);
 
                     break;
                 case CuePlacement.Emitter:
                     if (TryFindSpeakerPlan(name: transient.SpeakerName, plan: out var speakerPlan) &&
                         TryResolvePosition(plan: in speakerPlan, transforms: transforms, position: out var resolved)) {
-                        position = ToFixed(value: resolved);
+                        position = FixedVector3.FromVector3(value: resolved);
                         minRadius = speakerPlan.MinRadius;
                         maxRadius = speakerPlan.MaxRadius;
+                        curve = speakerPlan.Curve;
                     }
 
                     break;
@@ -807,6 +807,7 @@ internal sealed class WorldAudioDirector {
                 Position: position,
                 MinRadius: minRadius,
                 MaxRadius: maxRadius,
+                Curve: curve,
                 FadeFrames: 0,
                 GainQ16: transient.GainQ16,
                 Channel: WorldAudioChannel.Mix,
@@ -822,7 +823,6 @@ internal sealed class WorldAudioDirector {
             }
         }
     }
-
     private bool TryFindSpeakerPlan(string? name, out EmitterPlan plan) {
         if (name is not null) {
             var key = $"speaker:{name}";
@@ -859,14 +859,14 @@ internal sealed class WorldAudioDirector {
 
                 return true;
             case WorldSpeaker.Anchored anchored: {
-                lock (m_gate) {
-                    var plan = new EmitterPlan {
-                        Anchor = AnchorOf(anchor: anchored.Anchor, offset: anchored.Offset),
-                    };
+                    lock (m_gate) {
+                        var plan = new EmitterPlan {
+                            Anchor = AnchorOf(anchor: anchored.Anchor, offset: anchored.Offset),
+                        };
 
-                    return TryResolvePosition(plan: in plan, transforms: transforms, position: out position);
+                        return TryResolvePosition(plan: in plan, transforms: transforms, position: out position);
+                    }
                 }
-            }
             default:
                 position = default;
 
@@ -879,7 +879,7 @@ internal sealed class WorldAudioDirector {
     /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies NOW and owns every later
     /// reconcile; the document's <see cref="WorldAudioDefaults.MasterGain"/> keeps owning boot, and
     /// <c>world.save</c> folds the lever back into it (the render-levers asymmetry). Until first engaged, the
-    /// document value flows live (so the offline document-driven proofs and <c>world.audio.set</c>'s live master
+    /// document value flows live (so the offline document-driven proofs and <c>world.row.set audio</c>'s live master
     /// gain keep flowing from the document).</summary>
     /// <param name="value">The master volume (1 = unity), validated by the verb against the shared gain ceiling.</param>
     public void SetMasterVolume(float value) {
@@ -913,8 +913,8 @@ internal sealed class WorldAudioDirector {
     }
 
     // The distinct external (machine/tune) source identities the derived plan taps — the mixer binds one source slot
-    // per identity, so this is the plan's real demand on the bounded source table (largechange-01 compose-boundary
-    // validation). Synth-fed rows register a patch, not a source, so they do not count here.
+    // per identity, so this is the plan's real demand on the bounded source table (the compose-boundary
+    // validation above). Synth-fed rows register a patch, not a source, so they do not count here.
     private int CountDistinctExternalSources() {
         var seen = new HashSet<WorldAudioSourceKey>();
 
@@ -964,7 +964,7 @@ internal sealed class WorldAudioDirector {
 
         mixer.MasterGainQ16 = MasterGainQ16;
 
-        // largechange-01 reclaim: retire patch slots whose id left the derived plan BEFORE re-registering the live set,
+        // Retire patch slots whose id left the derived plan BEFORE re-registering the live set,
         // so the bounded table is not filled by the carcasses of churned sound emitters across reconciles.
         var livePatchIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -1004,7 +1004,6 @@ internal sealed class WorldAudioDirector {
             }
         }
     }
-
     private WorldTune? FindReferencedTune(WorldDefinition definition, string tuneId) {
         foreach (var plan in m_plan) {
             if ((plan.Source.Kind == WorldAudioSourceKind.Tune) && string.Equals(a: plan.Source.Id, b: tuneId, comparisonType: StringComparison.Ordinal)) {
@@ -1014,7 +1013,6 @@ internal sealed class WorldAudioDirector {
 
         return null;
     }
-
     private static TuneHost CreateTuneHost(WorldTune tune, WorldAudioMixer mixer) {
         var source = new TuneMachineSource(document: tune.Document);
 
@@ -1034,48 +1032,54 @@ internal sealed class WorldAudioDirector {
 
                 return true;
             case EmitterAnchorKind.Entity: {
-                if ((m_client is not { } client) || !client.IsActive(index: anchor.EntityIndex)) {
-                    position = default;
+                    if ((m_client is not { } client) || !client.IsActive(index: anchor.EntityIndex)) {
+                        position = default;
 
-                    return false;
-                }
+                        return false;
+                    }
 
-                position = (client.Position(index: anchor.EntityIndex) + Vector3.Transform(value: anchor.Offset, rotation: client.Orientation(index: anchor.EntityIndex)));
-
-                return true;
-            }
-            case EmitterAnchorKind.EntityLeaf: {
-                if ((m_client is not { } client) || !client.IsActive(index: anchor.EntityIndex) || (transforms.Length < WorldAvatarCatalog.DynamicTransformCapacity)) {
-                    position = default;
-
-                    return false;
-                }
-
-                // THE LEAF-POSE SWAP: the frame's real packed transforms carry the gait-swung leaf pose, so a
-                // hand-anchored speaker follows the swing, not the rest offset.
-                var (leafPosition, leafOrientation) = WorldAvatarCatalog.LeafPose(avatar: anchor.EntityIndex, role: anchor.Role, transforms: transforms);
-
-                position = (leafPosition + Vector3.Transform(value: anchor.Offset, rotation: leafOrientation));
-
-                return true;
-            }
-            case EmitterAnchorKind.Placement:
-            default: {
-                // Animated placements ride the stamp pool's current frame; an INHABITED placement rides its live body
-                // pose (both through TryShapePosition); a static placement uses the reconcile-time stamp math.
-                if ((m_animator is { } animator) && (m_client is { } client) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, client: client, out var animated)) {
-                    position = (animated + anchor.Offset);
+                    position = (client.Position(index: anchor.EntityIndex) + Vector3.Transform(value: anchor.Offset, rotation: client.Orientation(index: anchor.EntityIndex)));
 
                     return true;
                 }
+            case EmitterAnchorKind.EntityPart: {
+                    if ((m_client is not { } client) || (m_animator is not { } animator) ||
+                        !WorldEntityPartResolver.TryPackedPose(client: client, stamps: animator, entityIndex: anchor.EntityIndex, partId: anchor.PartId!, transforms: transforms, pose: out var partPose)) {
+                        position = default;
 
-                position = (anchor.Position + anchor.Offset);
+                        return false;
+                    }
 
-                return true;
-            }
+                    position = (partPose.Position + Vector3.Transform(value: anchor.Offset, rotation: partPose.Orientation));
+
+                    return true;
+                }
+            case EmitterAnchorKind.Placement:
+            default: {
+                    // Animated placements ride the stamp pool's current frame; an INHABITED placement rides its live body
+                    // pose (both through TryShapePosition); a static placement uses the reconcile-time stamp math.
+                    if ((m_animator is { } animator) && (m_client is { } client) && (anchor.PlacementId is { } placementId) && animator.TryShapePosition(placementId: placementId, shapeId: anchor.ShapeId, client: client, out var animated)) {
+                        position = (animated + anchor.Offset);
+
+                        return true;
+                    }
+
+                    // An ATTACHED row's pool lookup just failed — its target body is not live THIS frame (the SAME
+                    // verdict WorldStampPool.PackTransforms already renders as a hidden stamp), so the row is absent
+                    // rather than falling back to its INERT static Position (which neither the resolve nor the renderer
+                    // reads for an attached row — see WorldPlacement's own doc).
+                    if (anchor.IsAttached) {
+                        position = default;
+
+                        return false;
+                    }
+
+                    position = (anchor.Position + anchor.Offset);
+
+                    return true;
+                }
         }
     }
-
     private WorldAudioListener ResolveListener(ReadOnlySpan<WorldSeatCameraPose> seats, ReadOnlySpan<DynamicTransform> transforms) {
         var (eye, forward) = ResolveListenerPose(seats: seats, transforms: transforms);
         // The yaw rotor maps listener-local (X = right, Y = forward) into world (X, Z); building it from the planar
@@ -1091,7 +1095,7 @@ internal sealed class WorldAudioDirector {
             ).Normalize();
         }
 
-        return new WorldAudioListener(Position: ToFixed(value: eye), Yaw: m_lastListenerYaw);
+        return new WorldAudioListener(Position: FixedVector3.FromVector3(value: eye), Yaw: m_lastListenerYaw);
     }
 
     // The listener policy: focus = the first joined seat's resolved view camera (the editor rig when that
@@ -1121,7 +1125,6 @@ internal sealed class WorldAudioDirector {
 
         return (Eye: Vector3.Zero, Forward: new Vector3(x: 0f, y: 0f, z: -1f));
     }
-
     private (Vector3 Eye, Vector3 Forward)? ResolveCameraListener(string name, ReadOnlySpan<DynamicTransform> transforms) {
         if (m_definition is not { } definition) {
             return null;
@@ -1132,22 +1135,30 @@ internal sealed class WorldAudioDirector {
                 continue;
             }
 
-            // An unanchored look-at camera listens from its world eye toward its target; other unanchored rigs have no
-            // simple static listener pose (fall back to the listener placement).
+            // An unanchored static world-point framing has a directly resolvable listener pose.
             if (camera.Anchor is null) {
-                return ((camera.Rig is WorldRig.LookAt look) ? (Eye: camera.Offset, Forward: (look.Target - camera.Offset)) : ((Vector3 Eye, Vector3 Forward)?)null);
+                return (((camera.Rig.Motion is WorldCameraMotion.Static { WorldAxes: true } motion) && (camera.Rig.Aim is WorldCameraAim.WorldPoint aim))
+                    ? (Eye: motion.Position, Forward: (aim.Target - motion.Position))
+                    : ((Vector3 Eye, Vector3 Forward)?)null);
+            }
+
+            if (camera.Rig.Motion is not WorldCameraMotion.Follow { WorldAxes: false } follow) {
+                return null;
             }
 
             var plan = new EmitterPlan {
-                Anchor = AnchorOf(anchor: camera.Anchor, offset: camera.Offset),
+                Anchor = AnchorOf(anchor: camera.Anchor, offset: follow.Offset),
             };
 
             if (TryResolvePosition(plan: in plan, transforms: transforms, position: out var eye) && (m_client is { } client) &&
-                (camera.Anchor is WorldAnchor.Entity or WorldAnchor.EntityLeaf)) {
-                var index = ((camera.Anchor is WorldAnchor.Entity entity) ? entity.Index : ((WorldAnchor.EntityLeaf)camera.Anchor).Index);
+                (camera.Anchor is WorldAnchor.Entity or WorldAnchor.EntityPart)) {
+                var orientation = ((camera.Anchor is WorldAnchor.Entity entity)
+                    ? client.Orientation(index: entity.Index)
+                    : (((m_animator is { } animator) && WorldEntityPartResolver.TryPackedPose(client: client, stamps: animator, entityIndex: ((WorldAnchor.EntityPart)camera.Anchor).Index, partId: ((WorldAnchor.EntityPart)camera.Anchor).PartId, transforms: transforms, pose: out var partPose))
+                        ? partPose.Orientation
+                        : Quaternion.Identity));
 
-                // Avatar-local forward is -Z (the body convention every kit composition rides).
-                return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: client.Orientation(index: index)));
+                return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: orientation));
             }
 
             return null;
@@ -1160,8 +1171,7 @@ internal sealed class WorldAudioDirector {
 
     private EmitterAnchor AnchorOf(WorldAnchor anchor, Vector3 offset) => anchor switch {
         WorldAnchor.Entity entity => EmitterAnchor.EntityRoot(index: entity.Index, offset: offset),
-        WorldAnchor.EntityLeaf leaf when WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role) =>
-            EmitterAnchor.EntityLeafRole(index: leaf.Index, role: role, offset: offset),
+        WorldAnchor.EntityPart part => EmitterAnchor.EntityPart(index: part.Index, partId: part.PartId, offset: offset),
         WorldAnchor.Placement placement => EmitterAnchor.PlacementPoint(
             placementId: placement.PlacementId,
             shapeId: placement.ShapeId,
@@ -1171,10 +1181,9 @@ internal sealed class WorldAudioDirector {
         _ => EmitterAnchor.FixedPoint(position: offset),
     };
 
-    // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read (P9).
+    // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read.
     private Vector3 StaticPlacementPosition(string placementId, int? shapeId) =>
         ((m_definition is { } definition) ? WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placementId, shapeId: shapeId) : Vector3.Zero);
-
     private static WorldAudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
         WorldSpeakerSource.Machine machine => WorldAudioSourceKey.Machine(slot: machine.ScreenIndex),
         WorldSpeakerSource.Tune tune => WorldAudioSourceKey.Tune(id: tune.TuneId),
@@ -1190,7 +1199,6 @@ internal sealed class WorldAudioDirector {
         WorldSpeakerSource.Synth synth => $"synth:{synth.PatchId}:{PatchHash(definition: definition, patchId: synth.PatchId)}",
         _ => "none",
     };
-
     private static WorldTune? FindTune(WorldDefinition definition, string tuneId) {
         foreach (var tune in definition.Tunes) {
             if (string.Equals(a: tune.Id, b: tuneId, comparisonType: StringComparison.Ordinal)) {
@@ -1200,7 +1208,6 @@ internal sealed class WorldAudioDirector {
 
         return null;
     }
-
     private static string PatchHash(WorldDefinition definition, string patchId) {
         foreach (var patch in definition.Patches) {
             if (string.Equals(a: patch.Id, b: patchId, comparisonType: StringComparison.Ordinal)) {
@@ -1210,69 +1217,69 @@ internal sealed class WorldAudioDirector {
 
         return string.Empty;
     }
-
     private static string AnchorKindToken(WorldAnchor anchor) => anchor switch {
         WorldAnchor.Entity => "entity",
-        WorldAnchor.EntityLeaf => "entityLeaf",
+        WorldAnchor.EntityPart => "entityPart",
         _ => "placement",
     };
-
     private static string SourceToken(in WorldAudioSourceKey source) => source.Kind switch {
         WorldAudioSourceKind.Machine => $"machine:{source.Slot}",
         WorldAudioSourceKind.Tune => $"tune:{source.Id}",
         WorldAudioSourceKind.Synth => $"synth:{source.Id}",
         _ => "none",
     };
-
     private static string ChannelToken(WorldAudioChannel channel) => channel switch {
         WorldAudioChannel.Left => "left",
         WorldAudioChannel.Right => "right",
         _ => "mix",
     };
-
-    private static int GainQ16(float gain) => ((int)MathF.Round(x: (gain * 65536f)));
-
+    private static WorldAudioAttenuationCurve CurveOf(string token) =>
+        (string.Equals(a: token, b: WorldAudioDefaults.CurveLinear, comparisonType: StringComparison.Ordinal)
+            ? WorldAudioAttenuationCurve.Linear
+            : WorldAudioAttenuationCurve.Smoothstep);
+    private static string CurveToken(WorldAudioAttenuationCurve curve) =>
+        ((curve == WorldAudioAttenuationCurve.Linear) ? WorldAudioDefaults.CurveLinear : WorldAudioDefaults.CurveSmoothstep);
+    private static int GainQ16(float gain) => ((int)FixedQ4816.FromDouble(value: gain).Value);
     private static int FadeFrames(float seconds) => ((int)MathF.Round(x: (seconds * WorldAudioMixer.SampleRate)));
-
-    private static FixedVector3 ToFixed(Vector3 value) => new(
-        X: FixedQ4816.FromDouble(value: value.X),
-        Y: FixedQ4816.FromDouble(value: value.Y),
-        Z: FixedQ4816.FromDouble(value: value.Z)
-    );
-
     private static ulong Fnv64(string text) {
-        var hash = Fnv64OffsetBasis;
+        var hash = Fnv1aHash.Create();
 
         foreach (var character in text) {
-            hash = ((hash ^ character) * Fnv64Prime);
+            hash.Add(value: ((uint)character));
         }
 
-        return hash;
+        return hash.Value;
     }
 
     private enum EmitterAnchorKind : byte {
         Fixed,
         Entity,
-        EntityLeaf,
+        EntityPart,
         Placement,
     }
 
-    // WHERE one derived emitter rides — a fixed point, an entity root/leaf, or a placement (with the static stamp
+    // WHERE one derived emitter rides — a fixed point, an entity root/part, or a placement (with the static stamp
     // position precomputed at reconcile so per-frame resolution allocates nothing).
     private readonly struct EmitterAnchor {
-        public EmitterAnchorKind Kind { get; init; }
-        public Vector3 Position { get; init; }
-        public Vector3 Offset { get; init; }
         public int EntityIndex { get; init; }
-        public int Role { get; init; }
+        public EmitterAnchorKind Kind { get; init; }
+        public Vector3 Offset { get; init; }
+        public string? PartId { get; init; }
         public string? PlacementId { get; init; }
+        public Vector3 Position { get; init; }
         public int? ShapeId { get; init; }
+        // Whether the carrying placement row itself carries an ATTACH facet — the ONE fact TryResolvePosition needs
+        // to tell "the pool has no live position for this row's target body right now" (absent — the row contributes
+        // nothing, same as an inactive body's render stamp) apart from "this row was never pool-rooted at all" (an
+        // ordinary static/animated placement, where the STATIC-position fallback is correct). Defaults false, so
+        // every OTHER PlacementPoint caller (a speaker anchored to a placement's stamp) is unaffected.
+        public bool IsAttached { get; init; }
 
         public static EmitterAnchor FixedPoint(Vector3 position) => new() { Kind = EmitterAnchorKind.Fixed, Position = position };
-        public static EmitterAnchor EntityRoot(int index, Vector3 offset) => new() { Kind = EmitterAnchorKind.Entity, EntityIndex = index, Offset = offset };
-        public static EmitterAnchor EntityLeafRole(int index, int role, Vector3 offset) => new() { Kind = EmitterAnchorKind.EntityLeaf, EntityIndex = index, Role = role, Offset = offset };
-        public static EmitterAnchor PlacementPoint(string placementId, int? shapeId, Vector3 staticPosition, Vector3 offset = default) =>
-            new() { Kind = EmitterAnchorKind.Placement, PlacementId = placementId, ShapeId = shapeId, Position = staticPosition, Offset = offset };
+        public static EmitterAnchor EntityRoot(int index, Vector3 offset) => new() { EntityIndex = index, Kind = EmitterAnchorKind.Entity, Offset = offset };
+        public static EmitterAnchor EntityPart(int index, string partId, Vector3 offset) => new() { EntityIndex = index, Kind = EmitterAnchorKind.EntityPart, Offset = offset, PartId = partId };
+        public static EmitterAnchor PlacementPoint(string placementId, int? shapeId, Vector3 staticPosition, Vector3 offset = default, bool isAttached = false) =>
+            new() { IsAttached = isAttached, Kind = EmitterAnchorKind.Placement, Offset = offset, PlacementId = placementId, Position = staticPosition, ShapeId = shapeId };
     }
 
     // One derived emitter row — the document-derived stable facts Publish resolves a pose for each frame, plus the
@@ -1285,6 +1292,7 @@ internal sealed class WorldAudioDirector {
         public EmitterAnchor Anchor;
         public FixedQ4816 MinRadius;
         public FixedQ4816 MaxRadius;
+        public WorldAudioAttenuationCurve Curve;
         public int FadeFrames;
         public int GainQ16;
         public WorldAudioChannel Channel;
@@ -1293,14 +1301,11 @@ internal sealed class WorldAudioDirector {
         public bool LastResolved;
         public bool LastInSupport;
     }
-
     private readonly record struct EmitterIdentity(int Id, ulong Signature);
-
     private struct PendingTrigger {
         public WorldSynthTrigger Trigger;
         public int RemainingPublishes;
     }
-
     private enum CuePlacement : byte {
         AtSite,
         Listener,
@@ -1322,7 +1327,6 @@ internal sealed class WorldAudioDirector {
         public string? SpeakerName;
         public long RemainingFrames;
     }
-
     private readonly record struct TuneHost(string TuneId, string Hash, TuneMachineSource Source);
 
     // One live machine binding: the drained machine (reference identity — the swap detector) and its block-source

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <!-- A real GPU-host composition root (it boots its OWN Vulkan-or-Direct3D-12 device + window, exactly like
+             Puck.World does), not a dev tool that merely consumes engine types — a "Tool" kind may not hold a
+             Backends-row assembly even transitively through a .Presentation wrapper (PUCKARCH002); only the
+             Presentation row and composition roots may. -->
+        <PuckLayer>Composition roots</PuckLayer>
+    </PropertyGroup>
+    <!--
+        Puck.SdfVm.Bench — a headless-ish GPU/CPU ceiling-measurement harness for src/Puck.SdfVm's contributed
+        dynamic geometry (Phase 3 L1, 2026-08-02). It boots a real Vulkan-or-Direct3D-12 window host (Puck.Launcher +
+        SdfWorldRenderBuilder — the SAME generic assembly Puck.World composes, no game-specific glue) driving a
+        purpose-built ISdfFrameSource that runs SdfBenchScene's DynamicMatrix ladder (Puck.SdfVm.Debug) to completion
+        and exits. It is a MEASUREMENT tool, not a game — never add game features here.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <RootNamespace>Puck.SdfVm.Bench</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+    </ItemGroup>
+</Project>

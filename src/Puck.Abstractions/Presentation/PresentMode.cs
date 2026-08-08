@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.Abstractions.Presentation;
 
 /// <summary>
@@ -6,6 +9,7 @@ namespace Puck.Abstractions.Presentation;
 /// <c>IDXGISwapChain::Present</c> sync interval and flags) and falls back gracefully when the exact mode is
 /// unsupported.
 /// </summary>
+[JsonConverter(typeof(StrictEnumConverter<PresentMode>))]
 public enum PresentMode {
     /// <summary>Wait for vertical blank; no tearing. The safe, power-friendly default
     /// (Vulkan <c>FIFO</c>; Direct3D 12 <c>Present(1, 0)</c>).</summary>

@@ -1,0 +1,18 @@
+{
+  "description": "The water section (default null = a dry world) \u2014 the world\u0027s standing-water medium (see WorldWaterSection): one authored waterline, echoed by world.status and read by the swim motion model\u0027s stages. OPTIONAL, for the SAME reason Rules is.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "level": {
+      "description": "The waterline\u0027s world-space Y \u2014 the free surface of the world\u0027s standing water. A position below it is submerged.",
+      "type": "number"
+    }
+  },
+  "required": [
+    "level"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

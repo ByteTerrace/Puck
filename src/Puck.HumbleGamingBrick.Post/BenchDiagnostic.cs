@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
 /// The machine-fleet bench (<c>--bench</c>) — the measurement instrument the fleet-performance plan rests on
-/// (docs/machine-fleet-briefing.md §5 step 1). One run reports: the fleet scaling curve in BOTH shapes (independent
+/// (the fleet-scaling method, whose write-up is retired). One run reports: the fleet scaling curve in BOTH shapes (independent
 /// per-machine input streams and one shared choir stream), single- and multi-threaded; the burst catch-up rate (the
 /// simulate-on-demand dormancy budget); <c>Create</c>/<c>Snapshot</c>/<c>Restore</c>/<c>Fork</c> latency and
 /// allocation (the spawn / ghost-echo / promote-demote budgets); the mailbox-check cycle (restore → run → read
@@ -41,9 +41,9 @@ internal static class BenchDiagnostic {
         // why not also a comma list): 0 or 1 path runs the original homogeneous-fleet bench unchanged; 2+ additionally
         // runs the mixed-mapper fleet section (A2/D1's megamorphic payoff case — see MeasureMixedMapperFleet).
         var romPaths = ArgValues(args: args, name: "--bench-rom");
-        var frameFloor = (int.TryParse(s: ArgValue(args: args, name: "--bench-frames"), result: out var parsedFrames) ? parsedFrames : DefaultFramesPerMachine);
-        var fleetSizes = ParseFleetSizes(value: ArgValue(args: args, name: "--bench-fleet"));
-        var artifactsDirectory = (ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post"));
+        var frameFloor = (int.TryParse(s: CommandLineArguments.Value(args: args, name: "--bench-frames"), result: out var parsedFrames) ? parsedFrames : DefaultFramesPerMachine);
+        var fleetSizes = ParseFleetSizes(value: CommandLineArguments.Value(args: args, name: "--bench-fleet"));
+        var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post"));
         byte[] rom;
         ConsoleModel model;
         string romName;
@@ -494,15 +494,6 @@ internal static class BenchDiagnostic {
         }
 
         return Array.ConvertAll(array: value.Split(separator: ','), converter: static size => int.Parse(s: size));
-    }
-    private static string? ArgValue(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
     }
     /// <summary>Collects every occurrence of a repeatable flag verbatim (one value per occurrence) — the repeated-flag
     /// half of <c>--bench-fleet</c>'s "multiple values" convention. <c>--bench-rom</c> deliberately does NOT also

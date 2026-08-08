@@ -31,6 +31,15 @@ public sealed class SdfProgramBuilder {
     /// indexed ARRAY and giving PUSH/POP real push/pop-by-depth stack semantics in the shader FIRST, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
+    /// <summary>The largest <see cref="RepeatPolar"/> sector count this builder accepts: 2^24, the largest integer a
+    /// 32-bit float represents EXACTLY. <c>RepeatPolar</c> bakes the sector count into the packed program as a float
+    /// (Data0.z) and the shader's per-sector material recolor re-derives the sector index from it via float wrap
+    /// arithmetic (<c>sector - count*floor(sector/count)</c>); past this bound the int-to-float conversion of the
+    /// count itself is inexact, so the shader's wrapped max can diverge from this builder's exact-integer
+    /// <c>sectors - 1</c> claim — the Build()-time recolor-window refusal would then be judging a maximum the shader
+    /// does not actually observe. Refusing the count outright keeps that claim honest without forking the shader's
+    /// float arithmetic onto the host.</summary>
+    public const int MaxExactFloatSectorCount = (1 << 24);
 
     private readonly List<SdfInstanceRange> m_instances = [];
     private readonly List<SdfInstruction> m_instructions = [];
@@ -52,6 +61,26 @@ public sealed class SdfProgramBuilder {
     // Shape() before a positional shape's material lands in the packed program — the clamp early-returns whenever
     // m_materialScopes is empty, so a scope-free program never mutates an already-emitted instruction.
     private (int InstructionIndex, int ReachPerUnit, int RawValue)? m_positionalFold;
+    // The SECOND mirror of the shader's parityMaterialDelta slot, and the one the Build()-time refusal below reads.
+    // It exists beside m_positionalFold because the two answer different questions: m_positionalFold feeds the
+    // material-scope CLAMP, whose repair vocabulary is a fold's per-unit stride, so it deliberately tracks only the two
+    // strided folds; this slot tracks EVERY instruction that writes parityMaterialDelta — WallpaperFold, RepeatPolar,
+    // AND CellJitter, whose hashed variant is not a stride and has no clamped form. Carries the writing instruction's
+    // index and the largest delta ONE unit of its raw Material lane can produce (see MaxRecolorDelta, which reads the
+    // raw lane back out of m_instructions so it sees any value the clamp already narrowed). Cleared by ResetPoint on
+    // both sides (SDF_OP_RESET zeroes parityMaterialDelta).
+    private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
+    // Every positional recolor WINDOW the program has emitted: the recoloring op, the base material of the shape it
+    // recolors, the largest delta that op can add to it, and the material SCOPE the shape was emitted in (null when
+    // none was open). Recorded by Shape() — the palette is not final and the recolored shape does not exist when the
+    // fold is declared, so the window cannot be judged before Build(), which is where the refusal below reads this list
+    // against the span the window is allowed to reach. The scope is recorded by IDENTITY, not by extent: an open scope
+    // can still grow, so only its close knows where it ends (SdfMaterialScope.MaterialEnd), and every scope has closed
+    // by Build(). The delta and the window top are 64-bit because the reach is a PRODUCT of two caller-supplied ints: a
+    // colossal stride overflows a 32-bit multiply into a negative reach, which would read as an in-range window and let
+    // the very program this gate exists to refuse through. (The shader's own 32-bit product overflows too — that is a
+    // reason to refuse the program, not to model it.)
+    private readonly List<(SdfOp Op, int Material, long MaxDelta, SdfMaterialScope? Scope)> m_materialRecolorWindows = [];
     // The one open field scope (a PushField without its PopField yet), or null when none is open: carries the compose
     // blend + smooth radius PopField bakes onto its instruction, and the ShapeBlend count when it opened (so a
     // shape-less scope is rejected at close). Null for a scope-free program, so its packed words stay byte-identical.
@@ -71,7 +100,33 @@ public sealed class SdfProgramBuilder {
     /// <summary>Adds a material to the program palette.</summary>
     /// <param name="material">The material to add.</param>
     /// <returns>The zero-based material identifier used by shape instructions.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="material"/> is not finite, or is
+    /// negative.</exception>
+    /// <exception cref="InvalidOperationException">The composed palette already holds <see cref="ScreenMaterialId"/>
+    /// materials (see the ceiling check below).</exception>
     public int AddMaterial(SdfMaterial material) {
+        // Every field lands verbatim in the two packed palette words (SdfProgram writes Albedo/Emissive, then
+        // Specular/Shininess), so all four are shading inputs with no host-side normalization: a negative reflectance,
+        // emissive strength, specular strength, or Blinn-Phong exponent has no physical reading, and a NaN in any of
+        // them propagates into the shaded colour of every pixel the material wins.
+        RequireNonNegative(value: material.Albedo, paramName: nameof(material), subject: "A material albedo");
+        RequireNonNegative(value: material.Emissive, paramName: nameof(material), subject: "A material emissive strength");
+        RequireNonNegative(value: material.Specular, paramName: nameof(material), subject: "A material specular strength");
+        RequireNonNegative(value: material.Shininess, paramName: nameof(material), subject: "A material shininess exponent");
+
+        // THE PALETTE/SENTINEL COLLISION GATE. A shape's material id is a plain composed index below ScreenMaterialId,
+        // or a screen sentinel AT OR ABOVE it (ScreenMaterialId itself, or ScreenMaterialId + 1 + screenIndex — see
+        // ScreenSlab) — and Build()'s own palette-range gate deliberately EXEMPTS every id >= ScreenMaterialId rather
+        // than refusing it (that range is legitimately screen shading, not an out-of-palette row). So a caller whose
+        // OWN ordinal is perfectly in range (e.g. a puck.sdf.v1 document naming ordinal 0) can still have it translate,
+        // once composed onto a shared builder alongside enough EARLIER materials from another contributor, into a raw
+        // index at or past ScreenMaterialId — silently reinterpreted downstream as a screen-surface reference instead
+        // of refused as out-of-range. Refuse the growth HERE, at the one place that assigns the composed index, naming
+        // the ceiling, rather than let a document's palette-local ordinal reach another host table.
+        if (m_materials.Count >= ScreenMaterialId) {
+            throw new InvalidOperationException(message: $"A program's composed material palette may declare at most {ScreenMaterialId} materials (ScreenMaterialId) — material index {ScreenMaterialId} would collide with the reserved screen-material sentinel range. Register fewer materials.");
+        }
+
         m_materials.Add(item: material);
 
         return (m_materials.Count - 1);
@@ -101,6 +156,11 @@ public sealed class SdfProgramBuilder {
             throw new InvalidOperationException(message: "Material scopes must close in LIFO order — dispose the innermost open scope before an outer one (or this scope was already closed).");
         }
 
+        // Seal the scope's span for the Build()-time recolor gate: a window recorded inside this scope could not know
+        // where the scope would end (more AddMaterial calls could still land), so the end is stamped here, at the one
+        // moment it becomes final.
+        scope.MaterialEnd = m_materials.Count;
+
         m_materialScopes.RemoveAt(index: (m_materialScopes.Count - 1));
     }
     /// <summary>Opens a STATIC per-object instance: every instruction until the matching <see cref="EndInstance"/>
@@ -110,8 +170,11 @@ public sealed class SdfProgramBuilder {
     /// always evaluated, unmasked (floors/walls/unbounded shapes).</summary>
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
+    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
     public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius) {
+        RequireInstanceBound(center: boundCenter, centerParamName: nameof(boundCenter), radius: boundRadius, radiusParamName: nameof(boundRadius));
         BeginInstanceCore(isDynamic: false, center: boundCenter, radius: boundRadius, slot: 0);
 
         return this;
@@ -123,7 +186,10 @@ public sealed class SdfProgramBuilder {
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
+    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     public SdfProgramBuilder Instance(Vector3 boundCenter, float boundRadius, Action<SdfProgramBuilder> emit) {
+        RequireInstanceBound(center: boundCenter, centerParamName: nameof(boundCenter), radius: boundRadius, radiusParamName: nameof(boundRadius));
         ScopedInstance(isDynamic: false, center: boundCenter, radius: boundRadius, slot: 0, emit: emit);
 
         return this;
@@ -141,8 +207,12 @@ public sealed class SdfProgramBuilder {
     /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
     /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
     /// almost nothing. Its mask bit is always 0 — Stage 1 never marches it.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
+    /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
+    /// non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
     public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true) {
+        RequireInstanceBound(center: boundOffset, centerParamName: nameof(boundOffset), radius: boundRadius, radiusParamName: nameof(boundRadius));
         BeginInstanceCore(isDynamic: true, center: boundOffset, radius: boundRadius, slot: slot, active: active);
 
         return this;
@@ -155,7 +225,11 @@ public sealed class SdfProgramBuilder {
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
+    /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
+    /// non-negative.</exception>
     public SdfProgramBuilder DynamicInstance(int slot, Vector3 boundOffset, float boundRadius, Action<SdfProgramBuilder> emit) {
+        RequireInstanceBound(center: boundOffset, centerParamName: nameof(boundOffset), radius: boundRadius, radiusParamName: nameof(boundRadius));
         ScopedInstance(isDynamic: true, center: boundOffset, radius: boundRadius, slot: slot, emit: emit);
 
         return this;
@@ -190,6 +264,15 @@ public sealed class SdfProgramBuilder {
         return this;
     }
 
+    // The four public instance openers share this bound check but name their centre argument differently (boundCenter
+    // for a static instance, boundOffset for a dynamic one), so the caller's own parameter names are passed through
+    // rather than reported as this helper's or BeginInstanceCore's. The bound is a world-space sphere the beam prepass
+    // tests per tile (SdfProgram.WriteBound scales the radius and packs it): a negative radius describes a sphere that
+    // covers nothing, so the instance would silently never be marched.
+    private static void RequireInstanceBound(Vector3 center, string centerParamName, float radius, string radiusParamName) {
+        RequireFinite(value: center, paramName: centerParamName, subject: "An instance bound centre");
+        RequireNonNegative(value: radius, paramName: radiusParamName, subject: "An instance bound radius");
+    }
     private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
         if (isDynamic && ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))) {
             throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"Dynamic instance slots must be in [0, {SdfProgram.MaxDynamicTransformSlot}].");
@@ -229,15 +312,21 @@ public sealed class SdfProgramBuilder {
     /// <summary>Resets the local evaluation point for the next instruction chain without clearing the accumulated field.</summary>
     /// <returns>This builder.</returns>
     public SdfProgramBuilder ResetPoint() {
-        // Mirrors the shader's SDF_OP_RESET clearing parityMaterialDelta — see m_positionalFold's remarks.
+        // Mirrors the shader's SDF_OP_RESET clearing parityMaterialDelta — see m_positionalFold's remarks. Both mirrors
+        // of that slot clear together; they differ in what they track, never in when the GPU forgets it.
         m_positionalFold = null;
+        m_materialRecolor = null;
 
         return Transform(op: SdfOp.ResetPoint);
     }
     /// <summary>Translates subsequent point evaluation by <paramref name="offset"/>.</summary>
     /// <param name="offset">The translation in local units.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is not finite.</exception>
     public SdfProgramBuilder Translate(Vector3 offset) {
+        // A translation is signed in every component by construction, so only finiteness is refused.
+        RequireFinite(value: offset, paramName: nameof(offset), subject: "A translation");
+
         return Transform(
             data0: new Vector4(
                 value: offset,
@@ -249,7 +338,11 @@ public sealed class SdfProgramBuilder {
     /// <summary>Rotates subsequent point evaluation by a normalized copy of <paramref name="rotation"/>.</summary>
     /// <param name="rotation">The local-space rotation.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rotation"/> is not finite, or has zero
+    /// length.</exception>
     public SdfProgramBuilder Rotate(Quaternion rotation) {
+        RequireRotation(value: rotation, paramName: nameof(rotation), subject: "A rotation");
+
         // Normalized HOST-SIDE (defensive: JSON-authored quaternions arrive here raw) — the shader's inverse-rotate
         // assumes a unit quaternion, and a drifted one would shear space rather than rotate it.
         var unit = Quaternion.Normalize(value: rotation);
@@ -267,7 +360,12 @@ public sealed class SdfProgramBuilder {
     /// <summary>Scales subsequent point evaluation and applies the conservative minimum-axis distance correction.</summary>
     /// <param name="scale">The local-space scale. Components are converted to positive nonzero magnitudes.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not finite.</exception>
     public SdfProgramBuilder Scale(Vector3 scale) {
+        // The sign is DELIBERATELY unconstrained: the clamp below takes the absolute value, which is this method's
+        // documented contract. Only NaN/infinity, which no clamp absorbs, are refused.
+        RequireFinite(value: scale, paramName: nameof(scale), subject: "A scale");
+
         // The degenerate-scale clamp AND the resulting distance rescale are HOST-BAKED (Data0.xyz = |scale| clamped,
         // Data0.w = its min axis): shapes evaluate millions of times per frame while programs build once, and the
         // shader's per-evaluation abs/max/min collapse to one lane read. The min-axis factor is the conservative
@@ -309,16 +407,10 @@ public sealed class SdfProgramBuilder {
     /// <summary>Twists space about the local Y axis: the XZ plane rotates by <paramref name="rate"/> · y radians.
     /// NOT an isometry — keep rates moderate so the march stays stable.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder TwistY(float rate) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: rate,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.TwistY
-        );
+        // A signed rate is the whole point (the twist handedness), so only finiteness is refused.
+        return FiniteScalarTransform(op: SdfOp.TwistY, value: rate, paramName: nameof(rate), subject: "A twist rate");
     }
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells. A translation along
     /// <c>log(radius)</c> becomes a uniform SCALING in Cartesian space, so the prototype shape(s) that follow repeat
@@ -330,7 +422,14 @@ public sealed class SdfProgramBuilder {
     /// <param name="shellRatio">The Cartesian scale factor between consecutive shells (e.g. 2 = each shell twice the
     /// previous). Clamped to at least 1.0001 (a ratio of 1 means no shells and a divide-by-zero on the baked 1/w).</param>
     /// <param name="twist">Radians of Z-spin added per shell (the Droste spiral). 0 = concentric, un-spun shells.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="shellRatio"/> or <paramref name="twist"/> is not
+    /// finite.</exception>
     public SdfProgramBuilder LogSphere(float shellRatio, float twist = 0f) {
+        // The 1.0001 floor below absorbs a too-small (or negative) ratio, but not NaN — MathF.Max(NaN, x) is NaN, and
+        // the log and its reciprocal would then pack NaN into three lanes. A signed twist is the spiral handedness.
+        RequireFinite(value: shellRatio, paramName: nameof(shellRatio), subject: "A log-sphere shell ratio");
+        RequireFinite(value: twist, paramName: nameof(twist), subject: "A log-sphere twist");
+
         // w = ln(ratio) and its reciprocal are HOST-BAKED (the shader avoids a per-eval log-of-constant and a divide,
         // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in sdf-vm.hlsli).
         var ratio = MathF.Max(x: shellRatio, y: 1.0001f);
@@ -378,9 +477,19 @@ public sealed class SdfProgramBuilder {
     /// <exception cref="ArgumentException"><paramref name="materialVariants"/> is negative, or half of
     /// <paramref name="jitter"/> is not strictly less than half the smallest <paramref name="spacing"/> component (the
     /// displaced content would cross a cell boundary and hole the march).</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="flavor"/> is not a defined
+    /// <see cref="SdfNoiseFlavor"/>.</exception>
     public SdfProgramBuilder CellJitter(Vector3 spacing, float jitter, uint seed = 0u, float tumble = 0f, int materialVariants = 0, SdfNoiseFlavor flavor = SdfNoiseFlavor.White) {
+        // BEFORE the in-cell rule below, because that rule cannot see a NaN: (NaN * 0.5f) >= x is false, so a NaN
+        // jitter would pass the containment check and pack straight through. Signs are absorbed downstream (the
+        // spacing clamp, MathF.Abs on jitter, the tumble clamp), so only finiteness is refused.
+        RequireFinite(value: spacing, paramName: nameof(spacing), subject: "A cell-jitter spacing");
+        RequireFinite(value: jitter, paramName: nameof(jitter), subject: "A cell-jitter jitter");
+        RequireFinite(value: tumble, paramName: nameof(tumble), subject: "A cell-jitter tumble");
+        RequireDefined(value: flavor, paramName: nameof(flavor));
+
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz), mirroring Repeat().
-        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
+        var clamped = ClampSpacing(spacing: spacing);
 
         if (materialVariants < 0) {
             throw new ArgumentException(message: "CellJitter materialVariants must be >= 0 (0 = geometric only).", paramName: nameof(materialVariants));
@@ -411,6 +520,14 @@ public sealed class SdfProgramBuilder {
             Shape: seed
         ));
 
+        // Mirrors the shader's `if (instructionHeader.w != 0u) parityMaterialDelta = h0.z % variants` — a hashed row in
+        // 0..variants-1, so ONE unit of the raw lane reaches at most variants-1 (MaxRecolorDelta subtracts that 1).
+        // Unlike the two folds this records no m_positionalFold entry: a hashed variant count is not a stride, so the
+        // scope clamp has nothing to narrow — the Build()-time refusal is the whole guard for this route.
+        if (materialVariants != 0) {
+            m_materialRecolor = ((m_instructions.Count - 1), 1, SdfOp.CellJitter);
+        }
+
         return this;
     }
     /// <summary>Angular DOMAIN-REPEAT fold: folds the plane perpendicular to <paramref name="axis"/> into
@@ -431,15 +548,28 @@ public sealed class SdfProgramBuilder {
     /// <param name="materialStride">The per-sector palette stride: the sector index (0..count-1) times this strides the
     /// material id of a later shape win, so each sector can select its own palette row. 0 (the default) keeps the fold
     /// purely geometric.</param>
-    /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative, or <paramref name="count"/>
+    /// (after clamping to ≥ 1) exceeds <see cref="MaxExactFloatSectorCount"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a defined <see cref="SdfPolarAxis"/>.</exception>
     public SdfProgramBuilder RepeatPolar(int count, SdfPolarAxis axis = SdfPolarAxis.Y, bool mirror = false, int materialStride = 0) {
         if (materialStride < 0) {
             throw new ArgumentException(message: "RepeatPolar materialStride must be >= 0 (0 = geometric only).", paramName: nameof(materialStride));
         }
 
+        RequireDefined(value: axis, paramName: nameof(axis));
+
         // count and the sector angle's reciprocals are HOST-BAKED (Data0.yzw): shapes evaluate millions of times per
         // frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT_POLAR in Assets/Shaders/Sdf/sdf-vm.hlsli).
         var sectors = Math.Max(val1: 1, val2: count);
+
+        // THE FLOAT-EXACT SECTOR CEILING (see MaxExactFloatSectorCount). Past 2^24, (float)sectors is no longer the
+        // exact count — the shader observes a ROUNDED count, so the recolor window's claimed max (sectors - 1, an
+        // exact host integer) is no longer honestly the shader's max. Refuse rather than let the Build()-time gate
+        // judge against a maximum the shader does not actually enforce.
+        if (sectors > MaxExactFloatSectorCount) {
+            throw new ArgumentException(message: $"RepeatPolar count must be <= {MaxExactFloatSectorCount} (2^24, the largest integer a 32-bit float represents exactly) — the shader reads the packed sector count back as a float, and past this bound the host's exact sector-1 maximum can diverge from what the shader's float wrap arithmetic actually produces.", paramName: nameof(count));
+        }
+
         var angle = ((2f * MathF.PI) / sectors);
 
         m_instructions.Add(item: new SdfInstruction(
@@ -461,35 +591,22 @@ public sealed class SdfProgramBuilder {
         // RepeatPolar's own call site.
         if (materialStride != 0) {
             m_positionalFold = ((m_instructions.Count - 1), (sectors - 1), materialStride);
+            m_materialRecolor = ((m_instructions.Count - 1), (sectors - 1), SdfOp.RepeatPolar);
         }
 
         return this;
     }
     /// <summary>Bends space about the local X axis: the XY plane rotates by <paramref name="rate"/> · x radians.</summary>
     /// <param name="rate">Radians of rotation per unit of local X.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder BendX(float rate) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: rate,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.BendX
-        );
+        return FiniteScalarTransform(op: SdfOp.BendX, value: rate, paramName: nameof(rate), subject: "A bend rate");
     }
     /// <summary>Bends the XY plane by <paramref name="rate"/> · y radians.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder BendY(float rate) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: rate,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.BendY
-        );
+        return FiniteScalarTransform(op: SdfOp.BendY, value: rate, paramName: nameof(rate), subject: "A bend rate");
     }
     /// <summary>Rotates the YZ plane by <paramref name="rate"/> · y radians. The three bends are DISTINCT ops, not a
     /// symmetric family: <see cref="BendX"/> keys on x and rotates XY, <see cref="BendY"/> keys on y and rotates XY, and
@@ -497,21 +614,20 @@ public sealed class SdfProgramBuilder {
     /// bends their <c>1 + rate·ρ</c> Lipschitz factor (see <c>SdfProgram.BendOperatorNorm</c>) rather than
     /// <see cref="TwistY"/>'s smaller one.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder BendZ(float rate) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: rate,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.BendZ
-        );
+        return FiniteScalarTransform(op: SdfOp.BendZ, value: rate, paramName: nameof(rate), subject: "A bend rate");
     }
     /// <summary>Elongates the shape that follows: the point clamps into a box of the given extents, sweeping the
     /// shape's cross-section over ±extents (the classic capsule-from-sphere operator).</summary>
     /// <param name="extents">The per-axis elongation half-extents (0 on an axis = no stretch there).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="extents"/> is not finite and non-negative.</exception>
     public SdfProgramBuilder Elongate(Vector3 extents) {
+        // The decoder is `p -= clamp(p, -extents, extents)` (SDF_OP_ELONGATE, and ClampComponents in
+        // SdfFieldEvaluator): a negative component inverts the clamp bounds, which is undefined in HLSL and
+        // backend-dependent, so the half-extents must be non-negative.
+        RequireNonNegative(value: extents, paramName: nameof(extents), subject: "An elongation half-extent");
+
         return Transform(
             data0: new Vector4(
                 value: extents,
@@ -523,16 +639,14 @@ public sealed class SdfProgramBuilder {
     /// <summary>Shells the ENTIRE field accumulated so far into a hollow skin of the given thickness — a FIELD op:
     /// order it after everything it should shell.</summary>
     /// <param name="thickness">The shell half-thickness.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="thickness"/> is not finite and non-negative.</exception>
     public SdfProgramBuilder Onion(float thickness) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: thickness,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.Onion
-        );
+        // The decoder is `d = abs(d) - thickness`: a negative thickness leaves the field strictly positive everywhere,
+        // so the shell has no zero set at all — the op silently erases the geometry it was ordered after. (Unlike
+        // Dilate, whose negative branch is a real erosion; see its remarks.)
+        RequireNonNegative(value: thickness, paramName: nameof(thickness), subject: "An onion shell thickness");
+
+        return ScalarTransform(op: SdfOp.Onion, value: thickness);
     }
     /// <summary>Adds a bounded sinusoidal DISPLACEMENT to the field accumulated so far — surface relief (bumps,
     /// corrugation, a rippled skin) evaluated at the current point: the SDF-native answer to height/parallax mapping,
@@ -544,7 +658,15 @@ public sealed class SdfProgramBuilder {
     /// march to tiny steps). KEEP IN SYNC with SDF_OP_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="frequency">Per-axis angular frequency of the sinusoid (radians per world unit).</param>
     /// <param name="amplitude">Peak displacement added to the field (world units; 0 = an exact identity).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="frequency"/> or <paramref name="amplitude"/> is
+    /// not finite.</exception>
     public SdfProgramBuilder Displace(Vector3 frequency, float amplitude) {
+        // Both are signed by construction (a negative frequency or amplitude reverses the relief's phase, which is a
+        // real authoring choice), and every consumer of the amplitude takes its magnitude — SdfProgram's cull margin
+        // and DisplaceWarpLipschitz both read MathF.Abs — so only finiteness is refused.
+        RequireFinite(value: frequency, paramName: nameof(frequency), subject: "A displacement frequency");
+        RequireFinite(value: amplitude, paramName: nameof(amplitude), subject: "A displacement amplitude");
+
         return Transform(
             data0: new Vector4(
                 value: frequency,
@@ -562,7 +684,13 @@ public sealed class SdfProgramBuilder {
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="frequency">Per-axis angular frequency of the warp (radians per world unit).</param>
     /// <param name="amplitude">Peak point displacement (world units; 0 = an exact identity).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="frequency"/> or <paramref name="amplitude"/> is
+    /// not finite.</exception>
     public SdfProgramBuilder DomainWarp(Vector3 frequency, float amplitude) {
+        // Signed for the same reason as Displace, and the reach/Lipschitz folds take MathF.Abs of the amplitude.
+        RequireFinite(value: frequency, paramName: nameof(frequency), subject: "A domain-warp frequency");
+        RequireFinite(value: amplitude, paramName: nameof(amplitude), subject: "A domain-warp amplitude");
+
         return Transform(
             data0: new Vector4(
                 value: frequency,
@@ -584,8 +712,16 @@ public sealed class SdfProgramBuilder {
     /// SDF_OP_PUSH_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="compose">How the closed scope's field composes back into the parent (default <see cref="SdfBlendOp.Union"/>).</param>
     /// <param name="smooth">The smooth/chamfer radius of the <paramref name="compose"/> blend (ignored by the hard blends).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="smooth"/> is not finite, or
+    /// <paramref name="compose"/> is not a defined <see cref="SdfBlendOp"/>.</exception>
     /// <exception cref="InvalidOperationException">The scope would nest deeper than <see cref="MaxFieldScopeDepth"/>.</exception>
     public SdfProgramBuilder PushField(SdfBlendOp compose = SdfBlendOp.Union, float smooth = 0f) {
+        // PopField bakes MathF.Max(0f, smooth) onto the POP instruction, which absorbs a negative radius but not NaN.
+        RequireFinite(value: smooth, paramName: nameof(smooth), subject: "A field-scope compose smooth radius");
+        // compose doesn't flow through Shape() (PopField writes it directly onto its own instruction), so it needs its
+        // own enum-floor check rather than inheriting Shape()'s.
+        RequireDefined(value: compose, paramName: nameof(compose));
+
         // The depth guard reads MaxFieldScopeDepth (rather than just testing m_fieldScope is not null) so raising the
         // cap past 1 stays a localized change to this field + guard (see m_fieldScope's doc).
         var openDepth = ((m_fieldScope is null) ? 0 : 1);
@@ -645,17 +781,14 @@ public sealed class SdfProgramBuilder {
     }
     /// <summary>Inflates the ENTIRE field accumulated so far by a radius (rounds and fattens everything before it) —
     /// a FIELD op: order it after everything it should inflate.</summary>
-    /// <param name="radius">The inflation radius.</param>
+    /// <param name="radius">The inflation radius. A NEGATIVE radius is legal and erodes instead — the decoder is a
+    /// plain <c>d -= radius</c>, exact and 1-Lipschitz in both directions.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is not finite.</exception>
     public SdfProgramBuilder Dilate(float radius) {
-        return Transform(
-            data0: new Vector4(
-                w: 0f,
-                x: radius,
-                y: 0f,
-                z: 0f
-            ),
-            op: SdfOp.Dilate
-        );
+        // Sign DELIBERATELY unconstrained (unlike Onion's thickness): `result.distance -= data0.x` is a pure offset of
+        // a signed distance field, so a negative radius is an erosion — real geometry, not an empty field — and
+        // SdfProgram's cull margin already folds MathF.Abs of this lane.
+        return FiniteScalarTransform(op: SdfOp.Dilate, value: radius, paramName: nameof(radius), subject: "A dilation radius");
     }
     /// <summary>Infinite DOMAIN-REPEAT fold: tiles space into cells of <paramref name="spacing"/> with a single-cell
     /// <c>round()</c> fold, so the prototype that follows repeats on the lattice. The returned distance is the current
@@ -669,10 +802,15 @@ public sealed class SdfProgramBuilder {
     /// check would remove the constraint but is judged not worth the interpreter cost at current usage. KEEP IN SYNC
     /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="spacing"/> is not finite.</exception>
     public SdfProgramBuilder Repeat(Vector3 spacing) {
+        // Sign is absorbed by the clamp below and that absorption is a settled contract (see RepeatLimited's remark
+        // that a negative spacing must keep behaving as it did), so only finiteness is refused.
+        RequireFinite(value: spacing, paramName: nameof(spacing), subject: "A repeat spacing");
+
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz): shapes evaluate millions of
         // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
+        var clamped = ClampSpacing(spacing: spacing);
 
         return Transform(
             data0: new Vector4(
@@ -693,12 +831,20 @@ public sealed class SdfProgramBuilder {
     /// cannot see the prototype).</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     /// <param name="limit">The per-axis repeat-cell limit (the lattice spans cell indices −limit..+limit).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="spacing"/> is not finite, or
+    /// <paramref name="limit"/> is not finite and non-negative.</exception>
     public SdfProgramBuilder RepeatLimited(Vector3 spacing, Vector3 limit) {
+        // The limit rides `clamp(round(p / spacing), -limit, limit)`: a negative component inverts the clamp bounds
+        // (undefined in HLSL), so it must be non-negative. Zero is legal and pins that axis to the single centre cell —
+        // the shipped world's placement stamper does exactly that.
+        RequireFinite(value: spacing, paramName: nameof(spacing), subject: "A repeat spacing");
+        RequireNonNegative(value: limit, paramName: nameof(limit), subject: "A repeat-cell limit");
+
         // The degenerate-spacing clamp is HOST-BAKED, exactly as <see cref="Repeat"/> bakes it (KEEP IN SYNC with
         // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/sdf-vm.hlsli). Clamped WITHOUT Abs, matching the shader's old
         // max(data0.xyz, 0.001) — a negative spacing must keep behaving as it did. Unlike Repeat there is no free lane
         // for the reciprocal (Data1.xyz carries the limit), so the shader keeps its divide.
-        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
+        var clamped = ClampSpacing(spacing: spacing);
 
         return Transform(
             data0: new Vector4(
@@ -726,11 +872,43 @@ public sealed class SdfProgramBuilder {
     /// cell selects its own row of the palette. 0 (the default) keeps the fold purely geometric.</param>
     /// <param name="lodDistance">The symmetry-LOD distance threshold: past it the lattice keeps its copy positions
     /// but skips the in-cell folds (upright copies, cheaper and shimmer-free at range). 0 (the default) = off.</param>
+    /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A <paramref name="cell"/> extent the group reads is not finite and
+    /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="lodDistance"/> is not
+    /// finite and non-negative, <paramref name="group"/> is not a defined <see cref="SdfWallpaperGroup"/>, or
+    /// <paramref name="plane"/> is not a defined <see cref="SdfWallpaperPlane"/>.</exception>
     public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfWallpaperPlane plane = SdfWallpaperPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
+        // Mirrors RepeatPolar's stride check — the same Material lane, the same uint cast, and the shader reads it back
+        // as `(int)instructionHeader.w`, so a negative stride would recolor shapes DOWNWARD out of the palette.
+        if (materialStride < 0) {
+            throw new ArgumentException(message: "WallpaperFold materialStride must be >= 0 (0 = geometric only).", paramName: nameof(materialStride));
+        }
+
+        // Checked before isHex reads group's ordinal — an out-of-range group would otherwise silently misclassify.
+        RequireDefined(value: group, paramName: nameof(group));
+        RequireDefined(value: plane, paramName: nameof(plane));
+
         // The reciprocal cell extents are HOST-BAKED (Data0.zw): square lattices read them as 1/cell for the lattice
         // round; hex lattices (pitch = cell.x) read z = 1/pitch and w = 2/(√3·pitch) — the two divides in the axial
         // decompose (KEEP IN SYNC with the fold functions in Assets/Shaders/Sdf/sdf-vm.hlsli).
         var isHex = (group >= SdfWallpaperGroup.P3);
+
+        // cell.x is the lattice pitch for EVERY group, so it must be positive. cell.y is the second lattice extent for
+        // a square group only — sdfWallpaperFoldCell hands the hex path cell.x alone (sdfWallpaperFoldHexCell takes a
+        // scalar pitch), so a hex caller may leave cell.y at zero and it is checked for finiteness only.
+        RequirePositive(value: cell.X, paramName: nameof(cell), subject: "A wallpaper cell extent");
+
+        if (isHex) {
+            RequireFinite(value: cell.Y, paramName: nameof(cell), subject: "A wallpaper cell extent");
+        } else {
+            RequirePositive(value: cell.Y, paramName: nameof(cell), subject: "A wallpaper cell extent");
+        }
+
+        // The limit rides the same clamp(round(...), -limit, limit) shape RepeatLimited uses, and lodDistance is
+        // compared as `data1.z > 0.0` with 0 meaning off — a negative threshold has no spelling.
+        RequireNonNegative(value: limit, paramName: nameof(limit), subject: "A wallpaper repeat-cell limit");
+        RequireNonNegative(value: lodDistance, paramName: nameof(lodDistance), subject: "A wallpaper symmetry-LOD distance");
+
         var inverseX = (1f / MathF.Max(x: cell.X, y: 0.0001f));
         var inverseY = (isHex ? ((2f / 1.7320508f) * inverseX) : (1f / MathF.Max(x: cell.Y, y: 0.0001f)));
 
@@ -762,6 +940,7 @@ public sealed class SdfProgramBuilder {
             var maxCellKey = ((group >= SdfWallpaperGroup.P3) ? 2 : 1);
 
             m_positionalFold = ((m_instructions.Count - 1), maxCellKey, materialStride);
+            m_materialRecolor = ((m_instructions.Count - 1), maxCellKey, SdfOp.WallpaperFold);
         }
 
         return this;
@@ -790,7 +969,13 @@ public sealed class SdfProgramBuilder {
     /// <param name="offset">The plane's constant term: the mirror plane is <c>dot(p, normal) + offset = 0</c>, so it
     /// sits at signed distance <c>-offset</c> along the normal. A POSITIVE offset therefore moves the plane AGAINST the
     /// normal. 0 puts it through the local origin.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="normal"/> is not finite or has zero length, or
+    /// <paramref name="offset"/> is not finite.</exception>
     public SdfProgramBuilder SymmetryPlane(Vector3 normal, float offset = 0f) {
+        // The offset is signed by construction (it slides the plane along the normal in either direction).
+        RequireDirection(value: normal, paramName: nameof(normal), subject: "A symmetry-plane normal");
+        RequireFinite(value: offset, paramName: nameof(offset), subject: "A symmetry-plane offset");
+
         // Normalized HOST-SIDE (the shader's reflect assumes a unit normal; a drifted one would scale the mirrored half).
         return Transform(
             data0: new Vector4(
@@ -806,7 +991,15 @@ public sealed class SdfProgramBuilder {
     /// <param name="blend">The blend against the accumulated field.</param>
     /// <param name="smooth">The radius used by smooth and chamfer blends.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is not finite and non-negative, or
+    /// <paramref name="material"/> is negative, <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or
+    /// <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder Sphere(float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The decoder is `length(p) - radius`, so a negative radius leaves the field strictly positive: the sphere has
+        // no surface at all, while the program still spends an instruction, a cull bound (TryGetLocalBound packs
+        // MathF.Abs of this very lane) and a Lipschitz reach on it. Zero is allowed — a degenerate point.
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A sphere radius");
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -825,10 +1018,33 @@ public sealed class SdfProgramBuilder {
     /// radius−halfSeparation in XZ). <paramref name="halfSeparation"/> is clamped below <paramref name="radius"/> so
     /// the tip half-height √(r²−d²) is real; it is HOST-BAKED (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
     /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="radius">The two generating spheres' radius.</param>
+    /// <param name="halfSeparation">Half the distance between their centres (clamped below <paramref name="radius"/>).</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> or <paramref name="halfSeparation"/> is
+    /// not finite, the derived tip half-height (see remarks) is not finite, <paramref name="material"/> is negative,
+    /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
+    /// finite.</exception>
     public SdfProgramBuilder Vesica(float radius, float halfSeparation, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Both signs are absorbed by the MathF.Abs pair below, so only finiteness is refused.
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A vesica radius");
+        RequireFinite(value: halfSeparation, paramName: nameof(halfSeparation), subject: "A vesica half-separation");
+
         var r = MathF.Abs(x: radius);
         var d = MathF.Min(x: MathF.Abs(x: halfSeparation), y: (r * 0.9999f)); // d < r keeps b = √(r²−d²) real and positive
         var b = MathF.Sqrt(x: ((r * r) - (d * d)));
+
+        // r and d are each individually finite, but r*r (and d*d) can overflow past float.MaxValue for a large enough
+        // radius even though r itself does not — at radius == halfSeparation == float.MaxValue both squares overflow
+        // to +Infinity and their difference is +Infinity − +Infinity = NaN, which sqrt propagates. b is HOST-BAKED
+        // straight into Data0.z (the shape's own tip half-height) AND is what SdfProgram.TryGetLocalBound reads back
+        // as part of the shape's cull radius — refuse rather than clamp, the same overflow class RoundCone's slope
+        // check exists for.
+        if (!float.IsFinite(f: b)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(radius), message: $"A vesica's derived tip half-height (from radius {radius} and half-separation {halfSeparation}) is not finite. Narrow the radius or the half-separation.");
+        }
 
         return Shape(
             blend: blend,
@@ -855,15 +1071,29 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
+    /// remarks) is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined
+    /// <see cref="SdfLift"/>, or <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder RoundedRectangle(float halfWidth, float halfHeight, float cornerRadius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Every sign is absorbed below (MathF.Abs on the half-extents, Math.Clamp to [0, min] on the corner radius,
+        // MathF.Max(0) on the lift), and none of those absorb NaN.
+        RequireFinite(value: halfWidth, paramName: nameof(halfWidth), subject: "A rounded-rectangle half-width");
+        RequireFinite(value: halfHeight, paramName: nameof(halfHeight), subject: "A rounded-rectangle half-height");
+        RequireFinite(value: cornerRadius, paramName: nameof(cornerRadius), subject: "A rounded-rectangle corner radius");
+        RequireFinite(value: liftAmount, paramName: nameof(liftAmount), subject: "A lift amount");
+        RequireDefined(value: lift, paramName: nameof(lift));
+
         var hw = MathF.Abs(x: halfWidth);
         var hh = MathF.Abs(x: halfHeight);
+        var clampedLift = MathF.Max(x: 0f, y: liftAmount);
+
+        RequireFiniteLiftedReach(radius2D: new Vector2(x: hw, y: hh).Length(), liftAmount: clampedLift, lift: lift, shapeName: "rounded-rectangle");
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(x: 0f, y: liftAmount),
+                w: clampedLift,
                 x: hw,
                 y: hh,
                 z: Math.Clamp(cornerRadius, 0f, MathF.Min(x: hw, y: hh))
@@ -884,16 +1114,29 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> or <paramref name="liftAmount"/> is not
+    /// finite, the derived lifted bound radius (see remarks) is not finite, <paramref name="material"/> is negative,
+    /// <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or <paramref name="smooth"/> is not
+    /// finite.</exception>
     public SdfProgramBuilder RegularPolygon(int sides, float radius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Signs are absorbed (MathF.Abs on the radius, MathF.Max(0) on the lift); sides is an int clamped to >= 3.
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A polygon circumradius");
+        RequireFinite(value: liftAmount, paramName: nameof(liftAmount), subject: "A lift amount");
+        RequireDefined(value: lift, paramName: nameof(lift));
+
         var n = Math.Max(val1: 3, val2: sides);
+        var absRadius = MathF.Abs(x: radius);
+        var clampedLift = MathF.Max(x: 0f, y: liftAmount);
+
+        RequireFiniteLiftedReach(radius2D: absRadius, liftAmount: clampedLift, lift: lift, shapeName: "regular polygon");
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,      // Data1.y = lift mode
             derived2: 1f,                     // Data1.z = ecs.y = 1 (m = 2: the regular-polygon case)
             dimensions: new Vector4(
-                w: MathF.Max(x: 0f, y: liftAmount),
-                x: MathF.Abs(x: radius),
+                w: clampedLift,
+                x: absRadius,
                 y: (MathF.PI / n),            // an = π/n, HOST-BAKED
                 z: 0f                         // ecs.x = 0
             ),
@@ -915,18 +1158,33 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/>, <paramref name="sharpness"/> or
+    /// <paramref name="liftAmount"/> is not finite, the derived lifted bound radius (see remarks) is not finite,
+    /// <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
+    /// <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder Star(int points, float radius, float sharpness, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Signs are absorbed (MathF.Abs on the radius, Math.Clamp to [2, n] on the sharpness, MathF.Max(0) on the
+        // lift), and a NaN sharpness would otherwise reach both baked trig constants.
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A star outer radius");
+        RequireFinite(value: sharpness, paramName: nameof(sharpness), subject: "A star sharpness");
+        RequireFinite(value: liftAmount, paramName: nameof(liftAmount), subject: "A lift amount");
+        RequireDefined(value: lift, paramName: nameof(lift));
+
         var n = Math.Max(val1: 2, val2: points);
         var m = Math.Clamp(max: n, min: 2f, value: sharpness);
         var en = (MathF.PI / m);
+        var absRadius = MathF.Abs(x: radius);
+        var clampedLift = MathF.Max(x: 0f, y: liftAmount);
+
+        RequireFiniteLiftedReach(radius2D: absRadius, liftAmount: clampedLift, lift: lift, shapeName: "star");
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,      // Data1.y = lift mode
             derived2: MathF.Sin(x: en),          // Data1.z = ecs.y = sin(π/m)
             dimensions: new Vector4(
-                w: MathF.Max(x: 0f, y: liftAmount),
-                x: MathF.Abs(x: radius),
+                w: clampedLift,
+                x: absRadius,
                 y: (MathF.PI / n),            // an = π/n, HOST-BAKED
                 z: MathF.Cos(x: en)             // ecs.x = cos(π/m), HOST-BAKED
             ),
@@ -946,15 +1204,33 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
+    /// remarks) is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined
+    /// <see cref="SdfLift"/>, or <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder Trapezoid(float bottomHalfWidth, float topHalfWidth, float halfHeight, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Signs are absorbed (MathF.Abs on all three half-extents, MathF.Max(0) on the lift).
+        RequireFinite(value: bottomHalfWidth, paramName: nameof(bottomHalfWidth), subject: "A trapezoid bottom half-width");
+        RequireFinite(value: topHalfWidth, paramName: nameof(topHalfWidth), subject: "A trapezoid top half-width");
+        RequireFinite(value: halfHeight, paramName: nameof(halfHeight), subject: "A trapezoid half-height");
+        RequireFinite(value: liftAmount, paramName: nameof(liftAmount), subject: "A lift amount");
+        RequireDefined(value: lift, paramName: nameof(lift));
+
+        var bottomAbs = MathF.Abs(x: bottomHalfWidth);
+        var topAbs = MathF.Abs(x: topHalfWidth);
+        var heightAbs = MathF.Abs(x: halfHeight);
+        var clampedLift = MathF.Max(x: 0f, y: liftAmount);
+        var radius2D = MathF.Max(x: new Vector2(x: bottomAbs, y: heightAbs).Length(), y: new Vector2(x: topAbs, y: heightAbs).Length());
+
+        RequireFiniteLiftedReach(radius2D: radius2D, liftAmount: clampedLift, lift: lift, shapeName: "trapezoid");
+
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(x: 0f, y: liftAmount),
-                x: MathF.Abs(x: bottomHalfWidth),
-                y: MathF.Abs(x: topHalfWidth),
-                z: MathF.Abs(x: halfHeight)
+                w: clampedLift,
+                x: bottomAbs,
+                y: topAbs,
+                z: heightAbs
             ),
             material: material,
             shape: SdfShapeType.Trapezoid,
@@ -972,7 +1248,18 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="semiX"/>, <paramref name="semiY"/> or
+    /// <paramref name="liftAmount"/> is not finite, the derived lifted bound radius (see remarks) is not finite,
+    /// <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
+    /// <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder Ellipse(float semiX, float semiY, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Signs are absorbed (MathF.Abs then a 1e-4 floor on both semi-axes, MathF.Max(0) on the lift); a NaN would
+        // survive both MathF.Max calls and then poison the circle-degeneracy nudge below.
+        RequireFinite(value: semiX, paramName: nameof(semiX), subject: "An ellipse semi-axis");
+        RequireFinite(value: semiY, paramName: nameof(semiY), subject: "An ellipse semi-axis");
+        RequireFinite(value: liftAmount, paramName: nameof(liftAmount), subject: "A lift amount");
+        RequireDefined(value: lift, paramName: nameof(lift));
+
         var ea = MathF.Max(x: MathF.Abs(x: semiX), y: 1e-4f);
         var eb = MathF.Max(x: MathF.Abs(x: semiY), y: 1e-4f);
 
@@ -982,11 +1269,15 @@ public sealed class SdfProgramBuilder {
             eb = (ea + 1e-4f);
         }
 
+        var clampedLift = MathF.Max(x: 0f, y: liftAmount);
+
+        RequireFiniteLiftedReach(radius2D: MathF.Max(x: ea, y: eb), liftAmount: clampedLift, lift: lift, shapeName: "ellipse");
+
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(x: 0f, y: liftAmount),
+                w: clampedLift,
                 x: ea,
                 y: eb,
                 z: 0f
@@ -1017,7 +1308,22 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material id the letter shades with.</param>
     /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves).</param>
     /// <param name="smooth">The smooth/chamfer radius (meaningful only for a smooth/chamfer <paramref name="blend"/>).</param>
+    /// <exception cref="ArgumentOutOfRangeException">A UV or cell dimension is not finite,
+    /// <paramref name="distanceScale"/> is not finite and non-negative, <paramref name="material"/> is negative,
+    /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
+    /// finite.</exception>
     public SdfProgramBuilder Glyph(Vector2 uvBottomLeft, Vector2 uvTopRight, float halfWidth, float halfHeight, float extrudeHalfDepth, float distanceScale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // PackUv clamps the UVs into [0, 1] and the half-extents/extrusion take MathF.Abs / MathF.Max(0), so only
+        // finiteness is refused there. distanceScale is the ONE lane packed raw: the decoder gates the atlas tap on
+        // `dQuad < 0.5 * distanceScale` and then converts with `(0.5 - encoded) * distanceScale`, so a negative scale
+        // inverts inside and outside.
+        RequireFinite(value: uvBottomLeft, paramName: nameof(uvBottomLeft), subject: "A glyph atlas UV");
+        RequireFinite(value: uvTopRight, paramName: nameof(uvTopRight), subject: "A glyph atlas UV");
+        RequireFinite(value: halfWidth, paramName: nameof(halfWidth), subject: "A glyph cell half-width");
+        RequireFinite(value: halfHeight, paramName: nameof(halfHeight), subject: "A glyph cell half-height");
+        RequireFinite(value: extrudeHalfDepth, paramName: nameof(extrudeHalfDepth), subject: "A glyph extrude half-depth");
+        RequireNonNegative(value: distanceScale, paramName: nameof(distanceScale), subject: "A glyph distance scale");
+
         return Shape(
             blend: blend,
             derived1: MathF.Abs(x: halfWidth),   // Data1.y = halfWidth
@@ -1051,14 +1357,21 @@ public sealed class SdfProgramBuilder {
     /// <param name="extrudeHalfDepth">The half-depth each glyph extrudes along the plane normal.</param>
     /// <param name="smooth">The smooth/chamfer radius for a smooth/chamfer <paramref name="blend"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not greater than zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not finite and greater than
+    /// zero, <paramref name="origin"/> or <paramref name="extrudeHalfDepth"/> is not finite, <paramref name="right"/>
+    /// and <paramref name="up"/> do not span a plane, or <paramref name="blend"/> is not a defined
+    /// <see cref="SdfBlendOp"/>.</exception>
     public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f) {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
 
-        if (worldEmHeight <= 0f) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(worldEmHeight), message: "Text world em height must be greater than zero.");
-        }
+        // The pre-existing check missed NaN and +infinity: `NaN <= 0f` and `infinity <= 0f` are both false, so a
+        // non-finite em height passed and divided into every glyph's world-per-texel scale.
+        RequirePositive(value: worldEmHeight, paramName: nameof(worldEmHeight), subject: "A text world em height");
+        RequireFinite(value: origin, paramName: nameof(origin), subject: "A text origin");
+        RequireDirection(value: right, paramName: nameof(right), subject: "A text right axis");
+        RequireDirection(value: up, paramName: nameof(up), subject: "A text up axis");
+        RequireFinite(value: extrudeHalfDepth, paramName: nameof(extrudeHalfDepth), subject: "A text extrude half-depth");
 
         // Uniform world-per-texel (atlas.Size = pixels per em): every glyph derives BOTH half-extents from it, so the
         // sampled field stays 1-Lipschitz (factor 1). distanceScale rides the same factor.
@@ -1068,7 +1381,15 @@ public sealed class SdfProgramBuilder {
         // row-vector Transform), so Rotate places each glyph's authored local XY onto the text plane.
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
+
+        // Two individually valid axes can still be parallel, and their cross product is then zero — normalizing it
+        // would put NaN into the orientation quaternion every glyph rides.
         var forward = Vector3.Normalize(value: Vector3.Cross(vector1: unitRight, vector2: unitUp));
+
+        if (!float.IsFinite(f: forward.X) || !float.IsFinite(f: forward.Y) || !float.IsFinite(f: forward.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(up), message: "A text right and up axis must not be parallel — they span the plane the glyphs are laid out on.");
+        }
+
         var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
             m11: unitRight.X, m12: unitRight.Y, m13: unitRight.Z, m14: 0f,
             m21: unitUp.X, m22: unitUp.Y, m23: unitUp.Z, m24: 0f,
@@ -1145,10 +1466,15 @@ public sealed class SdfProgramBuilder {
     /// <param name="material">The material id the carved region shades with (unused where subtraction only removes).</param>
     /// <param name="blend">The compose against the accumulated field; <see cref="SdfBlendOp.Subtraction"/> by default (a
     /// brick carves). Smooth and chamfered carves remain analytic and must not use this sampled representation.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A dim is out of range, <paramref name="cellSize"/> is not positive
-    /// and finite, <paramref name="brickWordOffset"/> is negative, or <paramref name="boundaryFloor"/> is negative or not
-    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="boxMin"/> is not finite, a dim is out of range,
+    /// <paramref name="cellSize"/> is not positive and finite, <paramref name="brickWordOffset"/> is negative,
+    /// <paramref name="boundaryFloor"/> is negative or not finite, or <paramref name="blend"/> is not a defined
+    /// <see cref="SdfBlendOp"/>.</exception>
     public SdfProgramBuilder SampledRegion(Vector3 boxMin, float cellSize, int dimX, int dimY, int dimZ, int brickWordOffset, float boundaryFloor, int material, SdfBlendOp blend = SdfBlendOp.Subtraction) {
+        // The one lane this method did not check: the box corner is signed by construction (it is a position) but
+        // still reaches Data0.xyz raw, and TryGetLocalBound derives the brick's whole cull sphere from it.
+        RequireFinite(value: boxMin, paramName: nameof(boxMin), subject: "A sampled-region box corner");
+
         if (!float.IsFinite(f: cellSize) || (cellSize <= 0f)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(cellSize), message: "A sampled-region cell size must be finite and greater than zero.");
         }
@@ -1177,6 +1503,17 @@ public sealed class SdfProgramBuilder {
         // bits (like Glyph's PackUv) and round-trip exactly through SdfProgram's WriteVector4 — no arithmetic touches them.
         var packedDims = (uint)dimX | ((uint)dimY << 10) | ((uint)dimZ << 20);
 
+        // Every dim is capped at MaxSampledRegionDim (1023) and cellSize is required positive and finite, but the
+        // PRODUCT SdfProgram.TryGetLocalBound derives from them (dims * cellSize, the brick box's extent, feeding its
+        // circumsphere radius) can still overflow float.MaxValue for a large-enough finite cellSize even though every
+        // input independently passed its own check — the same overflow class Box/Cylinder/Torus/RoundCone/Capsule
+        // refuse below.
+        var extent = (new Vector3(x: dimX, y: dimY, z: dimZ) * cellSize);
+
+        if (!float.IsFinite(f: extent.Length())) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(cellSize), message: $"A sampled-region's derived box extent (dims {dimX}x{dimY}x{dimZ} at cellSize {cellSize}) is not finite. Narrow the cell size or the dimensions.");
+        }
+
         return Shape(
             blend: blend,
             derived1: BitConverter.UInt32BitsToSingle(value: packedDims),                // Data1.y = packedDims (uint bits)
@@ -1194,6 +1531,15 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Box(Vector3 halfExtents, float round, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The decoder is `q = abs(p) - (halfExtents - round); length(max(q, 0)) + min(max(q), 0) - round`. A negative
+        // half-extent turns the box inside out, and a negative round is a corner INSET the shape has no spelling for —
+        // RoundedRectangle, the 2D sibling, already clamps its corner radius to [0, min(half-extents)], which is the
+        // file's settled position that a corner radius is non-negative. A round LARGER than a half-extent stays legal:
+        // TryGetLocalBound deliberately adds it as bound slack "against degenerate authoring".
+        RequireNonNegative(value: halfExtents, paramName: nameof(halfExtents), subject: "A box half-extent");
+        RequireNonNegative(value: round, paramName: nameof(round), subject: "A box corner radius");
+        RequireFiniteBoxBound(halfExtents: halfExtents, round: round, shapeName: "box");
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -1206,6 +1552,22 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Torus(float majorRadius, float minorRadius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The decoder is `length(float2(length(p.xz) - major, p.y)) - minor`: both are radii of the revolved circle,
+        // and TryGetLocalBound packs MathF.Abs of each, so a negative one both mis-shapes the ring and desynchronizes
+        // the shape from its own cull bound.
+        RequireNonNegative(value: majorRadius, paramName: nameof(majorRadius), subject: "A torus major radius");
+        RequireNonNegative(value: minorRadius, paramName: nameof(minorRadius), subject: "A torus minor radius");
+
+        // Both radii are individually finite, but SdfProgram.TryGetLocalBound's Torus cull bound is their SUM (the
+        // ring's farthest reach from the local origin) — two radii each well under float.MaxValue can still sum past
+        // it into +Infinity, handing the packer (and any segment it merges with) an infinite bound that was never
+        // authored. Refuse here, at the shape that owns the radii, rather than at the analysis pass that discovers it.
+        var boundRadius = (majorRadius + minorRadius);
+
+        if (!float.IsFinite(f: boundRadius)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(minorRadius), message: $"A torus's derived bound radius (majorRadius {majorRadius} plus minorRadius {minorRadius}) is not finite. Narrow one or both radii.");
+        }
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -1220,6 +1582,10 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Plane(Vector3 normal, float offset, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Normalized host-side, so a zero normal packs NaN; the offset is signed by construction (it slides the plane).
+        RequireDirection(value: normal, paramName: nameof(normal), subject: "A plane normal");
+        RequireFinite(value: offset, paramName: nameof(offset), subject: "A plane offset");
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -1232,9 +1598,36 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder RoundCone(float lowerRadius, float upperRadius, float height, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Both radii are sphere radii in the decoder (`length(q) - lowerRadius`, `length(q - (0, height)) - upperRadius`)
+        // — the same argument as Sphere. The height must be non-negative because the slope below is baked against
+        // MathF.Max(height, 0.0001f) while the decoder places the top cap at the RAW +height: a negative height puts
+        // the cap below the origin with a slope constant computed for a positive one, so the two disagree.
+        RequireNonNegative(value: lowerRadius, paramName: nameof(lowerRadius), subject: "A round-cone lower radius");
+        RequireNonNegative(value: upperRadius, paramName: nameof(upperRadius), subject: "A round-cone upper radius");
+        RequireNonNegative(value: height, paramName: nameof(height), subject: "A round-cone height");
+
         // The slope terms are HOST-BAKED (Data0.w = b, Data1.y = a) to avoid a divide and square root per evaluation
         // (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/sdf-vm.hlsli).
         var slope = ((lowerRadius - upperRadius) / MathF.Max(x: height, y: 0.0001f));
+
+        // The three raw inputs are each individually finite (RequireNonNegative above already refuses NaN/infinity),
+        // but their RATIO is not: a huge radius difference over a near-zero height overflows a finite numerator by a
+        // finite (floored) denominator into +/-Infinity, which the shape method above cannot see or clamp — it packs
+        // straight into Data0.w and poisons derived1 and the program-wide Lipschitz step scale. Refuse rather than
+        // clamp: a clamped slope would silently cone the shape at some other angle than authored.
+        if (!float.IsFinite(f: slope)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(height), message: $"A round-cone's derived slope (lowerRadius {lowerRadius} minus upperRadius {upperRadius}, divided by height {height}) is not finite. Raise the height or narrow the radius difference.");
+        }
+
+        // A SECOND, independent derived value: SdfProgram.TryGetLocalBound's RoundCone cull bound is
+        // |height/2| + max(lowerRadius, upperRadius) — the same sum-overflow class as Torus's radii, reachable even
+        // when the slope above stays finite (equal enormous radii keep the slope's ratio at 0, but this sum still
+        // overflows).
+        var boundRadius = (MathF.Abs(x: (height * 0.5f)) + MathF.Max(x: lowerRadius, y: upperRadius));
+
+        if (!float.IsFinite(f: boundRadius)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(height), message: $"A round-cone's derived bound radius (half-height {(height * 0.5f)} plus the larger end radius {MathF.Max(x: lowerRadius, y: upperRadius)}) is not finite. Narrow the radii or the height.");
+        }
 
         return Shape(
             blend: blend,
@@ -1251,12 +1644,29 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Capsule(Vector3 endpoint, float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The endpoint is a signed local-space offset (the segment's far end), so only finiteness is refused; the
+        // radius closes the segment into a capsule exactly as Sphere's does — `length(...) - radius`.
+        RequireFinite(value: endpoint, paramName: nameof(endpoint), subject: "A capsule endpoint");
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A capsule radius");
+
+        // The endpoint's raw components are each individually finite, but dot(endpoint, endpoint) is not: a component
+        // near float's ~1.84e19 sqrt-of-max threshold squares past float.MaxValue and overflows to +Infinity — baking
+        // a silent reciprocal ZERO into derived1 below (poisoning the capsule's own distance field) while
+        // SdfProgram.TryGetLocalBound's endpoint.Length() (the SAME dot, square-rooted) derives an INFINITE cull
+        // bound. Refuse rather than clamp — a clamped dot would silently shorten the capsule to some other length
+        // than authored.
+        var dotEndpoint = Vector3.Dot(vector1: endpoint, vector2: endpoint);
+
+        if (!float.IsFinite(f: dotEndpoint)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(endpoint), message: $"A capsule endpoint {endpoint}'s derived dot(endpoint, endpoint) is not finite. Narrow the endpoint.");
+        }
+
         return Shape(
             blend: blend,
             // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
             // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
             // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/sdf-vm.hlsli).
-            derived1: (1f / MathF.Max(x: Vector3.Dot(vector1: endpoint, vector2: endpoint), y: 0.0001f)),
+            derived1: (1f / MathF.Max(x: dotEndpoint, y: 0.0001f)),
             dimensions: new Vector4(
                 value: endpoint,
                 w: radius
@@ -1267,6 +1677,18 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Cylinder(float radius, float halfHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The decoder subtracts both from magnitudes — `float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight)` —
+        // so a negative one leaves that axis with no surface, and the cull bound reads them as a right triangle's legs.
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A cylinder radius");
+        RequireNonNegative(value: halfHeight, paramName: nameof(halfHeight), subject: "A cylinder half-height");
+
+        // Both legs are individually finite, but SdfProgram.TryGetLocalBound's Cylinder cull bound is
+        // sqrt(radius² + halfHeight²) — the same dot-product-shaped overflow Capsule's endpoint has: either leg
+        // squared can overflow past float.MaxValue well before the leg itself does.
+        if (!float.IsFinite(f: MathF.Sqrt(x: ((radius * radius) + (halfHeight * halfHeight))))) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(halfHeight), message: $"A cylinder's derived bound radius (from radius {radius} and halfHeight {halfHeight}) is not finite. Narrow one or both dimensions.");
+        }
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -1281,6 +1703,10 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Ellipsoid(Vector3 radii, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The sign is absorbed by the Vector3.Abs clamp below (and the 1e-4 floor keeps the reciprocal finite), so
+        // only NaN/infinity — which neither absorbs — are refused.
+        RequireFinite(value: radii, paramName: nameof(radii), subject: "An ellipsoid radius");
+
         // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid two vector divides per
         // evaluation (KEEP IN SYNC with sdfEllipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli).
         var clamped = Vector3.Max(value1: Vector3.Abs(value: radii), value2: new Vector3(value: 0.0001f));
@@ -1301,6 +1727,11 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // A screen slab IS a rounded box (sdfBox decodes both shape types), so it carries Box's argument contract.
+        RequireNonNegative(value: halfExtents, paramName: nameof(halfExtents), subject: "A screen-slab half-extent");
+        RequireNonNegative(value: round, paramName: nameof(round), subject: "A screen-slab corner radius");
+        RequireFiniteBoxBound(halfExtents: halfExtents, round: round, shapeName: "screen-slab");
+
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -1328,9 +1759,30 @@ public sealed class SdfProgramBuilder {
     /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, or this
-    /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, this
+    /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces, a slab dimension is not finite and
+    /// non-negative, <paramref name="worldOrigin"/> is not finite, <paramref name="worldRight"/>/
+    /// <paramref name="worldUp"/> is not finite or has zero length, <paramref name="worldRight"/> and
+    /// <paramref name="worldUp"/> are parallel, or <paramref name="blend"/> is not a defined
+    /// <see cref="SdfBlendOp"/>.</exception>
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, int screenIndex, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // The slab geometry carries Box's contract; the UV frame's two axes are normalized host-side into the screen
+        // surface record, so a zero axis would map every hit point to a NaN UV.
+        RequireNonNegative(value: halfExtents, paramName: nameof(halfExtents), subject: "A screen-slab half-extent");
+        RequireNonNegative(value: round, paramName: nameof(round), subject: "A screen-slab corner radius");
+        RequireFiniteBoxBound(halfExtents: halfExtents, round: round, shapeName: "screen-slab");
+        RequireFinite(value: worldOrigin, paramName: nameof(worldOrigin), subject: "A screen-slab world origin");
+        RequireDirection(value: worldRight, paramName: nameof(worldRight), subject: "A screen-slab world right axis");
+        RequireDirection(value: worldUp, paramName: nameof(worldUp), subject: "A screen-slab world up axis");
+
+        // Two individually valid axes can still be parallel, and their cross product is then zero — normalizing it
+        // would put NaN into a downstream frame built from right/up/forward (Text's identical hazard; same check).
+        var forward = Vector3.Normalize(value: Vector3.Cross(vector1: Vector3.Normalize(value: worldRight), vector2: Vector3.Normalize(value: worldUp)));
+
+        if (!float.IsFinite(f: forward.X) || !float.IsFinite(f: forward.Y) || !float.IsFinite(f: forward.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(worldUp), message: "A screen-slab world right and up axis must not be parallel — they span the slab's front-face frame.");
+        }
+
         if (
             (screenIndex < 0) ||
             (screenIndex >= MaxScreenSurfaces)
@@ -1375,7 +1827,13 @@ public sealed class SdfProgramBuilder {
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius.</param>
     /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldOrientation"/> is not finite or has zero
+    /// length, or the overload this forwards to refuses an argument.</exception>
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, Vector3 worldOrigin, Quaternion worldOrientation, int screenIndex, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        // Checked HERE rather than left to the forwarded overload: a non-unit orientation would have produced two
+        // zero axes, and the refusal would then have named worldRight instead of the argument the caller supplied.
+        RequireRotation(value: worldOrientation, paramName: nameof(worldOrientation), subject: "A screen-slab orientation");
+
         var unit = Quaternion.Normalize(value: worldOrientation);
 
         return ScreenSlab(
@@ -1406,6 +1864,75 @@ public sealed class SdfProgramBuilder {
             throw new InvalidOperationException(message: "Build was called with a material scope still open (BeginMaterialScope without disposing the returned scope).");
         }
 
+        // THE PALETTE GATE. A shape's material id indexes the packed palette on the GPU through sdfMaterialLoad, and
+        // the shader CLAMPS an out-of-range id to row 0 rather than faulting — so an id past the palette is not a
+        // crash, it is a shape silently wearing the wrong material, which is exactly the failure an author will not
+        // see. It can only be judged HERE, at Build: a shape may legitimately name a material its emitter registers
+        // later in the same scope, so the palette is not final until now.
+        //
+        // The SCREEN SENTINELS are the one family that legitimately sits above the palette (ScreenMaterialId flags
+        // screen shading and ScreenMaterialId + 1 + screenIndex names the surface — see ScreenSlab), and they are
+        // distinguishable by that same threshold, so every id BELOW it is a palette row and is checked. Read off the
+        // packed instructions rather than a parallel list: SdfOp.ShapeBlend is written at exactly one site (Shape),
+        // so this covers every emitted shape by construction and cannot drift from one.
+        for (var index = 0; (index < m_instructions.Count); index++) {
+            var instruction = m_instructions[index];
+
+            if (instruction.Op != SdfOp.ShapeBlend) {
+                continue;   // Every other op's Material lane carries op-specific data (a fold's stride, a jitter's variant count), never a palette row.
+            }
+
+            var shapeMaterial = (int)instruction.Material;   // Shape refuses a negative id at emission, so this cast round-trips.
+
+            if ((shapeMaterial >= ScreenMaterialId) || (shapeMaterial < m_materials.Count)) {
+                continue;
+            }
+
+            throw new InvalidOperationException(message: $"A shape names material {shapeMaterial}, but the program declares {m_materials.Count} material(s) — every non-screen material id must be below {m_materials.Count}. The shader clamps an out-of-range id to material 0, so this would shade with a material the program never registered instead of failing. Add the material, or correct the shape's id.");
+        }
+
+        // THE POSITIONAL-RECOLOR GATE. A CellJitter variant, a WallpaperFold stride, and a RepeatPolar stride are all
+        // added to a shape's material id on the GPU, and the sum goes straight into sdfMaterialLoad, which indexes the
+        // packed palette. A window that leaves the span it may address is a defect, and it too can only be judged HERE:
+        // when the fold is declared the palette is not final and the shape it recolors does not exist yet.
+        // This REFUSES rather than repairs — the scope clamp is a first-party convenience that narrows the one stride it
+        // can see, this is the gate, and an author gets a throw instead of silently recolored pixels. If the two ever
+        // disagree, the gate wins by refusing.
+        //
+        // THE SPAN A WINDOW MAY ADDRESS is its OWN material scope when it was emitted inside one, and the whole palette
+        // only when it was not. BeginMaterialScope is per-CONTRIBUTOR, so judging every window against the whole palette
+        // would pass a contributor's oversized recolor whenever ANOTHER contributor happened to register enough
+        // materials — memory-safe (the read lands inside the table) but reading, and shading with, a neighbour's
+        // palette. With no scope open the whole palette IS the scope, so a direct build is judged exactly as before.
+        //
+        // A SPAN HAS TWO ENDS, AND BOTH ARE CHECKED. Judging only the window's TOP left the BASE unguarded, and a
+        // window can leave its scope downward just as easily: open scope A and add material 0, close it, open scope B
+        // and add materials 1 and 2, then recolor a shape whose base material is 0 by up to +1. The top is 1, well
+        // inside scope B's 0..2 — yet the shape alternates between scope B's material and scope A's, which is
+        // precisely the cross-contributor bleed the scope-relative gate exists to prevent. CellJitter is the route
+        // that reaches this (the strided folds are narrowed at emit time by ApplyPositionalMaterialScopeClamp, which
+        // refuses an out-of-scope base of its own), but the check is on the WINDOW, not on the op, so no future
+        // recolor op has to remember to opt in.
+        foreach (var window in m_materialRecolorWindows) {
+            var top = (window.Material + window.MaxDelta);   // 64-bit: see m_materialRecolorWindows on why a 32-bit top lies
+            var scope = window.Scope;
+            var limit = ((scope?.MaterialEnd) ?? m_materials.Count);
+
+            if ((scope is not null) && (window.Material < scope.MaterialBase)) {
+                var baseLever = ((window.Op == SdfOp.CellJitter) ? "materialVariants" : "materialStride");
+
+                throw new InvalidOperationException(message: $"A {window.Op} positional material recolor STARTS BELOW THE MATERIAL SCOPE it was emitted in: a shape whose base material is {window.Material}, recolored by up to +{window.MaxDelta}, reaches material ids {window.Material}..{top}, but that scope spans material ids {scope.MaterialBase}..{(limit - 1)} ({(limit - scope.MaterialBase)} material(s)) — every id must be at least {scope.MaterialBase}. The shader adds the recolor to the base, so this would shade with a material this contributor never registered: another contributor's palette. Give the shape a base material this scope added, or lower the {baseLever}.");
+            }
+
+            if (top >= limit) {
+                var lever = ((window.Op == SdfOp.CellJitter) ? "materialVariants" : "materialStride");
+
+                throw new InvalidOperationException(message: ((scope is null)
+                    ? $"A {window.Op} positional material recolor reaches past the palette: a shape whose base material is {window.Material}, recolored by up to +{window.MaxDelta}, reaches material id {top}, but the program declares {limit} material(s) — every id must stay below {limit}. The shader adds the recolor before sdfMaterialLoad, so this would read past the packed material table on the GPU. Add the materials the recolor reaches, or lower the {lever}."
+                    : $"A {window.Op} positional material recolor LEFT THE MATERIAL SCOPE it was emitted in: a shape whose base material is {window.Material}, recolored by up to +{window.MaxDelta}, reaches material id {top}, but that scope spans material ids {scope.MaterialBase}..{(limit - 1)} ({(limit - scope.MaterialBase)} material(s)) — every id must stay below {limit}. The shader adds the recolor before sdfMaterialLoad, so this would shade with a material this contributor never registered: another contributor's palette, or (past the {m_materials.Count} the program declares) the packed material table's end. Add the materials the recolor reaches to this scope, or lower the {lever}."));
+            }
+        }
+
         return new SdfProgram(
             buildInstanceGrid: buildInstanceGrid,
             instructions: m_instructions,
@@ -1415,6 +1942,134 @@ public sealed class SdfProgramBuilder {
         );
     }
 
+    // THE ARGUMENT FLOOR. Every float a caller supplies reaches the GPU as a packed word bit-for-bit (SdfProgram's
+    // WriteVector4 reinterprets, it never arithmetically normalizes), so a NaN or infinity is not absorbed anywhere
+    // downstream: it survives into the instruction stream, poisons the program-wide Lipschitz step scale
+    // (SdfProgram.AnalyzeLipschitz folds every shape dimension and warp rate into ONE scalar), and poisons the cull
+    // bounds derived from the same lanes. The host-baked clamps (Vector3.Max, MathF.Max, Math.Clamp) absorb SIGN, never
+    // NaN — MathF.Max(NaN, x) is NaN — which is why finiteness is checked here rather than left to them.
+    private static Vector3 ClampSpacing(Vector3 spacing) =>
+        Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
+    private static void RequireFinite(float value, string paramName, string subject) {
+        if (!float.IsFinite(f: value)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite.");
+        }
+    }
+    private static void RequireFinite(Vector2 value, string paramName, string subject) {
+        if (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite on every component.");
+        }
+    }
+    private static void RequireFinite(Vector3 value, string paramName, string subject) {
+        if (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) || !float.IsFinite(f: value.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite on every component.");
+        }
+    }
+    private static void RequireNonNegative(float value, string paramName, string subject) {
+        if (!float.IsFinite(f: value) || (value < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite and non-negative.");
+        }
+    }
+    private static void RequireNonNegative(Vector2 value, string paramName, string subject) {
+        if (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) || (value.X < 0f) || (value.Y < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite and non-negative on every component.");
+        }
+    }
+    private static void RequireNonNegative(Vector3 value, string paramName, string subject) {
+        if (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) || !float.IsFinite(f: value.Z) || (value.X < 0f) || (value.Y < 0f) || (value.Z < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite and non-negative on every component.");
+        }
+    }
+    private static void RequirePositive(float value, string paramName, string subject) {
+        if (!float.IsFinite(f: value) || (value <= 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite and greater than zero.");
+        }
+    }
+    // Shared by Box and both ScreenSlab overloads (a screen slab IS a rounded box): SdfProgram.TryGetLocalBound's
+    // Box/ScreenSlab cull bound is halfExtents.Length() + |round| — Length() is a dot-product-shaped sum of squares,
+    // so one huge half-extent component can overflow it past float.MaxValue even though every component individually
+    // stays finite (the same overflow class Capsule's endpoint dot and Cylinder's hypotenuse have). Checked here
+    // rather than left to the analysis pass that discovers it far from the shape that authored it.
+    private static void RequireFiniteBoxBound(Vector3 halfExtents, float round, string shapeName) {
+        if (!float.IsFinite(f: (halfExtents.Length() + MathF.Abs(x: round)))) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(halfExtents), message: $"A {shapeName}'s derived bound radius (from half-extents {halfExtents} and round {round}) is not finite. Narrow the half-extents.");
+        }
+    }
+    // Shared by the whole 2D-primitive-lift family (RoundedRectangle/RegularPolygon/Star/Trapezoid/Ellipse):
+    // SdfProgram.LiftedBoundRadius derives each one's cull bound from its own 2D reach (radius2D) and its lift amount
+    // — sqrt(radius2D² + liftAmount²) for Extrude, radius2D + liftAmount for Revolve — and either form can overflow
+    // past float.MaxValue from two individually-finite inputs, exactly like Torus's radii sum. KEEP IN SYNC with
+    // LiftedBoundRadius's own formula. Checked at the shape that owns radius2D/liftAmount rather than left to the
+    // analysis pass that discovers it far from the offending call.
+    private static void RequireFiniteLiftedReach(float radius2D, float liftAmount, SdfLift lift, string shapeName) {
+        var reach = ((lift == SdfLift.Extrude)
+            ? MathF.Sqrt(x: ((radius2D * radius2D) + (liftAmount * liftAmount)))
+            : (liftAmount + radius2D));
+
+        if (!float.IsFinite(f: reach)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(liftAmount), message: $"A {shapeName}'s derived lifted bound radius (2D reach {radius2D}, lift {liftAmount}) is not finite. Narrow the shape's dimensions or the lift amount.");
+        }
+    }
+    // A direction the builder NORMALIZES host-side: a zero-length (or underflowing) vector divides by zero and packs
+    // NaN into the lane the shader trusts to be a unit vector, so the normalized result is what has to be finite.
+    private static void RequireDirection(Vector3 value, string paramName, string subject) {
+        RequireFinite(value: value, paramName: paramName, subject: subject);
+
+        var unit = Vector3.Normalize(value: value);
+
+        if (!float.IsFinite(f: unit.X) || !float.IsFinite(f: unit.Y) || !float.IsFinite(f: unit.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must have a non-zero length (it is normalized host-side).");
+        }
+    }
+    // The quaternion twin of RequireDirection: Rotate/ScreenSlab normalize before packing, and a zero quaternion
+    // normalizes to NaN, which the shader's inverse-rotate would carry into every coordinate.
+    private static void RequireRotation(Quaternion value, string paramName, string subject) {
+        if (!float.IsFinite(f: value.W) || !float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) || !float.IsFinite(f: value.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must be finite on every component.");
+        }
+
+        var unit = Quaternion.Normalize(value: value);
+
+        if (!float.IsFinite(f: unit.W) || !float.IsFinite(f: unit.X) || !float.IsFinite(f: unit.Y) || !float.IsFinite(f: unit.Z)) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, message: $"{subject} must have a non-zero length (it is normalized host-side).");
+        }
+    }
+    // THE ENUM FLOOR. Every enum lane below is cast RAW to its packed uint (Blend/Shape/Material never validate it),
+    // so an out-of-range value some other caller-supplied int was cast from reaches the GPU as whatever THAT bit
+    // pattern decodes to in the shader's switch — a silently DIFFERENT op/shape/axis than authored, not a caught
+    // mistake. Each enum here is a contiguous uint range starting at 0 (KEEP IN SYNC with its own file), so a single
+    // upper-bound compare is the whole defined-set test — cheaper than Enum.IsDefined's reflection lookup and exact
+    // for a contiguous enum.
+    private static void RequireDefined(SdfBlendOp value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfBlendOp.ChamferSubtraction, actualValue: value, enumName: nameof(SdfBlendOp), paramName: paramName);
+    private static void RequireDefined(SdfPolarAxis value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfPolarAxis.Z, actualValue: value, enumName: nameof(SdfPolarAxis), paramName: paramName);
+    private static void RequireDefined(SdfNoiseFlavor value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfNoiseFlavor.Gaussian, actualValue: value, enumName: nameof(SdfNoiseFlavor), paramName: paramName);
+    private static void RequireDefined(SdfWallpaperGroup value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfWallpaperGroup.P6M, actualValue: value, enumName: nameof(SdfWallpaperGroup), paramName: paramName);
+    private static void RequireDefined(SdfWallpaperPlane value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfWallpaperPlane.YZ, actualValue: value, enumName: nameof(SdfWallpaperPlane), paramName: paramName);
+    private static void RequireDefined(SdfLift value, string paramName) =>
+        RequirePackedEnumValue(value: (uint)value, maximum: (uint)SdfLift.Extrude, actualValue: value, enumName: nameof(SdfLift), paramName: paramName);
+
+    /// <summary>Owns the defined-range check for every contiguous enum packed into the SDF instruction stream.</summary>
+    private static void RequirePackedEnumValue(uint value, uint maximum, object actualValue, string enumName, string paramName) {
+        if (value > maximum) {
+            throw new ArgumentOutOfRangeException(paramName: paramName, actualValue: actualValue, message: $"{actualValue} is not a defined {enumName}.");
+        }
+    }
+
+    /// <summary>Owns the instruction encoding shared by scalar transforms whose value occupies <c>Data0.x</c>.</summary>
+    private SdfProgramBuilder ScalarTransform(SdfOp op, float value) =>
+        Transform(data0: new Vector4(w: 0f, x: value, y: 0f, z: 0f), op: op);
+
+    /// <summary>Owns finite-value validation and instruction encoding for signed scalar transforms.</summary>
+    private SdfProgramBuilder FiniteScalarTransform(SdfOp op, float value, string paramName, string subject) {
+        RequireFinite(value: value, paramName: paramName, subject: subject);
+
+        return ScalarTransform(op: op, value: value);
+    }
     private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default) {
         m_instructions.Add(item: new SdfInstruction(
             Blend: 0,
@@ -1430,10 +2085,30 @@ public sealed class SdfProgramBuilder {
     // Data1.x is the ISA-wide smooth-blend radius; .yzw carry per-shape HOST-BAKED derived constants (the shader's
     // decode is per shape case — KEEP IN SYNC with sdf-vm.hlsli evaluateShape).
     private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f) {
+        // The two arguments EVERY public shape method shares, checked once here rather than at twenty call sites.
+        // material is cast to uint on the way into the packed lane, so a negative id would arrive as a huge positive
+        // one and index past the palette. The UPPER bound is not checked here and cannot be: the palette is still
+        // growing (a shape may name a material its own emitter registers a call later), so it is judged once at Build,
+        // against the final count and skipping the screen sentinels — see the palette gate there.
+        // smooth's SIGN is absorbed by the shader (blendShape clamps it with max(), and PopField already bakes the same
+        // clamp), so only finiteness is refused here.
+        if (material < 0) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(material), message: "A shape material identifier must be non-negative.");
+        }
+
+        // Checked here too (the enum floor): every public shape method funnels its blend through this one call, so
+        // one check here covers all of them, rather than twenty individually-fallible call sites.
+        RequireDefined(value: blend, paramName: nameof(blend));
+        RequireFinite(value: smooth, paramName: nameof(smooth), subject: "A shape blend smooth radius");
+
         // Counts ShapeBlend emissions so PopField can reject a shape-less scope. A scope-free program never reads it.
         m_shapeCount++;
 
         ApplyPositionalMaterialScopeClamp(material: material);
+        // AFTER the clamp, never before: the clamp may have just narrowed the active fold's raw stride, and the window
+        // recorded here must describe the reach the packed program actually carries, or a repaired program would be
+        // refused for a reach it no longer has.
+        RecordPositionalMaterialWindow(material: material);
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: (uint)blend,
@@ -1492,5 +2167,41 @@ public sealed class SdfProgramBuilder {
         // The clamp only ever narrows the reach going forward — a later shape under the SAME fold (in the same chain
         // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
+    }
+    // Pairs the active positional recolor with the shape it recolors, producing the (base material, max delta, scope)
+    // WINDOW the Build()-time gate judges once the palette is final. The scope recorded is the INNERMOST one open at
+    // this shape's emission — the same one ApplyPositionalMaterialScopeClamp resolves against — because that is the
+    // palette span this shape's contributor owns; null when the builder has no scope open at all. A shape carrying a
+    // screen sentinel records nothing: the
+    // shader applies the delta only under `material < SDF_SCREEN_MATERIAL`, so a screen face is never recolored (KEEP IN
+    // SYNC with the SDF_OP_SHAPE parityMaterialDelta apply in Assets/Shaders/Sdf/sdf-vm.hlsli). A zero delta records
+    // nothing either — the shape reaches only its own declared material, which this gate does not own.
+    private void RecordPositionalMaterialWindow(int material) {
+        if ((m_materialRecolor is not { } recolor) || (material >= ScreenMaterialId)) {
+            return;
+        }
+
+        var maxDelta = MaxRecolorDelta(recolor: recolor);
+
+        if (maxDelta <= 0L) {
+            return;
+        }
+
+        m_materialRecolorWindows.Add(item: (recolor.Op, material, maxDelta, ((m_materialScopes.Count == 0) ? null : m_materialScopes[^1])));
+    }
+    // The largest value the shader's parityMaterialDelta can hold for `recolor`, read from the raw Material lane of the
+    // recoloring instruction itself so a lane the scope clamp already narrowed is seen at its narrowed value. KEEP IN
+    // SYNC with the three parityMaterialDelta writers in Assets/Shaders/Sdf/sdf-vm.hlsli: WallpaperFold multiplies its
+    // stride by a cell key in 0..2 (a hex group's 3-coloring) or 0..1 (every other group's parity), RepeatPolar by a
+    // sector index in 0..count-1, and CellJitter takes a hashed row in 0..variants-1 — a COUNT, not a stride, which is
+    // the whole reason it subtracts one where the folds multiply.
+    private long MaxRecolorDelta((int InstructionIndex, int ReachPerUnit, SdfOp Op) recolor) {
+        var raw = (long)(int)m_instructions[recolor.InstructionIndex].Material;
+
+        if (raw == 0L) {
+            return 0L;
+        }
+
+        return ((recolor.Op == SdfOp.CellJitter) ? (raw - 1L) : (recolor.ReachPerUnit * raw));
     }
 }

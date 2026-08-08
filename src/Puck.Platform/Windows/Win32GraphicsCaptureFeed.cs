@@ -38,7 +38,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private const int Running = 0;
     private const int Stopped = 2;
     private const int Stopping = 1;
-    private static readonly Guid GraphicsCaptureItemGuid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
+
+    private static readonly Guid GraphicsCaptureItemGuid = new(g: "79C3F95B-31F7-4EC2-A464-632EF5D30760");
 
     /// <summary>Creates and starts a fully owned window feed, or returns false without retaining native resources.</summary>
     public static bool TryCreate(nint windowHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null) {
@@ -54,7 +55,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         feed = null;
         ValidateOutputExtent(width: width, height: height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
-        if (!double.IsFinite(refreshRateHz)) {
+        if (!double.IsFinite(d: refreshRateHz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
         }
 
@@ -126,6 +127,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             }
 
             var now = Environment.TickCount64;
+
             if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
                 m_lastLivenessCheckTicks = now;
                 if (!IsTargetAlive()) {
@@ -155,7 +157,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             // A resize latches the new extent into m_source* under the callback gate; the attached set keeps its
             // creation extent, so a mismatch means GPU publishing has paused until a matching AttachGpuTargets.
             var targets = m_gpuTargets;
-            return (targets is not null) && ((targets.Width != Volatile.Read(location: ref m_sourceWidth)) || (targets.Height != Volatile.Read(location: ref m_sourceHeight)));
+
+            return ((targets is not null) && ((targets.Width != Volatile.Read(location: ref m_sourceWidth)) || (targets.Height != Volatile.Read(location: ref m_sourceHeight))));
         }
     }
 
@@ -163,24 +166,26 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     public void AttachGpuTargets(NativeImageGpuCaptureTargets targets) {
         ArgumentNullException.ThrowIfNull(argument: targets);
         var handles = targets.SharedTargetHandles;
+
         ArgumentNullException.ThrowIfNull(argument: handles);
         if (handles.Count < 2) {
             throw new ArgumentException(message: "At least two shared targets are required so the writer stays off the slot a consumer is sampling.", paramName: nameof(targets));
         }
         ValidateOutputExtent(width: targets.Width, height: targets.Height);
 
-        var device = m_device ?? throw new ObjectDisposedException(objectName: nameof(Win32GraphicsCaptureFeed));
+        var device = (m_device ?? throw new ObjectDisposedException(objectName: nameof(Win32GraphicsCaptureFeed)));
 
         // Open every shared handle once, off the callback gate (the capture device is multithread-protected). A partial
         // failure releases what opened so no target leaks.
         var slotTextures = new nint[handles.Count];
         var opened = 0;
+
         try {
-            for (; opened < slotTextures.Length; opened++) {
+            for (; (opened < slotTextures.Length); opened++) {
                 slotTextures[opened] = device.OpenSharedTarget(sharedHandle: handles[opened], expectedWidth: targets.Width, expectedHeight: targets.Height);
             }
         } catch {
-            for (var i = 0; i < opened; i++) {
+            for (var i = 0; (i < opened); i++) {
                 Win32GraphicsCaptureDevice.ReleaseTexture(texture: slotTextures[i]);
             }
 
@@ -211,7 +216,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         var threadId = User32.GetWindowThreadProcessId(windowHandle: m_targetHandle, processId: out var processId);
-        return (threadId == m_ownerThreadId) && (processId == m_ownerProcessId);
+
+        return ((threadId == m_ownerThreadId) && (processId == m_ownerProcessId));
     }
 
     private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid) {
@@ -222,11 +228,12 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         if (targetKind == CaptureTargetKind.Window) {
             m_ownerThreadId = User32.GetWindowThreadProcessId(windowHandle: targetHandle, processId: out m_ownerProcessId);
         }
-        var outputByteLength = checked((width * height) * 4);
+        var outputByteLength = checked(((width * height) * 4));
+
         m_consumerPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
         m_publishedPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
         m_workingPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_refreshPeriodTicks = Math.Max(val1: 1L, val2: (long)Math.Round(Stopwatch.Frequency / refreshRateHz));
+        m_refreshPeriodTicks = Math.Max(val1: 1L, val2: (long)Math.Round(a: (Stopwatch.Frequency / refreshRateHz)));
         m_frameArrivedHandler = OnFrameArrived;
         m_targetClosedHandler = OnTargetClosed;
 
@@ -234,6 +241,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             m_device = new Win32GraphicsCaptureDevice(adapterLuid: adapterLuid);
             m_captureItem = CreateCaptureItem(targetKind: targetKind, targetHandle: targetHandle);
             var initialSize = m_captureItem.Size;
+
             ValidateSourceExtent(width: initialSize.Width, height: initialSize.Height);
             m_sourceHeight = initialSize.Height;
             m_sourceWidth = initialSize.Width;
@@ -313,10 +321,13 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         // resources and buffers, so they are abandoned (deliberately leaked) rather than freed — a leak on a hung driver
         // beats a use-after-free. Events are already detached and the state is already Stopping.
         var callbacksDrained = true;
+
         lock (m_lifetimeGate) {
-            var deadline = Environment.TickCount64 + DisposeTimeoutMilliseconds;
+            var deadline = (Environment.TickCount64 + DisposeTimeoutMilliseconds);
+
             while (m_activeCallbacks != 0) {
-                var remaining = deadline - Environment.TickCount64;
+                var remaining = (deadline - Environment.TickCount64);
+
                 if (remaining <= 0L) {
                     callbacksDrained = false;
                     break;
@@ -342,6 +353,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         var ended = false;
+
         try {
             if (!Monitor.TryEnter(obj: m_callbackGate)) {
                 return;
@@ -362,7 +374,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             EndAndScheduleDispose();
         }
     }
-
     private void OnTargetClosed(GraphicsCaptureItem _, object __) {
         EndAndScheduleDispose();
     }
@@ -379,11 +390,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
         }
     }
-
     private void PumpFrame(Direct3D11CaptureFramePool sender) {
         var resize = false;
         var contentSize = default(SizeInt32);
         var frame = sender.TryGetNextFrame();
+
         if (frame is null) {
             return;
         }
@@ -408,30 +419,34 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             RecreateForSourceSize(size: contentSize);
         }
     }
-
     private void ProcessCurrentSizeFrame(Direct3D11CaptureFrame frame) {
         if (m_device!.TryReadCompleted(destination: m_workingPixels, targetWidth: m_targetWidth, targetHeight: m_targetHeight)) {
             PublishWorkingFrame();
         }
 
         var now = Stopwatch.GetTimestamp();
+
         if (now < m_nextCaptureTicks) {
             return;
         }
 
         m_nextCaptureTicks += m_refreshPeriodTicks;
         if ((m_nextCaptureTicks <= now) || ((now - m_nextCaptureTicks) > m_refreshPeriodTicks)) {
-            m_nextCaptureTicks = now + m_refreshPeriodTicks;
+            m_nextCaptureTicks = (now + m_refreshPeriodTicks);
         }
 
         var surface = frame.Surface;
+
         try {
             var access = surface.As<IDirect3DDxgiInterfaceAccess>();
+
             try {
                 var texture = access.GetInterface(iid: ID3D11Texture2D.IID_Guid);
+
                 try {
                     var runCpuReadback = true;
                     var gpuTargets = m_gpuTargets;
+
                     if (gpuTargets is not null) {
                         PublishGpuFrame(gpuTargets: gpuTargets, sourceTexture: texture);
                         // With GPU mode active, throttle the CPU readback to every Nth tick (or off entirely). The
@@ -446,7 +461,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                     _ = Marshal.Release(pUnk: texture);
                 }
             } finally {
-                _ = Marshal.ReleaseComObject(access);
+                _ = Marshal.ReleaseComObject(o: access);
             }
         } finally {
             ((IWinRTObject)surface).NativeObject.Dispose();
@@ -462,12 +477,12 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         var slot = gpuTargets.NextSlot;
+
         m_device!.CopyToSharedTargetAndDrain(targetTexture: gpuTargets.SlotTextures[slot], sourceTexture: sourceTexture);
-        gpuTargets.NextSlot = (slot + 1) % gpuTargets.SlotTextures.Length;
+        gpuTargets.NextSlot = ((slot + 1) % gpuTargets.SlotTextures.Length);
         m_latestGpuSlot = slot;
         _ = Interlocked.Increment(location: ref m_gpuRevision);
     }
-
     private bool ShouldRunCpuReadback(int divisor) {
         if (divisor <= 0) {
             return false;
@@ -480,7 +495,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         m_cpuReadbackCounter = 0;
         return true;
     }
-
     private void RecreateForSourceSize(SizeInt32 size) {
         ValidateSourceExtent(width: size.Width, height: size.Height);
         m_device!.RecreateReadbacks(width: size.Width, height: size.Height);
@@ -493,7 +507,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         m_sourceHeight = size.Height;
         m_sourceWidth = size.Width;
     }
-
     private void PublishWorkingFrame() {
         lock (m_publicationGate) {
             (m_publishedPixels, m_workingPixels) = (m_workingPixels, m_publishedPixels);
@@ -501,7 +514,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             m_publishedRevision++;
         }
     }
-
     private bool TryAcquireCallback() {
         lock (m_lifetimeGate) {
             if (m_state != Running) {
@@ -512,7 +524,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             return true;
         }
     }
-
     private void ReleaseCallback() {
         lock (m_lifetimeGate) {
             m_activeCallbacks--;
@@ -521,7 +532,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             }
         }
     }
-
     private void DetachEvents() {
         if (m_framePool is not null) {
             try {
@@ -537,9 +547,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             }
         }
     }
-
     private void ReleaseResources() {
         var targetExists = IsTargetAlive();
+
         if (targetExists) {
             CloseAndRelease(value: m_captureSession);
         } else {
@@ -570,7 +580,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         m_device?.Dispose();
         m_device = null;
     }
-
     private static void ReleaseTargetSet(GpuTargetSet? targets) {
         if (targets is null) {
             return;
@@ -580,7 +589,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             Win32GraphicsCaptureDevice.ReleaseTexture(texture: texture);
         }
     }
-
     private static void ReleaseProjection(object? value) {
         if (value is IWinRTObject projection) {
             try {
@@ -589,7 +597,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             }
         }
     }
-
     private static void CloseAndRelease(IDisposable? value) {
         if (value is null) {
             return;
@@ -602,7 +609,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             ReleaseProjection(value: value);
         }
     }
-
     private static void CloseFrameAndRelease(Direct3D11CaptureFrame frame) {
         try {
             frame.Dispose();
@@ -610,23 +616,21 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             ReleaseProjection(value: frame);
         }
     }
-
     private static GraphicsCaptureItem CreateCaptureItem(CaptureTargetKind targetKind, nint targetHandle) {
         var interop = GraphicsCaptureItem.As<IGraphicsCaptureItemInterop>();
-        var itemPointer = targetKind == CaptureTargetKind.Monitor
+        var itemPointer = ((targetKind == CaptureTargetKind.Monitor)
             ? interop.CreateForMonitor(monitor: targetHandle, iid: GraphicsCaptureItemGuid)
-            : interop.CreateForWindow(window: targetHandle, iid: GraphicsCaptureItemGuid);
+            : interop.CreateForWindow(window: targetHandle, iid: GraphicsCaptureItemGuid));
+
         try {
-            return GraphicsCaptureItem.FromAbi(itemPointer);
+            return GraphicsCaptureItem.FromAbi(thisPtr: itemPointer);
         } finally {
             _ = Marshal.Release(pUnk: itemPointer);
         }
     }
-
     private static bool ExceedsResourceBudget(int width, int height) {
-        return (width > MaximumDimension) || (height > MaximumDimension) || (((long)width * height) > MaximumSourcePixels);
+        return ((width > MaximumDimension) || (height > MaximumDimension) || (((long)width * height) > MaximumSourcePixels));
     }
-
     private static void ValidateOutputExtent(int width, int height) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
@@ -634,9 +638,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             throw new ArgumentOutOfRangeException(paramName: nameof(width), message: $"Capture extents are limited to {MaximumDimension} per dimension and {MaximumSourcePixels} pixels.");
         }
 
-        _ = checked((width * height) * 4);
+        _ = checked(((width * height) * 4));
     }
-
     private static void ValidateSourceExtent(int width, int height) {
         if ((width <= 0) || (height <= 0) || ExceedsResourceBudget(width: width, height: height)) {
             throw new InvalidOperationException(message: $"The capture source extent {width}x{height} exceeds the supported resource budget.");
@@ -664,20 +667,18 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         public nint[] SlotTextures { get; }
         public int Width { get; }
     }
-
     [ComImport]
+    [ComVisible(true)]
     [Guid("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    [ComVisible(true)]
     private interface IGraphicsCaptureItemInterop {
         nint CreateForWindow(nint window, in Guid iid);
         nint CreateForMonitor(nint monitor, in Guid iid);
     }
-
     [ComImport]
+    [ComVisible(true)]
     [Guid("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    [ComVisible(true)]
     private interface IDirect3DDxgiInterfaceAccess {
         nint GetInterface(in Guid iid);
     }
@@ -686,6 +687,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 [SupportedOSPlatform("windows10.0.19041")]
 internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     private const int DxgiErrorWasStillDrawing = unchecked((int)0x887A000A);
+
     private readonly ReadbackSlot[] m_readbacks = [new(), new(), new()];
     private ID3D11DeviceContext* m_context;
     private ID3D11Device* m_device;
@@ -697,13 +699,14 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     private int m_sourceHeight;
     private int m_sourceWidth;
 
-    public IDirect3DDevice RuntimeDevice => m_runtimeDevice ?? throw new ObjectDisposedException(nameof(Win32GraphicsCaptureDevice));
+    public IDirect3DDevice RuntimeDevice => (m_runtimeDevice ?? throw new ObjectDisposedException(objectName: nameof(Win32GraphicsCaptureDevice)));
 
     // A LUID pins the device to the render host's adapter so its shared-target opens succeed (cross-adapter shared-handle
     // opens fail); the default (null) keeps the CPU-only path adapter-agnostic. An explicit adapter forces UNKNOWN driver
     // type. device1 carries OpenSharedResource1 and the event query drains each GPU copy.
     public Win32GraphicsCaptureDevice(long? adapterLuid = null) {
         IDXGIAdapter1* adapter = null;
+
         if (adapterLuid is long luid) {
             adapter = Win32D3D11.FindAdapterByLuid(adapterLuid: luid);
             if (adapter is null) {
@@ -714,7 +717,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         try {
             Win32D3D11.CreateMultithreadedDevice(
                 adapter: (IDXGIAdapter*)adapter,
-                driverType: adapter is null ? D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_HARDWARE : D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
+                driverType: ((adapter is null) ? D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_HARDWARE : D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN),
                 flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 device: out var device,
                 context: out var context
@@ -723,20 +726,23 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             m_device = device;
 
             var device1Iid = ID3D11Device1.IID_Guid;
-            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(in device1Iid, out var device1), operation: "QueryInterface(ID3D11Device1)");
+
+            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
             m_device1 = (ID3D11Device1*)device1;
 
             var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
             ID3D11Query* query;
+
             device->CreateQuery(pQueryDesc: &queryDesc, ppQuery: &query);
             m_gpuCopyQuery = query;
 
             var dxgiIid = IDXGIDevice.IID_Guid;
-            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(in dxgiIid, out var dxgiDevice), operation: "QueryInterface(IDXGIDevice)");
+
+            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var dxgiDevice, riid: in dxgiIid), operation: "QueryInterface(IDXGIDevice)");
             try {
-                Win32D3D11.ThrowIfFailed(hr: new HRESULT(CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice: (nint)dxgiDevice, graphicsDevice: out var inspectableDevice)), operation: "CreateDirect3D11DeviceFromDXGIDevice");
+                Win32D3D11.ThrowIfFailed(hr: new HRESULT(value: CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice: (nint)dxgiDevice, graphicsDevice: out var inspectableDevice)), operation: "CreateDirect3D11DeviceFromDXGIDevice");
                 try {
-                    m_runtimeDevice = MarshalInterface<IDirect3DDevice>.FromAbi(inspectableDevice);
+                    m_runtimeDevice = MarshalInterface<IDirect3DDevice>.FromAbi(ptr: inspectableDevice);
                 } finally {
                     _ = Marshal.Release(pUnk: inspectableDevice);
                 }
@@ -767,6 +773,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         );
 
         D3D11_TEXTURE2D_DESC description;
+
         ((ID3D11Texture2D*)texture)->GetDesc(pDesc: &description);
         if ((description.Format != DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM)
             || (description.Width != (uint)expectedWidth)
@@ -790,6 +797,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         m_context->Flush();
 
         BOOL done = false;
+
         while (!done) {
             m_context->GetData(pAsync: (ID3D11Asynchronous*)m_gpuCopyQuery, pData: &done, DataSize: (uint)sizeof(BOOL), GetDataFlags: 0);
             if (!done) {
@@ -804,7 +812,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             _ = ((IUnknown*)texture)->Release();
         }
     }
-
     public void RecreateReadbacks(int width, int height) {
         ReleaseReadbacks();
         var description = new D3D11_TEXTURE2D_DESC {
@@ -823,6 +830,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         try {
             foreach (var readback in m_readbacks) {
                 ID3D11Texture2D* texture;
+
                 m_device->CreateTexture2D(pDesc: &description, pInitialData: null, ppTexture2D: &texture);
                 if (texture is null) {
                     throw new InvalidOperationException(message: "D3D11 staging texture creation returned no texture.");
@@ -838,9 +846,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         m_sourceHeight = height;
         m_sourceWidth = width;
     }
-
     public bool TryQueueReadback(nint sourceTexture) {
         ReadbackSlot? slot = null;
+
         foreach (var candidate in m_readbacks) {
             if (!candidate.Pending) {
                 slot = candidate;
@@ -858,11 +866,12 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         slot.Sequence = ++m_sequence;
         return true;
     }
-
     public bool TryReadCompleted(byte[] destination, int targetWidth, int targetHeight) {
         var sequenceCeiling = long.MaxValue;
-        for (var attempt = 0; attempt < m_readbacks.Length; attempt++) {
+
+        for (var attempt = 0; (attempt < m_readbacks.Length); attempt++) {
             ReadbackSlot? candidate = null;
+
             foreach (var readback in m_readbacks) {
                 if (readback.Pending && (readback.Sequence < sequenceCeiling) && ((candidate is null) || (readback.Sequence > candidate.Sequence))) {
                     candidate = readback;
@@ -901,12 +910,13 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             (uint)D3D11_MAP_FLAG.D3D11_MAP_FLAG_DO_NOT_WAIT,
             &mapped
         );
+
         if (hr.Value == DxgiErrorWasStillDrawing) {
             return false;
         }
 
         Win32D3D11.ThrowIfFailed(hr: hr, operation: "ID3D11DeviceContext::Map");
-        m_downscaleAccumulators ??= new ulong[targetWidth * 4];
+        m_downscaleAccumulators ??= new ulong[(targetWidth * 4)];
         try {
             ScaleMapped(
                 source: (byte*)mapped.pData,
@@ -924,15 +934,16 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
         return true;
     }
-
     private static void ScaleMapped(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, ulong[] accumulators) {
         var target = MemoryMarshal.Cast<byte, uint>(span: destination.AsSpan());
+
         if ((sourceWidth == targetWidth) && (sourceHeight == targetHeight)) {
-            for (var y = 0; y < targetHeight; y++) {
-                var sourceRow = source + ((long)y * sourceRowPitch);
-                var targetRow = y * targetWidth;
-                for (var x = 0; x < targetWidth; x++) {
-                    target[targetRow + x] = Unsafe.ReadUnaligned<uint>(sourceRow + ((long)x * 4)) | 0xFF000000u;
+            for (var y = 0; (y < targetHeight); y++) {
+                var sourceRow = (source + ((long)y * sourceRowPitch));
+                var targetRow = (y * targetWidth);
+
+                for (var x = 0; (x < targetWidth); x++) {
+                    target[(targetRow + x)] = Unsafe.ReadUnaligned<uint>(source: (sourceRow + ((long)x * 4))) | 0xFF000000u;
                 }
             }
 
@@ -940,13 +951,15 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         }
 
         if ((sourceWidth < targetWidth) || (sourceHeight < targetHeight)) {
-            for (var y = 0; y < targetHeight; y++) {
-                var sourceY = ((long)y * sourceHeight) / targetHeight;
-                var sourceRow = source + (sourceY * sourceRowPitch);
-                var targetRow = y * targetWidth;
-                for (var x = 0; x < targetWidth; x++) {
-                    var sourceX = ((long)x * sourceWidth) / targetWidth;
-                    target[targetRow + x] = Unsafe.ReadUnaligned<uint>(sourceRow + (sourceX * 4)) | 0xFF000000u;
+            for (var y = 0; (y < targetHeight); y++) {
+                var sourceY = (((long)y * sourceHeight) / targetHeight);
+                var sourceRow = (source + (sourceY * sourceRowPitch));
+                var targetRow = (y * targetWidth);
+
+                for (var x = 0; (x < targetWidth); x++) {
+                    var sourceX = (((long)x * sourceWidth) / targetWidth);
+
+                    target[(targetRow + x)] = Unsafe.ReadUnaligned<uint>(source: (sourceRow + (sourceX * 4))) | 0xFF000000u;
                 }
             }
 
@@ -959,30 +972,36 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         // upscaled, so the divisor is always non-zero. Accumulators are 64-bit: one bucket can absorb the entire source
         // extent budget (MaximumSourcePixels * 255 overflows a 32-bit sum).
         var accumulatorSpan = accumulators.AsSpan();
-        for (var y = 0; y < targetHeight; y++) {
+
+        for (var y = 0; (y < targetHeight); y++) {
             accumulatorSpan.Clear();
-            var sourceY0 = ((long)y * sourceHeight) / targetHeight;
-            var sourceY1 = ((long)(y + 1) * sourceHeight) / targetHeight;
-            for (var sy = sourceY0; sy < sourceY1; sy++) {
-                var sourceRow = source + (sy * sourceRowPitch);
-                for (var sx = 0; sx < sourceWidth; sx++) {
-                    var pixel = Unsafe.ReadUnaligned<uint>(sourceRow + ((long)sx * 4));
-                    var bucket = ((sx * targetWidth) / sourceWidth) * 4;
+            var sourceY0 = (((long)y * sourceHeight) / targetHeight);
+            var sourceY1 = (((long)(y + 1) * sourceHeight) / targetHeight);
+
+            for (var sy = sourceY0; (sy < sourceY1); sy++) {
+                var sourceRow = (source + (sy * sourceRowPitch));
+
+                for (var sx = 0; (sx < sourceWidth); sx++) {
+                    var pixel = Unsafe.ReadUnaligned<uint>(source: (sourceRow + ((long)sx * 4)));
+                    var bucket = (((sx * targetWidth) / sourceWidth) * 4);
+
                     accumulatorSpan[bucket] += pixel & 0xFFu;
-                    accumulatorSpan[bucket + 1] += (pixel >> 8) & 0xFFu;
-                    accumulatorSpan[bucket + 2] += (pixel >> 16) & 0xFFu;
-                    accumulatorSpan[bucket + 3]++;
+                    accumulatorSpan[(bucket + 1)] += (pixel >> 8) & 0xFFu;
+                    accumulatorSpan[(bucket + 2)] += (pixel >> 16) & 0xFFu;
+                    accumulatorSpan[(bucket + 3)]++;
                 }
             }
 
-            var targetRow = y * targetWidth;
-            for (var x = 0; x < targetWidth; x++) {
-                var bucket = x * 4;
-                var count = accumulatorSpan[bucket + 3];
+            var targetRow = (y * targetWidth);
+
+            for (var x = 0; (x < targetWidth); x++) {
+                var bucket = (x * 4);
+                var count = accumulatorSpan[(bucket + 3)];
                 var b = (uint)(accumulatorSpan[bucket] / count);
-                var g = (uint)(accumulatorSpan[bucket + 1] / count);
-                var r = (uint)(accumulatorSpan[bucket + 2] / count);
-                target[targetRow + x] = b | (g << 8) | (r << 16) | 0xFF000000u;
+                var g = (uint)(accumulatorSpan[(bucket + 1)] / count);
+                var r = (uint)(accumulatorSpan[(bucket + 2)] / count);
+
+                target[(targetRow + x)] = b | (g << 8) | (r << 16) | 0xFF000000u;
             }
         }
     }
@@ -1033,7 +1052,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         m_sourceHeight = 0;
         m_sourceWidth = 0;
     }
-
     [DllImport("d3d11.dll", ExactSpelling = true)]
     private static extern int CreateDirect3D11DeviceFromDXGIDevice(nint dxgiDevice, out nint graphicsDevice);
 

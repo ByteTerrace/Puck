@@ -1,0 +1,26 @@
+# Case L (owner addendum): ceiling<=0 must REFUSE by name at the console door -- this is the seam that keeps
+# Puck.World.Protocol.ChannelPolicy.WithCeiling (ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(ceiling, 0))
+# and Puck.Maths.FixedContributionFold (whose own doc says "A null radius means no pool; zero is a valid
+# zero-width pool" -- i.e. FixedContributionFold treats a supplied ZERO radius as a REAL, if degenerate, pool)
+# from ever disagreeing live: FixedContributionFold's caller (WorldServer) treats "no authored ceiling" as no-pool, so a ceiling of
+# exactly 0 can never be authored through the console at all -- refused at PARSE TIME in
+# WorldGrantCommandModule.TryParseGrant, before either fold ever sees it. This is load-bearing, not incidental:
+# were ceiling:0 ever accepted, WHICH of the two zero-radius semantics governs would depend on which fold layer
+# is asked, and the two would visibly disagree.
+#
+# RED (both must refuse): ceiling:0 and a negative ceiling.
+# GREEN: a small positive ceiling is accepted.
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+replay.status
+world.wait 5
+# RED 1: ceiling:0 -- expect refusal citing "quantizes to raw 0 -- a granted-but-never-reachable pool is
+# accepted-and-inert; grant nothing instead" (WorldGrantCommandModule.cs's own parser message).
+world.grant seat1 drive body:0 channels:forward ceiling:0
+# RED 2: a negative ceiling -- expect refusal citing "expected ceiling:<f> with f in 0..1" (the same range check
+# that only accepts [0, 1] pre-quantization; the parser refuses the token outright rather than reading a sign).
+world.grant seat1 drive body:0 channels:forward ceiling:-0.1
+# GREEN: a small positive ceiling is accepted with no refusal line, and shows up in world.grants.
+world.grant seat1 drive body:0 channels:forward ceiling:0.01
+world.wait 5
+world.grants seat1

@@ -1,0 +1,162 @@
+[
+  {
+    "Id": "presented.clifford-signature-ladder-vs-geometric",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Square" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "BladeCount" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeneratorCount" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Compile" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Certify" },
+      { "Type": "Puck.Maths.Presentations", "Name": "Clifford" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "KeyCount" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Target" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "TargetCount" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Charge" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Outcome" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "IsAssociative" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "HasIdentity" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "NonAssociativeTripleCount" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "IsCommutative" },
+      { "Type": "Puck.Maths.PresentationCertificate`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "ZeroDivisorWitness" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the Clifford signatures with p+q+r<=4 enumerate to exactly 35, the range GeometricAlgebra.Create admits", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "InTreeIndependent", "Flavor": "None", "Subject": "the compiled cell at a generator's own square, at all 35 signatures", "Against": "GeometricAlgebra.Square(int) — a second shipped kernel sharing no code with the presented product's own generator-square reduction", "Shared": "", "Citation": "ENVELOPE: none — every generator at every one of the 35 signatures is checked, including the degenerate-square-to-zero branch", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "GeometricAlgebra.GeometricProduct's unit-blade charge (read per lane, so a leak into any OTHER blade is caught before the sign) AND the compiled FixedQ4816 table's matching cell, at all 35 signatures and all ordered blade pairs", "Against": "the bubble-sort charge oracle transcribed in PresentedKernelClaims.cs — explicit generator-list concatenation, bubble sort counting transpositions, degenerate-square cancellation, no popcount parity identity", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "a unit-blade product leaves every OTHER blade's coefficient at zero, at all 35 signatures and all ordered blade pairs — the leak check that licenses reading the sign off one lane", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the compiled BigInteger table at all 35 signatures IS a twisted group algebra — one target key, a unit +-1 sign — and satisfies the multiplicative 2-cocycle condition sigma(a,b)*sigma(a^b,c) = sigma(b,c)*sigma(a,b^c) on every ordered triple of lanes", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the certificate's zero-divisor witness count at all 35 signatures", "Against": "the count of ordered blade pairs sharing a degenerate generator, computed independently in PresentedKernelClaims.cs from the signature alone", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the certificate reports BasisAssociativityVerified, associative, unital, zero nonassociative triples, and commutative exactly when there is at most one generator, at all 35 signatures", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.octonion-twist-cocycle-count",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Presentations", "Name": "CayleyDickson" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Compile" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Target" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "TargetCount" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Charge" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the octonion floor's compiled BigInteger table IS a twisted group algebra, transcribed the same way as presented.clifford-signature-ladder-vs-geometric", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the compiled twist table's 2-cocycle failure count", "Against": "the number of ordered basis triples on which DoublingAlgebra's own product disagrees on bracketing — (a.b).c against a.(b.c) — formed through the shipped doubling tower alone, sharing no code with the presented/twist machinery", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the 2-cocycle failure count is exactly 168 of 512 — a REGRESSION PIN, set by observing the subject, corroborated by the sibling PresentedModulesPortedSubjects.LiveAssociatorMatchesDoublingTower case's identical count reached by an unrelated route", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.binary-field-wide-degrees-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Presentations", "Name": "Monogenic" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "SupportCount" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Keys" },
+      { "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.BinaryFields", "Name": "Degree32" },
+      { "Type": "Puck.Maths.BinaryFields", "Name": "Degree64" }
+    ],
+    "Legs": [
+      { "Kind": "InTreeIndependent", "Flavor": "None", "Subject": "the presented monogenic-over-ParityMaterial product at degree 32 (Monogenic(x^32+0x8D)) and degree 64 (Monogenic(x^64+0x1B))", "Against": "BinaryFields.Degree32.Multiply and BinaryFields.Degree64.Multiply — the shipped GF(2^k) kernels no existing case reaches past degree 16 — both sides EXACT over GF(2), no rounding substrate on either", "Shared": "", "Citation": "ENVELOPE: none — every sample is drawn full-width under the degree's own mask", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the same two presented products, at the same 256 index-derived samples per degree", "Against": "a carryless-multiply-and-reduce oracle in BigInteger in PresentedKernelClaims.cs — schoolbook carryless multiply into a double-width polynomial, then top-down degree-matched XOR reduction", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "operands are derived from the sample index by a fixed multiplicative hash (no Random, seeded or otherwise), masked to the degree's own width", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.sedenion-pair-zero-divisor-count",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Presentations", "Name": "CayleyDickson" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "SupportCount" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the sedenion tower carries exactly 84 zero divisors among the 120x120 two-term basis-pair sums, counted entirely through the subject's own Multiply and Element.SupportCount — a REGRESSION PIN, set by observing the subject, not an independently derived classical fact", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "this is a STRICTLY STRONGER statement than the basis-level ZeroDivisorWitness check the Cayley-Dickson certificate ladder already proves (presented.associator-twin-doubling): no BASIS pair is a zero divisor at any floor, but 84 of the 14400 two-term COMBINATIONS are", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.path-algebra-argument-validation",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Presentations", "Name": "Quiver" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Generator" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Compile" },
+      { "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Target" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "FromSupport refuses a key outside the normal-form range naming 'keys', CompiledProduct.Target refuses a negative leftKey naming 'leftKey', Generator refuses an out-of-range symbol naming 'symbol', and FromSupport refuses a keys/coefficients length mismatch naming 'coefficients' — all by shape, not by a wrong answer, on a path-algebra (quiver) presentation", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.rational-material-admits-only-rationals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.RationalMaterial", "Name": "Canonicalize" },
+      { "Type": "Puck.Maths.RationalMaterial", "Name": "TryInvert" },
+      { "Type": "Puck.Maths.RationalMaterial", "Name": "Zero" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Add" },
+      { "Type": "Puck.Maths.QuadraticSurd", "Name": "IsRational" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the material's carrier is the RATIONAL surds, and admission enforces it: Canonicalize refuses √2, √3 and the golden ratio (1+√5)/2 with an ArgumentOutOfRangeException naming 'value' whose message carries both the offending value and the root that leaves the field, and PresentedAlgebra.FromSupport refuses each of the three at coefficient admission. The refusal is the correct place: the surd carrier represents a + b·√d for every d, so admitting two coefficients from DIFFERENT quadratic fields left their sum with nowhere to live and QuadraticSurd's operator raised 'quadratic-surd operands must belong to the same field' with no parameter name and no way to say which coefficient was wrong", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the admitted rationals remain a field under the material's own operations", "Against": "hand-derived exact rational arithmetic stated inline: 1/3 + (-1/2) = -1/6 as an element sum on one key, the reciprocal of 1/3 is exactly 3, and zero reports no reciprocal and leaves its out parameter at zero. The expectations are arithmetic on paper and share neither code nor substrate with QuadraticSurd", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.counting-material-admits-only-naturals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CountingMaterial", "Name": "Canonicalize" },
+      { "Type": "Puck.Maths.CountingMaterial", "Name": "Zero" },
+      { "Type": "Puck.Maths.CountingMaterial", "Name": "One" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.CountingMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.CountingMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the counting semiring's carrier is the NATURALS, and admission enforces it: Canonicalize refuses -1, -2 and -10^40 with an ArgumentOutOfRangeException naming 'value' whose message carries the offending count and says a count is a natural number, and PresentedAlgebra.FromSupport refuses each at coefficient admission. A negative was previously admitted and squared to one, which is a legal-looking walk count for a coefficient that never was one; IntegerMaterial is the signed carrier and is reached by the type argument, so the widening bought nothing and hid the choice", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the naturals themselves pass admission unchanged and still multiply as counts", "Against": "the hand-stated count arithmetic 2 ways × 3 ways = 6 ways, read back as one term on one key of a free-monoid element product, plus BigInteger.Zero and BigInteger.One surviving canonicalization as themselves. The expectations are stated inline and share no code with the material", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.letter-mask-refuses-a-split-block",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MintermAlphabet`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.FiniteTokenAlphabet, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "LettersOf" },
+      { "Type": "Puck.Maths.MintermAlphabet`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.FiniteTokenAlphabet, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Minterm" },
+      { "Type": "Puck.Maths.MintermAlphabet`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.FiniteTokenAlphabet, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "LetterCount" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "a letter is the smallest thing a mask can name, so LettersOf refuses a predicate that SPLITS one rather than broadening it. On tokens {1,2,3} refined against Full there is a single letter, and both the token-1 and the token-{1,2} predicates cut it: each raises an ArgumentException naming 'predicate' whose message names letter 0 and says it is split. Intersection alone previously returned that whole letter, so a pattern built from the mask accepted tokens 2 and 3 that the predicate rejects — a broadened language, silently, with no refusal anywhere downstream", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the same alphabet refined against those two predicates instead carries three letters, and every union of whole letters is still answered EXACTLY: for the token-1, token-{1,2}, complement (token 3) and Full predicates the returned mask is checked letter by letter and token by token — a letter is named exactly when the predicate accepts the tokens that letter carries. The block of tokens satisfying no listed predicate is one of the three letters and is named by the complement, so the guard did not cost the outside block its letter", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.generator-colours-are-bounded-indices",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "ColourCount" },
+      { "Type": "Puck.Maths.Generator", "Name": "Inputs" },
+      { "Type": "Puck.Maths.Generator", "Name": "Outputs" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "a boundary colour is an index into the colour-indexed structures ColourCount sizes, so presentation admission bounds it on both sides: -1, int.MinValue, the cap 4096 and int.MaxValue are each refused with an ArgumentOutOfRangeException naming 'generators' whose message carries the offending index and says which boundary — input or output — it sat on. Every case is tried on both boundaries. Validation previously stopped at symbols and degrees and computed an unchecked (colour + 1), so int.MaxValue overflowed to negative and a negative colour maxed to nothing: both left ColourCount at zero for a presentation whose generator still mentioned the colour, and the zero was the number a caller would have sized an allocation by", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the legal range is admitted whole and the count still means what it says — one PAST the largest index mentioned, not a count of wires: colours 0 and 2 give three, the largest admitted index 4095 gives 4096, and a generator with no boundary wires gives zero. ENVELOPE: the cap 4096 is a declared construction budget, not a mathematical boundary, so the law pins that a bound is enforced and where it sits, never that this particular number is the right one", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  }
+]

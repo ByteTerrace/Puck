@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm.Debug;
 
 namespace Puck.SdfVm;
@@ -89,8 +90,7 @@ public sealed class SdfCarveBakePlanner {
     // subtraction instances bake to ONE SampledRegion brick, collapsing the GPU frame 120 ms → 3.31 ms (beam
     // 7.7 → 0.37 ms, views 111 → 2.9 ms) at native/shadows-on, so the recommended demo pairing (carve-bake ON,
     // shadow-proxy OFF) ships on. An explicit `sdf.carve-bake off` still emits analytic, BIT-IDENTICAL to pre-arc —
-    // and deleting every brick reproduces the identical scene (the cache-not-representation contract, plan §1). Post
-    // world stages render static programs with no planner, so this default never reaches them.
+    // and deleting every brick reproduces the identical scene (the cache-not-representation contract, plan §1).
     private static volatile bool s_enabled = true;
 
     /// <summary>The process-wide carve-bake feature gate (plan §5). Off (the default) makes every planner emit analytic
@@ -311,7 +311,7 @@ public sealed class SdfCarveBakePlanner {
                 && (bin.Phase == BinPhase.Brick));
 
             if (!represented) {
-                EmitOneCarve(builder: builder, carve: carve, material: material);
+                SdfDebugRenderer.EmitCarve(builder: builder, carve: carve, material: material);
             }
         }
     }
@@ -505,20 +505,9 @@ public sealed class SdfCarveBakePlanner {
         );
         builder.EndInstance();
     }
-
-    // The analytic emission of ONE carve — a static world-level subtraction instance bounded by the carve radius (the
-    // packer adds the float-safety padding + smooth halo). KEEP IN SYNC with SdfDebugRenderer.EmitCarves' per-carve
-    // body: the Enabled-off / nothing-baked paths must reproduce that emission exactly (the switch's byte-identity).
-    private static void EmitOneCarve(SdfProgramBuilder builder, SdfCarve carve, int material) {
-        var blend = (carve.Smooth ? SdfBlendOp.SmoothSubtraction : SdfBlendOp.Subtraction);
-
-        builder.BeginInstance(boundCenter: carve.Center, boundRadius: carve.Radius);
-        _ = builder.ResetPoint().Translate(offset: carve.Center).Sphere(radius: carve.Radius, material: material, blend: blend, smooth: (carve.Smooth ? carve.SmoothK : 0f));
-        builder.EndInstance();
-    }
     private static void EmitAnalytic(SdfProgramBuilder builder, IReadOnlyList<SdfCarve> carves, int material) {
         for (var index = 0; (index < carves.Count); index++) {
-            EmitOneCarve(builder: builder, carve: carves[index], material: material);
+            SdfDebugRenderer.EmitCarve(builder: builder, carve: carves[index], material: material);
         }
     }
 
@@ -630,15 +619,14 @@ public sealed class SdfCarveBakePlanner {
         }
 
         private static ulong Hash(SdfCarve carve) {
-            var h = 1469598103934665603UL; // FNV-1a offset basis
+            var hash = Fnv1aHash.Create();
 
-            h = Mix(h: h, value: BitConverter.SingleToUInt32Bits(value: carve.Center.X));
-            h = Mix(h: h, value: BitConverter.SingleToUInt32Bits(value: carve.Center.Y));
-            h = Mix(h: h, value: BitConverter.SingleToUInt32Bits(value: carve.Center.Z));
-            h = Mix(h: h, value: BitConverter.SingleToUInt32Bits(value: carve.Radius));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: carve.Center.X));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: carve.Center.Y));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: carve.Center.Z));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: carve.Radius));
 
-            return h;
+            return hash.Value;
         }
-        private static ulong Mix(ulong h, uint value) => ((h ^ value) * 1099511628211UL); // FNV-1a prime
     }
 }

@@ -136,7 +136,6 @@ public sealed class CapturingRenderNode : IRenderNode {
 
         return false;
     }
-
     private bool ShouldCaptureThisFrame() {
         if (
             (m_maxFrames > 0) &&

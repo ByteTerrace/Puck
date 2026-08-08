@@ -1,4 +1,4 @@
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.Forge.Tune;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Interfaces;

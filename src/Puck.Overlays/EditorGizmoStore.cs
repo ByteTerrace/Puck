@@ -1,4 +1,4 @@
-using Puck.Compositing;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Overlays;

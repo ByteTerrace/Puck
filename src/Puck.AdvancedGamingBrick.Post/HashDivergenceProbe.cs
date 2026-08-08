@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Snapshots;
 
 namespace Puck.AdvancedGamingBrick.Post;
@@ -8,7 +9,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// independently-built machines are stepped in lockstep and, every frame (or every scanline with <c>--fine</c>),
 /// snapshot-hashed with FNV-1a — the repo's standard fingerprint — and compared. The coarse hash is cheap enough to
 /// run every tick; on the first mismatch the localizer switches to the fine tool, walking the snapshot's section
-/// table (<see cref="AgbMachineSnapshot.Sections"/>) to name the first diverging component and byte offset, with a
+/// table (<see cref="SnapshotImage.Sections"/>) to name the first diverging component and byte offset, with a
 /// short hex window of both sides — turning "somewhere diverged" into "the bus component, byte 32768 (EWRAM)".
 /// </summary>
 /// <remarks>
@@ -126,8 +127,8 @@ internal static class HashDivergenceProbe {
     private static bool TryCompare(AdvancedGamingBrickMachine machineA, AdvancedGamingBrickMachine machineB, int frame, int? scanline) {
         var snapshotA = machineA.Snapshot();
         var snapshotB = machineB.Snapshot();
-        var hashA = StateFingerprint.Compute(data: snapshotA.Data);
-        var hashB = StateFingerprint.Compute(data: snapshotB.Data);
+        var hashA = Fnv1aHash.Compute(values: snapshotA.Data);
+        var hashB = Fnv1aHash.Compute(values: snapshotB.Data);
 
         if (hashA == hashB) {
             return true;

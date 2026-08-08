@@ -62,7 +62,6 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     private int m_runaheadFrames;
     private TInput m_lastPrediction = default!;
     private bool m_lookaheadPrimed;
-
     private bool m_enabled;
     private int m_fastForward = 1;
 
@@ -74,7 +73,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     /// once the budget is full.</param>
     /// <param name="cyclesPerSecond">The core's representative master-clock rate, used only to render the history span in
     /// seconds for status (presentation-only).</param>
-    public MachineTimeTravel(ITimeTravelMachineCore<TInput> core, int keyframeIntervalFrames = 120, long memoryBudgetBytes = (48L * 1024L * 1024L), ulong cyclesPerSecond = 1UL) {
+    public MachineTimeTravel(ITimeTravelMachineCore<TInput> core, int keyframeIntervalFrames = 120, long memoryBudgetBytes = ((48L * 1024L) * 1024L), ulong cyclesPerSecond = 1UL) {
         ArgumentNullException.ThrowIfNull(argument: core);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: keyframeIntervalFrames, other: 2);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: memoryBudgetBytes, other: 1L);
@@ -179,7 +178,6 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
         segment.BaseAccumulator = hostAccumulator;
         segment.DeltaCount = 0;
     }
-
     private void AppendDelta(long cycle, long nativeFrame, in TInput input, long budget, ulong hostAccumulator) {
         var segment = Newest;
         var index = segment.DeltaCount;
@@ -228,7 +226,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
         // The landed frame is the keyframe itself (frameIndex 0) or the last replayed delta; hand back the accumulator
         // phase it was recorded under so the host's next tick reproduces the recorded budget instead of the abandoned
         // future's phase.
-        hostAccumulator = ((frameIndex == 0) ? segment.BaseAccumulator : segment.Accumulator[frameIndex - 1]);
+        hostAccumulator = ((frameIndex == 0) ? segment.BaseAccumulator : segment.Accumulator[(frameIndex - 1)]);
 
         Truncate(slot: slot, frameIndex: frameIndex);
 
@@ -464,7 +462,6 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     // 8-byte lanes) plus the held-input image, each sized interval-1. Fixed per segment; allocated once in the ctor.
     private long PerFrameRecordBytes() =>
         ((long)(m_interval - 1) * (32L + Unsafe.SizeOf<TInput>()));
-
     private void EnsureScratch(int size) {
         if (m_snapshotSize == size) {
             return;

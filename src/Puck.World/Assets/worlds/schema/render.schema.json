@@ -1,0 +1,99 @@
+{
+  "description": "The render-lever boot defaults and quality-preset table.",
+  "type": "object",
+  "properties": {
+    "shadows": {
+      "description": "The boot soft-shadow tier.",
+      "enum": [
+        "Off",
+        "Low",
+        "Medium",
+        "High"
+      ]
+    },
+    "shadowCrowdRadius": {
+      "description": "The boot soft-shadow crowd radius (world units).",
+      "type": "number"
+    },
+    "ambientOcclusion": {
+      "description": "Whether ambient occlusion boots on.",
+      "type": "boolean"
+    },
+    "renderScale": {
+      "description": "The boot render-scale tier.",
+      "enum": [
+        "Native",
+        "ThreeQuarter",
+        "Half",
+        "Quarter",
+        "Eighth"
+      ]
+    },
+    "upscaleSharpness": {
+      "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
+      "type": "number"
+    },
+    "low": {
+      "description": "The world.quality low preset.",
+      "type": "object",
+      "properties": {
+        "shadows": {
+          "$ref": "./common.schema.json#/$defs/ShadowTier"
+        },
+        "ambientOcclusion": {
+          "description": "Whether the preset enables ambient occlusion.",
+          "type": "boolean"
+        },
+        "renderScale": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderScaleTier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "medium": {
+      "description": "The world.quality medium preset.",
+      "type": "object",
+      "properties": {
+        "shadows": {
+          "$ref": "./common.schema.json#/$defs/ShadowTier"
+        },
+        "ambientOcclusion": {
+          "description": "Whether the preset enables ambient occlusion.",
+          "type": "boolean"
+        },
+        "renderScale": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderScaleTier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "high": {
+      "description": "The world.quality high preset.",
+      "type": "object",
+      "properties": {
+        "shadows": {
+          "$ref": "./common.schema.json#/$defs/ShadowTier"
+        },
+        "ambientOcclusion": {
+          "description": "Whether the preset enables ambient occlusion.",
+          "type": "boolean"
+        },
+        "renderScale": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderScaleTier"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "shadows",
+    "shadowCrowdRadius",
+    "ambientOcclusion",
+    "renderScale",
+    "upscaleSharpness",
+    "low",
+    "medium",
+    "high"
+  ],
+  "additionalProperties": false
+}

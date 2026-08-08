@@ -6,7 +6,6 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Security;
-using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
@@ -92,13 +91,13 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         // A simultaneous-access texture rests in (and decays to) COMMON — the cross-API handoff state its foreign
         // writer expects; the historic D3D12-writes shape keeps UNORDERED_ACCESS (the compute recorder's seeded state).
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
-            in textureDesc,
-            (simultaneousAccess ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &resource
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
+            InitialResourceState: (simultaneousAccess ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            pDesc: in textureDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &resource,
+            riidResource: in resourceIid
         );
         m_resource = (nint)resource;
 
@@ -152,32 +151,13 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     /// <inheritdoc/>
     public uint Width { get; }
 
-    private static void Release(ref nint pointer) {
-        if (0 != pointer) {
-            _ = ((IUnknown*)pointer)->Release();
-            pointer = 0;
-        }
-    }
     private void WaitForGpu() {
-        var fence = (ID3D12Fence*)m_fence;
-        var value = m_fenceValue;
-
-        ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->Signal(
-            fence,
-            value
+        DirectXFence.SignalAndWait(
+            deviceContext: m_deviceContext,
+            fenceHandle: m_fence,
+            fenceEvent: m_fenceEvent,
+            fenceValue: ref m_fenceValue
         );
-        m_fenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                value,
-                m_fenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                hHandle: m_fenceEvent,
-                dwMilliseconds: uint.MaxValue
-            );
-        }
     }
 
     /// <inheritdoc/>

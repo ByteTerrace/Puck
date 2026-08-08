@@ -1,0 +1,12 @@
+diff --git a/src/Puck.Scripting/AddonChannelKind.cs b/src/Puck.Scripting/AddonChannelKind.cs
+index 8804d4da..b26be6e4 100644
+--- a/src/Puck.Scripting/AddonChannelKind.cs
++++ b/src/Puck.Scripting/AddonChannelKind.cs
+@@ -14,4 +14,7 @@ public enum AddonChannelKind : byte {
+
+     /// <summary>The host-written answer channel paired with <see cref="Request"/>; the guest never writes it.</summary>
+     Response = 3,
++
++    /// <summary>SABOTAGE — temporary, for the docs/verification/lane-present-deletion break/red/restore proof only.</summary>
++    Geometry = 4,
+ }

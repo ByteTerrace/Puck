@@ -58,6 +58,7 @@ public interface IViewContent {
 /// <param name="ProgramRevision">The program's revision counter — content compares this against its own
 /// last-uploaded revision to decide whether to re-upload.</param>
 /// <param name="Time">The frame's content clock (seconds) — content renders the same animated world the room does.</param>
+/// <param name="AuthoritativeTick">The latest authoritative simulation tick available to presentation.</param>
 /// <param name="DynamicTransforms">This frame's packed dynamic-transform buffer, identical to the main engine's.</param>
 /// <param name="ResolveScreenSource">Resolves a program-declared screen-surface index to its bound image handle —
 /// what a content's own render sees on every OTHER screen surface (see <see cref="ViewStack"/>'s self-reference
@@ -67,6 +68,7 @@ public readonly record struct ViewRenderContext(
     SdfProgram Program,
     int ProgramRevision,
     float Time,
+    ulong AuthoritativeTick,
     IReadOnlyList<DynamicTransform> DynamicTransforms,
     Func<int, nint> ResolveScreenSource
 );
@@ -99,9 +101,7 @@ public readonly record struct ViewRenderContext(
 /// <see cref="Resolve"/>/<see cref="ResolveGlow"/> image — never black, never zero. A registrant that instead wants a
 /// budgeted view to stop costing a render pass entirely (and release any GPU resource its content owns) still
 /// <see cref="Release(ViewId)"/>/<see cref="Release(string)"/>s it itself and re-<see cref="Register"/>s (fresh
-/// content) when it becomes wanted again — see
-/// <c>Puck.Demo.Overworld.OverworldFrameSource.PlanViews</c>'s own wire-driven release for the reference shape; the
-/// predicate is additive to that pattern, not a replacement for it.
+/// content) when it becomes wanted again; the predicate is additive to that pattern, not a replacement for it.
 /// </para>
 /// <para>
 /// Inside a view's own render, any screen surface currently wired to that view
@@ -182,7 +182,7 @@ public sealed class ViewStack : IDisposable {
     /// <param name="name">The view's stable name — the handle every consumer resolves by (see <see cref="Resolve"/>).</param>
     /// <param name="content">The content this name shows.</param>
     /// <param name="band">The view's priority band (today informational/ordering only — see the type remarks; a
-    /// screen-SURFACE slot claim is a SEPARATE arbitration, <c>Puck.Demo.Overworld.ScreenSlotLedger</c>).</param>
+    /// screen-SURFACE slot claim is a SEPARATE arbitration, owned by the host).</param>
     /// <param name="isLive">Optional registrant-supplied liveness gate for the BUDGETED round-robin (see the type
     /// remarks) — <see langword="null"/> (the default) means always live, today's behavior. Consulted only while this
     /// view's content is budgeted (<see cref="IViewContent.IsBudgeted"/>); unbudgeted content already resolves every

@@ -23,7 +23,8 @@ internal sealed class VictoryRegionStage : IPostStage {
     private const int RegionByteCount = 16;
 
     // The "one" v4 GUID (ffffffff-ffff-4fff-bfff-ffffffffffff) in canonical big-endian byte order — mirrors
-    // Puck.Scene.VictoryConstants.OneV4Guid, hardcoded here because the emulator battery does not reference Puck.Scene.
+    // the share value the cartridge's VictoryModule writes on a win — hardcoded here because the emulator battery
+    // does not reference the framework that emits it.
     private static readonly byte[] Region = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 0xBF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
 
     /// <inheritdoc/>

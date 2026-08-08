@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -514,25 +515,22 @@ internal sealed class ScriptedTradeDriver {
         Failed,
     }
 
-    // A host-side, never-serialized tally of one port's serial traffic (the LinkReplay fingerprint idiom): internal-clock
+    // A host-side, never-serialized tally of one port's serial traffic: internal-clock
     // sends, every completion, and an FNV-1a fold of each completed byte. A mutable class so the same accumulators survive
     // being re-attached to a fresh port after a churn.
     private sealed class TrafficTally {
-        private const ulong FnvOffsetBasis = 0xCBF29CE484222325ul;
-        private const ulong FnvPrime = 0x100000001B3ul;
-
         public int Completions;
-        public ulong Hash = FnvOffsetBasis;
+        public Fnv1aHash Hash = Fnv1aHash.Create();
         public int MasterSends;
 
         public void OnComplete(byte value) {
             ++Completions;
-            Hash = ((Hash ^ value) * FnvPrime);
+            Hash.Add(value: value);
         }
         public void OnSend(byte value) =>
             ++MasterSends;
         public LinkSideTraffic ToTraffic() =>
-            new(MasterSends: MasterSends, Completions: Completions, TrafficHash: Hash);
+            new(MasterSends: MasterSends, Completions: Completions, TrafficHash: Hash.Value);
     }
 }
 

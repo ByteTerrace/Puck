@@ -1,0 +1,211 @@
+[
+  {
+    "Id": "binary-field.narrow-degree-inverse-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField<byte>.Multiply at every one of the 256 ordered element pairs of GF(2^4), under each of three degree-four reduction tails: 0x3, 0x9 and 0xF",
+        "Against": "Oracles.BinaryFieldProduct, the SAME shared-nothing carryless-multiply-then-reduce BigInteger oracle binary-field.product-and-reduction-vs-oracle already pins the five catalog fields against, reached here at a degree none of those five fields has (every catalog field's degree equals its own carrier's width, so a degree-four modulus over the byte carrier is a genuinely narrower operand than that law's drawn-modulus leg is guaranteed to sample). EXACT on both sides, so the substrate condition does not arise.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryField<byte>.Inverse at every one of the 15 non-zero elements of the same three degree-four fields",
+        "Against": "Oracles.BinaryFieldInverse — the extended-Euclidean derivation binary-field.multiplicative-group-vs-oracle already uses at the two narrow catalog degrees (eight and sixteen), reached here at a degree none of the five catalog fields has — plus the certificate that the inverse's product with its own operand is Oracles.BinaryFieldProduct's One, in the same BigInteger arithmetic rather than by trusting Inverse and Multiply to fail together.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and it is the whole reason this case exists: every law binary-field.json and polynomial.json already declare reaches Inverse, Divide, SquareRoot or Exponentiate ONLY at the five catalog fields, whose degree always equals their carrier's width — the one path a degree strictly below the carrier's width exercises, the masked low-bit split the reduction takes when the modulus does not fill the carrier, is untested by any of them. This case closes exactly that gap and no other: irreducibility of the three tails is NOT re-derived here — it is already pinned exhaustively, at every legal degree-one-through-eight modulus including these three, by binary-field.irreducibility-vs-trial-division — so a wrong irreducibility decision could not hide behind this law's silence.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.narrow-degree-regions-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ScaleRegion"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "MultiplyAccumulateRegion"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "ScaleRegionInPlace"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ScaleRegion, MultiplyAccumulateRegion and ScaleRegionInPlace at a degree-five field over the byte carrier (reduction tail 0x05) and at a degree-twelve field over the sixteen-bit carrier (reduction tail 0x09) — two narrower-than-carrier region moduli — over nine lengths from zero through 259 crossed with one fixed scalar per field",
+        "Against": "Oracles.BinaryFieldProduct element by element, the SAME oracle binary-field.regions-vs-oracle already pins the byte and sixteen-bit catalog carriers against. EXACT on both sides.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: binary-field.regions-vs-oracle's every field — Degree8, Degree16, Degree32, Degree64, Degree128 — has degree equal to its own carrier's width, so the region-scaling ladder's masked-split path, active only when the field's degree sits strictly below its carrier's width, is unreached by that law no matter how it is swept. This case is that operand class, at degree five over the byte carrier and degree twelve over the sixteen-bit carrier.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, stated rather than assumed: this claim does not select which region rung serves the call — BinaryField<T>'s public region members dispatch to whichever accelerated rung this machine's hardware supports, exactly as any consumer would reach them — so a VALUE defect at this narrow degree is caught regardless of which rung is live on the machine the suite runs on, but a rung that answers correctly only while the accelerated path is reachable through the public surface, and silently degrades under a runtime feature-suppression knob, is not caught HERE. That second class of defect needs per-rung instrumentation, and it is not homeless in this suite. Puck.Maths/Properties/AssemblyInfo.cs's InternalsVisibleTo names Puck.Maths.Tests beside Puck.Post, so BinaryFieldKernels and BinaryFieldRegionTier — both still internal to Puck.Maths — are reachable here, and binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung and binary-field.region-lengths-vs-scalar-rung invoke every named rung this host supports DIRECTLY, bypassing dispatch exactly as this claim does not. What has no home here is a process relaunch under instruction-set-suppression environment knobs, which would drive one host through every fallback rung regardless of its own hardware; this suite has no relaunch primitive, so a rung this host's hardware genuinely lacks stays untested rather than forced.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Reduce is used ONLY to fold the fixed affine-walk content into each narrow field's legal element space before the sweep runs; it is not independently pinned by this claim, because a wrong Reduce would move the swept content and the oracle's own operand identically — both sides read the SAME already-reduced value — and so could not be caught here. Reduce's own agreement with Oracles.BinaryFieldReduce is binary-field.product-and-reduction-vs-oracle's, not this claim's.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.region-tiers-vs-scalar-rung",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "BinaryFieldKernels.MultiplyAccumulateRegionAffine512, MultiplyAccumulateRegionSplit512, MultiplyAccumulateRegionAffine256, MultiplyAccumulateRegionSplit256, MultiplyAccumulateRegionAffine128 and MultiplyAccumulateRegionSplit128, each invoked BY NAME — bypassing BinaryField<T>'s own widest-first public dispatch entirely — over the WHOLE 256-by-256 scalar-by-element byte cross product, at the three degree-8 moduli 0x1B, 0x2D and 0x9F and both accumulate modes",
+        "Against": "BinaryFieldKernels.MultiplyAccumulateRegionScalar, the element-at-a-time reference rung, over the identical operands",
+        "Shared": "BinaryFieldKernels.Multiply — the IDENTICAL member. Every named rung's table or matrix (AffineMatrix for the three Affine rungs, BuildSplitTables for the three Split rungs) is built by calling Multiply once per basis column or per nibble value, and the scalar rung calls the same Multiply once per element. Both are EXACT over GF(2), so condition (B) does not arise: there is no rounding substrate to share",
+        "Citation": "Multiply's own correctness at a degree-8 modulus is binary-field.product-and-reduction-vs-oracle's drawn-modulus leg, whose swept tail is any odd value below t^8 — 0x1B, 0x2D and 0x9F included — reached against Oracles.BinaryFieldProduct in BigInteger. This law's agreement therefore isolates exactly what its sibling cannot reach: the affine bit-matrix packing (AffineMatrix's row/column bit order), the nibble-shuffle table indexing (BuildSplitTables plus the SSSE3/AVX2/AVX512 per-lane shuffle), the vector store/accumulate mask and the scalar-tail fallback for the bytes past the last whole vector — never the product itself",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a rung BinaryFieldKernels.IsRegionTierSupported reports unsupported on the host running the suite is SKIPPED rather than exercised — a law cannot claim to pin a rung the host cannot execute. Every one of the six named rungs asks its own narrowest applicable instruction-set leaf (Gfni.V512, Avx512BW, Gfni.V256, Avx2, Gfni, Ssse3), so this law's coverage of any ONE named rung is conditional on that host's CPU, unlike the exhaustive Default-tier laws elsewhere in this family that sweep identically on every machine",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, what this law cannot reach: a relaunch as feature-suppressed child processes under DOTNET_EnableHWIntrinsic/DOTNET_EnableAES/DOTNET_EnableGFNI/DOTNET_EnableAVX2, which would drive a single host through every fallback rung regardless of its own hardware and then require an identical workload digest from each child. This suite has no process-relaunch or environment-variable primitive, so a rung this host's hardware genuinely lacks is skipped here, never forced; only a rung the host DOES support is exercised, directly, by this law and its two siblings binary-field.wide-region-tiers-vs-scalar-rung and binary-field.region-lengths-vs-scalar-rung",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.wide-region-tiers-vs-scalar-rung",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "BinaryFieldKernels.MultiplyAccumulateRegionWideAffine512, MultiplyAccumulateRegionWideAffine256 and MultiplyAccumulateRegionWideAffine128, each invoked BY NAME — bypassing BinaryField<T>'s own widest-first public dispatch entirely — over the WHOLE 65536-element sixteen-bit range, at eight scalars (0x0000, 0x0001, 0x0002, 0x00FF, 0x0100, 0x1234, 0x8000, 0xFFFF), the two degree-16 moduli 0x2B and 0x47, and both accumulate modes",
+        "Against": "BinaryFieldKernels.MultiplyAccumulateRegionScalar, the element-at-a-time reference rung, over the identical operands",
+        "Shared": "BinaryFieldKernels.Multiply — the IDENTICAL member. WideAffineMatrices builds its four bit matrices by calling Multiply once per basis column, exactly as the byte-wide AffineMatrix does, and the scalar rung calls the same Multiply once per element. Both are EXACT over GF(2), so condition (B) does not arise",
+        "Citation": "Multiply's own correctness at a degree-16 modulus is binary-field.product-and-reduction-vs-oracle's drawn-modulus leg (any odd tail below t^16, 0x2B and 0x47 included), reached against Oracles.BinaryFieldProduct in BigInteger. This law's agreement isolates the sixteen-bit rung's OWN packing — the byte-lane swap that presents each element's high half to the byte-wide affine transform, the low/high-half blend mask, and the scalar-tail fallback for elements past the last whole vector — never the product. There is deliberately no nibble-split rung at this width: a sixteen-bit product needs four sixteen-entry tables rather than two, which BinaryFieldKernels.cs's own remarks say costs more setup than the four affine matrices already buy, so BinaryFieldRegionTier's Split128/256/512 members have no sixteen-bit counterpart to invoke here",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a rung BinaryFieldKernels.IsRegionTierSupported reports unsupported on the host running the suite is SKIPPED rather than exercised — a law cannot claim to pin a rung the host cannot execute. Every one of the three named rungs asks its own narrowest applicable Galois-field-affine instruction-set leaf (Gfni.V512, Gfni.V256, Gfni), so this law's coverage of any ONE named rung is conditional on that host's CPU, unlike the exhaustive Default-tier laws elsewhere in this family that sweep identically on every machine",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, what this law cannot reach: a relaunch as feature-suppressed child processes, which would drive a single host through every fallback rung regardless of its own hardware and require an identical workload digest from each child. This suite has no process-relaunch or environment-variable primitive, so a rung this host's hardware genuinely lacks is skipped here, never forced; only a rung the host DOES support is exercised, directly, by this law and its two siblings binary-field.region-tiers-vs-scalar-rung and binary-field.region-lengths-vs-scalar-rung",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "binary-field.region-lengths-vs-scalar-rung",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "every named byte-wide and sixteen-bit region rung this host supports, invoked BY NAME at every length from zero through 259 — four whole 512-bit vectors and a partial one — crossed with four byte scalars (0x00, 0x01, 0x1D, 0xFF), four derived sixteen-bit scalars at the sixteen-bit carrier, and both accumulate modes",
+        "Against": "BinaryFieldKernels.MultiplyAccumulateRegionScalar over the identical fixed content, at every length",
+        "Shared": "BinaryFieldKernels.Multiply, exactly as binary-field.region-tiers-vs-scalar-rung and binary-field.wide-region-tiers-vs-scalar-rung share it: every rung's table or matrix is built by calling Multiply, and the scalar rung calls the same Multiply per element. Both are EXACT over GF(2), so condition (B) does not arise",
+        "Citation": "as those two siblings cite (binary-field.product-and-reduction-vs-oracle's drawn-modulus leg pins Multiply at degree 8 and degree 16 independently); this law is their LENGTH axis rather than a new operand class — the tail past the last whole vector, where a masked partial store or a missed length-mismatch guard is the classic region-kernel bug, is covered EXHAUSTIVELY here rather than sampled",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a rung BinaryFieldKernels.IsRegionTierSupported reports unsupported on the host running the suite is SKIPPED rather than exercised at any length — a law cannot claim to pin a rung the host cannot execute. This law's coverage of any ONE named rung is therefore conditional on that host's CPU, unlike the exhaustive Default-tier laws elsewhere in this family that sweep identically on every machine",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, what this law cannot reach: a relaunch as feature-suppressed child processes, which would drive a single host through every fallback rung regardless of its own hardware and require an identical workload digest from each child. This suite has no process-relaunch or environment-variable primitive, so a rung this host's hardware genuinely lacks is skipped here, never forced; only a rung the host DOES support is exercised, directly, at every length, by this law and its two siblings binary-field.region-tiers-vs-scalar-rung and binary-field.wide-region-tiers-vs-scalar-rung",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

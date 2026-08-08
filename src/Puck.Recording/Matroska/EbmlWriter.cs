@@ -20,7 +20,7 @@ internal static class EbmlWriter {
     /// <param name="stream">The destination stream.</param>
     /// <param name="id">The canonical encoded identifier.</param>
     public static void WriteId(Stream stream, uint id) {
-        var length = ((32 - BitOperations.LeadingZeroCount(value: id)) + 7) / 8;
+        var length = (((32 - BitOperations.LeadingZeroCount(value: id)) + 7) / 8);
         Span<byte> buffer = stackalloc byte[4];
 
         BinaryPrimitives.WriteUInt32BigEndian(destination: buffer, value: id);
@@ -40,7 +40,7 @@ internal static class EbmlWriter {
                 Span<byte> buffer = stackalloc byte[8];
                 var marker = (1L << (7 * length));
 
-                BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: (marker | size));
+                BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: marker | size);
                 stream.Write(buffer: buffer[(8 - length)..]);
 
                 return;

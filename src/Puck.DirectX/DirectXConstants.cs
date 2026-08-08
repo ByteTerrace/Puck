@@ -1,5 +1,7 @@
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.Graphics.Dxgi.Common;
+using Windows.Win32.System.Com;
 
 namespace Puck.DirectX;
 
@@ -69,5 +71,23 @@ public static unsafe class DirectXConstants {
         );
 
         return handle;
+    }
+    /// <summary>Releases a COM interface pointer and clears it.</summary>
+    /// <param name="pointer">The pointer to release.</param>
+    public static void Release(ref nint pointer) {
+        if (0 != pointer) {
+            _ = ((IUnknown*)pointer)->Release();
+            pointer = 0;
+        }
+    }
+
+    internal static D3D12_CLEAR_VALUE BlackClearValue(DXGI_FORMAT format) {
+        var clearValue = new D3D12_CLEAR_VALUE {
+            Format = format,
+        };
+
+        clearValue.Anonymous.Color[3] = 1f;
+
+        return clearValue;
     }
 }

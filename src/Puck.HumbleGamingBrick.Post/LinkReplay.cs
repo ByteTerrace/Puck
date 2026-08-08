@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -33,9 +34,6 @@ internal readonly record struct LinkReplayResult(
 /// pure function of the two machines' states, the whole run is replay-identical.
 /// </summary>
 internal static class LinkReplay {
-    private const ulong FnvOffsetBasis = 0xCBF29CE484222325ul;
-    private const ulong FnvPrime = 0x100000001B3ul;
-
     /// <summary>Drives a linked pair for a fixed number of frames under two scripts, tallying serial traffic and (via the
     /// optional per-frame callback) letting a caller observe or dump each frame. The machines are advanced only through
     /// the returned session's shared budget; the caller still owns and disposes the machines.</summary>
@@ -61,20 +59,20 @@ internal static class LinkReplay {
 
         var firstMasterSends = 0;
         var firstCompletions = 0;
-        var firstHash = FnvOffsetBasis;
+        var firstHash = Fnv1aHash.Create();
         var secondMasterSends = 0;
         var secondCompletions = 0;
-        var secondHash = FnvOffsetBasis;
+        var secondHash = Fnv1aHash.Create();
 
         firstPort.ByteTransmitted = _ => ++firstMasterSends;
         firstPort.TransferCompleted = value => {
             ++firstCompletions;
-            firstHash = ((firstHash ^ value) * FnvPrime);
+            firstHash.Add(value: value);
         };
         secondPort.ByteTransmitted = _ => ++secondMasterSends;
         secondPort.TransferCompleted = value => {
             ++secondCompletions;
-            secondHash = ((secondHash ^ value) * FnvPrime);
+            secondHash.Add(value: value);
         };
 
         try {
@@ -94,8 +92,8 @@ internal static class LinkReplay {
         }
 
         return new LinkReplayResult(
-            First: new LinkSideTraffic(MasterSends: firstMasterSends, Completions: firstCompletions, TrafficHash: firstHash),
-            Second: new LinkSideTraffic(MasterSends: secondMasterSends, Completions: secondCompletions, TrafficHash: secondHash),
+            First: new LinkSideTraffic(MasterSends: firstMasterSends, Completions: firstCompletions, TrafficHash: firstHash.Value),
+            Second: new LinkSideTraffic(MasterSends: secondMasterSends, Completions: secondCompletions, TrafficHash: secondHash.Value),
             FirstState: first.Machine.Snapshot(),
             SecondState: second.Machine.Snapshot()
         );

@@ -40,15 +40,24 @@ public sealed record BindingSessionPlan(
             throw new ArgumentException(message: $"page \"{pageId}\" has no entries to walk", paramName: nameof(pageId));
         }
 
+        // An activator-triggered entry (BindingPageEntryDefinition.Activator, no Source) has no single "suggested
+        // source" this simple capture-one-press model can prompt for — a guided session walks single-source
+        // entries only, so it is skipped rather than reduced to a misleading suggestion.
+        var sourcedEntries = page.Entries.Where(predicate: static entry => (entry.Source is not null)).ToList();
+
+        if (sourcedEntries.Count == 0) {
+            throw new ArgumentException(message: $"page \"{pageId}\" has no single-source entries to walk", paramName: nameof(pageId));
+        }
+
         return new BindingSessionPlan(
             RequiredPresses: requiredPresses,
             ReservedSources: [.. document.Modifiers.Select(selector: static modifier => modifier.Source)],
-            Steps: [.. page.Entries.Select(selector: static entry => new BindingSessionStep(
+            Steps: [.. sourcedEntries.Select(selector: static entry => new BindingSessionStep(
                 ActivateOn: entry.ActivateOn,
-                Command: entry.Command,
+                Command: ((entry.Channel is { } channel) ? BindingProfile.ChannelCommandName(channel: channel) : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
-                SuggestedSource: entry.Source
+                SuggestedSource: entry.Source!
             ))]
         );
     }

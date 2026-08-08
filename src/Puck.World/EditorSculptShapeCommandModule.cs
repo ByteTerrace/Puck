@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Numerics;
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.Commands;
 using Puck.World.Client;
 
@@ -9,9 +9,13 @@ namespace Puck.World;
 /// <summary>
 /// The sculpt SHAPE console surface — the assist-layer twins of the sculpt resting page's build chords plus
 /// the typed-parameter setters a chord cannot express: add/duplicate/delete, the target cycle (which extends past
-/// shapes into chain goals), primitive re-typing, and exact transform placement (positions are WORKBENCH-LOCAL
-/// coordinates — the bench origin is the frame). Everything here is client-local model state; nothing crosses the
-/// wire until <c>editor.sculpt.commit</c>. A SEPARATE module to keep every class under its analyzer ceilings.
+/// shapes into chain goals, folded onto <c>editor.sculpt.select</c>), primitive re-typing, uniform/per-axis scale
+/// (folded grow/shrink steps included), and the field setter <c>editor.sculpt.set &lt;field&gt; &lt;value…&gt;</c>
+/// (rotate/move/nudge/rename here, plus bend/dilate/onion/twist absorbed from the sibling style module — one door
+/// for every typed-parameter field a chord cannot express, since none of those eight fields is itself bindable).
+/// Positions are WORKBENCH-LOCAL coordinates — the bench origin is the frame. Everything here is client-local model
+/// state; nothing crosses the wire until <c>editor.sculpt.commit</c>. A SEPARATE module to keep every class under its
+/// analyzer ceilings.
 /// </summary>
 internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session, WorldWorkbench workbench) : ICommandModule {
     /// <summary>The add act (South on the sculpt resting page): the brush's primitive at the spawn point.</summary>
@@ -20,21 +24,20 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
     public const string RemoveCommand = "editor.sculpt.remove";
     /// <summary>The duplicate act (D-pad Up on the sculpt resting page).</summary>
     public const string DuplicateCommand = "editor.sculpt.duplicate";
-    /// <summary>The target-cycle-next act (D-pad Right on the sculpt resting page; cycles shapes THEN chain goals).</summary>
-    public const string NextCommand = "editor.sculpt.next";
-    /// <summary>The target-cycle-previous act (D-pad Left on the sculpt resting page).</summary>
-    public const string PrevCommand = "editor.sculpt.prev";
+    /// <summary>The select verb, widened to fold the target cycle onto itself: <c>editor.sculpt.select
+    /// &lt;id|name|next|prev&gt;</c>. D-pad Right/Left on the sculpt resting page bind it with a constant Axis1D
+    /// value (+1 next, -1 prev) in place of an argument. The cycle extends past shapes into chain goals.</summary>
+    public const string SelectCommand = "editor.sculpt.select";
     /// <summary>The deselect act (West on the LT bench page): the target reverts to the brush.</summary>
     public const string DeselectCommand = "editor.sculpt.deselect";
     /// <summary>The primitive-cycle act (North on the sculpt resting page).</summary>
     public const string PrimitiveCommand = "editor.sculpt.primitive";
-    /// <summary>The uniform grow step (D-pad Right on the RT style page).</summary>
-    public const string GrowCommand = "editor.sculpt.grow";
-    /// <summary>The uniform shrink step (D-pad Left on the RT style page).</summary>
-    public const string ShrinkCommand = "editor.sculpt.shrink";
+    /// <summary>The scale verb: <c>editor.sculpt.scale &lt;s|x y z|grow|shrink&gt;</c>. D-pad Right/Left on the RT
+    /// style page bind it with a constant Axis1D value (+1 grow, -1 shrink) in place of an argument.</summary>
+    public const string ScaleCommand = "editor.sculpt.scale";
 
     // The chord scale step: one press grows/shrinks the target ~15% — a deliberate act-scale step (held sweeps are
-    // the stick's job, precision is editor.sculpt.scale's).
+    // the stick's job, precision is editor.sculpt.scale's own <s>/<x y z> forms).
     private const float ScaleStepFactor = 1.15f;
 
     private readonly WorldEditorSession m_session = session;
@@ -43,79 +46,60 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: AddCommand,
             description: "Adds a shape to the seat's sculpt and selects it: editor.sculpt.add [primitive] [<x> <y> <z>] [seat] — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone (default: the brush's primitive) at workbench-local coordinates (default: the spawn point). The new shape inherits the brush's style and the brush's palette slot advances (siblings stay distinct). The chord twin is South on the sculpt page.",
             handler: AddHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: RemoveCommand,
             description: "Deletes the SELECTED shape (the selection clears): editor.sculpt.remove [seat]. The chord twin is D-pad Down on the sculpt page.",
             handler: RemoveHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: DuplicateCommand,
             description: "Duplicates the SELECTED shape in place (nudged aside; a grouped member's twin joins the same group) and selects the twin: editor.sculpt.duplicate [seat]. The chord twin is D-pad Up on the sculpt page.",
             handler: DuplicateHandler
         );
         yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.select",
-            description: "Selects a sculpt shape by id or name: editor.sculpt.select <id|name> [seat]. Edit verbs then act on it; editor.sculpt.deselect reverts the target to the brush.",
-            handler: SelectHandler
+            bindability: CommandBindability.Bindable,
+            name: SelectCommand,
+            description: "Selects a sculpt shape by id or name (editor.sculpt.select <id|name> [seat]), OR folds the target cycle onto the same verb: editor.sculpt.select [next|prev] [seat] — forward/backward through the shapes, THEN the chain goals, wrapping through none/brush. 'next'/'prev' are the D-pad Right/Left chord twins on the sculpt resting page, bound with a constant value in place of the argument. Edit verbs then act on the target; editor.sculpt.deselect reverts it to the brush.",
+            handler: SelectHandler,
+            // Every binding row targeting this verb carries a constant Axis1D value — declared here so
+            // BindingVocabularyCheck admits the row instead of rejecting every future recompose that touches this
+            // seat. See CommandDefinition.WithWireArgs's doctrine comment.
+            valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(
-            name: NextCommand,
-            description: "Cycles the sculpt target forward — through the shapes, THEN the chain goals, wrapping through none/brush: editor.sculpt.next [seat]. The chord twin is D-pad Right on the sculpt page.",
-            handler: (context, args) => CycleHandler(context: context, args: in args, direction: 1, verb: NextCommand)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: PrevCommand,
-            description: "Cycles the sculpt target backward: editor.sculpt.prev [seat]. The chord twin is D-pad Left on the sculpt page.",
-            handler: (context, args) => CycleHandler(context: context, args: in args, direction: -1, verb: PrevCommand)
-        );
-        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: DeselectCommand,
             description: "Clears the sculpt selection (the target reverts to the brush): editor.sculpt.deselect [seat]. The chord twin is West on the LT bench page.",
             handler: DeselectHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: PrimitiveCommand,
             description: "Re-types the TARGET's primitive: editor.sculpt.primitive [sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev] [seat] (default next — the chord twin is North on the sculpt page). On the brush it changes what the next add draws.",
             handler: PrimitiveHandler
         );
         yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.move",
-            description: "Places the TARGET at exact workbench-local coordinates (a targeted chain goal moves and re-solves): editor.sculpt.move <x> <y> <z> [seat]. The stick twin is the move stick while sculpting.",
-            handler: (context, args) => PositionHandler(context: context, args: in args, relative: false, verb: "editor.sculpt.move")
+            bindability: CommandBindability.Bindable,
+            name: ScaleCommand,
+            description: "Sets or steps the TARGET's scale (uniform or per-axis, clamped 0.2..3): editor.sculpt.scale <s> [seat], editor.sculpt.scale <x> <y> <z> [seat], or editor.sculpt.scale <grow|shrink> [seat] (±~15% — the typed twins of the style page's Grow/Shrink D-pad chord, which binds this same verb with no argument, direction from the binding's constant value).",
+            handler: ScaleHandler,
+            // Every binding row targeting this verb carries a constant Axis1D value — declared here so
+            // BindingVocabularyCheck admits the row instead of rejecting every future recompose that touches this
+            // seat. See CommandDefinition.WithWireArgs's doctrine comment.
+            valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.nudge",
-            description: "Moves the TARGET by a workbench-local delta: editor.sculpt.nudge <dx> <dy> <dz> [seat].",
-            handler: (context, args) => PositionHandler(context: context, args: in args, relative: true, verb: "editor.sculpt.nudge")
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.rotate",
-            description: "Sets the SELECTED shape's orientation from Tait-Bryan degrees (yaw about +Y, pitch about +X, roll about +Z): editor.sculpt.rotate <yawDeg> <pitchDeg> <rollDeg> [seat].",
-            handler: RotateHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.scale",
-            description: "Sets the TARGET's scale (uniform or per-axis, clamped 0.2..3): editor.sculpt.scale <s> [seat] or editor.sculpt.scale <x> <y> <z> [seat]. The chord twins are the style page's Grow/Shrink steps.",
-            handler: ScaleHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: GrowCommand,
-            description: "Steps the TARGET's uniform scale up ~15%: editor.sculpt.grow [seat]. The chord twin is D-pad Right on the RT style page.",
-            handler: (context, args) => ScaleStepHandler(context: context, args: in args, grow: true, verb: GrowCommand)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: ShrinkCommand,
-            description: "Steps the TARGET's uniform scale down ~15%: editor.sculpt.shrink [seat]. The chord twin is D-pad Left on the RT style page.",
-            handler: (context, args) => ScaleStepHandler(context: context, args: in args, grow: false, verb: ShrinkCommand)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: "editor.sculpt.rename",
-            description: "Names the SELECTED shape (chain definitions and selection accept names): editor.sculpt.rename <name> [seat].",
-            handler: RenameHandler
+            bindability: CommandBindability.Unbindable,
+            name: "editor.sculpt.set",
+            description: "Sets a field by name on the sculpt TARGET or brush — the one door for the typed-parameter fields no chord expresses: editor.sculpt.set <field> <value…> [seat] — bend <v> (about local Y, clamped ±1.5), dilate <v> (inflation radius, clamped 0..0.2), onion <v> (shell thickness, clamped 0..0.2), twist <v> (about local Y, clamped ±3), rotate <yawDeg> <pitchDeg> <rollDeg> (Tait-Bryan degrees — SELECTED shape only, a chain goal has no orientation), move <x> <y> <z> (ABSOLUTE workbench-local coordinates — a targeted chain goal moves and re-solves), nudge <dx> <dy> <dz> (RELATIVE workbench-local delta), rename <name> (SELECTED shape only).",
+            handler: SetHandler
         );
     }
 
@@ -174,8 +158,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         // Shapes: [primitive] [x y z] [seat] — the primitive token is non-numeric, so presence is unambiguous.
         var hasType = ((args.Count >= 1) && TryParsePrimitive(token: args[0], type: out _));
         var positionAt = (hasType ? 1 : 0);
-        var hasPosition = (args.Count >= (positionAt + 3)) &&
-            EditorCommandModule.TryFloat(args: in args, at: positionAt, value: out _);
+        var hasPosition = ((args.Count >= (positionAt + 3)) &&
+            EditorCommandModule.TryFloat(args: in args, at: positionAt, value: out _));
 
         var x = 0f;
         var y = 0f;
@@ -184,10 +168,11 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         if (hasPosition && (!EditorCommandModule.TryFloat(args: in args, at: positionAt, value: out x) ||
             !EditorCommandModule.TryFloat(args: in args, at: (positionAt + 1), value: out y) ||
             !EditorCommandModule.TryFloat(args: in args, at: (positionAt + 2), value: out z))) {
-            return Error(text: $"[{AddCommand}: could not parse <x> <y> <z> as finite numbers]");
+            return CommandResult.Error(output: $"[{AddCommand}: could not parse <x> <y> <z> as finite numbers]");
         }
 
         var seatAt = (positionAt + (hasPosition ? 3 : 0));
+
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: seatAt, verb: AddCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
@@ -199,21 +184,20 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         if (hasType && TryParsePrimitive(token: args[0], type: out var parsedType)) {
             type = parsedType;
         } else if ((args.Count > 0) && !hasType && (args.Count > seatAt) && !hasPosition && !int.TryParse(s: args[0], result: out _)) {
-            return Error(text: $"[{AddCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone]");
+            return CommandResult.Error(output: $"[{AddCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone]");
         }
 
         var added = model!.AddShape(type: type, position: (hasPosition ? new Vector3(x: x, y: y, z: z) : null));
 
         if (added is not { } shape) {
-            return Error(text: $"[{AddCommand}: shape budget spent ({model.StampShapeCount}/{model.ShapeCapacity}) — remove a shape first]");
+            return CommandResult.Error(output: $"[{AddCommand}: shape budget spent ({model.StampShapeCount}/{model.ShapeCapacity}) — remove a shape first]");
         }
 
-        return Echo(slot: slot, verb: AddCommand, detail: string.Create(
+        return EditorSculptCommandModule.Echo(slot: slot, verb: AddCommand, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"shape {shape.Id} ({shape.Type}) at ({shape.Position.X:0.00}, {shape.Position.Y:0.00}, {shape.Position.Z:0.00}) selected — {model.StampShapeCount}/{model.ShapeCapacity} stamp shapes"
         ));
     }
-
     private CommandResult RemoveHandler(CommandContext context, WireArgs args) {
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: RemoveCommand, session: m_session, workbench: m_workbench);
 
@@ -222,12 +206,11 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         }
 
         if (!model!.DeleteSelected()) {
-            return Error(text: $"[{RemoveCommand}: no shape selected — editor.sculpt.select or the target cycle first]");
+            return CommandResult.Error(output: $"[{RemoveCommand}: no shape selected — editor.sculpt.select or the target cycle first]");
         }
 
-        return Echo(slot: slot, verb: RemoveCommand, detail: $"shape removed — {model.StampShapeCount}/{model.ShapeCapacity} stamp shapes");
+        return EditorSculptCommandModule.Echo(slot: slot, verb: RemoveCommand, detail: $"shape removed — {model.StampShapeCount}/{model.ShapeCapacity} stamp shapes");
     }
-
     private CommandResult DuplicateHandler(CommandContext context, WireArgs args) {
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: DuplicateCommand, session: m_session, workbench: m_workbench);
 
@@ -236,52 +219,78 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         }
 
         if (!model!.DuplicateTarget()) {
-            return Error(text: $"[{DuplicateCommand}: needs a selected shape and free budget ({model.StampShapeCount}/{model.ShapeCapacity})]");
+            return CommandResult.Error(output: $"[{DuplicateCommand}: needs a selected shape and free budget ({model.StampShapeCount}/{model.ShapeCapacity})]");
         }
 
         var twin = model.SelectedShape!.Value;
 
-        return Echo(slot: slot, verb: DuplicateCommand, detail: string.Create(
+        return EditorSculptCommandModule.Echo(slot: slot, verb: DuplicateCommand, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"twin shape {twin.Id} selected — {model.StampShapeCount}/{model.ShapeCapacity} stamp shapes"
         ));
     }
-
+    // The select fold: no args -> bound dispatch (direction from a constant Axis1D value; a Digital value has no
+    // default here, unlike editor.camera's toggle or editor.select's deselect, so it refuses); a leading next|prev
+    // literal -> the same cycle, typed; otherwise the original <id|name> [seat] explicit form. See
+    // EditorCommandModule.TryDirection's doctrine comment for the bound-constant mechanism.
     private CommandResult SelectHandler(CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
-            return Error(text: "[editor.sculpt.select: expected <id|name> plus an optional seat 1..4]");
+        if (args.Count == 0) {
+            return NoArgSelectHandler(context: context);
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: "editor.sculpt.select", session: m_session, workbench: m_workbench);
+        if (args.Is(index: 0, value: "next") || args.Is(index: 0, value: "prev")) {
+            var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: SelectCommand, session: m_session, workbench: m_workbench);
 
-        if (error is { } benchError) {
-            return benchError;
+            if (error is { } benchError) {
+                return benchError;
+            }
+
+            return CycleCore(slot: slot, model: model!, direction: (args.Is(index: 0, value: "next") ? 1 : -1));
+        }
+
+        if (args.Count is (< 1 or > 2)) {
+            return CommandResult.Error(output: "[editor.sculpt.select: expected <id|name>, next, prev, plus an optional seat 1..4]");
+        }
+
+        var (idSlot, idModel, idError) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: SelectCommand, session: m_session, workbench: m_workbench);
+
+        if (idError is { } resolveError) {
+            return resolveError;
         }
 
         var idOrName = args[0].ToString();
 
-        if (model!.Select(idOrName: idOrName) is not { } shape) {
-            return Error(text: $"[editor.sculpt.select: no shape '{idOrName}' — editor.sculpt.status lists the model]");
+        if (idModel!.Select(idOrName: idOrName) is not { } shape) {
+            return CommandResult.Error(output: $"[editor.sculpt.select: no shape '{idOrName}' — editor.sculpt.status lists the model]");
         }
 
-        return Echo(slot: slot, verb: "editor.sculpt.select", detail: string.Create(
+        return EditorSculptCommandModule.Echo(slot: idSlot, verb: SelectCommand, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"shape {shape.Id} ({shape.Type}) at ({shape.Position.X:0.00}, {shape.Position.Y:0.00}, {shape.Position.Z:0.00})"
         ));
     }
-
-    private CommandResult CycleHandler(CommandContext context, in WireArgs args, int direction, string verb) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
+    // CommandContext.Source (non-null only for a bound dispatch) is the discriminator, not Value.Kind — this verb
+    // declares Axis1D, so the text path's own impulse value would read Axis1D too. See
+    // CommandDefinition.WithWireArgs's doctrine comment.
+    private CommandResult NoArgSelectHandler(CommandContext context) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: WireArgs.Empty, at: 0, verb: SelectCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
         }
 
-        model!.CycleSelection(direction: direction);
+        if (context.Source is null) {
+            return CommandResult.Error(output: "[editor.sculpt.select: expected <id|name>, next, or prev]");
+        }
 
-        return Echo(slot: slot, verb: verb, detail: DescribeTarget(model: model));
+        return CycleCore(slot: slot, model: model!, direction: ((context.Value.AsAxis1D >= 0f) ? 1 : -1));
     }
+    // Shared target-cycle body — through the shapes, then the chain goals, wrapping through none/brush.
+    private CommandResult CycleCore(int slot, SculptModel model, int direction) {
+        model.CycleSelection(direction: direction);
 
+        return EditorSculptCommandModule.Echo(slot: slot, verb: SelectCommand, detail: DescribeTarget(model: model));
+    }
     private CommandResult DeselectHandler(CommandContext context, WireArgs args) {
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: DeselectCommand, session: m_session, workbench: m_workbench);
 
@@ -291,12 +300,12 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
 
         model!.Deselect();
 
-        return Echo(slot: slot, verb: DeselectCommand, detail: "target=brush");
+        return EditorSculptCommandModule.Echo(slot: slot, verb: DeselectCommand, detail: "target=brush");
     }
-
     private CommandResult PrimitiveHandler(CommandContext context, WireArgs args) {
         // Shapes: [] = cycle next (the chord), [next|prev|name] [seat].
         var hasToken = ((args.Count >= 1) && !int.TryParse(s: args[0], result: out _));
+
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: (hasToken ? 1 : 0), verb: PrimitiveCommand, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
@@ -313,84 +322,39 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
             model!.SetPrimitive(type: parsed);
             applied = parsed;
         } else {
-            return Error(text: $"[{PrimitiveCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev]");
+            return CommandResult.Error(output: $"[{PrimitiveCommand}: unknown primitive '{args[0].ToString()}' — sphere|box|torus|cylinder|capsule|ellipsoid|roundcone|next|prev]");
         }
 
-        return Echo(slot: slot, verb: PrimitiveCommand, detail: $"{applied} ({(model!.TargetIsBrush ? "brush — the next add" : "selected shape")})");
+        return EditorSculptCommandModule.Echo(slot: slot, verb: PrimitiveCommand, detail: $"{applied} ({(model!.TargetIsBrush ? "brush — the next add" : "selected shape")})");
     }
+    // The scale fold: a leading grow|shrink literal, or (with no token) a bound constant Axis1D value from the
+    // style page's D-pad Right/Left step chord — see EditorCommandModule.TryDirection. Anything else falls through
+    // to the original <s> / <x y z> forms.
+    private CommandResult ScaleHandler(CommandContext context, WireArgs args) {
+        if (EditorCommandModule.TryDirection(context: context, args: args, at: 0, positive: "grow", negative: "shrink", direction: out var direction)) {
+            var (stepSlot, stepModel, stepError) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: ((args.Count >= 1) ? 1 : 0), verb: "editor.sculpt.scale", session: m_session, workbench: m_workbench);
 
-    private CommandResult PositionHandler(CommandContext context, in WireArgs args, bool relative, string verb) {
-        if (args.Count is (< 3 or > 4)) {
-            return Error(text: $"[{verb}: expected <x> <y> <z> plus an optional seat 1..4]");
-        }
-
-        if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var x) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var y) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var z)) {
-            return Error(text: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 3, verb: verb, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var requested = new Vector3(x: x, y: y, z: z);
-
-        if (relative) {
-            if (model!.TargetPosition is not { } current) {
-                return Error(text: $"[{verb}: no target — select a shape or a chain goal first]");
+            if (stepError is { } resolveStepError) {
+                return resolveStepError;
             }
 
-            requested = (current + requested);
+            var factor = ((direction > 0) ? ScaleStepFactor : (1f / ScaleStepFactor));
+            var stepped = stepModel!.SetTargetScale(scale: (stepModel.TargetScale * factor));
+
+            return EditorSculptCommandModule.Echo(slot: stepSlot, verb: "editor.sculpt.scale", detail: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"scale=({stepped.X:0.00}, {stepped.Y:0.00}, {stepped.Z:0.00})"
+            ));
         }
 
-        if (model!.SetTargetPosition(position: requested) is not { } applied) {
-            return Error(text: $"[{verb}: no target — select a shape or a chain goal first]");
-        }
-
-        return Echo(slot: slot, verb: verb, detail: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{DescribeTarget(model: model)} at ({applied.X:0.00}, {applied.Y:0.00}, {applied.Z:0.00})"
-        ));
-    }
-
-    private CommandResult RotateHandler(CommandContext context, WireArgs args) {
-        if (args.Count is (< 3 or > 4)) {
-            return Error(text: "[editor.sculpt.rotate: expected <yawDeg> <pitchDeg> <rollDeg> plus an optional seat 1..4]");
-        }
-
-        if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var yaw) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var pitch) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var roll)) {
-            return Error(text: "[editor.sculpt.rotate: could not parse the angles as finite numbers]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 3, verb: "editor.sculpt.rotate", session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        if (!model!.SetTargetRotation(yawDegrees: yaw, pitchDegrees: pitch, rollDegrees: roll)) {
-            return Error(text: "[editor.sculpt.rotate: no shape selected — a chain goal has no orientation]");
-        }
-
-        return Echo(slot: slot, verb: "editor.sculpt.rotate", detail: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"yaw={yaw:0.#}° pitch={pitch:0.#}° roll={roll:0.#}°"
-        ));
-    }
-
-    private CommandResult ScaleHandler(CommandContext context, WireArgs args) {
         // Shapes: <s> [seat] or <x y z> [seat].
         if (args.Count is (< 1 or > 4)) {
-            return Error(text: "[editor.sculpt.scale: expected <s> or <x> <y> <z>, plus an optional seat 1..4]");
+            return CommandResult.Error(output: "[editor.sculpt.scale: expected <s>, <x> <y> <z>, grow, or shrink, plus an optional seat 1..4]");
         }
 
-        var perAxis = (args.Count >= 3) && EditorCommandModule.TryFloat(args: in args, at: 2, value: out _);
+        var perAxis = ((args.Count >= 3) && EditorCommandModule.TryFloat(args: in args, at: 2, value: out _));
         var seatAt = (perAxis ? 3 : 1);
+
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: seatAt, verb: "editor.sculpt.scale", session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
@@ -403,13 +367,13 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
             if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var x) ||
                 !EditorCommandModule.TryFloat(args: in args, at: 1, value: out var y) ||
                 !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var z)) {
-                return Error(text: "[editor.sculpt.scale: could not parse <x> <y> <z> as finite numbers]");
+                return CommandResult.Error(output: "[editor.sculpt.scale: could not parse <x> <y> <z> as finite numbers]");
             }
 
             requested = new Vector3(x: x, y: y, z: z);
         } else {
             if (!EditorCommandModule.TryFloat(args: in args, at: 0, value: out var uniform)) {
-                return Error(text: "[editor.sculpt.scale: could not parse <s> as a finite number]");
+                return CommandResult.Error(output: "[editor.sculpt.scale: could not parse <s> as a finite number]");
             }
 
             requested = new Vector3(value: uniform);
@@ -417,46 +381,162 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
 
         var applied = model!.SetTargetScale(scale: requested);
 
-        return Echo(slot: slot, verb: "editor.sculpt.scale", detail: string.Create(
+        return EditorSculptCommandModule.Echo(slot: slot, verb: "editor.sculpt.scale", detail: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"scale=({applied.X:0.00}, {applied.Y:0.00}, {applied.Z:0.00})"
         ));
     }
 
-    private CommandResult ScaleStepHandler(CommandContext context, in WireArgs args, bool grow, string verb) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: verb, session: m_session, workbench: m_workbench);
+    // The one door for every field editor.sculpt.set absorbed: bend/dilate/onion/twist (from the sibling style
+    // module — plain SculptModel setters, no cross-module call needed), rotate/move/nudge/rename (already local).
+    // Every sub-form's argument indices are shifted by 1 relative to their old standalone verbs (args[0] is now the
+    // field name).
+    private CommandResult SetHandler(CommandContext context, WireArgs args) {
+        if (args.Count == 0) {
+            return CommandResult.Error(output: "[editor.sculpt.set: expected <field> <value…> — bend|dilate|onion|twist|rotate|move|nudge|rename]");
+        }
+
+        if (args.Is(index: 0, value: "bend")) {
+            return KnobSetHandler(context: context, args: in args, field: "bend", apply: static (model, value) => model.SetBend(value: value));
+        }
+
+        if (args.Is(index: 0, value: "dilate")) {
+            return KnobSetHandler(context: context, args: in args, field: "dilate", apply: static (model, value) => model.SetDilate(value: value));
+        }
+
+        if (args.Is(index: 0, value: "onion")) {
+            return KnobSetHandler(context: context, args: in args, field: "onion", apply: static (model, value) => model.SetOnion(value: value));
+        }
+
+        if (args.Is(index: 0, value: "twist")) {
+            return KnobSetHandler(context: context, args: in args, field: "twist", apply: static (model, value) => model.SetTwist(value: value));
+        }
+
+        if (args.Is(index: 0, value: "rotate")) {
+            return RotateSetHandler(context: context, args: in args);
+        }
+
+        if (args.Is(index: 0, value: "move")) {
+            return PositionSetHandler(context: context, args: in args, relative: false);
+        }
+
+        if (args.Is(index: 0, value: "nudge")) {
+            return PositionSetHandler(context: context, args: in args, relative: true);
+        }
+
+        if (args.Is(index: 0, value: "rename")) {
+            return RenameSetHandler(context: context, args: in args);
+        }
+
+        return CommandResult.Error(output: $"[editor.sculpt.set: unknown field '{args[0].ToString()}' — bend|dilate|onion|twist|rotate|move|nudge|rename]");
+    }
+    private CommandResult KnobSetHandler(CommandContext context, in WireArgs args, string field, Func<SculptModel, float, float> apply) {
+        var verb = $"editor.sculpt.set {field}";
+
+        if (args.Count is (< 2 or > 3)) {
+            return CommandResult.Error(output: $"[{verb}: expected <v> plus an optional seat 1..4]");
+        }
+
+        if (!EditorCommandModule.TryFloat(args: in args, at: 1, value: out var value)) {
+            return CommandResult.Error(output: $"[{verb}: could not parse <v> as a finite number]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 2, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
         }
 
-        var factor = (grow ? ScaleStepFactor : (1f / ScaleStepFactor));
-        var applied = model!.SetTargetScale(scale: (model.TargetScale * factor));
+        var applied = apply(model!, value);
 
-        return Echo(slot: slot, verb: verb, detail: string.Create(
+        return EditorSculptCommandModule.Echo(slot: slot, verb: verb, detail: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{applied:0.00}"));
+    }
+    private CommandResult RotateSetHandler(CommandContext context, in WireArgs args) {
+        const string verb = "editor.sculpt.set rotate";
+
+        if (args.Count is (< 4 or > 5)) {
+            return CommandResult.Error(output: $"[{verb}: expected <yawDeg> <pitchDeg> <rollDeg> plus an optional seat 1..4]");
+        }
+
+        if (!EditorCommandModule.TryFloat(args: in args, at: 1, value: out var yaw) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var pitch) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 3, value: out var roll)) {
+            return CommandResult.Error(output: $"[{verb}: could not parse the angles as finite numbers]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 4, verb: verb, session: m_session, workbench: m_workbench);
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        if (!model!.SetTargetRotation(yawDegrees: yaw, pitchDegrees: pitch, rollDegrees: roll)) {
+            return CommandResult.Error(output: $"[{verb}: no shape selected — a chain goal has no orientation]");
+        }
+
+        return EditorSculptCommandModule.Echo(slot: slot, verb: verb, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"scale=({applied.X:0.00}, {applied.Y:0.00}, {applied.Z:0.00})"
+            handler: $"yaw={yaw:0.#}° pitch={pitch:0.#}° roll={roll:0.#}°"
         ));
     }
+    private CommandResult PositionSetHandler(CommandContext context, in WireArgs args, bool relative) {
+        var verb = $"editor.sculpt.set {(relative ? "nudge" : "move")}";
 
-    private CommandResult RenameHandler(CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
-            return Error(text: "[editor.sculpt.rename: expected <name> plus an optional seat 1..4]");
+        if (args.Count is (< 4 or > 5)) {
+            return CommandResult.Error(output: $"[{verb}: expected <x> <y> <z> plus an optional seat 1..4]");
         }
 
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: "editor.sculpt.rename", session: m_session, workbench: m_workbench);
+        if (!EditorCommandModule.TryFloat(args: in args, at: 1, value: out var x) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var y) ||
+            !EditorCommandModule.TryFloat(args: in args, at: 3, value: out var z)) {
+            return CommandResult.Error(output: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 4, verb: verb, session: m_session, workbench: m_workbench);
 
         if (error is { } benchError) {
             return benchError;
         }
 
-        var name = args[0].ToString();
+        var requested = new Vector3(x: x, y: y, z: z);
+
+        if (relative) {
+            if (model!.TargetPosition is not { } current) {
+                return CommandResult.Error(output: $"[{verb}: no target — select a shape or a chain goal first]");
+            }
+
+            requested = (current + requested);
+        }
+
+        if (model!.SetTargetPosition(position: requested) is not { } applied) {
+            return CommandResult.Error(output: $"[{verb}: no target — select a shape or a chain goal first]");
+        }
+
+        return EditorSculptCommandModule.Echo(slot: slot, verb: verb, detail: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{DescribeTarget(model: model)} at ({applied.X:0.00}, {applied.Y:0.00}, {applied.Z:0.00})"
+        ));
+    }
+    private CommandResult RenameSetHandler(CommandContext context, in WireArgs args) {
+        const string verb = "editor.sculpt.set rename";
+
+        if (args.Count is (< 2 or > 3)) {
+            return CommandResult.Error(output: $"[{verb}: expected <name> plus an optional seat 1..4]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 2, verb: verb, session: m_session, workbench: m_workbench);
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var name = args[1].ToString();
 
         if (!model!.RenameSelected(name: name)) {
-            return Error(text: "[editor.sculpt.rename: no shape selected]");
+            return CommandResult.Error(output: $"[{verb}: no shape selected]");
         }
 
-        return Echo(slot: slot, verb: "editor.sculpt.rename", detail: $"shape named '{name}'");
+        return EditorSculptCommandModule.Echo(slot: slot, verb: verb, detail: $"shape named '{name}'");
     }
 
     // The target readout the cycle/position echoes share.
@@ -474,10 +554,4 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
         return "target=brush";
     }
 
-    private static CommandResult Echo(int slot, string verb, string detail) =>
-        new(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} {detail}]");
-
-    private static CommandResult Error(string text) => new(Output: text) {
-        IsError = true,
-    };
 }

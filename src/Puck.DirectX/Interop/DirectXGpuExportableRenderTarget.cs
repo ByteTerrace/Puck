@@ -6,7 +6,6 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Security;
-using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
@@ -199,23 +198,6 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         return barrier;
     }
-    private static void Release(ref nint pointer) {
-        if (0 != pointer) {
-            _ = ((IUnknown*)pointer)->Release();
-            pointer = 0;
-        }
-    }
-    // The optimized clear value (black, opaque) the render-target texture is created with, matching the recorder's
-    // per-frame ClearRenderTargetView so the fast-clear path is taken instead of a slow generic clear.
-    private static D3D12_CLEAR_VALUE BlackClearValue(DXGI_FORMAT format) {
-        var clearValue = new D3D12_CLEAR_VALUE {
-            Format = format,
-        };
-
-        clearValue.Anonymous.Color[3] = 1f;
-
-        return clearValue;
-    }
     private void CreateSharedRenderTarget(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
@@ -239,13 +221,13 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         var clearValue = BlackClearValue(format: format);
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
-            in textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
-            clearValue,
-            in resourceIid,
-            &renderTarget
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
+            pDesc: in textureDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: clearValue,
+            ppvResource: &renderTarget,
+            riidResource: in resourceIid
         );
         m_renderTarget = (nint)renderTarget;
 
@@ -279,25 +261,12 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         );
     }
     private void WaitForGpu() {
-        var fence = (ID3D12Fence*)m_fence;
-        var value = m_fenceValue;
-
-        ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->Signal(
-            fence,
-            value
+        DirectXFence.SignalAndWait(
+            deviceContext: m_deviceContext,
+            fenceHandle: m_fence,
+            fenceEvent: m_fenceEvent,
+            fenceValue: ref m_fenceValue
         );
-        m_fenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                value,
-                m_fenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                hHandle: m_fenceEvent,
-                dwMilliseconds: uint.MaxValue
-            );
-        }
     }
 
     /// <inheritdoc/>
@@ -325,12 +294,12 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
                 resource: (ID3D12Resource*)m_renderTarget
             );
 
-            commandList->ResourceBarrier(1, &toCommon);
+            commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toCommon);
             commandList->Close();
 
             var executable = (ID3D12CommandList*)commandList;
 
-            ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(1, &executable);
+            ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
 
             state.RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
         }

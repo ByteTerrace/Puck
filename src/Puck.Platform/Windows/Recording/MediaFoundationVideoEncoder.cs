@@ -62,7 +62,7 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             Check(hr: m_transform.GetOutputStreamInfo(dwOutputStreamID: 0, pStreamInfo: out var streamInfo));
 
             m_providesSamples = ((streamInfo.dwFlags & MftOutputStreamProvidesSamples) != 0);
-            m_outputSampleSize = Math.Max(val1: streamInfo.cbSize, val2: (uint)(width * height * 4));
+            m_outputSampleSize = Math.Max(val1: streamInfo.cbSize, val2: (uint)((width * height) * 4));
             m_eventGenerator = TryQueryEventGenerator(transform: transform);
             m_isAsync = (m_eventGenerator is not null);
 
@@ -227,17 +227,15 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         TrySetU32(codecApi: codecApi, api: CODECAPI_AVEncMPVGOPSize, value: (uint)(frameRate * 2));
         TrySetU32(codecApi: codecApi, api: CODECAPI_AVEncMPVDefaultBPictureCount, value: 0);
     }
-
     private static void TrySetU32(ICodecAPI codecApi, Guid api, uint value) {
         var apiGuid = api;
         var variant = new CodecApiVariant {
-            vt = VtUi4,
             value = value,
+            vt = VtUi4,
         };
 
         _ = codecApi.SetValue(Api: ref apiGuid, Value: ref variant);
     }
-
     private static IMFMediaEventGenerator? TryQueryEventGenerator(IMFTransform transform) {
         try {
             return (IMFMediaEventGenerator)transform;
@@ -245,7 +243,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             return null;
         }
     }
-
     private IMFSample2 BuildInputSample(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds) {
         var nv12Size = PixelToNv12Converter.Nv12Size(width: width, height: height);
 
@@ -277,21 +274,21 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
             switch (eventType) {
                 case MeTransformNeedInput: {
-                    m_needInputCredits++;
+                        m_needInputCredits++;
 
-                    break;
-                }
+                        break;
+                    }
                 case MeTransformHaveOutput: {
-                    CollectOutput();
+                        CollectOutput();
 
-                    break;
-                }
+                        break;
+                    }
                 case MeTransformDrainComplete: {
-                    return false;
-                }
+                        return false;
+                    }
                 default: {
-                    break;
-                }
+                        break;
+                    }
             }
 
             return true;
@@ -299,7 +296,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             _ = Marshal.ReleaseComObject(o: mediaEvent);
         }
     }
-
     private void DrainReadyEvents(IMFMediaEventGenerator generator) {
         while (true) {
             var hr = generator.GetEvent(dwFlags: MfEventFlagNoWait, ppEvent: out var mediaEvent);
@@ -312,7 +308,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             _ = HandleEvent(mediaEvent: mediaEvent);
         }
     }
-
     private void DrainSynchronousOutputs() {
         while (true) {
             if (!CollectOutput()) {
@@ -364,7 +359,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             }
         }
     }
-
     private void ReadOutputSample(IMFSample2 sample) {
         var timestampNanoseconds = ((sample.GetSampleTime(phnsSampleTime: out var hns) >= 0) ? (hns * 100) : 0);
         var cleanPointKey = MFSampleExtension_CleanPoint;
@@ -395,7 +389,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             _ = Marshal.ReleaseComObject(o: buffer);
         }
     }
-
     private void EmitPacket(ReadOnlySpan<byte> encoded, long timestampNanoseconds, bool isKeyframe) {
         if (m_codec == EncoderCodec.H264) {
             var payload = AvcConfigRecord.ToLengthPrefixed(annexB: encoded, sps: ref m_sps, pps: ref m_pps);
@@ -419,7 +412,6 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             m_packets.Add(item: new RecordedPacket(Data: payload, TimestampNanoseconds: timestampNanoseconds, IsKeyframe: isKeyframe));
         }
     }
-
     private IMFSample2 CreateOutputSample() {
         Check(hr: MFCreateMemoryBuffer(cbMaxLength: m_outputSampleSize, ppBuffer: out var buffer));
         Check(hr: MFCreateSample(ppIMFSample: out var sample));
@@ -428,6 +420,5 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
         return sample;
     }
-
     private static ulong PackU32Pair(uint high, uint low) => (((ulong)high) << 32) | low;
 }

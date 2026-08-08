@@ -1,0 +1,14 @@
+[package]
+name = "puck-addon-default"
+version = "0.1.0"
+edition = "2021"
+description = "Puck's default addon — the dead-reckoning clamp-walk ghost that ships with the engine, and the worked example for authoring your own addon against puck-stdlib."
+publish = false
+
+# cdylib, not rlib: this crate IS the shipped .wasm module. It is a thin consumer of puck-stdlib —
+# see src/lib.rs for why the frozen puck_* ABI exports live here rather than in the library.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }

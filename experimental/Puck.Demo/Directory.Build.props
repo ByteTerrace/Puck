@@ -1,0 +1,29 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.props.
+
+        This file exists to STOP MSBuild's upward Directory.Build.props discovery at this folder, so the
+        quarantined Demo does not inherit the engine's build context from the repository root.
+
+        WHY IT IS HERE. Puck.Demo was quarantined out of src/ and out of Puck.slnx by owner ruling
+        2026-08-01, but moving a tree does not remove it from MSBuild's reach: the root Directory.Build.props
+        walks DOWN into experimental/ just as readily as into src/, because the walk is upward from the
+        project and nothing stopped it here. The architecture gate makes that concrete — hooked at the root,
+        it would run on a project deliberately removed from the graph and fail it against a ledger that
+        cannot describe it. QUARANTINE MEANS UNGATED, and this pair is what makes that structural rather than
+        a path filter someone maintains. A filter that happens to exclude the right directories reads
+        identically to one that excludes the wrong ones.
+
+        THIS TREE DOES NOT BUILD, and that is settled rather than pending. Its seventeen ProjectReferences
+        are relative paths written when it lived at src/Puck.Demo, so every one of them dangles from here.
+        Worse than a plain break: `dotnet restore` EXITS 0 while silently discarding all seventeen (each
+        reported as a warning-level "Skipping project ... because it was not found"), and the build then
+        fails as a flood of CS0234 missing-namespace errors that point at source files rather than at the
+        dangling edges. Do not trust a green restore in this tree. Repairing the paths was considered and
+        declined: it spends seventeen edits buying back exactly the compilability the ruling found was not
+        worth its keep. The source here is PORT-REFERENCE MATERIAL for the Demo -> World port, read by
+        people, not built by anything.
+    -->
+
+</Project>

@@ -121,11 +121,9 @@ public readonly record struct VariableRefreshCapabilities {
     /// <param name="source">The recognized declaration or declarations that supplied the interval.</param>
     /// <returns>Validated supported capabilities.</returns>
     public static VariableRefreshCapabilities CreateSupported(VariableRefreshRange range, VariableRefreshSource source) {
-        const VariableRefreshSource knownSources = (
-            VariableRefreshSource.DisplayIdAdaptiveSync |
+        const VariableRefreshSource knownSources = VariableRefreshSource.DisplayIdAdaptiveSync |
             VariableRefreshSource.HdmiForum |
-            VariableRefreshSource.AmdFreeSync
-        );
+            VariableRefreshSource.AmdFreeSync;
 
         if ((source == VariableRefreshSource.None) || ((source & ~knownSources) != 0)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(source), actualValue: source, message: "Supported VRR capabilities require an explicit source.");
@@ -164,5 +162,5 @@ public readonly record struct DisplayTimingSnapshot(DisplaySignalTiming Signal, 
     public static DisplayTimingSnapshot Unknown => default;
 
     /// <summary>Whether at least one display fact was discovered.</summary>
-    public bool IsKnown => Signal.IsKnown || (VariableRefresh.Support != VariableRefreshSupport.Unknown);
+    public bool IsKnown => (Signal.IsKnown || (VariableRefresh.Support != VariableRefreshSupport.Unknown));
 }

@@ -14,7 +14,7 @@ public sealed class NullNativeImageCaptureService : INativeImageCaptureService {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
 
-        if (!double.IsFinite(refreshRateHz)) {
+        if (!double.IsFinite(d: refreshRateHz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
         }
 
@@ -28,7 +28,7 @@ public sealed class NullNativeImageCaptureService : INativeImageCaptureService {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
 
-        if (!double.IsFinite(refreshRateHz)) {
+        if (!double.IsFinite(d: refreshRateHz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
         }
 

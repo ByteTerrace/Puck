@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -9,6 +11,7 @@ namespace Puck.Commands;
 /// <param name="Entries">The bindings active while this page is selected.</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>
 /// <param name="Icon">An optional display icon id for the UI layer; opaque to the engine.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingPageDefinition(
     string Id,
     IReadOnlyList<BindingPageEntryDefinition> Entries,

@@ -14,7 +14,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
     /// <inheritdoc/>
     [SupportedOSPlatformGuard("windows10.0.19041")]
     public bool IsSupported =>
-        OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: MinimumWindowsBuild) && IsGraphicsCaptureSupported();
+        (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: MinimumWindowsBuild) && IsGraphicsCaptureSupported());
 
     /// <inheritdoc/>
     public bool TryCreateWindowCapture(string windowTitleFragment, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
@@ -23,7 +23,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
 
-        if (!double.IsFinite(refreshRateHz)) {
+        if (!double.IsFinite(d: refreshRateHz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
         }
 
@@ -53,7 +53,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
 
-        if (!double.IsFinite(refreshRateHz)) {
+        if (!double.IsFinite(d: refreshRateHz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
         }
 
@@ -85,7 +85,6 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
             return false;
         }
     }
-
     [SupportedOSPlatform("windows")]
     private static bool TryFindWindow(string titleFragment, out nint windowHandle) {
         var match = (nint)0;
@@ -98,16 +97,19 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
                 }
 
                 var titleLength = User32.GetWindowTextLength(windowHandle: candidate);
+
                 if (titleLength <= 0) {
                     return true;
                 }
 
                 var required = (titleLength + 1);
+
                 if (buffer.Length < required) {
                     buffer = new char[required];
                 }
 
                 var copied = User32.GetWindowText(windowHandle: candidate, text: buffer, maxLength: buffer.Length);
+
                 if ((copied <= 0) || !buffer.AsSpan(start: 0, length: copied).Contains(value: titleFragment, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     return true;
                 }
@@ -133,6 +135,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
 
         var handles = new List<nint>();
         var primaryOrdinal = -1;
+
         _ = User32.EnumDisplayMonitors(
             deviceContext: 0,
             clipRectangle: 0,
@@ -140,6 +143,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
                 var info = new MonitorInfo {
                     Size = (uint)Marshal.SizeOf<MonitorInfo>(),
                 };
+
                 if (User32.GetMonitorInfo(monitorHandle: candidate, monitorInfo: ref info)) {
                     if ((info.Flags & MonitorInfoPrimary) != 0) {
                         primaryOrdinal = handles.Count;
@@ -155,6 +159,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
 
         // Logical order places the primary first, then the remaining monitors in enumeration order.
         var ordinal = 0;
+
         if (primaryOrdinal >= 0) {
             if (monitorIndex == 0) {
                 monitorHandle = handles[primaryOrdinal];
@@ -164,7 +169,7 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
             ordinal = 1;
         }
 
-        for (var i = 0; i < handles.Count; i++) {
+        for (var i = 0; (i < handles.Count); i++) {
             if (i == primaryOrdinal) {
                 continue;
             }

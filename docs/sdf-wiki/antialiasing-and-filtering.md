@@ -37,5 +37,5 @@ compute shaders and must not rely on implicit pixel-shader derivatives.
 - Do not use stochastic jitter unless its seed, sequence, and accumulation
   policy are part of the documented render contract.
 
-Ray-differential CRT filtering remains an open quality feature; see
-[the SDF backlog](../sdf-backlog.md).
+Ray-differential CRT filtering remains an open quality feature. Nothing tracks
+it and nothing is sequenced to build it.

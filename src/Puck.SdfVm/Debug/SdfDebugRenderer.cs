@@ -143,12 +143,15 @@ public sealed class SdfDebugRenderer {
     // carve bench (EmitBenchCarves) and folded worst-case by EmitProbe.
     internal static void EmitCarves(SdfProgramBuilder builder, IReadOnlyList<SdfCarve> carves, int material) {
         foreach (var carve in carves) {
-            var blend = (carve.Smooth ? SdfBlendOp.SmoothSubtraction : SdfBlendOp.Subtraction);
-
-            builder.BeginInstance(boundCenter: carve.Center, boundRadius: carve.Radius);
-            _ = builder.ResetPoint().Translate(offset: carve.Center).Sphere(radius: carve.Radius, material: material, blend: blend, smooth: (carve.Smooth ? carve.SmoothK : 0f));
-            builder.EndInstance();
+            EmitCarve(builder: builder, carve: carve, material: material);
         }
+    }
+    internal static void EmitCarve(SdfProgramBuilder builder, SdfCarve carve, int material) {
+        var blend = (carve.Smooth ? SdfBlendOp.SmoothSubtraction : SdfBlendOp.Subtraction);
+
+        builder.BeginInstance(boundCenter: carve.Center, boundRadius: carve.Radius);
+        _ = builder.ResetPoint().Translate(offset: carve.Center).Sphere(radius: carve.Radius, material: material, blend: blend, smooth: (carve.Smooth ? carve.SmoothK : 0f));
+        builder.EndInstance();
     }
 
     // Applies every FIELD-class op in emission order (shared by the scoped and flat paths in Emit — the two orders
@@ -451,6 +454,10 @@ public sealed class SdfDebugRenderer {
                 }
 
                 break;
+            case SdfBenchWorkload.DynamicMatrix:
+                EmitDynamicMatrix(builder: builder, placement: config.Placement, moving: config.Moving, count: config.InstanceCount, material: material);
+
+                break;
             default:
                 _ = builder.ResetPoint().Sphere(radius: 1f, material: material);
 
@@ -501,6 +508,36 @@ public sealed class SdfDebugRenderer {
         }
     }
 
+    /// <summary>Emits the DYNAMIC MATRIX bench workload (Phase 3 L1 ceiling-measurement arc, 2026-08-02):
+    /// <paramref name="count"/> compact spheres laid out by <paramref name="placement"/>
+    /// (<see cref="SdfBenchScene.DynamicMatrixBasePosition"/>), either baked STATIC (a plain <c>BeginInstance</c> at
+    /// its base position — grid-INVARIANT, no per-frame CPU rebuild) or MOVING (one dynamic-transform slot per
+    /// instance, orbiting its base position every produced frame via <see cref="SdfBenchScene.TryPackStormTransforms"/>
+    /// — forces <see cref="SdfProgram.RequiresFrameInstanceGridRebuild"/>). Every op stays CORE (Sphere + Translate/
+    /// TransformDynamic only), so <see cref="SdfViewsKernelVariants.FirstExoticTouch"/> selects the CoreOps views
+    /// kernel variant regardless of N/placement/moving.</summary>
+    public void EmitDynamicMatrix(SdfProgramBuilder builder, SdfBenchPlacement placement, bool moving, int count, int material) {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var n = Math.Clamp(value: count, min: 0, max: SdfProgramBuilder.MaxInstances);
+
+        for (var index = 0; (index < n); index++) {
+            var basePosition = SdfBenchScene.DynamicMatrixBasePosition(placement: placement, index: index, count: n);
+
+            if (moving) {
+                // boundOffset zero: the per-frame packer bakes the base position + orbit displacement into the slot's
+                // POSITION, so the bound (center = slot position + offset) tracks the mover — see EmitStorm.
+                builder.BeginInstanceDynamic(slot: index, boundOffset: Vector3.Zero, boundRadius: SdfBenchScene.StormBoundRadius);
+                _ = builder.ResetPoint().TransformDynamic(slot: index).Sphere(radius: SdfBenchScene.StormInstanceRadius, material: material);
+            } else {
+                builder.BeginInstance(boundCenter: basePosition, boundRadius: SdfBenchScene.StormBoundRadius);
+                _ = builder.ResetPoint().Translate(offset: basePosition).Sphere(radius: SdfBenchScene.StormInstanceRadius, material: material);
+            }
+
+            builder.EndInstance();
+        }
+    }
+
     /// <summary>Emits heterogeneous walking-style articulated rigs: 12..36 independent dynamic bone slots per avatar
     /// (60..180 authored instructions) and five rigid instructions per leaf. Puck.Maths low-discrepancy samples vary
     /// counts, shape order, dimensions, and poses without RNG state; every avatar owns distinct instruction records.</summary>
@@ -521,7 +558,7 @@ public sealed class SdfDebugRenderer {
                 var band = (bone / 4);
                 var authoredRotation = Quaternion.CreateFromYawPitchRoll(
                     yaw: ((poseX - 0.5f) * 0.22f),
-                    pitch: (side * (0.06f + (0.03f * poseY) + (0.008f * band))),
+                    pitch: (side * ((0.06f + (0.03f * poseY)) + (0.008f * band))),
                     roll: ((poseY - 0.5f) * 0.10f)
                 );
                 var leafOffset = new Vector3(x: 0f, y: ((poseX - 0.5f) * 0.03f), z: 0f);
@@ -783,5 +820,8 @@ public sealed class SdfDebugEmitter(SdfDebugMode mode) : ISdfSceneEmitter {
     }
 
     /// <inheritdoc/>
-    public int Revision => m_mode.Revision;
+    public int RevisionComponentCount => SdfDebugMode.RevisionComponentCount;
+
+    /// <inheritdoc/>
+    public void WriteRevision(Span<int> destination) => m_mode.WriteRevision(destination: destination);
 }

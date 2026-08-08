@@ -306,79 +306,41 @@ public static class PrimeExtensions {
         4251904273U, 4255695013U, 4271267333U, 4275011401U, 4277526901U, 4278305651U, 4282867213U, 4294901761U,
     };
 
-    /// <summary>Gets the odd primes through fifty-nine, paired index-for-index with <see cref="SmallFactorCeilings"/> and consumed by <see cref="Factorize(uint, Span{uint})"/>.</summary>
-    private static ReadOnlySpan<uint> SmallFactorPrimes => new uint[16] {
-        3U, 5U, 7U, 11U, 13U, 17U, 19U, 23U, 29U, 31U, 37U, 41U, 43U, 47U, 53U, 59U,
-    };
-    /// <summary>Gets the divisibility ceilings paired with <see cref="SmallFactorPrimes"/>: a value is divisible by the paired prime exactly when its inverse-product does not exceed the ceiling, and the product is then the exact quotient.</summary>
-    private static ReadOnlySpan<uint> SmallFactorCeilings => new uint[16] {
-        (uint.MaxValue / 3U), (uint.MaxValue / 5U), (uint.MaxValue / 7U), (uint.MaxValue / 11U),
-        (uint.MaxValue / 13U), (uint.MaxValue / 17U), (uint.MaxValue / 19U), (uint.MaxValue / 23U),
-        (uint.MaxValue / 29U), (uint.MaxValue / 31U), (uint.MaxValue / 37U), (uint.MaxValue / 41U),
-        (uint.MaxValue / 43U), (uint.MaxValue / 47U), (uint.MaxValue / 53U), (uint.MaxValue / 59U),
-    };
-    /// <summary>Gets the multiplicative inverses modulo 2³² paired with <see cref="SmallFactorPrimes"/>.</summary>
-    private static ReadOnlySpan<uint> SmallFactorInverses => new uint[16] {
-        2863311531U, 3435973837U, 3067833783U, 3123612579U,
-        3303820997U, 4042322161U, 678152731U, 3921491879U,
-        1332920885U, 3186588639U, 2437684141U, 3247414297U,
-        799063683U, 1736263375U, 2350076445U, 2693454067U,
-    };
-
     /// <summary>Gets the 65,536-bit occupancy filter over <see cref="StrongPseudoprimesBase2"/> fingerprints; a clear bit proves non-membership without a search.</summary>
     private static readonly ulong[] StrongPseudoprimeFilter = CreateStrongPseudoprimeFilter();
     /// <summary>Gets the modular inverses of the odd primes through fifty-nine, split across two vectors and consumed by the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>
-    private static readonly Vector256<uint> LadderDivisorInversesLow = Vector256.Create(
-        e0: GetModularInverse(divisor: 3U),
-        e1: GetModularInverse(divisor: 5U),
-        e2: GetModularInverse(divisor: 7U),
-        e3: GetModularInverse(divisor: 11U),
-        e4: GetModularInverse(divisor: 13U),
-        e5: GetModularInverse(divisor: 17U),
-        e6: GetModularInverse(divisor: 19U),
-        e7: GetModularInverse(divisor: 23U)
-    );
+    /// <remarks>Derived from <see cref="PrimeKernels.SmallFactorPrimes"/> rather than transcribed, so no lane can fall out of step with the prime it stands for.</remarks>
+    private static readonly Vector256<uint> LadderDivisorInversesLow = CreateLadderDivisorInverses(offset: 0);
     /// <inheritdoc cref="LadderDivisorInversesLow"/>
-    private static readonly Vector256<uint> LadderDivisorInversesHigh = Vector256.Create(
-        e0: GetModularInverse(divisor: 29U),
-        e1: GetModularInverse(divisor: 31U),
-        e2: GetModularInverse(divisor: 37U),
-        e3: GetModularInverse(divisor: 41U),
-        e4: GetModularInverse(divisor: 43U),
-        e5: GetModularInverse(divisor: 47U),
-        e6: GetModularInverse(divisor: 53U),
-        e7: GetModularInverse(divisor: 59U)
-    );
+    private static readonly Vector256<uint> LadderDivisorInversesHigh = CreateLadderDivisorInverses(offset: 8);
     /// <summary>Gets the per-lane divisibility ceilings paired with <see cref="LadderDivisorInversesLow"/>: a value is divisible by the lane's prime exactly when its inverse-product does not exceed the ceiling.</summary>
-    private static readonly Vector256<uint> LadderQuotientCeilingsLow = Vector256.Create(
-        e0: (uint.MaxValue / 3U),
-        e1: (uint.MaxValue / 5U),
-        e2: (uint.MaxValue / 7U),
-        e3: (uint.MaxValue / 11U),
-        e4: (uint.MaxValue / 13U),
-        e5: (uint.MaxValue / 17U),
-        e6: (uint.MaxValue / 19U),
-        e7: (uint.MaxValue / 23U)
-    );
+    /// <remarks>Derived from <see cref="PrimeKernels.SmallFactorPrimes"/> rather than transcribed, so no lane can fall out of step with the prime it stands for.</remarks>
+    private static readonly Vector256<uint> LadderQuotientCeilingsLow = CreateLadderQuotientCeilings(offset: 0);
     /// <inheritdoc cref="LadderQuotientCeilingsLow"/>
-    private static readonly Vector256<uint> LadderQuotientCeilingsHigh = Vector256.Create(
-        e0: (uint.MaxValue / 29U),
-        e1: (uint.MaxValue / 31U),
-        e2: (uint.MaxValue / 37U),
-        e3: (uint.MaxValue / 41U),
-        e4: (uint.MaxValue / 43U),
-        e5: (uint.MaxValue / 47U),
-        e6: (uint.MaxValue / 53U),
-        e7: (uint.MaxValue / 59U)
-    );
+    private static readonly Vector256<uint> LadderQuotientCeilingsHigh = CreateLadderQuotientCeilings(offset: 8);
 
-    /// <summary>Defers the window-sieve table until a long NthPrime walk actually needs it.</summary>
-    private static class WindowSieve {
-        internal static readonly uint[] BasePrimes;
+    /// <summary>Builds one half of the trial-division ladder's inverse table from <see cref="PrimeKernels.SmallFactorPrimes"/>.</summary>
+    /// <param name="offset">The index of the first small factor the vector covers.</param>
+    /// <returns>The inverse modulo 2³² of each of the eight small factors starting at <paramref name="offset"/>.</returns>
+    private static Vector256<uint> CreateLadderDivisorInverses(int offset) {
+        Span<uint> lanes = stackalloc uint[Vector256<uint>.Count];
+        var primes = PrimeKernels.SmallFactorPrimes;
 
-        static WindowSieve() => BasePrimes = CreateBasePrimes();
+        for (var i = 0; (i < lanes.Length); ++i) { lanes[i] = ((uint)primes[(offset + i)]).ModularInverse(); }
+
+        return Vector256.Create<uint>(values: lanes);
     }
+    /// <summary>Builds one half of the trial-division ladder's ceiling table from <see cref="PrimeKernels.SmallFactorPrimes"/>.</summary>
+    /// <param name="offset">The index of the first small factor the vector covers.</param>
+    /// <returns>The divisibility ceiling of each of the eight small factors starting at <paramref name="offset"/>.</returns>
+    private static Vector256<uint> CreateLadderQuotientCeilings(int offset) {
+        Span<uint> lanes = stackalloc uint[Vector256<uint>.Count];
+        var primes = PrimeKernels.SmallFactorPrimes;
 
+        for (var i = 0; (i < lanes.Length); ++i) { lanes[i] = (uint.MaxValue / ((uint)primes[(offset + i)])); }
+
+        return Vector256.Create<uint>(values: lanes);
+    }
     /// <summary>Builds <see cref="StrongPseudoprimeFilter"/> by fingerprinting every entry of <see cref="StrongPseudoprimesBase2"/>.</summary>
     /// <returns>The occupancy bitmap consulted by <see cref="IsPrime(uint)"/> before it falls back to a binary search.</returns>
     private static ulong[] CreateStrongPseudoprimeFilter() {
@@ -386,33 +348,31 @@ public static class PrimeExtensions {
         var table = StrongPseudoprimesBase2;
 
         for (var i = 0; (i < table.Length); ++i) {
-            var fingerprint = ((table[i] * 0x9E3779B1U) >> 16);
+            var fingerprint = Fingerprint(value: table[i]);
 
             filter[(fingerprint >> 6)] |= (1UL << ((int)(fingerprint & 63U)));
         }
 
         return filter;
     }
-    /// <summary>Computes the multiplicative inverse of <paramref name="divisor"/> modulo 2³² by Newton–Hensel lifting.</summary>
-    /// <param name="divisor">The odd divisor.</param>
-    /// <returns>The value <c>d′</c> satisfying <c>divisor · d′ ≡ 1 (mod 2³²)</c>.</returns>
+    /// <summary>Maps a value onto its bit position in <see cref="StrongPseudoprimeFilter"/>.</summary>
+    /// <param name="value">The value to fingerprint.</param>
+    /// <returns>The sixteen-bit position <paramref name="value"/> occupies in the filter.</returns>
+    /// <remarks>
+    /// Written once because the builder and the query must agree exactly: a retuned multiplier applied at one site only
+    /// would either clear the bit of a listed pseudoprime — making <see cref="IsPrime(uint)"/> call it prime — or miss
+    /// every bit, dropping the binary search back into every call. The multiply is unchecked on purpose; the wrap is the
+    /// mixing.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetModularInverse(uint divisor) {
-        var inverse = divisor;
-
-        inverse *= (2U - (divisor * inverse));
-        inverse *= (2U - (divisor * inverse));
-        inverse *= (2U - (divisor * inverse));
-        inverse *= (2U - (divisor * inverse));
-
-        return inverse;
-    }
+    private static uint Fingerprint(uint value) =>
+        ((value * 0x9E3779B1U) >> 16);
     /// <summary>Computes the negated multiplicative inverse of <paramref name="modulus"/> modulo 2³².</summary>
     /// <param name="modulus">The odd modulus.</param>
     /// <returns>The value <c>m′</c> satisfying <c>modulus · m′ ≡ −1 (mod 2³²)</c>, consumed by <see cref="MontgomeryMultiply(uint, uint, uint, uint)"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetMontgomeryInverse(uint modulus) =>
-        (0U - GetModularInverse(divisor: modulus));
+        (0U - modulus.ModularInverse());
     /// <summary>Doubles a Montgomery-form residue modulo <paramref name="modulus"/> without branching.</summary>
     /// <param name="modulus">The odd modulus.</param>
     /// <param name="residue">The residue to double; must be less than <paramref name="modulus"/>.</param>
@@ -439,149 +399,6 @@ public static class PrimeExtensions {
 
         return ((uint)(adjusted + (((ulong)modulus) & ((ulong)(((long)adjusted) >> 63)))));
     }
-    /// <summary>Advances one step of the factoring polynomial <c>y² + addend</c> modulo <paramref name="modulus"/>.</summary>
-    /// <param name="addend">The polynomial offset distinguishing one cycle walk from another.</param>
-    /// <param name="inverse">The negated inverse of <paramref name="modulus"/> obtained from <see cref="GetMontgomeryInverse(uint)"/>.</param>
-    /// <param name="modulus">The odd modulus.</param>
-    /// <param name="value">The residue to advance; must be less than <paramref name="modulus"/>.</param>
-    /// <returns>The advanced residue, less than <paramref name="modulus"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint AdvancePolynomial(uint addend, uint inverse, uint modulus, uint value) {
-        var advanced = (((ulong)MontgomeryMultiply(
-            left: value,
-            modulus: modulus,
-            modulusInverse: inverse,
-            right: value
-        )) + addend);
-
-        return ((uint)((advanced < modulus)
-            ? advanced
-            : (advanced - modulus)));
-    }
-    /// <summary>Computes the greatest common divisor of <paramref name="left"/> and <paramref name="right"/> by binary reduction.</summary>
-    /// <param name="left">The first operand.</param>
-    /// <param name="right">The second operand; must be odd.</param>
-    /// <returns>The greatest common divisor of the operands.</returns>
-    private static uint GreatestCommonDivisor(uint left, uint right) {
-        if (0U == left) { return right; }
-
-        left >>= ((int)uint.TrailingZeroCount(value: left));
-
-        while (left != right) {
-            if (left < right) {
-                (left, right) = (right, left);
-            }
-
-            left -= right;
-            left >>= ((int)uint.TrailingZeroCount(value: left));
-        }
-
-        return left;
-    }
-    /// <summary>Runs one Brent cycle walk over the polynomial <c>y² + addend</c> modulo <paramref name="modulus"/>.</summary>
-    /// <param name="addend">The polynomial offset for this walk.</param>
-    /// <param name="inverse">The negated inverse of <paramref name="modulus"/> obtained from <see cref="GetMontgomeryInverse(uint)"/>.</param>
-    /// <param name="modulus">The odd composite to split.</param>
-    /// <returns>A divisor of <paramref name="modulus"/>; the walk failed when the result is <c>1</c> or <paramref name="modulus"/> itself.</returns>
-    private static uint FindFactorCycle(uint addend, uint inverse, uint modulus) {
-        var divisor = 1U;
-        var product = 1U;
-        var range = 1U;
-        var anchor = 0U;
-        var backtrack = 0U;
-        var y = 2U;
-
-        do {
-            anchor = y;
-
-            for (var i = 0U; (i < range); ++i) {
-                y = AdvancePolynomial(
-                    addend: addend,
-                    inverse: inverse,
-                    modulus: modulus,
-                    value: y
-                );
-            }
-
-            var k = 0U;
-
-            do {
-                backtrack = y;
-
-                var limit = Math.Min(
-                    val1: 32U,
-                    val2: (range - k)
-                );
-
-                for (var i = 0U; (i < limit); ++i) {
-                    y = AdvancePolynomial(
-                        addend: addend,
-                        inverse: inverse,
-                        modulus: modulus,
-                        value: y
-                    );
-                    product = MontgomeryMultiply(
-                        left: product,
-                        modulus: modulus,
-                        modulusInverse: inverse,
-                        right: ((anchor > y)
-                        ? (anchor - y)
-                        : (y - anchor))
-                    );
-                }
-
-                divisor = GreatestCommonDivisor(
-                    left: product,
-                    right: modulus
-                );
-                k += 32U;
-            } while ((k < range) && (1U == divisor));
-
-            range <<= 1;
-        } while (1U == divisor);
-
-        if (divisor == modulus) {
-            do {
-                backtrack = AdvancePolynomial(
-                    addend: addend,
-                    inverse: inverse,
-                    modulus: modulus,
-                    value: backtrack
-                );
-                divisor = GreatestCommonDivisor(
-                    left: ((anchor > backtrack)
-                    ? (anchor - backtrack)
-                    : (backtrack - anchor)),
-                    right: modulus
-                );
-            } while (1U == divisor);
-        }
-
-        return divisor;
-    }
-    /// <summary>Returns a nontrivial divisor of the odd composite <paramref name="value"/>, whose prime factors must all exceed fifty-nine.</summary>
-    /// <param name="value">The composite to split.</param>
-    /// <returns>A divisor strictly between <c>1</c> and <paramref name="value"/>; it is not necessarily prime.</returns>
-    /// <remarks>The polynomial offset advances through a fixed sequence until a walk succeeds, so the split is deterministic.</remarks>
-    private static uint FindFactor(uint value) {
-        var inverse = GetMontgomeryInverse(modulus: value);
-        var addend = 1U;
-
-        while (true) {
-            var divisor = FindFactorCycle(
-                addend: addend,
-                inverse: inverse,
-                modulus: value
-            );
-
-            if (
-                (1U < divisor) &&
-                (divisor < value)
-            ) { return divisor; }
-
-            ++addend;
-        }
-    }
     /// <summary>Subtracts <paramref name="subtrahend"/> from every element of <paramref name="values"/> in place.</summary>
     /// <param name="subtrahend">The amount removed from each element.</param>
     /// <param name="values">The elements to adjust.</param>
@@ -600,57 +417,6 @@ public static class PrimeExtensions {
 
         for (var i = 0; (i < values.Length); ++i) { values[i] -= subtrahend; }
     }
-    /// <summary>Builds the process-wide table of odd primes below 65,536.</summary>
-    /// <returns>The 6,541 primes required by every 32-bit window sieve.</returns>
-    private static uint[] CreateBasePrimes() {
-        var basePrimes = new uint[6541];
-        var composite = new bool[65536];
-        var count = 0;
-
-        for (var candidate = 3; (candidate < 65536); candidate += 2) {
-            if (composite[candidate]) { continue; }
-
-            basePrimes[count++] = ((uint)candidate);
-
-            for (var m = (((long)candidate) * candidate); (m < 65536L); m += (((long)candidate) << 1)) { composite[m] = true; }
-        }
-
-        return basePrimes;
-    }
-    /// <summary>Sieves the odd values <c>low + 2i</c> for <c>i</c> in <c>[0, bits)</c>, setting bit <c>i</c> of <paramref name="bitmap"/> when the value is composite.</summary>
-    /// <param name="basePrimes">The ascending odd primes obtained from <see cref="CreateBasePrimes"/>.</param>
-    /// <param name="bitmap">The destination bitmap; its tail word is left unmasked.</param>
-    /// <param name="bits">The number of odd values in the window.</param>
-    /// <param name="low">The first (odd) value of the window; must be at least <c>3</c>.</param>
-    private static void MarkWindow(uint[] basePrimes, ulong[] bitmap, ulong bits, ulong low) {
-        var high = (low + ((bits - 1UL) << 1));
-
-        Array.Clear(
-            array: bitmap,
-            index: 0,
-            length: ((int)((bits + 63UL) >> 6))
-        );
-
-        for (var i = 0; (i < basePrimes.Length); ++i) {
-            var prime = ((ulong)basePrimes[i]);
-            var start = (prime * prime);
-
-            if (start > high) { break; }
-            if (start < low) {
-                var quotient = ((low + (prime - 1UL)) / prime);
-
-                if (0UL == (quotient & 1UL)) { ++quotient; }
-
-                start = (quotient * prime);
-            }
-
-            for (var m = start; (m <= high); m += (prime << 1)) {
-                var bit = ((m - low) >> 1);
-
-                bitmap[(bit >> 6)] |= (1UL << ((int)(bit & 63UL)));
-            }
-        }
-    }
     /// <summary>Returns the <paramref name="remaining"/>-th prime strictly greater than <paramref name="start"/> by sieving forward windows.</summary>
     /// <param name="gap">The expected spacing between consecutive primes near <paramref name="start"/>, used to size the windows.</param>
     /// <param name="remaining">The number of primes to advance past; must be positive.</param>
@@ -662,13 +428,10 @@ public static class PrimeExtensions {
             var cursor = (((ulong)start) + 2UL);
 
             while (true) {
-                var span = Math.Min(
-                    val1: 2_097_150UL,
-                    val2: Math.Max(
-                        val1: 4096UL,
-                        val2: (((ulong)(remaining * gap)) + 1024UL)
-                    )
-                ) & ~1UL;
+                var span = WindowSpan(
+                    gap: gap,
+                    remaining: remaining
+                );
                 var high = Math.Min(
                     val1: (cursor + span),
                     val2: 4_294_967_295UL
@@ -677,8 +440,8 @@ public static class PrimeExtensions {
                 var words = ((int)((bits + 63UL) >> 6));
                 var tail = ((((ulong)words) << 6) - bits);
 
-                MarkWindow(
-                    basePrimes: WindowSieve.BasePrimes,
+                PrimeKernels.MarkWindow(
+                    basePrimes: PrimeKernels.BasePrimes,
                     bitmap: bitmap,
                     bits: bits,
                     low: cursor
@@ -721,13 +484,10 @@ public static class PrimeExtensions {
             var cursor = ((ulong)start);
 
             while (true) {
-                var span = Math.Min(
-                    val1: 2_097_150UL,
-                    val2: Math.Max(
-                        val1: 4096UL,
-                        val2: (((ulong)(remaining * gap)) + 1024UL)
-                    )
-                ) & ~1UL;
+                var span = WindowSpan(
+                    gap: gap,
+                    remaining: remaining
+                );
                 var low = ((cursor > (span + 3UL))
                     ? (cursor - span)
                     : 3UL);
@@ -735,8 +495,8 @@ public static class PrimeExtensions {
                 var words = ((int)((bits + 63UL) >> 6));
                 var tail = ((((ulong)words) << 6) - bits);
 
-                MarkWindow(
-                    basePrimes: WindowSieve.BasePrimes,
+                PrimeKernels.MarkWindow(
+                    basePrimes: PrimeKernels.BasePrimes,
                     bitmap: bitmap,
                     bits: bits,
                     low: low
@@ -768,92 +528,57 @@ public static class PrimeExtensions {
             ArrayPool<ulong>.Shared.Return(array: bitmap);
         }
     }
+    /// <summary>Sizes the window one pass of a walk sieves.</summary>
+    /// <param name="gap">The expected spacing between consecutive primes near the walk's cursor.</param>
+    /// <param name="remaining">The number of primes the walk has still to encounter; it shrinks as windows are consumed, so the span is re-sized each pass.</param>
+    /// <returns>An even span, at least 4,096 and at most 2,097,150 wide.</returns>
+    /// <remarks>
+    /// <see cref="WalkForward(double, uint, uint)"/> and <see cref="WalkBackward(double, uint, uint)"/> mirror each
+    /// other, and this is the one part of the mirror that is a shared decision rather than a reflected one: a correction
+    /// to the sizing must reach both directions or the un-corrected one silently returns the wrong prime.
+    /// </remarks>
+    private static ulong WindowSpan(double gap, uint remaining) =>
+        Math.Min(
+            val1: 2_097_150UL,
+            val2: Math.Max(
+                val1: 4096UL,
+                val2: (((ulong)(remaining * gap)) + 1024UL)
+            )
+        ) & ~1UL;
 
     /// <summary>Writes the prime factors of <paramref name="value"/>, with multiplicity and in ascending order, into <paramref name="destination"/>.</summary>
     /// <param name="value">The value to factor.</param>
     /// <param name="destination">The destination for the factors; thirty-two entries always suffice.</param>
     /// <returns>
-    /// The number of factors written (for example, <c>360</c> writes <c>2, 2, 2, 3, 3, 5</c>), or <c>0</c> when
-    /// <paramref name="value"/> is prime or less than two, since neither case has a proper factorization to report.
+    /// The number of factors written — Ω, the count with multiplicity. For example, <c>360</c> writes
+    /// <c>2, 2, 2, 3, 3, 5</c> and returns <c>6</c>; a prime writes itself and returns <c>1</c>. Only a
+    /// <paramref name="value"/> below two returns <c>0</c>, having no factorization at all.
     /// </returns>
     /// <remarks>
-    /// Factors through fifty-nine are removed by reciprocal multiplication — the inverse-product is the exact quotient
-    /// whenever it stays under the paired ceiling — and the remaining cofactor is split recursively by Brent cycle
-    /// walks over the Montgomery kernel, with each piece settled by <see cref="IsPrime(uint)"/>. Every step is
-    /// deterministic, so the same input always factors identically.
+    /// The narrow face of <see cref="PrimeKernels.Factorize(ulong, Span{ulong})"/>: factors through fifty-nine are
+    /// removed by reciprocal multiplication — the inverse-product is the exact quotient whenever it stays under the
+    /// paired ceiling — and the remaining cofactor is split recursively by Brent cycle walks over the Montgomery ring,
+    /// with each piece settled by <see cref="IsPrime(uint)"/>, which the kernel dispatches to for every operand this
+    /// overload can hand it. Every step is deterministic, so the same input always factors identically.
     /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> cannot hold the complete factorization. The destination is not modified.</exception>
     public static int Factorize(this uint value, Span<uint> destination) {
-        if (
-            (2U > value) ||
-            value.IsPrime()
-        ) { return 0; }
+        Span<ulong> factors = stackalloc ulong[64];
 
-        var count = 0;
+        var count = PrimeKernels.Factorize(
+            value: value,
+            destination: factors
+        );
 
-        while (0U == (value & 1U)) {
-            destination[count++] = 2U;
-            value >>= 1;
+        if (destination.Length < count) {
+            throw new ArgumentException(
+                message: $"The destination must have room for all {count} prime factors.",
+                paramName: nameof(destination)
+            );
         }
 
-        var primes = SmallFactorPrimes;
-        var ceilings = SmallFactorCeilings;
-        var inverses = SmallFactorInverses;
-
-        for (var i = 0; (i < primes.Length); ++i) {
-            var prime = primes[i];
-
-            if ((((ulong)prime) * prime) > value) { break; }
-
-            var ceiling = ceilings[i];
-            var inverse = inverses[i];
-
-            while (true) {
-                var quotient = (value * inverse);
-
-                if (quotient > ceiling) { break; }
-
-                destination[count++] = prime;
-                value = quotient;
-            }
-        }
-
-        if (1U == value) { return count; }
-
-        var sorted = count;
-        var depth = 0;
-        Span<uint> pending = stackalloc uint[8];
-
-        pending[depth++] = value;
-
-        while (0 < depth) {
-            var cofactor = pending[--depth];
-
-            if (cofactor.IsPrime()) {
-                destination[count++] = cofactor;
-
-                continue;
-            }
-
-            var divisor = FindFactor(value: cofactor);
-
-            pending[depth++] = divisor;
-            pending[depth++] = (cofactor / divisor);
-        }
-
-        for (var i = (sorted + 1); (i < count); ++i) {
-            var current = destination[i];
-            var j = (i - 1);
-
-            while (
-                (j >= sorted) &&
-                (destination[j] > current)
-            ) {
-                destination[(j + 1)] = destination[j];
-                --j;
-            }
-
-            destination[(j + 1)] = current;
-        }
+        // Every factor divides a 32-bit value and so fits one; the widening the kernel works in is carriage, not range.
+        for (var i = 0; (i < count); ++i) { destination[i] = ((uint)factors[i]); }
 
         return count;
     }
@@ -884,7 +609,7 @@ public static class PrimeExtensions {
             );
 
             if (Vector256<uint>.Zero != divisible) {
-                return (value is 3U or 5U or 7U or 11U or 13U or 17U or 19U or 23U or 29U or 31U or 37U or 41U or 43U or 47U or 53U or 59U);
+                return PrimeKernels.SmallFactorPrimes.Contains(value: ((ulong)value));
             }
             if (3721U > value) { return (1U < value); }
         } else {
@@ -952,7 +677,7 @@ public static class PrimeExtensions {
             } while (minusOne != result);
         }
 
-        var fingerprint = ((value * 0x9E3779B1U) >> 16);
+        var fingerprint = Fingerprint(value: value);
 
         if (0UL == (StrongPseudoprimeFilter[(fingerprint >> 6)] & (1UL << ((int)(fingerprint & 63U))))) { return true; }
 

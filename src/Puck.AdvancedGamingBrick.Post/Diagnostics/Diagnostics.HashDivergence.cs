@@ -40,9 +40,9 @@ internal static partial class Diagnostics {
             : null);
 
         var fine = (Array.IndexOf(array: args, value: "--fine") >= 0);
-        var framesArg = ArgValue(args: args, name: "--frames");
+        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
         var frames = ((framesArg is not null) ? int.Parse(s: framesArg) : 600);
-        var perturbArg = ArgValue(args: args, name: "--perturb-at");
+        var perturbArg = CommandLineArguments.Value(args: args, name: "--perturb-at");
         var perturbAtFrame = ((perturbArg is not null) ? int.Parse(s: perturbArg) : (int?)null);
 
         exitCode = HashDivergenceProbe.Run(romAPath: romAPath, romBPath: romBPath, bios: BiosImage, frames: frames, fine: fine, perturbAtFrame: perturbAtFrame);

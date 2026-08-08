@@ -3,6 +3,17 @@ bin/
 obj/
 artifacts/
 
+# puck CLI: published framework-dependent binaries (rebuilt via dotnet publish, never committed)
+src/Puck.Cli/publish/
+# Session-compat shim: the retired standalone rex exe (temporary; slated for removal)
+tools/rex/publish/
+
+# puck bench microscope: BenchmarkDotNet run artifacts, written under the cwd (evidence for a decision, never baselines to commit)
+BenchmarkDotNet.Artifacts/
+
+# Tool run transcripts (a stray tools/run.log was committed once by accident and untracked on 2026-07-25)
+tools/*.log
+
 # Vendored native runtime binaries
 !lib/win-x64/mimalloc-3.3/bin/
 
@@ -21,9 +32,10 @@ coverage.cobertura.xml
 *.userosscache
 *.sln.docstates
 
-# Claude Code local-only files (skills are shared and versioned)
+# Claude Code local-only files (skills and orchestration state are shared and versioned)
 .claude/*
 !.claude/skills/
+!.claude/orchestration/
 
 # VS Code local-only files
 .vscode/*
@@ -60,6 +72,15 @@ __pycache__/
 worlds/
 # The checked-in world documents are repo content, not runtime saves — exempt them from the bare worlds/ pattern.
 !/src/Puck.World/Assets/worlds/
+# A battery's own test world is repo content too, and without it the battery cannot run at all.
+!/wasm/puck-addon-channelwalk/worlds/
+# A battery's own test cartridge is repo content too: a real, synthetic, code-generated Game Boy ROM
+# (built from Puck.Forge.Tune.TuneRom — see verification/authority/README.md — never licensed content).
+# Negating the directory alone does not re-include a file the *.gb pattern above ALSO matches directly
+# (a directory negation does not cascade to an unrelated file-extension exclusion) — the file itself
+# must be named, the same lesson the bare worlds/ trap taught.
+!/verification/authority/fixtures/
+!/verification/authority/fixtures/*.gb
 forged-avatars/
 # Engine benchmark (puck.bench) reports — puck.bench.v1 JSON written under the cwd by --bench / bench.run
 # (plan §8). Machine-specific measurements, never a committed artifact.

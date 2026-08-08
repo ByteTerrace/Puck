@@ -1,0 +1,1140 @@
+[
+  {
+    "Id": "core.big-integer-is-prime-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.IsPrime over every value below 4096 and a twelve-rung edge ladder through ulong.MaxValue, including both 2^31 \u2212 1 and 2^31 \u002B 1, the largest prime below 2^32 and below 2^64, and 2^61 \u2212 1",
+        "Against": "Oracles.ExactPrimality, which shares no line and no table with the subject: a trial-division screen against its own small-prime table, then strong-probable-prime rounds computed from BigInteger.ModPow in the oracle module. The subject over this band is PrimeField64.IsPrime \u2014 twelve rounds in a ScaledResidueRing64 \u2014 reached by delegation, so agreement pins that delegation as well as the decision",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the decision at 2^p \u2212 1 for p in {61, 89, 107, 127} (accepted) and p in {67, 83, 101} (rejected)",
+        "Against": "the Mersenne prime exponents, whose membership over this band is settled classical arithmetic \u2014 Lucas (1876) for M127, Cole (1903) for M67\u0027s compositeness, Powers (1914) for M107",
+        "Shared": "",
+        "Citation": "the published Mersenne exponent list; no value in it is computed anywhere in this repository, and the composite entries are the band\u0027s complement rather than a second run of the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "compositeness holds BY CONSTRUCTION at two operands past the fixed-width carrier \u2014 the product of the two published primes 2^89 \u2212 1 and 2^107 \u2212 1, and the square of the first \u2014 so those rejections rest on no table at all; and every value below two is rejected rather than throwing, including the negative operands the BigInteger carrier admits and no fixed-width decider can spell. ENVELOPE: exactness is claimed only below 3.19 * 10^23. Every operand above it here is either a published prime (which passes whatever the witness set does) or composite by construction, so NO acceptance above that bound is evidence that the twelve bases remain complete there \u2014 the member\u0027s own documentation states they are not, and this law does not contradict it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.big-integer-prime-factors-vs-word-kernel",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "EnumeratePrimeFactors"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.EnumeratePrimeFactors over every operand from two through 2047, sequence for sequence",
+        "Against": "UnsignedNumberFunctions.EnumeratePrimeFactors\u003Culong\u003E, a SECOND SHIPPED implementation over a different carrier and a different splitter: PrimeKernels\u0027 Brent cycle walk batching its greatest-common-divisor across a Montgomery ring, against the subject\u0027s Floyd two-rate walk on raw BigInteger remainders. Neither derives its answer from the other",
+        "Shared": "",
+        "Citation": "the reference is itself pinned by core.unsigned-integer-contracts and, at FULL WIDTH, by core.factorization-full-width-sweep, which reassembles every factorization of 400,000 uint operands and 40,000 ulong ones and puts the splitter on 2,000 hard semiprimes of two 2^31-scale primes. ENVELOPE: the shared range this leg reaches stops at 2047 \u2014 every wider operand is carried by the reassembly leg below, not by this one",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over thirteen operands of every shape the carrier admits \u2014 powers of two, 65535 and 65536, a Mersenne prime, 10^22, and three operands past ulong including 2^83 \u2212 1 and a hand-built product of 2^61 \u2212 1, 2^31 \u2212 1 and eight \u2014 the reported factors REASSEMBLE the operand under a product formed here, run non-decreasing, and are each independently prime (by Oracles.ExactPrimality where the factor fits a word). Reassembly plus per-factor primality is the whole definition of a factorization, so this leg is self-contained and leans on no reference at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the factorization of 2^67 \u2212 1 as exactly 193707721 and 761838257287",
+        "Against": "Cole\u0027s 1903 factorization of M67",
+        "Shared": "",
+        "Citation": "published constants, transcribed from the literature and derived nowhere in this repository",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a prime BELOW the deterministic boundary reports ITSELF, so the returned length is Omega there, pinned at 2^61 \u2212 1; at or above it the enumeration FAILS CLOSED, refusing by an exception that names the value \u2014 2^89 \u2212 1 is a published Mersenne prime, so the bounded refutation has nothing to find and MUST exhaust, which reaches that branch by construction rather than hoping an operand resists. Exhausting a refutation is not a primality proof, and a method promising prime factors may not report one it cannot prove. And only an operand below two reports nothing, including the negative ones the carrier admits, which report empty rather than throwing. ENVELOPE: the splitter is a cycle walk, so the cost is the fourth root of the operand and NO hard semiprime of two large primes is swept here \u2014 the widest successfully factored operand\u0027s least factor is 193707721. This law therefore pins the splitter\u0027s CORRECTNESS and the refusal, and says nothing about its termination time on an adversarial operand",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.big-integer-square-root-vs-unsigned",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "SquareRoot"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.SquareRoot over the whole shared range \u2014 every ulong through 4096 and a nineteen-rung edge ladder up to ulong.MaxValue, including (2^32 \u2212 1)^2 and both its neighbours",
+        "Against": "UnsignedNumberFunctions.SquareRoot\u003Culong\u003E, a SECOND SHIPPED implementation sharing no line and no idea: it seeds a hardware Math.Sqrt and settles the estimate with two branchless corrections, while the subject runs an unbounded Newton descent from a power of two above the root",
+        "Shared": "",
+        "Citation": "the reference is itself pinned only by core.unsigned-integer-contracts, whose own square/successor ladder runs through 10000 \u2014 so above 10000 this leg is agreement between two implementations rather than agreement with a pinned one, and the structural leg below is what carries the range past ulong. ENVELOPE: the shared range STOPS at ulong.MaxValue; nothing the reference says reaches the operands the next two legs cover",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SquareRoot at 2^200, 10^100 and each of their two neighbours, plus zero",
+        "Against": "hand-derived exact literals: 2^200 = (2^100)^2 and 10^100 = (10^50)^2 are squares outright; (2^100 \u2212 1)^2 = 2^200 \u2212 2^101 \u002B 1 falls below 2^200 so one less roots to 2^100 \u2212 1; and (2^100 \u002B 1)^2 = 2^200 \u002B 2^101 \u002B 1 exceeds 2^200 \u002B 1 so one more still roots to 2^100. The derivation is arithmetic on paper, calls no kernel, and both sides are exact integers, so condition (B) does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the defining inequality r^2 \u003C= v \u003C (r \u002B 1)^2 holds at twelve operands no fixed-width carrier reaches \u2014 2^201, 2^333 and 2^1024 among them, whose roots are irrational and therefore have no closed literal to compare against \u2014 and the refusal is part of the statement: a negative operand throws ArgumentOutOfRangeException naming the \u0027value\u0027 parameter, at \u22121 and at \u22122^200",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.big-integer-modular-inverse-vs-hensel",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "ModularInverse"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.ModularInverse at modulus 2^64 over every odd value below 4096 and a twelve-rung edge ladder to ulong.MaxValue. The ladder is odd-only BY NECESSITY, not by sampling choice: modulo a power of two the units are exactly the odd residues, so an even rung names a value the subject is contracted to REFUSE and could never agree with the reference on \u2014 the refusal leg below carries those instead, at 2^64 \u2212 2 and at two",
+        "Against": "UnsignedNumberFunctions.ModularInverse\u003Culong\u003E, a SECOND SHIPPED implementation of a DIFFERENT algorithm: a fixed ladder of Newton\u2013Hensel squarings that doubles the correct low bits, against the subject\u0027s extended-Euclid remainder descent. Neither derives its answer from the other",
+        "Shared": "",
+        "Citation": "2^64 is the ONLY modulus the reference knows \u2014 it inverts modulo 2^width by construction \u2014 so this leg pins nothing whatever about an odd modulus, a composite non-power-of-two modulus, or the degenerate modulus one. Those are the next leg\u0027s. The reference is itself pinned only by core.unsigned-integer-contracts, whose check is the single row 3u",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ModularInverse at eight hand-derived rows and one wide row",
+        "Against": "literals derived by multiplying back on paper and nowhere else: 3\u00B75 = 2\u00B77 \u002B 1, 3\u00B74 = 11 \u002B 1, 10\u00B712 = 7\u00B717 \u002B 1, 2\u00B73 = 5 \u002B 1; \u22121 reduces to 6 first and 6\u00B76 = 5\u00B77 \u002B 1; and 2\u00B7(2^63 \u002B 1) = 2^64 \u002B 2 is one past the odd modulus 2^64 \u002B 1. The degenerate modulus one names the zero ring, where zero and one are the same residue, so the answer there is zero",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the defining identity value\u00B7inverse \u2261 1 and the declared range [0, modulus) hold across nine moduli of every shape \u2014 prime, composite, a power of two, 2^61 \u2212 1, 2^64, 2^64 \u002B 1 and 10^40 \u2014 over sixty-four values per modulus including negative ones. The product is reduced with the BUILT-IN BigInteger remainder, never with FloorModulo, so this leg leans on nothing the subject also calls",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusals are part of the statement. A value sharing a factor with the modulus throws ArgumentException naming \u0027value\u0027 \u2014 at (6, 9), (0, 5), (4, 8), (14, 21) and (2^64, 2^64) \u2014 rather than returning the B\u00E9zout coefficient in hand, which would multiply to that shared factor instead of to one; and a modulus of zero or a negative modulus throws ArgumentOutOfRangeException naming \u0027modulus\u0027",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.big-integer-modular-square-root-vs-prime-field",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "TrySquareRootModuloOddPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "TrySquareRootModuloOddPrime\u0027s accept/reject decision and returned root over a twelve-prime ladder inside the shared range, forty-eight values each",
+        "Against": "PrimeField64.TrySqrt, a second shipped implementation over a different carrier and a different arithmetic substrate \u2014 a ScaledResidueRing64 chain instead of BigInteger.ModPow \u2014 compared as root == fieldRoot or root == p \u2212 fieldRoot, since either of the two roots is legal",
+        "Shared": "",
+        "Citation": "the ALGORITHM is shared, not merely similar: both run Euler\u0027s criterion, both take the single power at p \u2261 3 (mod 4), and both walk the two-part descent otherwise. What differs is the carrier, the arithmetic and the code \u2014 so this leg pins transcription and carriage, NOT the descent\u0027s correctness, which the next two legs carry. ENVELOPE: the shared range stops at PrimeField64.MaximumModulus = 2^62, so no prime above it is reached by this leg",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the quadratic character at every operand of the ladder, and at twenty-four operands modulo the Mersenne prime 2^89 \u2212 1",
+        "Against": "NumberTheoryFunctions.JacobiSymbol, which shares NO idea with either root-finder: binary reciprocity with no exponentiation and no descent at all. A prime modulus makes it the Legendre symbol, so accept \u27FA symbol \u003E= 0, the zero case being p dividing the value",
+        "Shared": "",
+        "Citation": "JacobiSymbol is itself pinned by core.number-theory-contracts against the published Jacobi(1001/9907) = \u22121 and by the prime-field family\u0027s reciprocity oracle. It decides the CHARACTER only \u2014 that a root exists \u2014 and says nothing about which value is returned; the root itself is pinned by the next leg",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every returned root squares back: root^2 \u2261 value (mod p) in plain BigInteger remainder arithmetic, over the whole ladder and above every fixed-width carrier at 2^89 \u2212 1, where a planted square (2^44 \u002B 1234567)^2 is recovered as itself or its negation. Refusal is part of the statement too: a non-residue returns false AND leaves the out parameter at zero, hand-derived at the full non-residue sets {3, 5, 6} modulo 7 and {2, 5, 6, 7, 8, 11} modulo 13, whose residue sets {0,1,2,4} and {0,1,3,4,9,10,12} are the squares listed out on paper. ENVELOPE: above 2^64 only the p \u2261 3 (mod 4) single-power branch is reached \u2014 every Mersenne prime is 3 modulo four \u2014 so the two-part descent is pinned at 64-bit primes alone, where 65537 and 257 make p \u2212 1 a pure power of two and 998244353 = 119\u00B72^23 \u002B 1 gives it the deepest two-adic run below 2^30",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the precondition split is the contract: what is decidable at a glance is ENFORCED \u2014 a modulus below three or an even modulus throws ArgumentOutOfRangeException naming \u0027oddPrime\u0027, asserted at 0, 1, 2, \u22123, \u22127, 4, 8, 100 and 2^80 \u2014 while primality is documented as the caller\u0027s and deliberately not checked. ENVELOPE: no case here passes an odd composite, because the member\u0027s own XML declares the result unspecified there and the descent not guaranteed to return; that branch is unreachable by construction rather than untested by omission",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.binary-integer-contracts",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwisePair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUnpair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ClearLowestSetBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "DigitalRoot"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "EnumerateDigits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "Exponentiate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ExtractLowestSetBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FillFromLowestClearBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FillFromLowestSetBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FloorModulo"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "GreatestCommonDivisor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LeastCommonMultiple"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LeastSignificantBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LeastSignificantDigit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LogarithmBase10"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "MostSignificantBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "MostSignificantDigit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "PermuteBitsLexicographically"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "PopulationParity"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReflectedBinaryDecode"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReflectedBinaryEncode"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReverseBits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReverseDigits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "RotateDigitsLeft"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "RotateDigitsRight"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Morton round trip, decimal/bit identities, Gray round trip, cyclic same-popcount permutation over every byte and signed-byte carrier pattern, and the width-free BigInteger minority-bit walk \u2014 ascending non-negatives, descending negatives, fixed constant strings",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.discrete-measure-exact-and-compiled",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "AmountAt"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "AmountBetween"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "AmountOver"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "CompileInt64"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Cumulative"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "IndexContaining"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "IsPeriodic"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "LowerBound"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Map"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "MapBetween"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "MaximumAmount"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "MinimumAmount"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "NextNonemptyIndex"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Offset"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Period"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Rate"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Rational"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Translate"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "TryCompileInt64"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasure",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "AmountAt"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "AmountBetween"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "AmountOver"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "Cumulative"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "FractionalRateDenominator"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "FractionalRateNumerator"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "IndexContaining"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "IntegralRate"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "IsPeriodic"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "IsQuadratic"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "IsValid"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "LowerBound"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "Map"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "OffsetDenominator"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "OffsetNumerator"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "Period"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryAmountAt"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryAmountBetween"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryAmountOver"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryCumulative"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryIndexContaining"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryLowerBound"
+      },
+      {
+        "Type": "Puck.Maths.CompiledDiscreteMeasure64",
+        "Name": "TryMap"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasureCompilationFailure",
+        "Name": "CoefficientOutOfRange"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasureCompilationFailure",
+        "Name": "IrrationalOffset"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasureCompilationFailure",
+        "Name": "IrrationalRate"
+      },
+      {
+        "Type": "Puck.Maths.DiscreteMeasureCompilationFailure",
+        "Name": "None"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rational boundary/range/inverse identities and every throwing/Try compiled twin over the 4/3 rate with 1/3 offset, plus real compiler outcomes for rational-numerator and radicand coefficient refusal, for surd-numerator coefficient refusal under both a rational and an irrational rate, and for irrational-rate envelope refusal",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "compiled quadratic cumulative and amount queries over four square-equivalent radical spellings and both signed-long endpoints",
+        "Against": "the unbounded exact DiscreteMeasure boundary kernel",
+        "Shared": "",
+        "Citation": "the query ladders assert exact equality after successful compilation; endpoint probes compare refusal with mathematical signed-long representability",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.number-theory-contracts",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "EnumeratePrimes"
+      },
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "HenselLiftRoot"
+      },
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "JacobiSymbol"
+      },
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "SegmentedPrimeSieve"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SegmentedPrimeSieve and EnumeratePrimes through 512",
+        "Against": "local integer trial division sharing no sieve code",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the supported-ceiling singleton/window and JacobiSymbol(1001, 9907)",
+        "Against": "4294967291 is the largest 32-bit prime; Jacobi(1001/9907) = -1",
+        "Shared": "",
+        "Citation": "standard published integer/Jacobi examples, paired with direct range and refusal assertions",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Hensel rejects a non-unit derivative modulo four and lifts the nonzero unit-derivative root of x^2 - 7 from base nine through the fourth base power, with the result\u0027s residue, range, and direct polynomial evaluation checked independently of the lifting loop",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.quadratic-surd-field-and-conversion",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Denominator"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "IsRational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Radicand"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Rational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "RationalNumerator"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Sign"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "SurdNumerator"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "ToDouble"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_LessThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticSurd",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the exact real-quadratic field identities, square-equivalent equality/order, floor/ceiling/sign accessors, and huge shared-scale binary64 conversion including an exact-conjugate cancellation family",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.prime-extensions-vs-trial-division",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "Factorize"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "IsPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrime through 2048 and the first eleven NthPrime/PrimeCountingFunction rows",
+        "Against": "local trial division and the hand-enumerated prime prefix",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Factorize emits 360\u0027s sorted multiplicity list, reports a prime as itself, reports nothing only below two, and refuses an undersized destination before modifying it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.unsigned-integer-contracts",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantPair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantUnpair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "EnumeratePrimeFactors"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ModularInverse"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "NextPowerOfTwo"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "NextSquare"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "SquareRoot"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the elegant-pair round trip over 1024 pairs, factor multiplicity, power-of-two inverse, next-power/next-square boundaries, and integer-square-root inequalities through 10000",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.fnv1a-published-vector",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Fnv1aHash",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.Fnv1aHash",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.Fnv1aHash",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.Fnv1aHash",
+        "Name": "Compute"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Fnv1aHash over UTF-8 \u0027hello\u0027",
+        "Against": "0xa430d84680aabd0b",
+        "Shared": "",
+        "Citation": "the published FNV-1a 64-bit reference vector; packed integer folds are also compared with explicit little-endian byte folds",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Fnv1aHash.Compute over the EMPTY span and over UTF-8 a, b, c, foobar and hello",
+        "Against": "0xcbf29ce484222325, 0xaf63dc4c8601ec8c, 0xaf63df4c8601f1a5, 0xaf63de4c8601eff2, 0x85944171f73967e8 and 0xa430d84680aabd0b",
+        "Shared": "",
+        "Citation": "the canonical FNV-1a 64-bit reference vector set, authored outside this tree. FNV-1a is DEFINED by its offset basis, its prime and its exclusive-or-then-multiply recurrence, so any reference computed inside this suite would be the implementation restated and would prove nothing about it; the published vectors are the only evidence available here that is not a second spelling of the subject. The empty-span row is the load-bearing one — an accumulator that failed to prime itself returns zero there and the offset basis nowhere — and the three single-character rows differ only in the byte folded, so a fold that ignored its input agrees with none of them.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the fold is ORDER-SENSITIVE: the two-byte inputs ab and ba hash differently. A published vector set over single characters cannot show that on its own, and a Compute that exclusive-ored or summed its bytes without the multiply between them would satisfy every constant above at length one while collapsing every longer input onto its multiset.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.monotonic-partitioner-fast-invariants",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketId"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketIdDangerous"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetMetrics"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "MaxBucketCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "MaxValueCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "BucketCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "JumpCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "MigrationDistance"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Rank"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Velocity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "safe/dangerous agreement, range and one-new-owner monotonicity over 4096 values \u00D7 64 bucket counts, plus complete metrics and Guid accessor carriage",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.jacobi-symbol-cross-carrier",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "JacobiSymbol"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "JacobiSymbol"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the CROSS-CARRIER agreement, exhaustively: every odd modulus through 401 against every numerator through 400, with UnsignedNumberFunctions.JacobiSymbol read at uint, at ulong and at UInt128 and NumberTheoryFunctions.JacobiSymbol read at BigInteger on the same 80,601 cells. Each width is read into its own local so a failure names the carrier that diverged rather than reporting the narrowest one for every fault — a UInt128-only defect used to print expected=−1 actual=−1",
+        "Against": "Oracles.JacobiSymbolReciprocity, the binary descent in BigInteger that carries a signed accumulator and tests the residues literally where both shipped spellings accumulate the sign in a parity bit and strip the whole trailing-zero run in one count. The grid is EXHAUSTIVE rather than sampled because a reciprocity sign rule that is wrong for one residue class is invisible to a sampled sweep",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the COMPOSITE-MODULUS regime, which is the regime a primality test actually consumes the symbol in: every odd modulus through 401 on the exhaustive grid, and 20,000 odd composite moduli spanning 2^20 to 2^32",
+        "Against": "the symbol's DEFINITION rather than another descent — PrimalityScaleClaims.JacobiSymbolByFactorAndEuler factors the odd modulus by trial division and multiplies the Legendre symbols of its prime powers, each decided by Euler's criterion in BigInteger. It reaches no reciprocity step anywhere. This closes an OWED that stood twice over: at prime moduli the symbol was anchored through Euler, but at COMPOSITE odd moduli the only reference was the library's own BigInteger sibling, which walks the same descent and reaches the same BinaryIntegerFunctions.FloorModulo, so a sign rule wrong for the descent at large was invisible to that pair. Worklist D1 asked for a factor-and-Legendre oracle; this is it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the fixed-width symbol at ten prime moduli from three to the first prime above 2^61, sweeping every residue where the modulus is small enough and sampling 512 otherwise",
+        "Against": "PrimeField64.LegendreCharacter, Euler's criterion by Montgomery exponentiation — at a prime modulus Jacobi IS Legendre, and this is the leg that stands outside the reciprocity descent altogether. Algorithmically independent: exponentiation against reciprocity, with no shared line",
+        "Shared": "",
+        "Citation": "both sides are Puck.Maths kernels, so this leg is not independent evidence about the library as a whole. ENVELOPE: PrimeField64.LegendreCharacter is anchored classically by prime-field.legendre-vs-reciprocity and, over the whole thirty-two-modulus ladder, by prime-field.montgomery-chains-exhaustive against Oracles.JacobiSymbolReciprocity; the Montgomery exponentiation beneath it is anchored by prime-field.pow-vs-modpow and again by prime-field.montgomery-chains-exhaustive against BigInteger.ModPow",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "full-width randomized agreement on all four surfaces at once over 20,000 trials — uint, ulong and UInt128 through UnsignedNumberFunctions.JacobiSymbol and BigInteger through NumberTheoryFunctions.JacobiSymbol — where the odd-modulus edge and the top bits live, plus the boundary grid of eight numerators by eight moduli including both carrier extremes",
+        "Against": "Oracles.JacobiSymbolReciprocity on the same operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the DEFINING laws, over 20,000 trials at widths that keep every product inside the carrier: multiplicativity in the numerator, multiplicativity in the denominator, and periodicity in the numerator modulo the denominator at one and at three periods. Beside them the conventions the descent does not reach — the symbol over modulus one is the empty product one, a vanishing numerator over any larger modulus is zero, and the symbol vanishes exactly where numerator and modulus share a factor",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the REFUSALS: an even modulus and a zero modulus are both refused with an ArgumentOutOfRangeException naming the modulus parameter, on all three fixed-width carriers, checked at the zero and at the carrier-maximum-minus-one spelling of even. A symbol admissible as an input to a primality test has to refuse the arguments it has no definition for rather than return a plausible sign",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE. This law is where the cross-carrier agreement and the composite-modulus regime for the Jacobi symbol live. Measured cost: about two seconds, which is why it sits at Deep rather than Exhaustive — it is a set of statements at grid scale, not a sweep over an entire carrier. What it does NOT reach: the factor-and-Euler reference is bounded to moduli below 2^32, because factoring a wider modulus by trial division is not cheap, so above that width the only references are the reciprocity descent in Oracles and the defining laws. BinaryIntegerFunctions.FloorModulo, which both shipped spellings call for argument normalization, still carries no classical pin of its own",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.factorization-full-width-sweep",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "Factorize"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "EnumeratePrimeFactors"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "every factorization reported for 200,000 random FULL-WIDTH uint values and for a 200,000-value contiguous run at the very top of the uint carrier: the factors reassemble the operand under a product formed here, run non-decreasing, and are each independently prime; a prime reports itself and only a value below two reports nothing",
+        "Against": "trial division by the primes below 65,536, sieved here by Oracles.PrimeSieve, which decides EVERY uint outright — no probable-prime reasoning anywhere in the answer — beside reassembly and ordering, which together are the whole definition of a factorization and lean on no reference at all",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "PrimeExtensions.Factorize against UnsignedNumberFunctions.EnumeratePrimeFactors at uint, sequence for sequence, on all 400,000 operands of the leg above",
+        "Against": "the generic enumerator at the same width",
+        "Shared": "PrimeKernels.Factorize. Both entry points hand the operand to that ONE kernel and differ only in carriage — a Span written and a count returned against an IEnumerable yielded, with a narrowing cast on the way out. Agreement therefore proves the wiring and the narrowing and never the splitter, which is exactly why the leg is spelled as a delegation twin rather than as a second implementation",
+        "Citation": "the kernel underneath is pinned by the classical leg above, which decides every reported factor by trial division and reassembles every operand; core.big-integer-prime-factors-vs-word-kernel pins it again over two through 2047 against the BigInteger splitter, which shares none of its lines",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnsignedNumberFunctions.EnumeratePrimeFactors at ULONG width — the reference core.big-integer-prime-factors-vs-word-kernel leans on, swept where that law's own shared range stops at 2047 — over 20,000 random full-width values and a 20,000-value contiguous run at the top of the carrier, checked by reassembly, ordering and per-factor primality",
+        "Against": "Oracles.ExactPrimality for each reported factor, and the operand itself for the reassembly: trial division by the primes below 8192 then twenty BigInteger strong rounds, outside Puck.Maths entirely",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the ADVERSARIAL shape a random stream essentially never draws: 2,000 semiprimes built from a pool of 256 primes near 2^31, whose least factor is beyond any trial division and whose product fills the carrier",
+        "Against": "the two primes the product was BUILT from, each located independently by Oracles.ExactPrimality, compared as the whole expected sequence in ascending order. This is where the cycle walk's fourth-root cost is actually put to work rather than small factors doing it: core.big-integer-prime-factors-vs-word-kernel records outright that NO hard semiprime of two large primes is swept there, and its widest operand's least factor is 193,707,721",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "six hand-built vectors of every shape the carrier admits: 2^63, 10^19, the Mersenne prime 2^61−1 reporting itself, 2^64−1 and 2^64−2",
+        "Against": "the published factorizations, written out beside each operand rather than read back from the subject — 2^64−1 as 3·5·17·257·641·65537·6700417, the product of the first five Fermat numbers, and 2^63−1 as 7²·73·127·337·92737·649657. The two pure-power rows are spelled as repeat COUNTS rather than as pasted runs of literals, so a miscounted paste cannot make either row pass for the wrong reason",
+        "Shared": "",
+        "Citation": "the Fermat-number factorization of 2^64−1 and the factorization of the composite Mersenne 2^63−1 are published constants, transcribed from the literature and derived nowhere in this repository",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE. This law is the coverage core.big-integer-prime-factors-vs-word-kernel cites its word-sized reference on. Measured cost: about twelve seconds. What it does NOT reach: nothing here pins the splitter's TERMINATION TIME on an adversarial operand, only its correctness; the semiprime rows bound the cost at two 2^31-scale factors and say nothing about a worse shape. PrimeExtensions.Factorize's undersized-destination refusal is owned by core.prime-extensions-vs-trial-division and is not restated here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.witness-set-boundary-factors-exactly",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BigIntegerFunctions", "Name": "IsPrime" },
+      { "Type": "Puck.Maths.BigIntegerFunctions", "Name": "EnumeratePrimeFactors" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.EnumeratePrimeFactors at the least strong pseudoprime to the twelve witness bases two through thirty-seven",
+        "Against": "the published factorization 399165290221 * 798330580441, whose two factors are each below 2^64 and therefore settled exactly without any witness set",
+        "Shared": "",
+        "Citation": "A014233(12), the twelfth strong-pseudoprime threshold, tabulated outside this tree. Nothing here derives it, and it is the ONE value below the previously advertised bound at which the primality gate answers wrongly -- the gate still calls it prime, which is why the factorization must not take that answer as terminal",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the recorded deterministic ceiling equals that composite exactly, and every factor the enumeration reports is itself prime AND strictly below the ceiling, so no factor is named on the strength of an answer that cannot be proved. A deterministic bound is a function of the witness set, so this pins the two together: an edit to either the bases or the ceiling reddens the case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.prime-counting-is-dense-against-a-sieve",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" },
+      { "Type": "Puck.Maths.PrimeExtensions", "Name": "NthPrime" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the prime-counting function at EVERY argument from zero through twenty thousand, composite arguments included, and the nth-prime inverse across the same range",
+        "Against": "a sieve of Eratosthenes built inside the claim, which marks multiples and counts them where the subject reads a table and interpolates",
+        "Shared": "",
+        "Citation": "elementary counting; the sieve shares no line and no table with the subject. This closes a real gap rather than adding depth to a covered one: the only other pin walks eleven PRIME arguments, two through thirty-one, against a hand-enumerated prefix, so composite arguments were unreached -- and callers use it there, the Mobius leg of the presented family evaluating it at sixty",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.deep-multiplicity-factors-without-stack-growth",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BigIntegerFunctions", "Name": "EnumeratePrimeFactors" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an operand of multiplicity two hundred thousand -- 2^200000, and the same with an odd cofactor of three -- returns every factor rather than exhausting the native stack. A LIVENESS statement: the evidence is that the call returns at all, since a stack overflow is not a recoverable exception and a compact 25 KiB operand used to control the call depth directly",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

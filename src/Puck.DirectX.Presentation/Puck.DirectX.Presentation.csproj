@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Presentation</PuckLayer>
+    </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
     </ItemGroup>

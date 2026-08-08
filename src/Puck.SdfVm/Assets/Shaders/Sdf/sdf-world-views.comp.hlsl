@@ -24,6 +24,12 @@
 // verbatim include, so BOTH Stage 1 variants bind the pool and evaluate bricks.
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t41
+// The area-light shadow estimator's host-baked sampler table (sdf-world.hlsli declares it at binding 48 / register
+// t43, APPENDED LAST in the engine's viewsBindings after the frame instance grid t42). Stage 1 is the only kernel
+// that shades, so it is the only one that binds it; every other consumer of sdf-world.hlsli compiles the estimator
+// away to fully-lit rather than carrying a descriptor it would never read. The core-ops variant inherits this define
+// through its verbatim include, so BOTH Stage 1 pipelines bind the table.
+#define SDF_SHADOW_SAMPLER
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
@@ -42,6 +48,13 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+    if (params.sampleIndex == SDF_ISA_REPORT_REQUEST) {
+        if (all(id == uint3(0, 0, 0))) {
+            sources[0][uint2(0, 0)] = (float4(0x53u, 0x44u, asuint(tiles[0]), SDF_ISA_VERSION) / 255.0);
+        }
+        return;
+    }
+
     if (id.z >= params.viewportCount) {
         return;
     }
@@ -61,7 +74,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
     // The per-invocation program-layout cache (sdf-vm.hlsli) — renderView's primary march (<=160 steps), shadow
-    // march (<=48 steps), AO taps, and normal dual all call mapMasked/mapGradMasked per step, so the decode must
+    // march (<=2 x 32 steps), AO taps, and normal dual all call mapMasked/mapGradMasked per step, so the decode must
     // happen exactly once here, before renderView runs.
     sdfProgramLayout = sdfLoadProgramLayout();
 
@@ -99,11 +112,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // This is a pixel DIAMETER, deliberately 2x the pixel radius Keinert's termination test names — a half-pixel of
     // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
     float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
-    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint);
+    // The shadow accumulator's history lane: this pixel's RETAINED alpha from the last frame Stage 1 rendered it. The
+    // source texture is the only Stage-1-owned surface whose cross-frame persistence the engine already depends on (the
+    // cadence gate re-composites from it), Stage 2 reads only .rgb, and a hosted child slot returned above — so the
+    // lane is free, private, and never observed by anything downstream.
+    sdfShadowHistoryIn = sources[id.z][pixel].a;
+    sdfShadowHistoryOut = 1.0;
+
+    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, id.z);
 
     // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
-    sources[id.z][pixel] = float4(color, 1.0);
+    sources[id.z][pixel] = float4(color, sdfShadowHistoryOut);
 }

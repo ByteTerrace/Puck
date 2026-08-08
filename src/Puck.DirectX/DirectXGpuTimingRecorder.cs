@@ -23,9 +23,9 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
 
         // A timestamp is written with EndQuery (it has no BeginQuery); the neutral stage is point-in-time on D3D12.
         commandList->EndQuery(
-            (ID3D12QueryHeap*)pool.QueryHeapHandle,
-            D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP,
-            queryIndex
+            Index: queryIndex,
+            Type: D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP,
+            pQueryHeap: (ID3D12QueryHeap*)pool.QueryHeapHandle
         );
     }
 
@@ -35,12 +35,12 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
         var pool = DecodePool(poolHandle: poolHandle);
 
         commandList->ResolveQueryData(
-            (ID3D12QueryHeap*)pool.QueryHeapHandle,
-            D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP,
-            firstQuery,
-            queryCount,
-            (ID3D12Resource*)pool.ReadbackBufferHandle,
-            (firstQuery * (ulong)sizeof(ulong))
+            AlignedDestinationBufferOffset: (firstQuery * (ulong)sizeof(ulong)),
+            NumQueries: queryCount,
+            StartIndex: firstQuery,
+            Type: D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP,
+            pDestinationBuffer: (ID3D12Resource*)pool.ReadbackBufferHandle,
+            pQueryHeap: (ID3D12QueryHeap*)pool.QueryHeapHandle
         );
     }
 
@@ -60,7 +60,7 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
 
         void* mapped;
 
-        buffer->Map(0, &readRange, &mapped);
+        buffer->Map(Subresource: 0, pReadRange: &readRange, ppData: &mapped);
 
         try {
             var ticks = (ulong*)mapped;
@@ -72,7 +72,7 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
             // We wrote nothing back; an empty written range tells the runtime so.
             var writtenRange = new D3D12_RANGE { Begin = 0, End = 0, };
 
-            buffer->Unmap(0, &writtenRange);
+            buffer->Unmap(Subresource: 0, pWrittenRange: &writtenRange);
         }
 
         return queryCount;

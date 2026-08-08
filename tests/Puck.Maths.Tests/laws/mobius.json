@@ -1,0 +1,104 @@
+[
+  {
+    "Id": "mobius.integer-0,-1",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MobiusStep"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.MobiusStep numerator at the rotation relation (0, \u22121) \u2014 MobiusStepFusedInteger, plain wrapping long arithmetic, ZERO roundings",
+        "Against": "Oracles.MobiusNumerator in BigInteger, where the shift-16 RoundDyadic is provably a no-op (remainder identically zero at integer coefficients) \u2014 both sides exact, condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projective step carries the input numerator forward unchanged as the returned denominator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mobius.integer-1,1",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MobiusStep"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.MobiusStep numerator at the golden relation (1, 1) \u2014 MobiusStepFusedInteger, plain wrapping long arithmetic, ZERO roundings",
+        "Against": "Oracles.MobiusNumerator in BigInteger, where the shift-16 RoundDyadic is provably a no-op \u2014 both sides exact, condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projective step carries the input numerator forward unchanged as the returned denominator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mobius.integer-2,1",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MobiusStep"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.MobiusStep numerator at the silver relation (2, 1) \u2014 MobiusStepFusedInteger, plain wrapping long arithmetic, ZERO roundings",
+        "Against": "Oracles.MobiusNumerator in BigInteger, where the shift-16 RoundDyadic is provably a no-op \u2014 both sides exact, condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projective step carries the input numerator forward unchanged as the returned denominator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

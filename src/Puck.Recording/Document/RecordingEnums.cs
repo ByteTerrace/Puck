@@ -1,6 +1,10 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.Recording.Document;
 
 /// <summary>The recording's timestamp source.</summary>
+[JsonConverter(typeof(StrictEnumConverter<RecordingClock>))]
 public enum RecordingClock {
     /// <summary>Live capture: frames and audio are stamped from the wall clock (QPC) at consume time.</summary>
     Wall,
@@ -9,6 +13,7 @@ public enum RecordingClock {
 }
 
 /// <summary>The kind of an audio capture row.</summary>
+[JsonConverter(typeof(StrictEnumConverter<RecordingAudioKind>))]
 public enum RecordingAudioKind {
     /// <summary>A capture device (the microphone).</summary>
     Microphone,
@@ -17,6 +22,7 @@ public enum RecordingAudioKind {
 }
 
 /// <summary>How an audio row lands in the container.</summary>
+[JsonConverter(typeof(StrictEnumConverter<RecordingAudioTrackMode>))]
 public enum RecordingAudioTrackMode {
     /// <summary>Summed into the single default stereo track (what a service such as YouTube reads).</summary>
     Mix,
@@ -25,6 +31,7 @@ public enum RecordingAudioTrackMode {
 }
 
 /// <summary>The kind of a capture-only overlay row.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayKind>))]
 public enum OverlayKind {
     /// <summary>A run of styled text.</summary>
     Text,
@@ -35,6 +42,7 @@ public enum OverlayKind {
 }
 
 /// <summary>The anchor a normalized overlay position is measured from.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayAnchor>))]
 public enum OverlayAnchor {
     /// <summary>The top-left corner.</summary>
     TopLeft,
@@ -57,6 +65,7 @@ public enum OverlayAnchor {
 }
 
 /// <summary>Which clock a <see cref="OverlayKind.Timecode"/> row reads.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayClock>))]
 public enum OverlayClock {
     /// <summary>The wall-clock session time since capture began.</summary>
     Session,

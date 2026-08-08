@@ -14,8 +14,14 @@ namespace Puck.SdfVm;
 /// clamp. The mechanism is a safety net; authors should still add all recolored materials before emitting the fold.
 /// </para>
 /// <para>
+/// A scope is ALSO the span <see cref="SdfProgramBuilder.Build"/>'s positional-recolor gate judges a window emitted
+/// inside it against (<see cref="MaterialEnd"/>) — including <see cref="SdfProgramBuilder.CellJitter"/>'s hashed
+/// variants, which have no clamped form. That refusal is the isolation guarantee; the clamp above is the convenience.
+/// </para>
+/// <para>
 /// With NO scope open, <see cref="SdfProgramBuilder.WallpaperFold"/>/<see cref="SdfProgramBuilder.RepeatPolar"/> are
-/// unaffected because this type's machinery does not run.
+/// unaffected because this type's machinery does not run, and the gate judges a window against the whole palette — with
+/// no scope, the whole palette IS the scope.
 /// </para></summary>
 public sealed class SdfMaterialScope : IDisposable {
     private readonly SdfProgramBuilder m_builder;
@@ -31,6 +37,12 @@ public sealed class SdfMaterialScope : IDisposable {
     /// never touched by this scope's clamp; only materials added at or after this index, while the scope is open,
     /// bound a positional stride's legal reach.</summary>
     public int MaterialBase { get; }
+
+    /// <summary>The EXCLUSIVE end of this scope's added-material span — the builder's material count at the moment the
+    /// scope closed — or <see langword="null"/> while the scope is still open. A scope can still grow, so its end is
+    /// not knowable at the moment a shape is emitted inside it; the builder records the scope IDENTITY with each
+    /// positional recolor window and reads this at <see cref="SdfProgramBuilder.Build"/>, where every scope has closed.</summary>
+    public int? MaterialEnd { get; internal set; }
 
     /// <summary>Closes the scope, returning the builder's innermost-open-scope state to whatever it was before this
     /// scope opened. Scopes MUST close in LIFO order relative to any other open scope — dispose the innermost one

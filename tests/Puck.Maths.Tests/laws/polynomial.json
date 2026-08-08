@@ -1,0 +1,780 @@
+[
+  {
+    "Id": "polynomial.additive-group-and-accessors",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Bits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsOne"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.Degree \u2014 sixty-three minus a hardware LeadingZeroCount over the packed carrier (BinaryPolynomial.cs:53)",
+        "Against": "Oracles.BinaryPolynomialDegree, a downward scan in BigInteger for the highest set bit that knows nothing of a carrier width, so a wrong width constant or an off-by-one in the complement is visible. EXACT on both sides: this wing rounds nowhere, so the substrate condition is not merely discharged, it does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.operator \u002B and operator \u2212, both of which are one ulong exclusive or (BinaryPolynomial.cs:63-70)",
+        "Against": "Oracles.BinaryPolynomialSum \u2014 the coefficient sum formed ARITHMETICALLY, one bit position at a time, as an integer addition reduced modulo two rather than a bitwise operator, so a subject that reached for a conjunction, a disjunction or an ordinary sum is caught",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.ToString over the swept operands, a six-row written-form ladder hand-derived from the convention, and the dense sixty-four-term word stated by its shape \u2014 term count, opening exponent and closing pair",
+        "Against": "Oracles.BinaryPolynomialText, which collects terms into a list and joins them and takes its upper bound from the CALLER rather than from Degree, where the subject walks Degree downward into a StringBuilder placing a separator before each term after the first. ENVELOPE: the member\u0027s own doc says the form is diagnostic and claims NO parsing round trip, so this leg pins the rendering and nothing about a reader. It buys NO coverage credit \u2014 MemberSurface.ExcludedNames drops ToString (Coverage.cs:19-23) \u2014 and stands because a reversed exponent loop or a misplaced separator is otherwise invisible",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the constructor and Bits round trip over the whole sixty-four-bit carrier: every swept raw, reinterpreted unchanged, reads back bit-for-bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "characteristic two, stated three ways at every swept operand: unary minus is the identity map, a polynomial added to itself is zero, and subtraction IS addition \u2014 the type\u0027s whole additive contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the five declared constants read into locals before comparison so the run makes the comparison rather than the compiler: Zero equals AdditiveIdentity equals default with Bits zero, IsZero true, IsOne false and Degree \u22121; One equals MultiplicativeIdentity with Bits one, IsOne true and Degree zero; Indeterminate has Bits two and Degree one. A swap of any two of them reddens here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is the two-sided identity for both \u002B and \u2212 at every swept operand, and commutativity and associativity of \u002B hold over three distinct operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.multiply-vs-carryless-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_CheckedMultiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_LeftShift"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.operator * \u2014 the low limb of BinaryFieldKernels.CarrylessMultiply64, one carryless-multiply instruction on the hardware tier and four thirty-two-bit comb multiplies on the portable one (BinaryPolynomial.cs:81-82)",
+        "Against": "Oracles.CarrylessProduct \u2014 shifted copies of the multiplicand combined under exclusive or in BigInteger, with no word split, no limb, no comb and no instruction set. EXACT on both sides; this wing rounds nowhere, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the checked operator\u0027s OVERFLOW PREDICATE (BinaryPolynomial.cs:88-94)",
+        "Against": "Oracles.CarrylessProduct\u0027s own degree: the operator must throw exactly when the exact product carries a coefficient at or above degree 64 and return the truncating operator\u0027s value otherwise. The predicate is judged from OUTSIDE the subject\u0027s carrier, so a high-limb test that read the wrong limb is caught in both directions",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "op_Multiply and op_CheckedMultiply at the four sixty-four-by-sixty-four reference operand pairs",
+        "Against": "Subjects.BinaryCarrylessVectors \u2014 four (Left, Right, Low, High) rows compared EXACTLY",
+        "Shared": "",
+        "Citation": "the published carryless-multiply reference vectors \u2014 four (Left, Right, Low, High) rows whose provenance is outside this tree, transcribed once into Subjects.BinaryCarrylessVectors. This is the ONLY copy in the tree, so the leg rests on the rows\u0027 published provenance alone: a transcription slip in these four rows is caught by a reader and by nothing else",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the truncating product IS multiplication in GF(2)[t]/(t\u2076\u2074) \u2014 discarding every coefficient above degree 63 is reduction modulo t\u2076\u2074, a genuine ring quotient and not a lossy clamp \u2014 so commutativity, associativity and distributivity over \u002B hold BIT-FOR-BIT at every swept operand including the ones that truncate. That is the statement which makes the type\u0027s truncation contract a ring rather than an accident",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "One is a two-sided multiplicative identity, Zero a two-sided annihilator, and multiplication by the Indeterminate is the single left shift, at every swept operand. ENVELOPE: the last of these is stated at degree 63 too, where BOTH sides truncate identically, so it pins agreement of the two truncations rather than an untruncated product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "the value the checked operator returns when it does not throw",
+        "Against": "the value operator * returns on the same operands",
+        "Shared": "BinaryFieldKernels.CarrylessMultiply64 \u2014 the IDENTICAL member on both sides, called once per operator (BinaryPolynomial.cs:82 against 89), so the two cannot disagree about the product and only the reporting differs",
+        "Citation": "the classical leg above, in this same case, which pins that shared kernel\u0027s low limb against Oracles.CarrylessProduct on the same operand stream",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.divrem-vs-monomial-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "DivRem"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.DivRem \u2014 top-down long division, aligning the divisor\u0027s leading term against the running remainder\u0027s and clearing one high coefficient per step (BinaryPolynomial.cs:195-212)",
+        "Against": "Oracles.BinaryPolynomialDivRem \u2014 the BOTTOM-UP monomial route, which carries the pair (t^i div d, t^i mod d) forward one exponent at a time and sums the pairs at the dividend\u0027s set bits, never inspecting the dividend\u0027s leading term at all. Two different derivations of the same unique pair; EXACT on both sides, so the substrate condition does not arise. ENVELOPE on the operand stream: a zero divisor divides nothing, so a drawn zero divisor is replaced by One \u2014 applied IDENTICALLY in the subject and in the oracle \u2014 and the zero divisor\u0027s own contract is the refusal leg below",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the division identity, at every swept pair: (quotient \u00B7 divisor) \u002B remainder is the dividend BIT-FOR-BIT. ENVELOPE, stated rather than implied: the product here is exact only because deg(quotient) \u002B deg(divisor) equals deg(dividend), which is at most 63 \u2014 the identity leans on the truncating operator NOT truncating on these operands, and polynomial.multiply-vs-carryless-oracle is where the truncation itself is pinned",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the remainder\u0027s degree is strictly below the divisor\u0027s at every swept pair, which is the half of Euclidean division the identity alone does not force",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal contract: DivRem, operator / and operator % each throw DivideByZeroException against the zero polynomial, checked at every swept dividend INCLUDING the zero one, where a guard that tested the dividend instead would pass unnoticed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the four poles: the zero dividend gives (Zero, Zero); a divisor of strictly higher degree gives (Zero, dividend) with no loop iteration at all; a non-zero polynomial divided by itself gives (One, Zero); and division by One gives (dividend, Zero) \u2014 the degenerate cases the sampled stream reaches only by accident",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "BinaryPolynomial.operator / and operator %",
+        "Against": "DivRem\u0027s Quotient and Remainder",
+        "Shared": "DivRem itself \u2014 both operators are one call through to it (BinaryPolynomial.cs:100-108), so agreement proves the projection and never the division",
+        "Citation": "the classical leg above, in this same case, on the same operand stream: the pair the two operators project out of is pinned against Oracles.BinaryPolynomialDivRem before either operator reads it",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.gcd-vs-binary-descent-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "GreatestCommonDivisor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.GreatestCommonDivisor \u2014 the classical Euclidean loop, one long division per step through operator % (BinaryPolynomial.cs:216-223)",
+        "Against": "Oracles.BinaryPolynomialGcd \u2014 the BINARY (Stein) descent, which performs no division anywhere: it strips the common power of t, then repeatedly exclusive-ors the lower-degree operand into the higher and strips the ts that exclusive or creates. Different algorithm, different primitives, same theorem; EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor DIVIDES both operands, at every swept pair and at the planted common-factor pair, checked through operator % against a zero remainder",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MAXIMALITY, which divisibility alone does not force: the planted factor divides both operands by construction, so it is required to divide the REPORTED divisor. A routine that returned some common divisor rather than the greatest satisfies the divisibility leg and fails this one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the descent is actually exercised: each step plants a third drawn polynomial as a common factor of both operands, folded to One where either product would leave the carrier, because two random sixty-four-bit polynomials are coprime with high probability and a sweep of drawn pairs alone would spend nearly every case on the trivial answer. The planted case additionally requires the reported divisor\u0027s degree to reach the planted factor\u0027s",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the poles the doc states: a zero operand returns the other, two zeros return zero, an operand against itself returns itself, an operand against One returns One, and the result is symmetric in its arguments",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MONICITY is automatic here and the law says why: over the two-element field every non-zero polynomial has leading coefficient one, so the doc\u0027s \u0027monic gcd\u0027 costs no normalization step and there is no normalization to get wrong. The leading coefficient is asserted anyway, so a reader is not left looking for a missing check",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.shifts-are-monomial-arithmetic",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_LeftShift"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_RightShift"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_UnsignedRightShift"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.operator \u003C\u003C at every ladder count through 63 (BinaryPolynomial.cs:114-122)",
+        "Against": "the low sixty-four coefficients of Oracles.CarrylessProduct against the monomial t^count \u2014 multiplication by a monomial derived independently of any shift. EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.operator \u003E\u003E\u003E at every ladder count through 63 (BinaryPolynomial.cs:135-141)",
+        "Against": "Oracles.BinaryPolynomialDivRem\u0027s quotient by the monomial t^count, the bottom-up monomial route \u2014 division by a monomial derived independently of any shift",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the carrier-masking seam, from BOTH sides and by value: at count 63 the operator uses the carrier\u0027s own shift, and at counts 64, 65, 127 and int.MaxValue BOTH shifts return the zero polynomial rather than the carrier\u0027s masked result, which would wrap the count back into range and resurrect exactly the coefficients the operator promises to discard. A guard written as \u2264 instead of \u003C reddens at the 63 row and one written as \u003C instead of \u2264 at the 64 row",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "operator \u003E\u003E and operator \u003E\u003E\u003E agree at every ladder count and every swept operand, which is the doc\u0027s claim that the two are one operation",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the shifts round trip where nothing is lost: shifting up by a count and back down recovers the operand bit-for-bit whenever the operand\u0027s degree plus the count stays inside the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder: all three shift operators throw ArgumentOutOfRangeException naming the \u0027count\u0027 parameter at \u22121, \u221264 and int.MinValue. operator \u003E\u003E reaches its guard through operator \u003E\u003E\u003E, so the name it reports is the one the delegated-to operator captured, and the law asserts the NAME rather than merely that something threw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the shifts read as monomial multiplication and division",
+        "Against": "BinaryPolynomial.operator * and operator / against the monomial t^count \u2014 two independently authored SHIPPED kernels that share no member with the shift operators, which is why this is an in-tree-independent leg and not a shared-substrate one: the shifts are plain carrier shifts behind a count guard (BinaryPolynomial.cs:114-141), the product routes to BinaryFieldKernels.CarrylessMultiply64 (cs:81-82) and the quotient to DivRem (cs:100-101)",
+        "Shared": "",
+        "Citation": "polynomial.multiply-vs-carryless-oracle and polynomial.divrem-vs-monomial-oracle, which pin the product and the Euclidean pair classically; this leg then says the shifts agree with them, which the two classical legs above do NOT say on their own",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.irreducible-census-and-trial-division",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the exhaustive count of monic irreducible polynomials at every degree 1 through 12",
+        "Against": "Subjects.BinaryIrreducibleCounts \u2014 the first terms 2, 1, 2, 3, 6, 9, 18, 30, 56, 99, 186, 335",
+        "Shared": "",
+        "Citation": "OEIS A001037, the number of monic irreducible polynomials of degree n over the two-element field \u2014 a published property of the RING, which an implementation that is self-consistently wrong still cannot reproduce. The same anchor runs to degree 16 at deep.polynomial-irreducible-census-and-trial-division, this case\u0027s Deep mirror, and again over the CONSTRUCTIBLE moduli at deep.binary-field-irreducible-census \u2014 the four further published terms 630, 1161, 2182 and 4080 are checked there and nowhere at Default",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.IsIrreducible at EVERY monic polynomial of degree 1 through 8, both constant terms \u2014 510 decisions",
+        "Against": "Oracles.BinaryPolynomialIsIrreducible, exhaustive trial division by every monic polynomial of degree one through half the subject\u0027s, which is the DEFINITION. The subject\u0027s route is Ben-Or/Rabin \u2014 repeated Frobenius exponentiation and gcd inside BinaryFieldKernels \u2014 so the two share no procedure at all. This is the per-polynomial statement the census cannot make: an aggregate count is satisfied by a false positive paired with a false negative, and this leg is not. EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible on products the ORACLE constructed, at degrees up to 63",
+        "Against": "Oracles.CarrylessProduct of two polynomials each of degree at least one \u2014 a product of two non-constant factors is reducible by definition, so the reference verdict is derived without consulting the subject and without any decision procedure at all. One-sided but COMPLETE, and it is the only independent statement this campaign can make above the trial-division ceiling; the pairs reach degrees 40, 48, 55 and 63",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible at the degree-8, degree-16 and degree-32 canonical moduli",
+        "Against": "Subjects.BinaryCatalogModuli \u2014 t\u2078\u002Bt\u2074\u002Bt\u00B3\u002Bt\u002B1, t\u00B9\u2076\u002Bt\u2075\u002Bt\u00B3\u002Bt\u002B1 and t\u00B3\u00B2\u002Bt\u2077\u002Bt\u00B3\u002Bt\u00B2\u002B1, all required irreducible",
+        "Shared": "",
+        "Citation": "the standard minimum-weight irreducible pentanomials at those degrees, declared in src/Puck.Maths/FiniteFields/README.md and re-proved at run time by Post\u0027s binary-field stage rather than trusted",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the three transcribed catalog moduli",
+        "Against": "BinaryFields.Degree8, Degree16 and Degree32\u0027s own Degree and ReductionTail, reassembled into whole moduli",
+        "Shared": "",
+        "Citation": "binary-field.irreducibility-vs-trial-division calls IsIrreducible() on all five catalog presets, so no published constant in that catalog is taken on its word, and binary-field.wide-degree-irreducibility-certificates goes further at the three wide ones \u2014 it does not accept that decision at all, but certifies every modulus the subject calls irreducible against an exact BigInteger multiplicative-order certificate. This leg catches a transcription slip between the two copies of the three NARROW moduli and claims nothing more",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three short circuits, by value rather than by inspection: degree below one is false at both the zero polynomial and the constant one; every degree-one polynomial is irreducible; and a zero constant term above degree one is reducible, checked at every such polynomial through degree 8. The indeterminate t is the row that separates the second rule from the third \u2014 it is irreducible AND has a zero constant term \u2014 and the law asserts it explicitly",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "IsIrreducible above degree one with a non-zero constant term",
+        "Against": "BinaryField\u003Culong\u003E.FromModulus(this).IsIrreducible(), the Ben-Or/Rabin criterion in BinaryFieldKernels",
+        "Shared": "the whole decision \u2014 the polynomial type derives nothing a second time (BinaryPolynomial.cs:237)",
+        "Citation": "the trial-division leg in this same case, which is independent evidence for the DELEGATED-TO kernel too over every degree it reaches, deep.polynomial-irreducible-census-and-trial-division, which runs the same census to degree 16, and binary-field.wide-degree-irreducibility-certificates, which exercises that DELEGATED-TO kernel at degrees 32, 64 and 128 \u2014 where nothing in this case can reach, BinaryPolynomial\u0027s packed carrier topping out at degree 63 \u2014 against an exact BigInteger multiplicative-order certificate and against moduli reducible by construction",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.primitive-order-and-census",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsPrimitive"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "MaximumPrimitiveDegree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": ".ctor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.IsPrimitive at EVERY monic polynomial with a non-zero constant term of degree 1 through 10 \u2014 1023 decisions (BinaryPolynomial.cs:261-299)",
+        "Against": "Oracles.BinaryPolynomialIsPrimitive, which computes the EXACT multiplicative order of t: the least divisor of 2^d \u2212 1 at which t^e is one, over EVERY divisor rather than only the maximal prime quotients, with the divisors coming from its own trial-division factorization rather than from UnsignedNumberFunctions.EnumeratePrimeFactors, and with NO irreducibility decision anywhere \u2014 an order of exactly 2^d \u2212 1 forces irreducibility by itself, since that many distinct powers in a ring of 2^d elements leaves no non-unit. The subject decides irreducibility first through BinaryField\u003Culong\u003E, then tests only t^((2^d\u22121)/p) for the prime divisors p, and returns a boolean. Different criterion, different factorization, different arithmetic; EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the COUNT of primitive polynomials at each degree 1 through 10",
+        "Against": "the closed form \u03C6(2^d \u2212 1)/d, with the totient formed in the claim body by its own trial division rather than by the shipped prime-factor enumerator the subject uses \u2014 the classical census to degree 14. What THIS case adds over an aggregate census is the per-polynomial leg above: an aggregate count is satisfied by a false positive paired with a false negative, and a per-polynomial order is not",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrimitive at the two witnesses that separate primitivity from irreducibility",
+        "Against": "t \u002B 1 primitive; t\u2074\u002Bt\u00B3\u002Bt\u00B2\u002Bt\u002B1 irreducible and NOT primitive, with the oracle\u0027s order exactly 5",
+        "Shared": "",
+        "Citation": "hand-derived: t \u002B 1 is DigitalNetSampler.PlaneGenerator, the smallest primitive polynomial there is, and t\u2075 \u002B 1 = (t \u002B 1)(t\u2074\u002Bt\u00B3\u002Bt\u00B2\u002Bt\u002B1) puts the root\u0027s order at 5 rather than at 2\u2074 \u2212 1 = 15. The same negative witness is what Post\u0027s digital-net stage uses (DigitalNetStage.cs:113-117)",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "primitivity is strictly stronger than irreducibility, checked in both directions across the whole census: every primitive polynomial is irreducible, and the degree-4 witness is irreducible while not primitive, so the implication is asserted rather than assumed and its converse is refuted by a named row. The census additionally requires that no polynomial the subject calls non-primitive has t at the full order",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the degree cap, from BOTH sides and through the declared constant read into a local: MaximumPrimitiveDegree is 32, degree-32 polynomials are decided without throwing, and a degree-33 polynomial throws NotSupportedException. The constant is read into a local before comparison so the run makes the comparison rather than the compiler folding it away",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrimitive over a hoisted ladder of UNLABELLED polynomials at degrees 16, 24 and 32",
+        "Against": "Oracles.BinaryPolynomialIsPrimitive\u0027s order at the same rows. The rows carry no claimed verdict \u2014 the oracle is the judge \u2014 so no transcription mistake in the table can make this case red at landing, and the statement is still the full one: the subject\u0027s boolean must equal the oracle\u0027s. Both arms ARE reached above the census ceiling, and the claim body ASSERTS that rather than resting on the table as it stands today: it counts the accepting and the rejecting rows PER DEGREE and returns a named counterexample if 16, 24 or 32 ever stops carrying one. Each degree carries the first primitive polynomial deep.polynomial-primitive-order-and-census\u0027s own search reaches, beside a catalog modulus and the reducible t^d \u002B 1. The counters are not decoration \u2014 this is the only Default-tier evidence that IsPrimitive\u0027s ACCEPTING arm works above degree 10, since the exhaustive census stops there and the searching mirror is Deep-only, and a ladder that drifted to all-rejecting rows would satisfy a row-by-row comparison while proving nothing about that arm",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrimitive on the indeterminate t \u2014 the ONE polynomial in the whole type the constant-term gate has to answer by itself \u2014 returns FALSE (BinaryPolynomial.cs:271). The law asserts alongside it that t is still reported irreducible, which is what makes it the unique operand reaching that gate: every other zero-constant-term polynomial has degree at least two and IsIrreducible refuses it first, so a change that made t reducible would leave the gate unreached and this row decorative",
+        "Against": "Oracles.BinaryPolynomialIsPrimitive at t, which agrees and adds the reason: no divisor of 2^1 \u2212 1 = 1 sends t to one, because t reduces to 0 modulo t and every power of it is 0, so the exact order is not merely short \u2014 it does not exist. The oracle takes no irreducibility decision anywhere and never builds a quotient, where the subject\u0027s answer comes from a constant-term test in front of one. The conventional answer too: a primitive polynomial has a non-zero constant term. EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE on a line no operand can falsify: the prime-group-order fallback (BinaryPolynomial.cs:292), which supplies the group order as its own only prime divisor, is a mathematical no-op. Where 2^d \u2212 1 is prime every irreducible polynomial IS primitive, and the single test it adds is t^1 \u2260 1, which holds for every modulus except t \u002B 1 \u2014 whose group order is 1 and which never reaches the fallback. No sweep and no census can distinguish its presence from its absence, and the campaign states that rather than implying the line is covered",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "polynomial.factor-odd-cycle-vs-cyclotomic-cosets",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "FactorOddCycle"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Bits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the DEGREES of BinaryPolynomial.FactorOddCycle\u0027s output at each ladder order (BinaryPolynomial.cs:151-189)",
+        "Against": "Oracles.BinaryCyclotomicFactorDegrees \u2014 the orbit sizes of x \u21A6 2x on Z/nZ. The classical structure of t^n \u2212 1 over GF(2): the Frobenius map permutes the n-th roots of unity by squaring and each orbit is the root set of one irreducible factor. NO polynomial is multiplied, divided or reduced anywhere in that computation, where the subject enumerates monic candidates, tests each for irreducibility and divides \u2014 the two sides could not fail together. EXACT on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the VALUES of the returned factors",
+        "Against": "their fold under Oracles.CarrylessProduct, required to be exactly t^n \u002B 1 in BigInteger. The re-multiplication is done by the ORACLE rather than by BinaryPolynomial.operator *, which is what separates this leg from integer.symmetry-lattice-exact-structure\u0027s re-multiplication of SymmetryLattice.RayCycleFactors. That statement declares itself shared-substrate:delegation-twin precisely BECAUSE the same type produces the factors and multiplies them back, so a shared error would cancel there, and it cites this leg for the property itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "each returned factor\u0027s irreducibility",
+        "Against": "Oracles.BinaryPolynomialIsIrreducible, exhaustive trial division \u2014 so the claim that the factors are irreducible is judged without running the subject\u0027s own decision a second time. The deepest row the Default ladder hands it is degree 8",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the factors are pairwise DISTINCT, each is monic and each has a non-zero constant term, which together with the degree multiset and the exact re-multiplication is the whole factorization: t^n \u002B 1 is squarefree for odd n \u2014 its formal derivative is t^(n\u22121), which shares no factor with it \u2014 so \u0027distinct\u0027 is the right contract and a repeated factor would mean the quotient loop divided one out twice",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared ORDER: ascending by degree, then ascending by packed value. Order 15 is the row that makes the tie-break observable at all, with three factors of degree 4. ENVELOPE, stated rather than implied: the discovery order is ALREADY ascending in both keys \u2014 degrees are tried upward and candidates within a degree are enumerated upward \u2014 so removing either sort key leaves the output unchanged and this leg cannot falsify their presence, only their inversion",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder: 0, \u22121, 32, 33, int.MinValue, int.MaxValue and every even order in [2, 30] each throw ArgumentOutOfRangeException naming the \u0027cycleOrder\u0027 parameter, and order 1 returns exactly the single factor t \u002B 1",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE on an unreachable branch: the InvalidOperationException at BinaryPolynomial.cs:180-183 \u2014 \u0027the binary factorization did not finish with an irreducible factor\u0027 \u2014 cannot fire for any legal order. The loop divides out every factor of degree at most n/2, so the leftover is a product of factors each of degree above n/2 whose degrees sum to at most n, which admits exactly one factor. No operand reaches it, and the campaign says so instead of implying the branch is covered. Order 17 is the ladder row that would reach it if the outer loop bound were narrowed by one, which is what makes that row load-bearing rather than decorative",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

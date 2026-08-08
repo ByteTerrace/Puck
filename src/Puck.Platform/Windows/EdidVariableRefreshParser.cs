@@ -2,12 +2,12 @@ namespace Puck.Platform.Windows;
 
 /// <summary>Parses only explicit VRR declarations from a monitor's effective EDID.</summary>
 internal static class EdidVariableRefreshParser {
-    private const int EdidBlockSize = 128;
     private const byte CtaExtensionTag = 0x02;
-    private const byte DisplayIdExtensionTag = 0x70;
+    private const byte CtaVendorSpecificTag = 0x03;
     private const byte DisplayIdAdaptiveSyncTag = 0x2B;
     private const byte DisplayIdCtaDataBlockCollectionTag = 0x81;
-    private const byte CtaVendorSpecificTag = 0x03;
+    private const byte DisplayIdExtensionTag = 0x70;
+    private const int EdidBlockSize = 128;
 
     /// <summary>Extracts positively identified VRR capabilities; generic monitor range limits are intentionally ignored.</summary>
     /// <param name="edid">The effective base EDID plus its declared extension blocks.</param>
@@ -23,7 +23,7 @@ internal static class EdidVariableRefreshParser {
         }
 
         var extensionCount = edid[126];
-        var requiredLength = checked((extensionCount + 1) * EdidBlockSize);
+        var requiredLength = checked(((extensionCount + 1) * EdidBlockSize));
 
         if (edid.Length < requiredLength) {
             return VariableRefreshCapabilities.Unknown;
@@ -31,7 +31,7 @@ internal static class EdidVariableRefreshParser {
 
         var accumulator = default(RangeAccumulator);
 
-        for (var extensionIndex = 0; extensionIndex < extensionCount; ++extensionIndex) {
+        for (var extensionIndex = 0; (extensionIndex < extensionCount); ++extensionIndex) {
             var offset = ((extensionIndex + 1) * EdidBlockSize);
             var extension = edid.Slice(start: offset, length: EdidBlockSize);
 
@@ -58,15 +58,14 @@ internal static class EdidVariableRefreshParser {
     }
 
     private static bool HasEdidHeader(ReadOnlySpan<byte> block) =>
-        (block[0] == 0x00) &&
+        ((block[0] == 0x00) &&
         (block[1] == 0xFF) &&
         (block[2] == 0xFF) &&
         (block[3] == 0xFF) &&
         (block[4] == 0xFF) &&
         (block[5] == 0xFF) &&
         (block[6] == 0xFF) &&
-        (block[7] == 0x00);
-
+        (block[7] == 0x00));
     private static bool HasValidChecksum(ReadOnlySpan<byte> block) {
         if (block.Length != EdidBlockSize) {
             return false;
@@ -80,7 +79,6 @@ internal static class EdidVariableRefreshParser {
 
         return ((sum & 0xFF) == 0);
     }
-
     private static bool ParseCtaExtension(ReadOnlySpan<byte> extension, ref RangeAccumulator accumulator) {
         var dataBlockEnd = extension[2];
 
@@ -94,11 +92,10 @@ internal static class EdidVariableRefreshParser {
 
         return ParseCtaDataBlocks(dataBlocks: extension[4..dataBlockEnd], accumulator: ref accumulator);
     }
-
     private static bool ParseCtaDataBlocks(ReadOnlySpan<byte> dataBlocks, ref RangeAccumulator accumulator) {
-        for (var offset = 0; offset < dataBlocks.Length;) {
+        for (var offset = 0; (offset < dataBlocks.Length);) {
             var header = dataBlocks[offset];
-            var payloadLength = (header & 0x1F);
+            var payloadLength = header & 0x1F;
             var blockLength = (payloadLength + 1);
 
             if ((offset + blockLength) > dataBlocks.Length) {
@@ -136,8 +133,8 @@ internal static class EdidVariableRefreshParser {
             return;
         }
 
-        var minimum = (dataBlock[9] & 0x3F);
-        var maximum = (((dataBlock[9] & 0xC0) << 2) | dataBlock[10]);
+        var minimum = dataBlock[9] & 0x3F;
+        var maximum = ((dataBlock[9] & 0xC0) << 2) | dataBlock[10];
 
         // HDMI Forum defines 1..48 for VRRmin. VRRmax values below 100 are interpreted as the current mode's base
         // refresh rate; some shipping low-rate sinks use a nonzero sub-100 encoding instead of the canonical zero.
@@ -172,7 +169,6 @@ internal static class EdidVariableRefreshParser {
             source: VariableRefreshSource.AmdFreeSync
         );
     }
-
     private static bool ParseDisplayIdExtension(ReadOnlySpan<byte> extension, double? activeSignalHertz, ref RangeAccumulator accumulator) {
         // DisplayID section header: tag, version, payload byte count, product type, extension count.
         var payloadLength = extension[2];
@@ -184,15 +180,15 @@ internal static class EdidVariableRefreshParser {
             return false;
         }
 
-        for (var offset = payloadStart; offset < payloadEnd;) {
+        for (var offset = payloadStart; (offset < payloadEnd);) {
             if ((payloadEnd - offset) < 3) {
                 return false;
             }
 
             var tag = extension[offset];
-            var revisionAndDescriptorSize = extension[offset + 1];
-            var blockPayloadLength = extension[offset + 2];
-            var blockEnd = (offset + 3 + blockPayloadLength);
+            var revisionAndDescriptorSize = extension[(offset + 1)];
+            var blockPayloadLength = extension[(offset + 2)];
+            var blockEnd = ((offset + 3) + blockPayloadLength);
 
             if (blockEnd > payloadEnd) {
                 return false;
@@ -221,14 +217,13 @@ internal static class EdidVariableRefreshParser {
 
         return true;
     }
-
     private static bool ParseDisplayIdAdaptiveSyncBlock(
         ReadOnlySpan<byte> block,
         byte revisionAndDescriptorSize,
         double? activeSignalHertz,
         ref RangeAccumulator accumulator
     ) {
-        var revision = (revisionAndDescriptorSize & 0x07);
+        var revision = revisionAndDescriptorSize & 0x07;
         var descriptorLength = (6 + ((revisionAndDescriptorSize >> 4) & 0x07));
         var payloadLength = block[2];
 
@@ -243,10 +238,10 @@ internal static class EdidVariableRefreshParser {
 
         var selected = default(DisplayIdRangeSelection);
 
-        for (var offset = 3; offset < block.Length; offset += descriptorLength) {
+        for (var offset = 3; (offset < block.Length); offset += descriptorLength) {
             var descriptor = block.Slice(start: offset, length: descriptorLength);
             var flags = descriptor[0];
-            var mode = ((flags >> 2) & 0x03);
+            var mode = (flags >> 2) & 0x03;
 
             // Revision 0 reserves bits 7:6, modes 2/3, and descriptor byte 4 bits 7:2. Game-style variable
             // presentation needs Adaptive V-Total support (mode 1), not fixed-average-V-total alone (mode 0).
@@ -259,7 +254,7 @@ internal static class EdidVariableRefreshParser {
             }
 
             var minimumCode = descriptor[2];
-            var maximumCode = (descriptor[3] | ((descriptor[4] & 0x03) << 8));
+            var maximumCode = descriptor[3] | ((descriptor[4] & 0x03) << 8);
 
             if ((minimumCode == 0) || (maximumCode == 0)) {
                 continue;
@@ -299,7 +294,7 @@ internal static class EdidVariableRefreshParser {
 
         public void Consider(double minimumHertz, double maximumHertz, bool native, double? activeSignalHertz) {
             // A descriptor below the current physical signal cannot describe the active operating mode.
-            if ((activeSignalHertz is { } active) && (maximumHertz + 0.01 < active)) {
+            if ((activeSignalHertz is { } active) && ((maximumHertz + 0.01) < active)) {
                 return;
             }
 
@@ -315,7 +310,6 @@ internal static class EdidVariableRefreshParser {
             }
         }
     }
-
     private struct RangeAccumulator {
         private bool m_hasValue;
         private bool m_conflicted;
@@ -338,7 +332,6 @@ internal static class EdidVariableRefreshParser {
                 );
             }
         }
-
         public void Add(double minimumHertz, double? maximumHertz, VariableRefreshSource source) {
             if (!m_hasValue) {
                 m_hasValue = true;
@@ -351,8 +344,8 @@ internal static class EdidVariableRefreshParser {
 
             m_minimumHertz = Math.Max(val1: m_minimumHertz, val2: minimumHertz);
             m_maximumHertz = (m_maximumHertz, maximumHertz) switch {
-                ({ } left, { } right) => Math.Min(val1: left, val2: right),
-                ({ } left, null) => left,
+                ( { } left, { } right) => Math.Min(val1: left, val2: right),
+                ( { } left, null) => left,
                 (null, { } right) => right,
                 _ => null,
             };
@@ -362,7 +355,6 @@ internal static class EdidVariableRefreshParser {
                 m_conflicted = true;
             }
         }
-
         public readonly VariableRefreshCapabilities CreateCapabilities() {
             if (!m_hasValue || m_conflicted) {
                 return VariableRefreshCapabilities.Unknown;

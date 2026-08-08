@@ -1,0 +1,31 @@
+{
+  "description": "The storage host-section defaults \u2014 the per-user cloud endpoint and explicit user-id override, authored as data.",
+  "type": "object",
+  "properties": {
+    "endpoint": {
+      "description": "The per-user blob endpoint (a URI, e.g. https://blob.byteterrace.com), or null for none. Validated as an absolute URI when present. Feeds WorldStorageSyncHandle\u0027s target construction; a URI here is edge-shaped (platform-managed containers), a connection-string override (CLI-only \u2014 see the validator) is raw-shaped.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "userId": {
+      "description": "An explicit user-id override (an Entra oid Guid string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver\u0027s explicit-override source.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "discoveryEndpoint": {
+      "description": "The direct-to-account connection container LIST uses when Endpoint resolves to an edge-shaped target \u2014 the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint\u0027s remarks), so an edge-shaped target with this null refuses discovery BY NAME instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only \u2014 see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "description": "The named spawn poses seats and population policies reference.",
+  "type": "array",
+  "items": {
+    "description": "One named spawn pose available to seats and population policies.",
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "The stable spawn name, unique within the definition.",
+        "type": "string"
+      },
+      "position": {
+        "description": "The seat\u0027s spawn position."
+      },
+      "yawDegrees": {
+        "description": "The spawn yaw about \u002BY, in degrees.",
+        "type": "number"
+      }
+    },
+    "additionalProperties": false
+  }
+}

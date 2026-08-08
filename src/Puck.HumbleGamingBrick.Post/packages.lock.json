@@ -2,6 +2,17 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg=="
+      },
+      "Concentus": {
+        "type": "Transitive",
+        "resolved": "2.2.2",
+        "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ=="
+      },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -23,15 +34,10 @@
       "puck.abstractions": {
         "type": "Project"
       },
-      "puck.capture": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
+          "Puck.Maths": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
         }
       },
@@ -54,6 +60,14 @@
       },
       "puck.maths": {
         "type": "Project"
+      },
+      "puck.recording": {
+        "type": "Project",
+        "dependencies": {
+          "Concentus": "[2.*, )",
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
+        }
       },
       "puck.snapshots": {
         "type": "Project"

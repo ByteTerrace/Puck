@@ -1,0 +1,751 @@
+[
+  {
+    "Id": "quasicrystal.chain-walk-vs-streamed-word",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ContinuedFraction",
+        "Name": "Expand"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "Contains"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "Next"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "Position"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "Previous"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "StartsLongTile"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Word"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the origin is a vertex; over 1200 steps the walk never leaves the acceptance window, Previous inverts Next at every step, each step is exactly the long or the short tile vector, and Position strictly increases (Subjects.cs:4396-4418)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "Chain.Contains over the coordinate box [0,24]²",
+        "Against": "the vertex set the 1200-step walk actually visited (Subjects.cs:4421-4431)",
+        "Shared": "Chain.Contains IS what StartsLongTile/Next walk with (QuadraticQuasicrystal.cs:263-271), so the box check pins the window's SIZE against the walk's reach, not Contains against an independent membership test",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the 1200-tile word read off the Chain walk by StartsLongTile",
+        "Against": "QuadraticQuasicrystal.Word — the streamed substitution fixed point, compared by factorhood since the walk's phase is not part of the claim (Subjects.cs:4433-4439, 4456-4462)",
+        "Shared": "ContinuedFraction.Expand — the period block both sides are built from (QuadraticQuasicrystal.cs:52 and QuadraticInflation.cs:90). Nothing else: the walk is exact Int128 surd signs, the word is exact letter-image composition. Owed: expose Oracles.MaximumPartialQuotient's quotient list and compare the period block directly (worklist C25)",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.metallic-random-access-vs-streamed-word",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Contains"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Next"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Previous"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Position"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "StartsLongTile"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "InflationFactor"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Word"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over 4000 steps at six metallic means: the origin is a member, the walk never leaves the set, Previous inverts Next, each step is exactly one of the two admissible vectors, Position strictly increases, no over-long run of long tiles appears, and no forbidden short-short factor appears",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "MetallicQuasicrystal.InflationFactor against the walk's own measured long-to-short frequency, built purely from Contains, Next and StartsLongTile — which call InflationFactor nowhere",
+        "Against": "exact BigInteger cross-multiplication rather than a double ratio",
+        "Shared": "",
+        "Citation": "a two-percent relative band; it does not pin the convergence rate",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Contains equals the walked vertex set exactly over a bounded coordinate box at every mean",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the ring-coordinate walk word from Contains, StartsLongTile and Next",
+        "Against": "QuadraticQuasicrystal.Word streamed at the same period — the continued-fraction substitution stream, sharing no code and no rounding substrate with the surd-window ring walk",
+        "Shared": "",
+        "Citation": "the ring-walk path reaches ContinuedFraction.Expand nowhere; only MetallicQuasicrystal.Word itself delegates to the streamed word, and that member is stated separately",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an extreme coordinate does not wrap into membership, Next overflows at the carrier extremes, Position refuses an out-of-range coordinate naming its parameter, the inflation factor at a huge index rounds exactly, and a huge-index prefix is all long tiles",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.modular-transform-classes-and-cusp-action",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "Classify"
+      },
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two standard generators have their stated elliptic and parabolic orders, a hyperbolic element classifies as such, and neither elliptic element returns to the identity earlier than its stated order",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "determinant and Classify over a deterministic 512-word ensemble built from each index's own bit pattern, not fresh randomness",
+        "Against": "an Int128 determinant recomputed from the matrix entries and the trace class boundary, both formed independently of Classify's own branches",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "each word composed with its inverse is the identity across all 512 words, and composition is associative over 200 deterministically selected triples",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the cusp action over the 512-word ensemble at six deterministic trial points each",
+        "Against": "a BigInteger greatest-common-divisor reduction written out here, reading only the matrix entries and calling no other member — exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the cusp action is compatible with composition, and the standard involution is a cusp involution",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.gauss-reduction-into-fundamental-domain",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "GaussReduce"
+      },
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "Apply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Gauss reduction lands the form inside the reduced region over a fully deterministic sweep of definite forms, with no random draw anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the reduction transform's determinant and the preserved discriminant over the same sweep",
+        "Against": "a recomputation of both quantities formed independently in the claim body: the determinant in Int128, which holds a product of two long entries exactly, and the discriminant in BigInteger, which holds b² − 4ac at ANY long input rather than only at this sweep's bounds — the quantity being judged is the one the subject itself judges, so the oracle does not borrow the subject's width to judge it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the reported reduced form",
+        "Against": "the contravariant substitution action transcribed into Int128, reading only the matrix entries — exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "reduction is idempotent: reducing the reduced form returns the identity transform",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the ORIGINAL form's root, mapped by the reduction transform through the real ModularTransform.Apply(FixedComplex) kernel, over the same sweep",
+        "Against": "the fundamental domain's own closed-form membership conditions |Re z| <= 1/2 and |z| >= 1, tested as exact Int128 inequalities on the mapped point's raw ticks rather than a predicted value - so no knowledge of FixedComplex division's rounding schedule is needed. The root fed in is BracketRawQ16's Q16 approximation of the exact irrational root; both inequalities carry a small integer slack for that approximation and the kernel's own one-rounding-per-component division, measured to matter only at the domain's own corners and edges (degenerate reduced forms such as (1,1,1) or (1,1,2))",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.gauss-reduction-definiteness-across-the-carrier",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ModularTransform",
+        "Name": "GaussReduce"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the admit-or-refuse decision over the full cross product of fourteen signed-carrier corners — 2744 triples — plus six triples placed exactly ON the b² = 4ac boundary and one tick inside it, at three magnitudes",
+        "Against": "the definiteness predicate stated directly and evaluated in exact BigInteger in the claim body: the leading coefficient is positive AND b² − 4ac is negative. It shares no expression and no carrier with the subject's own test. The distinction is load-bearing rather than stylistic — the discriminant of a legal triple needs up to 129 signed bits, so an oracle that recomputed b² − 4ac in a 128-bit carrier would misjudge exactly the corners the subject must get right, in both directions",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the discriminant of every admitted form's reduced output",
+        "Against": "the source triple's discriminant recomputed in exact BigInteger, so preservation is checked at full width rather than at the width the reduction happens to use",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every admitted form's reduced output has a positive leading coefficient and lies in the documented reduced region -A < B <= A <= C, at the carrier's extremes as well as at small coefficients; the ensemble is required to have both admitted and refused something, so an all-refusing or all-admitting decision is not vacuously green",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.continued-fraction-periods-and-full-width",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ContinuedFraction",
+        "Name": "Expand"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the period structure and block for six quadratic surds",
+        "Against": "a hand-declared period-start and period-block table",
+        "Shared": "",
+        "Citation": "the classical continued-fraction expansions of these six quadratic irrationals, re-derived by hand",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the expanded terms' convergents",
+        "Against": "an exact BigInteger cross-multiplied bound — the convergent recurrence checked with no floating point anywhere",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "algebraically identical scalings, including one whose intermediate exceeds the carrier, produce IDENTICAL expansions, and an oversized partial quotient overflows rather than silently narrowing",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.inflation-invariants-and-polynomial-tails",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "PeriodLength"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "Discriminant"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "GeodesicClass"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "Axis"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "InflationFactor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "period length, determinant and discriminant for six surds",
+        "Against": "a hand-declared invariant table",
+        "Shared": "",
+        "Citation": "re-derived by hand from each surd's continued-fraction period",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the determinant is exactly the period's parity sign, the geodesic and its axis classify hyperbolic, and the axis is unimodular",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the exact characteristic root",
+        "Against": "the characteristic-polynomial identity checked in EXACT QuadraticSurd field arithmetic — no floating point anywhere",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticInflation.InflationFactor over six surds",
+        "Against": "an independent BigInteger Newton-descent square root at extra precision, bracketing the same exact root. ENVELOPE: an eight-raw-tick band rather than exact ties-to-even reproduction of the fixed-point square root's own rounding",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the golden and silver discriminants come OUT of the lens rather than being fed in, and the construction is deterministic across repeated calls",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the polynomial continued-fraction analysis slope and offset",
+        "Against": "hand-declared exact QuadraticSurd constants — exact on both sides, no floating point",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the asymptotic series head equals the offset, a wide-parameter certificate verifies with a positive lower bound at its cutoff, and two malformed analyses are refused naming their parameters",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.metallic-reproduces-golden-silver-fixed-point",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "StartsLongTile"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "Next"
+      },
+      {
+        "Type": "Puck.Maths.MetallicQuasicrystal",
+        "Name": "InflationFactor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the golden and silver generator words",
+        "Against": "the ring-coordinate walk from the origin — a DIFFERENT internal path than the streamed-word delegation",
+        "Shared": "",
+        "Citation": "factorhood only, phase-independent",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the silver generator does NOT contain the golden word as a factor — the discrimination control on the factor test",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the inflation factor at six means",
+        "Against": "the streamed word's own measured long-to-short frequency by exact BigInteger cross-multiplication",
+        "Shared": "",
+        "Citation": "a two-percent relative band",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the streamed word is a fixed point of its own substitution at every mean, checked by re-expanding each tile in place",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.general-chain-is-sturmian-and-tile-length-consistent",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Compile"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "LongTileLength"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "square-equivalent surd representations compare, hash, set-deduplicate and add as one value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the index's tile-at and long-tile-count over 2048 indices at seven periods",
+        "Against": "the streamed word plus a running count formed in the claim body",
+        "Shared": "ContinuedFraction.Expand — the period extraction both the index's grammar descent and the streamed word depend on, and nothing else",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the remote prefix identity holds at an index past the carrier's reach, where the count difference equals the tile at that index",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the streamed word's factor complexity over seven periods",
+        "Against": "a sliding-window distinct-factor count written out here, against the Sturmian theorem",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the tile-length inflation identity using the index's own exact fields",
+        "Against": "an independently hand-built characteristic root checked in EXACT field arithmetic — no floating point",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticQuasicrystal.LongTileLength over seven periods",
+        "Against": "an exact bracket of the index's own exact tile length. ENVELOPE: both sides trace back to ContinuedFraction.Expand, so this pins the FIXED-POINT ROUNDING against the exact value, not a second independent period derivation",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the general generator's golden word",
+        "Against": "a ring-coordinate walk built from the metallic surface",
+        "Shared": "",
+        "Citation": "the metallic walk is itself pinned independently in quasicrystal.metallic-random-access-vs-streamed-word",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the complexity oracle has teeth: a synthetic periodic word does NOT report the Sturmian count",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.width-and-period-regressions",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Compile"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "LongTileLength"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Positions"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a perfect-square radicand is refused naming its parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "a 217-term period: period length, tile-at over 512 indices, and Sturmian complexity",
+        "Against": "the independently streamed word and the transcribed complexity oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the inflation construction overflows on that long period, a huge partial quotient keeps its prefix all long tiles, and the position accumulator overflows at scale",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the long tile length at the huge-quotient case",
+        "Against": "an exact bracket of the independently compiled exact tile length, at a band widened for the case's magnitude. ENVELOPE: the same shared-upstream caveat as the general-chain case",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quasicrystal.chain-single-term-matches-metallic-and-new-periods",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "Inflation"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal+Chain",
+        "Name": "InflationFactor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the chain's single-term walk word in tile-count coordinates",
+        "Against": "the metallic walk word in ring coordinates — two acceptance-window derivations sharing no code",
+        "Shared": "",
+        "Citation": "factorhood both ways over 900 tiles, phase aside; the metallic side is independently pinned in quasicrystal.metallic-random-access-vs-streamed-word",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "for four NEW continued-fraction periods not covered by quasicrystal.chain-walk-vs-streamed-word: the origin is a member, the walk never leaves the acceptance window over 6000 steps, Previous inverts Next, each step is exactly one admissible tile vector, and Position strictly increases",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the chain walk's long density over the four new periods",
+        "Against": "the streamed word's own long density by exact BigInteger cross-multiplication",
+        "Shared": "ContinuedFraction.Expand, reached by the chain through the inflation lens and by the word directly",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Contains equals the walked vertex set exactly over a bounded coordinate box for the four new periods, with an explicit overshoot check guaranteeing the walk covered it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the chain walk word over the four new periods",
+        "Against": "the streamed word as a contiguous factor, phase aside",
+        "Shared": "ContinuedFraction.Expand, as above",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticQuasicrystal.Chain.Inflation and .InflationFactor, the two cached DATA-ACCESSOR properties on Chain, read back after every one of the four new-period walks above",
+        "Against": "a FRESH QuadraticInflation.FromQuadraticIrrational(p, q, d, r) call and its own InflationFactor(), built from the same (p, q, d, r) the chain was built from a few lines earlier, independent of whatever the chain cached",
+        "Shared": "",
+        "Citation": "empirically confirmed by mutation: corrupting Chain.Inflation to default reddens the single-term walk comparison at n=1, and corrupting Chain.InflationFactor to zero reddens the chain-positions-increasing check at d=7, before this legs own comparison is even reached, so the walk assertions above are already load-bearing on both members and this leg pins them a second, direct way",
+        "Absolute": ""
+      }
+    ]
+  }
+]

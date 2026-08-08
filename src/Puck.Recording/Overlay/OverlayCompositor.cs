@@ -62,9 +62,9 @@ public sealed class OverlayCompositor {
 
                     break;
                 case OverlayKind.Timecode:
-                    DrawText(pixels: pixels, format: format, width: width, height: height, row: row, text: FormatTimecode(nanoseconds: (row.Clock == OverlayClock.Sim)
+                    DrawText(pixels: pixels, format: format, width: width, height: height, row: row, text: FormatTimecode(nanoseconds: ((row.Clock == OverlayClock.Sim)
                         ? simTimeNanoseconds
-                        : sessionTimeNanoseconds));
+                        : sessionTimeNanoseconds)));
 
                     break;
                 default:
@@ -109,7 +109,6 @@ public sealed class OverlayCompositor {
             }
         }
     }
-
     private static void DrawRect(Span<byte> pixels, SurfaceFormat format, int width, int height, OverlayRow row) {
         if (!Rgba32.TryParse(value: row.Color, color: out var fill)) {
             return;
@@ -130,17 +129,16 @@ public sealed class OverlayCompositor {
             for (var t = 0; (t < OutlineThickness); t++) {
                 for (var x = 0; (x < rectWidth); x++) {
                     Blend(pixels: pixels, format: format, width: width, height: height, x: (originX + x), y: (originY + t), color: outline);
-                    Blend(pixels: pixels, format: format, width: width, height: height, x: (originX + x), y: ((originY + rectHeight) - 1 - t), color: outline);
+                    Blend(pixels: pixels, format: format, width: width, height: height, x: (originX + x), y: (((originY + rectHeight) - 1) - t), color: outline);
                 }
 
                 for (var y = 0; (y < rectHeight); y++) {
                     Blend(pixels: pixels, format: format, width: width, height: height, x: (originX + t), y: (originY + y), color: outline);
-                    Blend(pixels: pixels, format: format, width: width, height: height, x: ((originX + rectWidth) - 1 - t), y: (originY + y), color: outline);
+                    Blend(pixels: pixels, format: format, width: width, height: height, x: (((originX + rectWidth) - 1) - t), y: (originY + y), color: outline);
                 }
             }
         }
     }
-
     private static void FillBlock(Span<byte> pixels, SurfaceFormat format, int width, int height, int x, int y, int size, Rgba32 color) {
         for (var dy = 0; (dy < size); dy++) {
             for (var dx = 0; (dx < size); dx++) {
@@ -148,7 +146,6 @@ public sealed class OverlayCompositor {
             }
         }
     }
-
     private static void Blend(Span<byte> pixels, SurfaceFormat format, int width, int height, int x, int y, Rgba32 color) {
         if ((x < 0) || (y < 0) || (x >= width) || (y >= height) || (color.A == 0)) {
             return;
@@ -168,11 +165,10 @@ public sealed class OverlayCompositor {
             blueIndex = (offset + 2);
         }
 
-        pixels[redIndex] = (byte)(((color.R * alpha) + (pixels[redIndex] * inverse) + 127) / 255);
-        pixels[(offset + 1)] = (byte)(((color.G * alpha) + (pixels[(offset + 1)] * inverse) + 127) / 255);
-        pixels[blueIndex] = (byte)(((color.B * alpha) + (pixels[blueIndex] * inverse) + 127) / 255);
+        pixels[redIndex] = (byte)((((color.R * alpha) + (pixels[redIndex] * inverse)) + 127) / 255);
+        pixels[(offset + 1)] = (byte)((((color.G * alpha) + (pixels[(offset + 1)] * inverse)) + 127) / 255);
+        pixels[blueIndex] = (byte)((((color.B * alpha) + (pixels[blueIndex] * inverse)) + 127) / 255);
     }
-
     private static int AnchorX(float normalized, int frame, int extent, OverlayAnchor anchor) {
         var origin = (int)MathF.Round(x: (normalized * frame));
 
@@ -182,7 +178,6 @@ public sealed class OverlayCompositor {
             _ => origin,
         };
     }
-
     private static int AnchorY(float normalized, int frame, int extent, OverlayAnchor anchor) {
         var origin = (int)MathF.Round(x: (normalized * frame));
 

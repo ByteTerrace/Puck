@@ -161,9 +161,16 @@ char[] chars = RandomNumberGenerator.GetItems<char>(alphabet, 30);
 - **Guidance:** For tensors, prefer `t1 += t2` over `t1 = t1 + t2` — they are no longer equivalent in cost. On big value-bag types you own, define `operator +=` when in-place mutation is semantically safe, instead of forcing allocate-and-replace through `+`.
 
 ```csharp
-// C# 14: a type may define both; += no longer expands to a = a + b
-public static C operator +(C left, C right) => new() { Value = left.Value + right.Value };
-public static void operator +=(C other) => Value += other.Value; // mutates in place
+public sealed class C(int value)
+{
+    public int Value { get; private set; } = value;
+
+    // C# 14: a type may define both; += no longer expands to a = a + b.
+    public static C operator +(C left, C right) => new(left.Value + right.Value);
+
+    // Explicit compound assignment is a void-returning instance operator.
+    public void operator +=(C other) => Value += other.Value;
+}
 ```
 
 - **Caveat (correctness, not just perf):** `+=` may now mutate the existing instance rather than rebind the variable. Aliasing code that assumed `a += b` produced a fresh object must be reviewed.

@@ -1,0 +1,208 @@
+[
+  {
+    "Id": "algebra.quadratic-surd-twin-lane",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Add" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Subtract" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Conjugate" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Trace" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra<BigInteger>.{Add,Subtract,Multiply,Conjugate,Norm,Trace} at the (k,1) metallic relation for k in {1,2,3,5}, transported by U+V·x → ((2U+V·k)+V·√Δ)/2 into Q(√Δ), Δ=k²+4",
+        "Against": "QuadraticSurd's own +, -, *, and the hand-transported conjugate (SurdNumerator negated) — an exact-rational real-quadratic-field type sharing no code and no rounding substrate with QuadraticAlgebra",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the basis-change map is the ONLY connective tissue between the two representations — an error in either QuadraticAlgebra<BigInteger>'s defining relation x²=k·x+1 or in QuadraticSurd's own field arithmetic breaks agreement, so neither side's correctness is assumed going in; this is the (k,1)/BigInteger == QuadraticSurd twin, and no other law in the suite covers it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.quadratic-twin-linear-ops-full-range",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Add" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Subtract" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Negate" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Conjugate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "QuadraticAlgebra<FixedQ4816>.{Add,Subtract,Negate} at the (0,−1) relation, full raw range including the narrow/wide (2³¹, 2⁴⁷) seams and the two's-complement wrap extremes",
+        "Against": "FixedQ4816's own +, −, unary− operators applied directly to the same (U,V) raw pair",
+        "Shared": "FixedQ4816's own +/−/unary− operators — the IDENTICAL exact (unrounded) kernel: QuadraticAlgebra<TScalar>.Add/Subtract/Negate call TScalar's operators componentwise with no rounding of their own",
+        "Citation": "the FixedQ4816 addition/subtraction/negation kernel's own evidence lives in scalar.json; condition (B) is vacuous here because addition, subtraction and negation on this carrier never round",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Conjugate(U,V) equals (U,−V) for the (0,−1) relation, where P is the carrier's additive identity — checked against the raw pair directly rather than through a sibling type's own conjugate, so a defect in Conjugate's P-degenerate short-circuit (e.g. wrongly forming U+P·V) is caught. ENVELOPE: Add/Subtract/Negate and this P-additive-identity branch of Conjugate never read P or Q, so testing one relation exercises them for the whole (0,−1)/(0,0)/(0,+1) family; Conjugate's P-nonzero branch is separately pinned by algebra.quadratic-surd-twin-lane's (k,1) relation",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.doubling-floor1-matches-fixed-complex",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": ".ctor" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Left" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Right" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Add" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Subtract" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Negate" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Conjugate" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Norm" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "DoublingAlgebra<FixedScalarRing>.Multiply and .Norm (Floor 1, the complex plane) over the full raw range",
+        "Against": "FixedComplex's own operator* and Conjugate()-then-real-part, reached by Unsafe.BitCast (DoublingAlgebra.cs:242-246 MultiplyLeafComplex, :342-347 NormLeafComplex) rather than a maintained parallel kernel",
+        "Shared": "the identical FixedComplex value, bit-cast rather than recomputed — carriage only",
+        "Citation": "FixedComplex's own multiplication/conjugation evidence: complex.mul-vs-oracle, complex.twin-quad, complex.conjugate-distributes",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "DoublingAlgebra<FixedScalarRing>.{Add,Subtract,Negate} over the full raw range",
+        "Against": "FixedComplex's own +, −, unary− operators, over the same operand pair",
+        "Shared": "FixedQ4816's own +/−/unary− operators — DoublingAlgebra<TInner>.Add/Subtract/Negate call TInner.Add/Subtract/Negate componentwise (TInner=FixedScalarRing wraps FixedQ4816 exactly), and FixedComplex's own operators call the identical FixedQ4816 members on Real/Imaginary",
+        "Citation": "pinned in scalar.json; exact and unrounded on both sides, so condition (B) drops out",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the BitCast field layout (Left↔Real, Right↔Imaginary) is confirmed jointly by all five operations agreeing in ONE pass per sampled pair — a layout defect that diverged Add's pairing from Multiply's (both independently BitCast in DoublingAlgebra.cs) would be caught here even though a Multiply-only check could miss it. This is FLOOR 1 of the delegation identity DoublingAlgebra.cs:63-67 remarks on",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.doubling-floor2-matches-fixed-quaternion",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": ".ctor" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Left" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Right" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Add" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Subtract" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Negate" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Conjugate" },
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Norm" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "DoublingAlgebra<DoublingAlgebra<FixedScalarRing>>.Multiply and .Norm (Floor 2, the quaternions) over the full raw range",
+        "Against": "FixedQuaternion's own operator* and Conjugate()-then-real-part, reached by Unsafe.BitCast plus an explicit coordinate remap ((w,x,y,z) ↔ ((w,x),(y,z))) at the boundary (DoublingAlgebra.cs:253-263 MultiplyLeafQuaternion, :352-359 NormLeafQuaternion)",
+        "Shared": "the identical FixedQuaternion value, reconstructed via the coordinate remap rather than recomputed — carriage only",
+        "Citation": "FixedQuaternion's own multiplication/conjugation evidence: quaternion.mul-vs-oracle, quaternion.norm-vs-oracle, quaternion.conjugate-antiautomorphism",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same doubling pair product (a,b)·(c,d) = (a·c − conj(d)·b, d·a + b·conj(c)) at Floor 2, over an exact BigInteger carrier (a test-local IConjugationRing wrapping BigInteger, sharing no code with FixedQ4816 or FixedQuaternion)",
+        "Against": "a hand-derived Hamilton-product formula recomputed directly from the four components under (w,x,y,z)=(c0,c1,c2,c3) — no doubling machinery, no rounding anywhere",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "DoublingAlgebra<DoublingAlgebra<FixedScalarRing>>.{Add,Subtract,Negate} over the full raw range",
+        "Against": "FixedQuaternion's own +, −, unary− operators, over the same operand pair",
+        "Shared": "FixedQ4816's own +/−/unary− operators, reached componentwise through both towers",
+        "Citation": "pinned in scalar.json; exact and unrounded on both sides",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the BitCast-plus-coordinate-remap field layout is confirmed jointly by all five fixed-point operations agreeing in ONE pass per sampled pair, independently of the exact-carrier Hamilton leg above which confirms the pair-product SIGN CONVENTION alone. This is FLOOR 2 of the delegation identity DoublingAlgebra.cs:63-67 remarks on",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.doubling-floor2-commutator-witness",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Commutator" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "DoublingAlgebra<DoublingAlgebra<FixedScalarRing>>.Commutator(i,j) is nonzero at the canonical basis units i=(0,1,0,0), j=(0,0,1,0) under (w,x,y,z)=(c0,c1,c2,c3), computed over an exact BigInteger carrier with no rounding anywhere — the floor-2 non-commutativity witness (the canonical Hamilton fact [i,j]=2k) that DoublingAlgebra's own price-ladder documentation claims and which, before this law, no case in the suite exercised (Commutator was entirely uncovered)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.doubling-floor3-octonion-norm-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Norm" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "DoublingAlgebra<DoublingAlgebra<DoublingAlgebra<FixedScalarRing>>>.Norm (Floor 3, the octonion floor over FixedQ4816) — both the all-eight-leaves-below-2²⁹ Int64 branch and the full-range Int128 fallback",
+        "Against": "Oracles.RoundDyadic(exact: the sum of the eight raw squares formed in BigInteger, shift: 16) — the exact ideal Σo² rounded ONCE, ties to even, sharing no code with FixedQ4816.RoundProductSum's call inside NormLeafOctonion",
+        "Shared": "",
+        "Citation": "ENVELOPE: the exact narrow/wide boundary (combined magnitude == 2²⁹) is not separately probed; the two branches are swept as a coarse partition (leaves independently drawn from the full 64-bit range vs. all eight bounded under 2²⁹). No case in the suite cited Norm on DoublingAlgebra before this law — it was entirely uncovered",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the returned value's other three quaternion-shaped leaves (Left.Right, Right.Left, Right.Right) are exactly zero on every sample — the norm's real-embedding contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Puck.Text;
 
@@ -15,10 +16,7 @@ namespace Puck.Text;
 /// <c>pxRange</c> / <c>distanceRange</c> distance-field overrides (see
 /// <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas, FontAtlasGlyph)"/>).
 /// </remarks>
-public sealed class FontAtlasLoader {
-    private static readonly JsonSerializerOptions SerializerOptions = new() {
-        PropertyNameCaseInsensitive = true,
-    };
+public sealed partial class FontAtlasLoader {
 
     /// <summary>Loads a font atlas from a JSON metadata file on disk, together with its atlas image.</summary>
     /// <param name="jsonPath">The path to the font-atlas bake pipeline's JSON metadata file.</param>
@@ -43,7 +41,7 @@ public sealed class FontAtlasLoader {
         }
 
         var jsonContent = File.ReadAllBytes(path: jsonPath);
-        var document = (JsonSerializer.Deserialize<FontAtlasDocument>(options: SerializerOptions, utf8Json: jsonContent)
+        var document = (JsonSerializer.Deserialize(utf8Json: jsonContent, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
             ?? throw new InvalidDataException(message: "Font atlas metadata is empty or invalid JSON."));
         var resolvedImagePath = ResolveImagePath(
             jsonPath: jsonPath,
@@ -87,7 +85,7 @@ public sealed class FontAtlasLoader {
 
         ArgumentNullException.ThrowIfNull(imageData);
 
-        var document = (JsonSerializer.Deserialize<FontAtlasDocument>(options: SerializerOptions, utf8Json: jsonContent.Span)
+        var document = (JsonSerializer.Deserialize(utf8Json: jsonContent.Span, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
             ?? throw new InvalidDataException(message: $"Font atlas metadata '{atlasIdentifier}' is empty or invalid JSON."));
 
         return CreateAtlas(
@@ -291,5 +289,9 @@ public sealed class FontAtlasLoader {
         public float Left { get; set; }
         public float Right { get; set; }
         public float Top { get; set; }
+    }
+    [JsonSerializable(typeof(FontAtlasDocument))]
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    private sealed partial class FontAtlasJsonContext : JsonSerializerContext {
     }
 }

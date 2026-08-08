@@ -10,8 +10,14 @@ namespace Puck.Platform.Windows;
 internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSource {
     private const int CwUseDefault = unchecked((int)0x80000000);
     private const int ErrorClassAlreadyExists = 1410;
+    // WM_KEYDOWN/WM_KEYUP lParam bit 24 — set for the right-hand Control/Alt (and numpad Enter), clear for the
+    // left-hand ones. Shift carries no such distinction (see MapvkVscToVkEx below).
+    private const long ExtendedKeyBit = 0x01000000;
     private const int GwlStyle = -16;
     private const int GwlpUserData = -21;
+    // MapVirtualKey map type: scan code -> the LEFT/RIGHT-distinguishing extended virtual key. The only way to
+    // tell VK_LSHIFT from VK_RSHIFT — Shift's lParam extended-key bit is never set for either side.
+    private const uint MapvkVscToVkEx = 0x03;
     private const int MonitorDefaultToNearest = 2;
     private const int PmRemove = 0x0001;
     private const int SwShow = 5;
@@ -26,6 +32,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkDown = 0x28;
     private const int VkEscape = 0x1B;
     private const int VkF1 = 0x70;
+    private const int VkF10 = 0x79;
+    private const int VkF11 = 0x7A;
+    private const int VkF12 = 0x7B;
     private const int VkF2 = 0x71;
     private const int VkF3 = 0x72;
     private const int VkF4 = 0x73;
@@ -33,10 +42,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkF6 = 0x75;
     private const int VkF7 = 0x76;
     private const int VkF8 = 0x77;
+    private const int VkF9 = 0x78;
     private const int VkLWin = 0x5B;
     private const int VkLeft = 0x25;
     private const int VkMenu = 0x12;
     private const int VkOem3 = 0xC0;
+    private const int VkRShift = 0xA1;
     private const int VkRWin = 0x5C;
     private const int VkReturn = 0x0D;
     private const int VkRight = 0x27;
@@ -54,11 +65,17 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmInput = 0x00FF;
     private const uint WmKeyDown = 0x0100;
     private const uint WmKeyUp = 0x0101;
+    private const uint WmKillFocus = 0x0008;
     private const uint WmLButtonDown = 0x0201;
     private const uint WmLButtonUp = 0x0202;
     private const uint WmMButtonDown = 0x0207;
     private const uint WmMButtonUp = 0x0208;
     private const uint WmMouseMove = 0x0200;
+    private const uint WmMouseWheel = 0x020A;
+    // WHEEL_DELTA: the notch quantum WM_MOUSEWHEEL's high word counts in. A free-spin or precision wheel reports
+    // FRACTIONS of it, so the neutral event carries the quotient as a float rather than an integer notch count —
+    // rounding here would silently drop every sub-notch report a high-resolution wheel makes.
+    private const float WheelDelta = 120f;
     private const uint WmNcCreate = 0x0081;
     private const uint WmNcDestroy = 0x0082;
     private const uint WmPaint = 0x000F;
@@ -186,9 +203,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
 
     private void FlushPointerFrame() {
-        // Emit at most one pointer.move (the frame's summed relative motion) and one pointer.position per
-        // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta the
-        // command registry records correctly (its polled value is last-wins; one signal makes that exact).
+        // Emit at most one PointerDelta (the frame's summed relative motion) and one PointerAbsolute per
+        // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta each
+        // observer sees once (a per-frame consumer sums or last-wins; one event makes either exact).
         if (m_frameMouseDelta != Vector2.Zero) {
             m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: m_frameMouseDelta));
             m_frameMouseDelta = Vector2.Zero;
@@ -427,6 +444,15 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                     wParam: wParam,
                     windowHandle: windowHandle
                 );
+            case WmKillFocus:
+                // OS window focus loss (Alt-Tab away, click-away): a modifier key's own release can be delivered
+                // to whatever window just stole focus and never reach this process at all, permanently stranding
+                // a slot's chord tracker mid-page (the pre-existing lt/rt trigger modifiers self-heal because an
+                // analog trigger re-reports its value every tick; a keyboard modifier is edge-only and never
+                // re-asserts). Surfaced through the same TryDequeueInput path as every other window event so the
+                // pump can release every held command AND every slot's chord state in one place.
+                m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
+                return 0;
             case WmShowWindow:
                 m_isVisible = (wParam != 0);
                 return 0;
@@ -493,6 +519,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 );
             case WmMouseMove:
                 return HandleMouseMove(lParam: lParam);
+            case WmMouseWheel:
+                return HandleMouseWheel(wParam: wParam);
             case WmLButtonDown:
                 return HandlePointerButtonDown(button: 0, windowHandle: windowHandle);
             case WmLButtonUp:
@@ -581,14 +609,17 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             return 0;
         }
 
-        var modifiers = ComputeModifiers();
-
         // Ctrl+V pastes: the clipboard text flows through the text pipeline. The chord is consumed WHETHER OR NOT the
         // clipboard has text — otherwise an empty clipboard would let Ctrl+V fall through to the letter case below
         // and emit a LetterDown('v', Control) that a full clipboard suppresses: a clipboard-state-dependent binding
-        // behavior no consumer could reason about.
+        // behavior no consumer could reason about. Exactly Control (no Shift/Alt/Super) so Ctrl+Shift+V still falls
+        // through to its letter signal rather than also pasting.
         if (
-            (modifiers == InputModifiers.Control) &&
+            IsKeyDown(virtualKey: VkControl) &&
+            !IsKeyDown(virtualKey: VkShift) &&
+            !IsKeyDown(virtualKey: VkMenu) &&
+            !IsKeyDown(virtualKey: VkLWin) &&
+            !IsKeyDown(virtualKey: VkRWin) &&
             (wParam.ToInt64() == VkV)
         ) {
             if (
@@ -603,73 +634,121 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         switch (wParam.ToInt64()) {
             case VkOem3:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backtick, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backtick));
                 m_suppressNextCharacterInput = true;
                 return 0;
             case VkBack:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backspace, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backspace));
                 return 0;
             case VkEscape:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Escape, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Escape));
                 return 0;
             case VkReturn:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Enter, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Enter));
                 return 0;
             case VkF1:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F1, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F1));
                 return 0;
             case VkF2:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F2, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F2));
                 return 0;
             case VkF3:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F3, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F3));
                 return 0;
             case VkF4:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F4, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F4));
                 return 0;
             case VkF5:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F5, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F5));
                 return 0;
             case VkF6:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F6, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F6));
                 return 0;
             case VkF7:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F7, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F7));
                 return 0;
             case VkF8:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F8, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F8));
+                return 0;
+            case VkF9:
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F9));
+                return 0;
+            case VkF10:
+                // F10 alone is ALSO a system key (it activates keyboard menu-navigation mode via WM_SYSKEYDOWN,
+                // the same route that carries Alt+letter mnemonics) — handling it here and returning 0 suppresses
+                // that the same way the Alt+F4/Alt+Space/Alt+letter cases already suppress theirs.
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F10));
+                return 0;
+            case VkF11:
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F11));
+                return 0;
+            case VkF12:
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F12));
                 return 0;
             case VkUp:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowUp, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowUp));
                 return 0;
             case VkDown:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowDown, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowDown));
                 return 0;
             case VkLeft:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowLeft, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowLeft));
                 return 0;
             case VkRight:
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowRight, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowRight));
                 return 0;
             case VkSpace:
                 // Space is a first-class named key (the world binds it to the jump action lane, held for variable
                 // height). Its WM_CHAR (a literal ' ') still arrives independently — TranslateMessage runs before
                 // dispatch — so typed text keeps flowing to the text pipeline; an unbound Space signal is ignored by
                 // the binding table. Mirrors the letter/arrow keys: down here, up via TryMapNamedKey in HandleKeyUp.
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Space, modifiers: modifiers));
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Space));
                 return 0;
-            case VkTab when (modifiers != InputModifiers.None):
-                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Tab, modifiers: modifiers));
+            case VkTab:
+                // Tab is a first-class named key, chorded or plain — bare Tab drives the radial action menu's hold
+                // binding, so its down edge must reach the pipeline exactly as its up edge always has
+                // (TryMapNamedKey maps VkTab unconditionally in HandleKeyUp). Consuming it here also keeps
+                // DefWindowProc from treating it as dialog navigation.
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Tab));
+                return 0;
+            case VkControl:
+                // The generic Control VK; the lParam extended-key bit resolves the physical side (set for the
+                // right key, clear for the left — see ExtendedKeyBit's remarks). Was previously unhandled here
+                // and fell to DefWindowProc, so bare Ctrl never reached bindings.
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(
+                    key: ((IsExtendedKey(lParam: lParam)) ? KeyCode.ControlRight : KeyCode.ControlLeft)
+                ));
+                return 0;
+            case VkMenu:
+                // Same side resolution as Control. Bare Alt (no chorded key) previously fell through untouched;
+                // consuming it here also suppresses whatever DefWindowProc did with the WM_SYSKEYDOWN it no
+                // longer sees (a bare Alt tap normally arms keyboard menu-navigation mode).
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(
+                    key: ((IsExtendedKey(lParam: lParam)) ? KeyCode.AltRight : KeyCode.AltLeft)
+                ));
+                return 0;
+            case VkShift:
+                // Shift carries no extended-key bit on either side; MapVirtualKey on the scan code is the only
+                // way to resolve which physical key fired — see MapvkVscToVkEx's remarks.
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: ResolveShiftSide(lParam: lParam)));
+                return 0;
+            case VkLWin:
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.SuperLeft));
+                return 0;
+            case VkRWin:
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.SuperRight));
                 return 0;
             case >= VkA and <= VkZ:
                 // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the
                 // same way it binds Ctrl+C. The letter's WM_CHAR still arrives independently (TranslateMessage runs
                 // in the pump before dispatch), so typed text keeps flowing to the text pipeline; an unbound letter
-                // signal is simply ignored by the binding table.
+                // signal is simply ignored by the binding table. The modifier chord rides along so a consumer (the
+                // console's Ctrl+A/C/X) can distinguish a plain letter from a chorded one without a second binding.
                 m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(
-                    character: LetterForVirtualKey(virtualKey: wParam.ToInt64()),
-                    modifiers: modifiers
-                ));
+                    character: LetterForVirtualKey(virtualKey: wParam.ToInt64())
+                ) with {
+                    Modifiers = CurrentModifiers(),
+                });
                 return 0;
             default:
                 return User32.DefWindowProc(
@@ -683,8 +762,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private nint HandleKeyUp(nint windowHandle, uint message, nint wParam, nint lParam) {
         // Release edges for the named navigation/function/special keys AND the letter keys — a held-key
         // consumer (e.g. a movement binding's release edge) needs the up transition or the hold sticks.
-        // Releases are inert by default (CommandBinding.ActivateOn ignores Completed). Modifiers are not
-        // recomputed: a key-up carries no chord intent.
+        // Releases are inert by default (CommandBinding.ActivateOn ignores Completed).
         var virtualKey = wParam.ToInt64();
 
         if (virtualKey is >= VkA and <= VkZ) {
@@ -692,7 +770,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             return 0;
         }
 
-        if (TryMapNamedKey(virtualKey: virtualKey, key: out var key)) {
+        if (TryMapNamedKey(lParam: lParam, virtualKey: virtualKey, key: out var key)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
             return 0;
         }
@@ -709,7 +787,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static char LetterForVirtualKey(long virtualKey) {
         return (char)('a' + (virtualKey - VkA));
     }
-    private static bool TryMapNamedKey(long virtualKey, out KeyCode key) {
+    private static bool TryMapNamedKey(long virtualKey, nint lParam, out KeyCode key) {
         key = virtualKey switch {
             VkOem3 => KeyCode.Backtick,
             VkBack => KeyCode.Backspace,
@@ -729,10 +807,33 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             VkF6 => KeyCode.F6,
             VkF7 => KeyCode.F7,
             VkF8 => KeyCode.F8,
+            VkF9 => KeyCode.F9,
+            VkF10 => KeyCode.F10,
+            VkF11 => KeyCode.F11,
+            VkF12 => KeyCode.F12,
+            VkControl => ((IsExtendedKey(lParam: lParam)) ? KeyCode.ControlRight : KeyCode.ControlLeft),
+            VkMenu => ((IsExtendedKey(lParam: lParam)) ? KeyCode.AltRight : KeyCode.AltLeft),
+            VkShift => ResolveShiftSide(lParam: lParam),
+            VkLWin => KeyCode.SuperLeft,
+            VkRWin => KeyCode.SuperRight,
             _ => KeyCode.None,
         };
 
         return (key != KeyCode.None);
+    }
+    // WM_KEYDOWN/WM_KEYUP lParam bit 24 (ExtendedKeyBit) — set for the right-hand Control/Alt, clear for the
+    // left-hand ones. Verified against the documented WM_KEYDOWN/WM_KEYUP lParam layout, not against hardware.
+    private static bool IsExtendedKey(nint lParam) {
+        return ((lParam.ToInt64() & ExtendedKeyBit) != 0);
+    }
+    // Shift's lParam carries no extended-key bit on either side, so the scan code (lParam bits 16..23) plus
+    // MapVirtualKey(MAPVK_VSC_TO_VK_EX) is the documented way to recover which physical Shift key fired.
+    // Ambiguous or unresolved input (0, or neither VK) defaults to the left key.
+    private static KeyCode ResolveShiftSide(nint lParam) {
+        var scanCode = (uint)((lParam.ToInt64() >> 16) & 0xFF);
+        var resolvedVirtualKey = User32.MapVirtualKey(code: scanCode, mapType: MapvkVscToVkEx);
+
+        return ((resolvedVirtualKey == VkRShift) ? KeyCode.ShiftRight : KeyCode.ShiftLeft);
     }
     private nint HandleRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
         var size = (uint)Marshal.SizeOf<RawInput>();
@@ -792,7 +893,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
-        // WM_MOUSEMOVE owns the absolute position (pointer.position). It only owns the relative delta as a
+        // WM_MOUSEMOVE owns the absolute position (PointerAbsolute). It only owns the relative delta as a
         // fallback when raw input could not be registered — otherwise WM_INPUT is the single delta emitter,
         // so the two never both feed the pump-level accumulator for the same motion.
         if (
@@ -809,6 +910,19 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
         m_pointerPositionDirty = true;
+        return 0;
+    }
+    // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at
+    // human cadence, so each one is enqueued as it arrives and consumers accumulate what they care about. The
+    // delta rides the SIGNED high word of wParam (positive = away from the user) — an unsigned read would turn
+    // every scroll toward the user into a large positive number.
+    private nint HandleMouseWheel(nint wParam) {
+        var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
+
+        if (notches != 0f) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: notches));
+        }
+
         return 0;
     }
     // A left-button press captures the mouse: the OS then keeps routing WM_MOUSEMOVE/WM_LBUTTONUP to this window
@@ -945,26 +1059,25 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static bool IsKeyDown(int virtualKey) {
         return ((User32.GetKeyState(virtualKey: virtualKey) & 0x8000) != 0);
     }
-    private static InputModifiers ComputeModifiers() {
-        var modifiers = InputModifiers.None;
+    // The currently-held modifier chord, provider-neutral (Puck.Input.WindowInputModifiers), for stamping onto a
+    // key event — either physical Super key folds into the one Super flag, mirroring left/right Control/Alt above.
+    private static WindowInputModifiers CurrentModifiers() {
+        var modifiers = WindowInputModifiers.None;
 
         if (IsKeyDown(virtualKey: VkControl)) {
-            modifiers |= InputModifiers.Control;
+            modifiers |= WindowInputModifiers.Control;
         }
 
         if (IsKeyDown(virtualKey: VkShift)) {
-            modifiers |= InputModifiers.Shift;
+            modifiers |= WindowInputModifiers.Shift;
         }
 
         if (IsKeyDown(virtualKey: VkMenu)) {
-            modifiers |= InputModifiers.Alt;
+            modifiers |= WindowInputModifiers.Alt;
         }
 
-        if (
-            IsKeyDown(virtualKey: VkLWin) ||
-            IsKeyDown(virtualKey: VkRWin)
-        ) {
-            modifiers |= InputModifiers.Super;
+        if (IsKeyDown(virtualKey: VkLWin) || IsKeyDown(virtualKey: VkRWin)) {
+            modifiers |= WindowInputModifiers.Super;
         }
 
         return modifiers;

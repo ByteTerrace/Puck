@@ -1,0 +1,136 @@
+[
+  {
+    "Id": "algebra.complex-lane-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at the (0, \u22121) relation, integer lane",
+        "Against": "Oracles.QuadraticMultiply at (0, \u22121) \u2014 the Q48 form rounded once at shift 32 in BigInteger. ENVELOPE: the second narrow branch is unreachable at this relation",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.fractional-mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at (0, \u00BD), the fractional lane through FusedArithmetic.RoundQ48SumToRaw",
+        "Against": "Oracles.QuadraticMultiply \u2014 the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32, no Puck.Maths call",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.fractional-norm-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.Norm at (0, \u00BD), the fractional lane through FusedArithmetic.RoundQ48SumToRaw",
+        "Against": "Oracles.QuadraticNorm \u2014 U\u00B2\u00B72\u00B9\u2076 \u002B p\u00B7U\u00B7V \u2212 q\u00B7V\u00B2 in BigInteger, one Oracles.RoundDyadic at shift 32",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.fractional-mobius-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MobiusStep"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.MobiusStep numerator at (0, \u00BD), the fractional lane through FixedQ4816.RoundProductSum(Int128)",
+        "Against": "Oracles.MobiusNumerator \u2014 p\u00B7n \u002B q\u00B7d in BigInteger, one Oracles.RoundDyadic at shift 16",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projective step carries the input numerator forward unchanged as the returned denominator, so a step that agreed on the numerator alone would still fail",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.binary-polynomial-crc32-published-vector",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the CRC-32 register built ONLY from BinaryPolynomial\u0027s own remainder, shift and addition operators over the reflected bytes of the standard check string",
+        "Against": "0xCBF43926",
+        "Shared": "",
+        "Citation": "the reveng CRC catalogue\u0027s published check value for CRC-32/ISO-HDLC, the algorithm zlib also implements \u2014 an external anchor no line of this suite computes",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "this is the SUBJECT\u0027S OWN ring arithmetic under an external published workload, not a second CRC implementation: a wrong remainder, shift or addition on BinaryPolynomial breaks the check value even though none of them is independently classical here. The case cites NO members deliberately \u2014 a broken identity cannot isolate which operator is at fault, so it is evidence for the RING rather than a coverage claim on any one operator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

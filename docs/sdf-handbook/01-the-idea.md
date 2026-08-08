@@ -193,9 +193,10 @@ that model into practice with `SdfProgramBuilder`.
   compresses into "beam" and "mask".
 - [docs/sdf-wiki/lipschitz-and-field-correctness.md](../sdf-wiki/lipschitz-and-field-correctness.md)
   — the formal theory behind the step-scale correction mentioned above.
-- [docs/sdf-bench-notes.md](../sdf-bench-notes.md) — measured per-pass GPU
-  cost on the reference hardware, for readers who want the numbers behind
-  "cheap coarse passes let the fine march skip regions."
-- [.agents/skills/sdf-world/SKILL.md](../../.agents/skills/sdf-world/SKILL.md)
+- [08-performance.md](08-performance.md) — the measured per-pass GPU cost on
+  the reference hardware, for readers who want the numbers behind "cheap coarse
+  passes let the fine march skip regions." Those numbers are now recorded only
+  in that chapter, and only as of when it was written; see its status note.
+- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
   — the living contract this chapter's map is a simplified, human-facing
   view of.

@@ -16,7 +16,7 @@ public static class GpuDeviceContextExtensions {
 
         try {
             deviceContext.WaitIdle();
-        } catch (Exception exception) when (exception is DeviceLostException or ObjectDisposedException) {
+        } catch (Exception exception) when ((exception is DeviceLostException or ObjectDisposedException)) {
             // The device is already lost or torn down; nothing in flight will ever complete, so nothing to drain.
         }
     }

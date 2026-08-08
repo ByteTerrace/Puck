@@ -47,13 +47,13 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &resource
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            pDesc: in textureDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &resource,
+            riidResource: in resourceIid
         );
         m_resource = (nint)resource;
 

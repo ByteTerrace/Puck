@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -117,7 +118,7 @@ internal static class BessScope {
         writer.WriteBytes(value: capture.BackgroundPalette);
         writer.WriteBytes(value: capture.ObjectPalette);
 
-        return StateFingerprint.Compute(data: writer.ToArray());
+        return Fnv1aHash.Compute(values: writer.ToArray());
     }
     /// <summary>Reads a run of bytes through the bus (a diagnostic read; not recorded anywhere, no side effects beyond
     /// whatever a real CPU read on that address would have).</summary>

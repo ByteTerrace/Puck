@@ -1,0 +1,1215 @@
+{
+  "$schema": "../worlds/puck.world.def.v1.schema.json",
+  "motion": {
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
+    "maxSmoothError": 3
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        2,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        2,
+        0,
+        2
+      ]
+    }
+  ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "screens": [],
+  "cameras": [],
+  "population": {
+    "capacity": 4,
+    "reconnectGraceTicks": 720,
+    "seatActivation": [
+      "Eager",
+      "Eager",
+      "Eager",
+      "Eager"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "wander"
+    },
+    "seatSpawns": [
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4"
+    ],
+    "distribution": {
+      "region": {
+        "$type": "disc",
+        "radius": 40
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
+    },
+    "peerVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "seatVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "peerColors": {
+      "name": "additive",
+      "offset": -4,
+      "step": 0.618034
+    }
+  },
+  "inputHold": {
+    "ceilingTicks": 120,
+    "lowerAfterTicks": 60,
+    "defaultTicks": 0,
+    "equalizeByDefault": true,
+    "participants": []
+  },
+  "targetRegisters": [
+    {
+      "name": "target",
+      "maximumRange": 50,
+      "maximumHalfAngleDegrees": 30,
+      "requiresLineOfSight": true
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveForward"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    },
+    {
+      "name": "pitch",
+      "shape": "Bipolar",
+      "role": "Pitch"
+    },
+    {
+      "name": "roll",
+      "shape": "Bipolar",
+      "role": "Roll"
+    },
+    {
+      "name": "jump",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "dash",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "run",
+      "shape": "Binary",
+      "composition": true
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "grounded",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "free",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "IntegrateLocalAttitude",
+        "ComputeLocalTargetVelocity",
+        "RunActionTriggers",
+        "ApplyVerticalDecay",
+        "IntegrateScratchVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "wander",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceWanderIntent"
+      ]
+    },
+    {
+      "name": "attend",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "target": {
+        "$type": "sensed",
+        "scope": "Seats",
+        "range": 16,
+        "halfAngleDegrees": 180,
+        "requiresLineOfSight": false
+      },
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceWanderIntent",
+        "ProduceAttendIntent",
+        "FaceSensorTarget"
+      ]
+    },
+    {
+      "name": "designated",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "target": {
+        "$type": "designated",
+        "register": "target"
+      },
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceAttendIntent",
+        "FaceSensorTarget"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "traveler",
+      "bodyMotionProgram": "grounded",
+      "motion": {
+        "$type": "grounded",
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "sprintMultiplier": 1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ],
+        "sprintMultiplier": 1.6,
+        "sprintChannel": "run",
+        "moveFrame": "World",
+        "facingSnap": true
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.375,
+            "softRadius": 45,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0,
+            "turnWave": 0,
+            "upWave": 0,
+            "pitchWave": 0,
+            "rollTurn": 0,
+            "pressThreshold": 0,
+            "altitudeBase": 0,
+            "altitudeRange": 0
+          },
+          "channels": {
+          }
+        }
+      },
+      "actions": {
+        "jump": {
+          "state": [
+            {
+              "name": "jumpUses",
+              "kind": "Counter",
+              "initial": 0,
+              "resetFact": "Grounded"
+            }
+          ],
+          "onPress": {
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "recently",
+                  "fact": "Grounded",
+                  "windowSeconds": 0.09
+                },
+                {
+                  "$type": "compareState",
+                  "state": "jumpUses",
+                  "comparison": "Less",
+                  "value": 1
+                }
+              ]
+            },
+            "latchSeconds": 0.1,
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 5.5
+              },
+              {
+                "$type": "addState",
+                "state": "jumpUses",
+                "value": 1
+              }
+            ]
+          },
+          "onRelease": {
+            "gate": {
+              "$type": "now",
+              "fact": "Rising"
+            },
+            "latchSeconds": 0,
+            "effects": [
+              {
+                "$type": "scaleVerticalVelocity",
+                "factor": 0.45
+              }
+            ]
+          }
+        }
+      },
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.35
+      }
+    }
+  ],
+  "defaultSeatKit": "traveler",
+  "assignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 1,
+      "step": 0
+    },
+    "rows": []
+  },
+  "addons": [],
+  "bindingOverlays": [
+    {
+      "id": "combat-sprint",
+      "document": {
+        "version": "puck.bindings.v1",
+        "modifiers": [],
+        "chords": [
+          {
+            "group": "play",
+            "chord": [],
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "source": "keyboard.space",
+                  "channel": "jump",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.space",
+                  "channel": "jump",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "channel": "jump",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "channel": "jump",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "run",
+                  "activateOn": null,
+                  "label": "Sprint",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "run",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "run",
+                  "activateOn": null,
+                  "label": "Sprint",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "run",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                }
+              ],
+              "label": null,
+              "icon": null
+            },
+            "command": null
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "endpoint": null,
+    "userId": null,
+    "discoveryEndpoint": null
+  },
+  "creations": [
+    {
+      "id": "ground",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ground",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.33,
+              "y": 0.52,
+              "z": 0.24
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "ground",
+            "type": "Plane",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+    }
+  ],
+  "placements": [
+    {
+      "id": "ground",
+      "creationId": "ground",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    }
+  ],
+  "authoring": {
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 4
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  },
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "presentation": "Windowed",
+    "backend": "auto",
+    "width": 1920,
+    "height": 1080,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": true,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "views": {
+    "seatRig": {
+      "motion": {
+        "$type": "follow",
+        "offset": [
+          0,
+          2.2,
+          5
+        ],
+        "worldAxes": false,
+        "spreadPullback": 0
+      },
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "smoothRate": 6
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 129,
+      "step": 0
+    },
+    "rows": []
+  },
+  "links": [],
+  "grants": [],
+  "hud": {
+    "defaults": {
+      "enabled": true
+    },
+    "panels": []
+  },
+  "state": [
+    {
+      "name": "hp",
+      "kind": "int",
+      "capacity": 8,
+      "cells": [
+        {
+          "key": "0",
+          "value": 70,
+          "advance": {
+            "rateNumerator": 1,
+            "rateDenominator": 24,
+            "epochTick": 0
+          }
+        },
+        {
+          "key": "1",
+          "value": 100
+        },
+        {
+          "key": "2",
+          "value": 30
+        }
+      ]
+    },
+    {
+      "name": "threat",
+      "kind": "int",
+      "capacity": 8,
+      "cells": [
+        {
+          "key": "0",
+          "value": 10
+        },
+        {
+          "key": "1",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "name": "dead",
+      "kind": "bool",
+      "capacity": 8,
+      "gatesDrive": true,
+      "cells": [
+        {
+          "key": "2",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "stunRemaining",
+      "kind": "int",
+      "capacity": 8,
+      "nonNegative": true,
+      "gatesDrive": true,
+      "cells": [
+        {
+          "key": "2",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "strikeCooldown",
+      "kind": "int",
+      "capacity": 8,
+      "nonNegative": true,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "ccCooldown",
+      "kind": "int",
+      "capacity": 8,
+      "nonNegative": true,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "mobAttackCooldown",
+      "kind": "int",
+      "capacity": 8,
+      "nonNegative": true,
+      "cells": [
+        {
+          "key": "2",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "castStrike",
+      "kind": "bool",
+      "value": false
+    },
+    {
+      "name": "castCC",
+      "kind": "bool",
+      "value": false
+    },
+    {
+      "name": "mobTarget",
+      "kind": "int",
+      "value": -1
+    }
+  ],
+  "rules": [
+    {
+      "name": "strike-cooldown-tick",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "strikeCooldown",
+        "key": "0",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "strikeCooldown",
+          "key": "0",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "cc-cooldown-tick",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "ccCooldown",
+        "key": "0",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "ccCooldown",
+          "key": "0",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "mob-attack-cooldown-tick",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "mobAttackCooldown",
+        "key": "2",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "mobAttackCooldown",
+          "key": "2",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "mob-stun-tick",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "stunRemaining",
+        "key": "2",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "stunRemaining",
+          "key": "2",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "mob-target-mirror",
+      "mode": "Level",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "mobTarget",
+          "fromState": "$argmax:threat"
+        }
+      ]
+    },
+    {
+      "name": "player1-strike",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "castStrike",
+            "comparison": "Equal",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "$distance:body:0:body:2",
+            "comparison": "LessOrEqual",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "state": "strikeCooldown",
+            "key": "0",
+            "comparison": "LessOrEqual",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "dead",
+            "key": "2",
+            "comparison": "NotEqual",
+            "value": 1
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "hp",
+          "key": "2",
+          "value": -15
+        },
+        {
+          "$type": "setState",
+          "state": "strikeCooldown",
+          "key": "0",
+          "value": 240
+        },
+        {
+          "$type": "setState",
+          "state": "castStrike",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "player1-cc",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "castCC",
+            "comparison": "Equal",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "$los:body:0:body:2",
+            "comparison": "Equal",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "ccCooldown",
+            "key": "0",
+            "comparison": "LessOrEqual",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "dead",
+            "key": "2",
+            "comparison": "NotEqual",
+            "value": 1
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "stunRemaining",
+          "key": "2",
+          "value": 120
+        },
+        {
+          "$type": "setState",
+          "state": "ccCooldown",
+          "key": "0",
+          "value": 240
+        },
+        {
+          "$type": "setState",
+          "state": "castCC",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "mob-dies",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "hp",
+        "key": "2",
+        "comparison": "LessOrEqual",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "dead",
+          "key": "2",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "mob-attacks-p1",
+      "mode": "Level",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "$argmax:threat",
+            "comparison": "Equal",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$distance:body:2:body:0",
+            "comparison": "LessOrEqual",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "state": "mobAttackCooldown",
+            "key": "2",
+            "comparison": "LessOrEqual",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "dead",
+            "key": "2",
+            "comparison": "NotEqual",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "stunRemaining",
+            "key": "2",
+            "comparison": "LessOrEqual",
+            "value": 0
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "hp",
+          "key": "0",
+          "value": -5
+        },
+        {
+          "$type": "setState",
+          "state": "mobAttackCooldown",
+          "key": "2",
+          "value": 120
+        }
+      ]
+    },
+    {
+      "name": "mob-attacks-p2",
+      "mode": "Level",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "$argmax:threat",
+            "comparison": "Equal",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "$distance:body:2:body:1",
+            "comparison": "LessOrEqual",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "state": "mobAttackCooldown",
+            "key": "2",
+            "comparison": "LessOrEqual",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "dead",
+            "key": "2",
+            "comparison": "NotEqual",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "stunRemaining",
+            "key": "2",
+            "comparison": "LessOrEqual",
+            "value": 0
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "hp",
+          "key": "1",
+          "value": -5
+        },
+        {
+          "$type": "setState",
+          "state": "mobAttackCooldown",
+          "key": "2",
+          "value": 120
+        }
+      ]
+    },
+    {
+      "name": "mob-spawn-add",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "hp",
+        "key": "2",
+        "comparison": "LessOrEqual",
+        "value": 15
+      },
+      "effects": [
+        {
+          "$type": "upsertPlacement",
+          "placement": {
+            "id": "combat-add-1",
+            "creationId": "ground",
+            "position": [
+              4,
+              0,
+              4
+            ],
+            "yawDegrees": 0,
+            "scale": 0.4
+          }
+        }
+      ]
+    },
+    {
+      "name": "mob-despawn-add",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "dead",
+        "key": "2",
+        "comparison": "Equal",
+        "value": 1
+      },
+      "effects": [
+        {
+          "$type": "removePlacement",
+          "id": "combat-add-1"
+        }
+      ]
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "documentId": "combat-vertical-slice",
+  "playerDefaults": {
+    "identities": [
+      {
+        "id": "amber",
+        "name": "amber",
+        "color": "#ED8530"
+      },
+      {
+        "id": "cobalt",
+        "name": "cobalt",
+        "color": "#3373D9"
+      },
+      {
+        "id": "moss",
+        "name": "moss",
+        "color": "#4CBD52"
+      },
+      {
+        "id": "violet",
+        "name": "violet",
+        "color": "#A359D6"
+      }
+    ],
+    "neutralColor": "#8C8C8C",
+    "colorSequence": {
+      "name": "additive",
+      "offset": 0,
+      "step": 0.618034
+    },
+    "saturation": 0.65,
+    "value": 0.85,
+    "colorSearchLimit": 64,
+    "noseFactor": 0.35,
+    "pickerThreshold": 0.6,
+    "pickerNeutralColor": "#8C8C8C",
+    "pickerNeutralBlend": 0.5,
+    "seatLook": {
+      "yawSensitivity": 0.001,
+      "pitchSensitivity": 0.001,
+      "invertYaw": false,
+      "invertPitch": false,
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "arming": "RightButton",
+      "worldAxes": false
+    }
+  }
+}

@@ -1,0 +1,238 @@
+[
+  {
+    "Id": "core.layer-sequence-walker-and-bounded-horizon",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.LayerSequence", "Name": "LayerOf" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "LayerSize" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Count" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Seed" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Triangular" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Pronic" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Square" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "CenteredSquare" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "CenteredHexagonal" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Linear" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Create" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "MaxLayer" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Capacity" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Locate" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Project" },
+      { "Type": "Puck.Maths.LayerLocation", "Name": ".ctor" },
+      { "Type": "Puck.Maths.LayerProjection", "Name": ".ctor" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the closed-form inverse LayerOf agrees with an incremental walker that accumulates LayerSize forward from the sequence's own Seed, at every index from 0 through 65535, across all five shipped presets (Triangular, Pronic, Square, CenteredSquare, CenteredHexagonal) — the constant-time formula and the O(n) walk are two independently coded computations of the same layer index",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Count's own boundary is exact at scale the walker above never reaches: for n = 1, 3, 9, ... up to just under 10^8 (stepping by a factor of eight), the layer reported just past Count(n) is n + 1 and the layer reported just before it is n, checked through LayerOf rather than the walker, so this pins Count and LayerOf against EACH OTHER at magnitudes the O(n) walk could not afford",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "LayerSequence.Linear's flat indexing at three hand-derived points (a size-five, seed-three ladder placing index 2 in layer 0, index 3 in layer 1, and index 12 in layer 2), and its own overflow refusal: LayerOf at long.MaxValue on an unbounded flat sequence throws OverflowException rather than silently wrapping",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "a hand-built bounded horizon, LayerSequence.Create(start: 6, step: -2, seed: 1) — three positive layer sizes (6, 4, 2) before the arithmetic step reaches zero — read into locals before comparison",
+        "Against": "MaxLayer is 3 and Capacity is 13, both derived on paper from the declared start/step arithmetic sequence and the seed rather than from any kernel call",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Locate and Project agree with LayerOf on the SAME bounded horizon at both an in-range index and one past capacity: Locate(5) resolves to (layer 1, offset 4); LayerOf(12) reports the last layer (3) at the boundary; LayerOf(13) — one past Capacity — throws ArgumentOutOfRangeException; and Project decomposes an out-of-range index into (Layer, Overflow, Depth) as exactly (3, 8, 2) at index 20 and cleanly (3, 0, 0) at the in-range boundary index 12",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Project's overflow channel saturates rather than wrapping: an unbounded flat sequence (LayerSequence.Linear(size: 0, seed: 0)) projecting long.MaxValue reports Overflow equal to long.MaxValue itself, the widest excess the channel can represent",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: before this case, LayerSequence's only pinned members were Count and LayerSize, and only as one half of presented.antidifference-vs-layer-sequence's PresentedTwin leg comparing Count against a presented-algebra prefix sum — a statement about the summation operator, which says nothing about LayerOf, Locate, Project, Capacity, MaxLayer, the Linear/Create factories or the bounded-horizon refusal ladder. This case is the first and only law that reaches the closed-form inverse and the saturation channels directly, which is the whole of this member's job",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.bitwise-pair-signed-narrow-and-wide-carriers",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BinaryIntegerFunctions", "Name": "BitwisePair" },
+      { "Type": "Puck.Maths.BinaryIntegerFunctions", "Name": "BitwiseUnpair" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BitwisePair<short,uint> over an eight-row ladder of negative, boundary and index-derived short pairs — both lanes at short.MinValue, MinValue against zero either side, MaxValue against MinValue, both lanes at −1, and two bit-derived patterns (0xACE5, 0x53A1) exercising every nibble",
+        "Against": "a bit-by-bit interleave reference formed over the LOW SIXTEEN BITS of each operand's two's-complement pattern — value's bits at the even positions, other's at the odd ones — sharing no line with BinaryIntegerFunctions.BitwisePair's Bmi2.ParallelBitDeposit branch for the `case short: case ushort:` arm, a DISTINCT code path from the `case int: case uint:` arm core.binary-integer-contracts exercises and the width-agnostic SWAR default path scalar.binary-integer-wide-carrier-vs-oracle exercises",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BitwisePair<long,Int128> over the same eight-row shape at the wide width — both lanes at long.MinValue, MinValue against zero either side, MaxValue against MinValue, both lanes at −1, and one bit-derived pattern",
+        "Against": "a bit-by-bit interleave reference over the full sixty-four-bit two's-complement pattern of each operand, assembled in UInt128 and cast to Int128 through the same unchecked bit reinterpretation the subject's SWAR fallback performs, sharing no loop and no idea with it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the unpair is the exact inverse at every row of both ladders, recovering the ORIGINAL signed value bit for bit — not merely its truncated magnitude — because CreateTruncating's narrowing back to the signed result type re-sign-extends the same low bits it was built from",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this is the SIGNED complement to the two existing pairing cases. core.binary-integer-contracts sweeps BitwisePair<uint,ulong> over the non-negative range [0,32)x[0,32), which reaches the switch's `case int: case uint:` branch, and scalar.binary-integer-wide-carrier-vs-oracle sweeps BitwisePair<ulong,UInt128> over 30000 drawn non-negative ulong pairs on the SWAR default path — neither reaches the `case short: case ushort:` branch at all, and neither ever passes a negative operand through any branch, which is exactly where a sign-extension leak into the interleaved bits — the historical 'polluted bits' defect — would show up first",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.field-noise-wide-position-alias-and-rebase",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FieldNoise", "Name": "Sample" },
+      { "Type": "Puck.Maths.FixedPosition", "Name": ".ctor" },
+      { "Type": "Puck.Maths.FixedPosition", "Name": "CellSizeLog2" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FieldNoise.Sample(seed, FixedPosition) at the WIDE hierarchical path — reached when the cell-scaled coordinate leaves the signed sixty-four-bit range the flat fast path tests for, which every position sampled here does — does not discard the high cell bits: at eight probe positions whose CellX is zero against the same eight probes with CellX pushed to 2^(64 − CellSizeLog2), each under its own seed, not every pair samples identically",
+        "Against": "the same sample at the origin cell — required to DIFFER at least once across the eight probes, since a wide path that truncated CellX to its low bits before hashing would alias every one of them",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "owed:a value-level FieldNoise.Sample oracle — no absolute sibling exists in this tree at the wide path either; sampling.field-noise-bounds-and-gradient's bound and corner-identity legs are the closest evidence and pin only the NATIVE path, and its own DelegationTwin leg says outright that the wide path is not reached there"
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two DIFFERENT wide hierarchical encodings of the SAME logical point sample IDENTICALLY: a position at cell (2^50, −2^50, 2^50) with a zero local offset, against the same point rebased to cell (2^50+1, −2^50−1, 2^50+1) with a local offset of exactly one cell width in the matching sign — the cell/local carry the wide path performs must land on the one hash input both encodings denote",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: sampling.field-noise-bounds-and-gradient's DelegationTwin leg states in so many words that the wide path 'is not reached by any position here, and no leg claims it', and sampling.field-noise-periodicity-canary-and-distribution's hash-period, seed-translation and octave-wrap canaries all stay on signed-64 coordinates too; this case is the first and only one that constructs a FixedPosition whose combined coordinate leaves signed-64 and reaches SampleWideLattice",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.unsigned-square-root-uint128-carrier-boundary",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.UnsignedNumberFunctions", "Name": "SquareRoot" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnsignedNumberFunctions.SquareRoot<UInt128> at seven boundary rows: zero, 2^100 exactly, its two neighbours, ulong.MaxValue squared exactly, and UInt128.MaxValue with its one neighbour below it",
+        "Against": "hand-derived exact literals computed on paper: 2^100 = (2^50)^2 is a square outright, so 2^100 minus one roots one below at 2^50 minus one and 2^100 plus one still roots at 2^50; ulong.MaxValue squared is a square outright at ulong.MaxValue; and UInt128.MaxValue and its predecessor both root to ulong.MaxValue because (ulong.MaxValue + 1)^2 = 2^128 exceeds both. No kernel is called on either side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SquareRoot<UInt128> at thirty-two index-derived interior operands spanning the widest quarter of the carrier, each formed as 2^(127-k) plus a small index-derived offset for k from 0 through 31",
+        "Against": "the defining inequality root^2 <= value < (root + 1)^2 checked in exact BigInteger arithmetic — the only safe way to state the upper bound this near UInt128's own ceiling, since (root + 1)^2 itself overflows the 128-bit carrier for several of these operands and would silently wrap if formed in the carrier under test. No rounding or estimate stands on either side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: core.unsigned-integer-contracts already credits UnsignedNumberFunctions.SquareRoot by name, but its own leg states the sweep runs 'through 10000' at type uint — it never instantiates the generic member at T = UInt128, and never reaches within 2^90 of the carrier's own ceiling. This case is what actually exercises the width-128 instantiation, including the corner where a naive (root + 1)^2 would overflow the very carrier it is bounding",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedTickConversion", "Name": "DurationEngineTicks" },
+      { "Type": "Puck.Maths.FixedTickConversion", "Name": "TicksPerSecond" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedTickConversion.DurationEngineTicks at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second",
+        "Against": "an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * TicksPerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "this is the seam headless P1 (docs/project-map.md) dissolves: Puck.World.Server's WorldBody and Puck.World.Data's WorldDefinition kit-effect compile path both call this ONE member instead of the Data project reaching into the Server project (or vice versa) for the seconds-to-ticks round-up — the law's coverage of the member is what keeps that single call site honest as both callers change",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

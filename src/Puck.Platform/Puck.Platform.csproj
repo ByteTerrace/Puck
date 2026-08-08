@@ -1,8 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
         <!-- Emit CsWin32's generated interop to obj/generated (obj is gitignored) so the
              `named-args` format pass can resolve calls into the generated Win32 types. -->
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <!-- Media Foundation and GameInput use built-in COM marshalling, which trimming does not support. -->
+        <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />

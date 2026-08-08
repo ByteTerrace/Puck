@@ -1,0 +1,69 @@
+<Project>
+
+    <Import Project="$(MSBuildThisFileDirectory)Architecture.props" />
+
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckArchitectureGate"
+    >
+        <ParameterGroup>
+            <BackendExceptions ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <DeclaredReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Kind ParameterType="System.String" />
+            <Kinds ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Layer ParameterType="System.String" />
+            <Layers ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Profiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <ProjectFile ParameterType="System.String" Required="true" />
+            <ProjectName ParameterType="System.String" Required="true" />
+            <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckArchitectureGate.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+
+    <!--
+        The hook point is BeforeTargets="CoreCompile", and it was chosen by measurement rather than by
+        reading. @(ReferencePathWithRefAssemblies) is EMPTY after ResolveReferences (measured: count=0 on
+        every project) because FindReferenceAssembliesForReferences populates it later, on the way into the
+        compile. A gate hooked at the obvious-looking place would have examined nothing and passed
+        everything, forever — and running it is exactly what would never have complained. Here the item is
+        populated (measured: 201 entries on Puck.Launcher, four of them Puck projects), and the target still
+        fires on a fully up-to-date incremental build, so an edit to a csproj cannot slip past by not
+        triggering a recompile of the project that would have caught it.
+
+        The reference set is filtered to ReferenceSourceTarget == 'ProjectReference'. That is deliberately a
+        THE FILTER USED TO SIT HERE AND IT WAS A HOLE. An earlier version passed only items whose
+        ReferenceSourceTarget was 'ProjectReference', and its comment claimed a non-project Puck reference
+        "would surface as a missing declaration rather than pass unseen." That was measured FALSE by the
+        unit-1 review: a raw <Reference> with a HintPath into another project's bin/ builds green, zero
+        diagnostics, and the reviewer compiled a Puck.Commands type inside the neutral scripting core to
+        prove it. The same hole let a raw backend DLL past the quarantine, and a package delivering a Puck
+        assembly would ride it identically.
+
+        So the WHOLE resolved set crosses now, and provenance is a field the task reads rather than a filter
+        applied here. What a reference IS, architecturally, cannot depend on how someone chose to write it.
+    -->
+    <Target
+        Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
+        Name="PuckArchitectureCheck"
+        BeforeTargets="CoreCompile"
+    >
+        <PuckArchitectureGate
+            BackendExceptions="@(PuckArchitectureBackendException)"
+            DeclaredReferences="@(ProjectReference)"
+            Kind="$(PuckKind)"
+            Kinds="@(PuckArchitectureKind)"
+            Layer="$(PuckLayer)"
+            Layers="@(PuckArchitectureLayer)"
+            Profiles="@(PuckArchitectureProfile)"
+            ProjectFile="$(MSBuildProjectFullPath)"
+            ProjectName="$(MSBuildProjectName)"
+            References="@(ReferencePathWithRefAssemblies)"
+        />
+    </Target>
+
+</Project>

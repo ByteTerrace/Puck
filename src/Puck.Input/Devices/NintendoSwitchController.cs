@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Numerics;
 using Puck.Input.Hid;
 
@@ -63,9 +62,6 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private const byte SubcommandReplyInputReportId = 0x21;   // device -> host: subcommand acknowledgement/reply
     private const byte SubcommandReplyAckOffset = 14;         // echoed subcommand id within a 0x21 reply
     private const int ReportSizeInBytes = 64;
-    // A >=30 ms coalescing cadence so a per-tick streamer can't flood the link: writing faster can drop a
-    // Bluetooth controller off the link or make a USB controller miss the command.
-    private const long RumbleWriteIntervalMilliseconds = 30L;
 
     private static ReadOnlySpan<byte> DefaultRumblePacket => [0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40,];
 
@@ -76,8 +72,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private readonly ImuOrientationTracker m_tracker = new();
     private byte m_packetId;
     private byte m_rumblePacketId;
-    private long m_lastRumbleSendTicks;
-    private float m_lastRumbleIntensity;
+    private RumbleThrottle m_rumbleThrottle;
     private StickCalibration m_leftStickCalibration;   // default: IsValid = false → the nominal scale is used
     private StickCalibration m_rightStickCalibration;
 
@@ -455,18 +450,10 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
         var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
         var intensity = MathF.Max(x: low, y: high);
-        var now = Stopwatch.GetTimestamp();
 
-        if ((0f < intensity) && (intensity <= m_lastRumbleIntensity) && (0L != m_lastRumbleSendTicks)) {
-            var elapsedMilliseconds = (((now - m_lastRumbleSendTicks) * 1000L) / Stopwatch.Frequency);
-
-            if (elapsedMilliseconds < RumbleWriteIntervalMilliseconds) {
-                return ValueTask.CompletedTask;
-            }
+        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+            return ValueTask.CompletedTask;
         }
-
-        m_lastRumbleIntensity = intensity;
-        m_lastRumbleSendTicks = now;
 
         var buffer = m_rumbleBuffer;
 
@@ -659,16 +646,8 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             x: Math.Clamp(value: x, max: 1f, min: -1f),
             y: Math.Clamp(value: y, max: 1f, min: -1f)
         );
-        var magnitude = stick.Length();
 
-        if (magnitude <= StickDeadzone) {
-            return Vector2.Zero;
-        }
-
-        // Rescale past the deadzone so the response starts at zero just outside it, and clamp to the unit disc.
-        var scaled = ((MathF.Min(x: magnitude, y: 1f) - StickDeadzone) / (1f - StickDeadzone));
-
-        return ((stick / magnitude) * scaled);
+        return GamepadNormalization.ApplyRadialDeadzone(stick: stick, deadzone: StickDeadzone);
     }
     private static Vector3 ReadGyro(ReadOnlySpan<byte> report) {
         var sum = Vector3.Zero;

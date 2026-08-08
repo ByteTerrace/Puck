@@ -1,0 +1,416 @@
+[
+  {
+    "Id": "quadratic-integer.class-number-one-worlds-factor-prime-canonical",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "IsPrimeElement" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "CanonicalAssociate" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "IsUnit" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "ValidateDescriptor" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorization", "Name": "Factors" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorization", "Name": "LeadingUnit" },
+      { "Type": "Puck.Maths.Research.QuadraticPrimeFactor", "Name": "Prime" },
+      { "Type": "Puck.Maths.Research.QuadraticPrimeFactor", "Name": "Multiplicity" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Create" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Discriminant" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Multiply" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Conjugate" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Negate" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "P" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Q" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Zero" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFactorize over QuadraticAlgebra<BigInteger> succeeds with zero obstructions across the nine imaginary class-number-one worlds (Delta = -3, -4, -7, -8, -11, -19, -43, -67, -163) and the real Delta = 5 world, swept by a deterministic arithmetic-progression element stream (no System.Random) rather than at one hand-picked value; each world's Discriminant is checked against its expected value before anything else runs",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every returned prime factor is re-checked twice over: IsPrimeElement confirms it is genuinely prime, and CanonicalAssociate is IDEMPOTENT on it (CanonicalAssociate(factor.Prime) == factor.Prime), so a factorization that produced a composite or a non-canonical representative would fail here even though it never reaches a reassembly mismatch",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the leading unit times each canonical prime power, multiplied back through the algebra's own Multiply, reproduces the input element exactly, and the leading factor is independently confirmed a unit by IsUnit rather than merely assumed from its role",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: reassembly composes QuadraticAlgebra<BigInteger>.Multiply and Conjugate/Negate reach through CanonicalAssociate's unit-orbit search, so this case does not isolate any one of those from TryFactorize's own arithmetic; Multiply is independently pinned over the FixedQ4816 carrier by algebra.complex-lane-vs-oracle and its neighbours, and here it is exercised only as the composition the factorization contract itself promises to close",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.golden-unit-and-splitting-vs-jacobi",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "FundamentalUnit" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "SplittingCharacter" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Discriminant" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at the descriptor (P, Q) = (1, 1), FundamentalUnit returns exactly (0, 1) — the adjoined root x itself, which IS phi by construction (x^2 = x + 1). A hand computation of the SAME norm formula the type implements gives Norm(0,1) = 0^2 + 1*0*1 - 1*1^2 = -1, which is a definitional fact about this descriptor checked directly rather than a value captured from running the subject and fed back to it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SplittingCharacter at Delta = 5 over every prime below 2000",
+        "Against": "a binary quadratic-reciprocity descent (RefJacobiSymbol) written fresh in QuadraticIntegerClaims.cs, sharing no line with NumberTheoryFunctions.JacobiSymbol or UnsignedNumberFunctions.JacobiSymbol, either of which SplittingCharacter itself could reach; 2 is decided by Delta mod 8 independently on both sides, and an odd prime by the reciprocity symbol against 5 versus the residue test ell mod 5 == 0 for the ramified case",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.sum-of-two-squares-and-class-group-witness",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "SplittingCharacter" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorizationObstruction", "Name": "RationalPrime" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorizationObstruction", "Name": "Splitting" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorization", "Name": "Factors" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "in the (0, -1) world, TryFactorize(ell, 0) carries a prime of norm exactly ell for every rational prime ell below 10^4",
+        "Against": "the classical sum-of-two-squares law: ell is a sum of two squares exactly when ell = 2 or ell = 1 (mod 4), a fact about rational integers independent of this library, checked over an ell-stream enumerated by a fresh trial-division sieve rather than NumberTheoryFunctions.SegmentedPrimeSieve",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SplittingCharacter agrees with the norm-ell factor test on the SAME rational prime: the character is anything but Inert exactly when a norm-ell prime element was found, tying two different subject calls together rather than checking either alone",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the first-twist class-group witness: in the Delta = -20 world, TryFactorize(6, 0) REFUSES, and the returned obstruction names rational prime 2 or 3 — the two primes above which are non-principal there",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over a deterministic element stream in each of three non-class-number-one worlds (Delta = -20, -15, -24), the obstruction rate is NONZERO and every successful factorization still reassembles exactly",
+        "Against": "quadratic-integer.class-number-one-worlds-factor-prime-canonical - the zero-obstruction sibling this survey's nonzero rate is required to differ from; that case's nine imaginary worlds plus Delta = 5 see no obstruction at all across the same shape of deterministic sweep",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "quadratic-integer.class-number-one-worlds-factor-prime-canonical - the zero-obstruction sibling this survey's nonzero rate is required to differ from"
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.factorization-is-deterministic",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at Delta = -19, calling TryFactorize twice on each of a hundred deterministic elements returns byte-identical factorizations (same leading unit, same prime powers in the same order) or byte-identical obstructions, at every one of them",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.fast-tier-routing-vs-independent-reference",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "IsUnit" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "IsPrimeElement" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "CanonicalAssociate" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Multiply" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Root" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Norm, IsUnit and IsPrimeElement across four worlds (three class-number-one, one non-principal) and three routing regimes — comfortably inside the 2^41 fixed-width fast-tier bound, straddling it, and comfortably above it",
+        "Against": "RefNorm/RefIsPrimeElement, a BigInteger recomputation written fresh in QuadraticIntegerClaims.cs that calls no Puck.Maths member: it re-derives the norm form U^2+P*U*V-Q*V^2 directly, its own Miller-Rabin witness ladder for the primality gate, and its own reciprocity descent (RefJacobiSymbol) for the splitting character an inert-square norm needs — so no branch of the reference re-enters the fast/wide-tier routing under test",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsPrimeElement's inert-square branch — a norm equal to the square of an INERT rational prime — is driven EXPLICITLY through algebra.Root rather than left to chance (random components almost never land a norm exactly ell^2), and judged consistently by IsPrimeElement, by the CanonicalAssociate-based associate comparison, and by the independent reference alike",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the divide-out loop, scaled by 1, 2^37 and 2^43 so a smooth-norm element's components straddle and cross the routing boundary within a single factorization",
+        "Against": "each successful factorization reassembles exactly and its factor-norm product, recomputed independently by RefNorm rather than through QuadraticAlgebra<BigInteger>.Norm, matches the reference |norm| exactly — tying the fast-tier divide-out back to a shared-nothing recomputation across the seam. Determinism is checked in the same loop: the same scaled element factors byte-identically a second time",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.real-order-fundamental-unit-vs-retired-scan",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "FundamentalUnit" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Discriminant" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "P" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over every real order in [5, 4000], FundamentalUnit's recovered (X, Y) satisfies X^2 - Delta*Y^2 = +-4 exactly, Norm agrees with the certificate's sign, and both coordinates are strictly positive",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "wherever Y is small enough to reach (at or below a budget of 10,000), FundamentalUnit's (X, Y, sign)",
+        "Against": "the retired ascending-Y unit scan (TryRetiredAscendingUnitScan) — an exhaustive squareness search over Delta*y^2 -+ 4 that shares no code and no idea with the continued-fraction period walk FundamentalUnit actually runs. Its FIRST hit, ascending from Y = 1, is exactly the minimality claim: if the scan and the walk agree, the walk's answer is not merely a solution but the SMALLEST one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the retired scan's own budget (10,000) bounds which discriminants its minimality cross-check reaches; beyond it only the unit-equation identity in the first leg is checked, and the case asserts a floor on how many discriminants each leg actually visited so a defect that silently shrank either count cannot pass unnoticed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.landmine-and-descriptor-invariance",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "FundamentalUnit" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "ValidateDescriptor" },
+      { "Type": "Puck.Maths.PellEquation", "Name": "FundamentalUnit" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Discriminant" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at five discriminants (5, 13, 61, 109, 181) the norm-minus-one +-4 unit QuadraticIntegerArithmetic.FundamentalUnit returns is STRICTLY smaller (by Y) than the norm-one unit PellEquation.FundamentalUnit(radicand: Delta) returns — both answers computed LIVE and each checked against its own defining equation (X^2-Delta*Y^2 = +-4, respectively X^2-Delta*Y^2 = 1) rather than against a hard-coded literal table, so no regression pin stands in for either value and neither answer is derivable from the other",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "descriptor invariance: the two Delta = 5 descriptors (1, 1) and (3, -1) recover the IDENTICAL (X, Y) pair from FundamentalUnit, and their raw element coordinates differ by exactly the predicted (P'-P)/2*Y",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FundamentalUnit refuses every non-positive or perfect-square discriminant (-4, 0, 4, 9, 16 — the latter three the discriminants that looped forever before the nonsquare guard landed) with ArgumentException, and PellEquation.FundamentalUnit refuses the radicands 0, -5 and 49 with ArgumentOutOfRangeException",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.pell-delegation-vs-retired-convergent-loop",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.PellEquation", "Name": "FundamentalUnit" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "PellEquation.FundamentalUnit over every nonsquare radicand in [2, 3000]",
+        "Against": "RetiredPellConvergentLoop, written in QuadraticIntegerClaims.cs as a verbatim transcription of PellEquation.FundamentalUnit's OWN former body from before it delegated to the shared unit-equation primitive (QuadraticNormEquation) — the same continued-fraction convergent walk, stopping at the first norm-one convergent",
+        "Shared": "the continued-fraction convergent-walk RULE PellEquation.FundamentalUnit carried directly before its refactor to delegate; this leg proves the refactor preserved that rule's answers, not that the rule itself is correct",
+        "Citation": "no independent witness stands beside this transcription alone for the ANSWER; independent evidence stands elsewhere in this same case (the X^2-D*Y^2=1 identity, checked directly against every delegated answer) and, for the shared underlying primitive both FundamentalUnit entry points now delegate to, in quadratic-integer.real-order-fundamental-unit-vs-retired-scan's ascending-Y minimality oracle",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every delegated answer satisfies X^2 - D*Y^2 = 1 exactly, checked independently of the transcription comparison above",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.audit-hang-completes-forced-sign",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "FundamentalUnit" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Discriminant" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at D = 991 (Delta = 3964, the exact input the audit found FundamentalUnit hanging on) and D = 99991 (Delta = 399964), both radicands D are checked LIVE to be 3 (mod 4) — not Delta = 4*D, which is always 0 (mod 4) and would trip on nothing — and then it is checked EXHAUSTIVELY over every (x, y) in [0, 4) x [0, 4) that no residue makes x^2-D*y^2 congruent to -1 (mod 4). Since Certificate = X^2-Delta*Y^2 = 4*(a^2-D*b^2) = 4*Norm(unit) for a (0, D) descriptor, this is the FORCED-sign argument for Norm itself, verified rather than assumed, which is why the returned unit's Norm is required to be exactly +1 and not merely +-1",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FundamentalUnit completes inside a bounded wait (a safety net against a regression of the former hang, not a timing measurement — the assertion is completion, never elapsed time) at both discriminants, each producing a certificate X^2-Delta*Y^2 = +-4",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at both discriminants, neither X+2 nor X-2 is a perfect square, which rules out the returned unit being some other unit's own square (an index-two answer) — minimality itself rests on the period argument FundamentalUnit's own continued-fraction walk performs, not on this check",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.real-order-prime-norm-existence-vs-retired-orbit-box",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" },
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "SplittingCharacter" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorizationObstruction", "Name": "RationalPrime" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorizationObstruction", "Name": "Splitting" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over every real order in [5, 200] times every rational prime through 60, TryFactorize's principal/non-principal decision on the norm-ell^2 element (ell, 0) agrees with SplittingCharacter (a non-inert prime factors and carries a norm-ell prime; an inert one is skipped) and its obstruction, where one is returned, names exactly that prime and its splitting",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "wherever the retired orbit-box existence oracle's box is small enough to enumerate (budget 40,000)",
+        "Against": "RetiredOrbitBoxHasNormElement — an exhaustive lattice search over every norm-one unit orbit's bounded representative, sharing no code and no idea with the continued-fraction generator search TryFactorize actually runs to decide the same question. Its yes/no answer is compared against TryFactorize's own principal/non-principal decision on the same (order, prime) pair",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: beyond the orbit box's budget the comparison above is silently skipped rather than counted a mismatch, so the case asserts a floor on both how many decisions were made in total and how many of them the orbit box was able to re-decide, which keeps a defect that always tripped the budget check from passing by vacuous coverage",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quadratic-integer.real-order-factorization-beyond-orbit-box",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.Research.QuadraticIntegerArithmetic", "Name": "TryFactorize" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorization", "Name": "Factors" },
+      { "Type": "Puck.Maths.Research.QuadraticFactorization", "Name": "LeadingUnit" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1", "Name": "Norm" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the expected norm magnitude at each of two probe elements — (15, 2) in the D = 991 order and (401, 3) in the D = 99991 order",
+        "Against": "RefNorm, computed independently of QuadraticAlgebra<BigInteger>.Norm rather than taken from a literal table; TryFactorize's result reassembles to the probe element exactly and its factors' norms (recomputed the same independent way) multiply back to that expected magnitude exactly",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both factorizations complete inside a bounded wait at the exact elements the audit's orbit-box-sized search could not return from — D = 991's 29-digit fundamental unit and D = 99991's 200-plus-digit one — the bounded wait being a safety net against a regression of that hang, not a timing measurement",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

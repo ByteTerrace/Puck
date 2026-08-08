@@ -3,8 +3,11 @@
 This reference explains signed-distance-field rendering techniques in the
 context of Puck's interpreted SDF VM. The pages summarize the algorithm,
 correctness requirements, determinism implications, and current applicability.
-Use [SDF rendering technique priorities](../sdf-sota-survey.md) for current
-investment priorities and [the SDF backlog](../sdf-backlog.md) for open work.
+Use [the technique index](verdict-index.md) for the compact verdict table.
+There is no investment-priority survey and no backlog: both were deleted on
+2026-08-02 and nothing replaced them. Where a page here calls something open,
+that sentence is the entire record of it — nothing tracks it and nothing
+sequences it.
 
 ## Performance and acceleration
 
@@ -55,8 +58,11 @@ investment priorities and [the SDF backlog](../sdf-backlog.md) for open work.
   with world-space lengths must account for that scale as documented by the
   shader contract.
 - Simulation state uses deterministic fixed-point data. Presentation shaders
-  may use floating point but must satisfy the configured cross-backend parity
-  gates.
+  may use floating point, and are supposed to hold cross-backend parity within
+  the configured thresholds — but nothing measures that today. The parity stages
+  were quarantined with `Puck.Post`; only the threshold *document* model
+  (`ParityThresholdsDocument`) survives, and no runner reads it. Treat parity as
+  an unchecked intent, not a gate.
 - The analytic instruction stream and authored carve list are authoritative.
   `SampledRegion` bricks are bounded, invalidatable render caches, never the
   simulation or persistence representation.

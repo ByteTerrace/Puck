@@ -1,4 +1,4 @@
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 namespace Puck.Forge.Tune;
 
 /// <summary>
@@ -9,7 +9,7 @@ namespace Puck.Forge.Tune;
 /// </summary>
 public static class TuneRom {
     /// <summary>Assembles the jukebox <c>.gbc</c> from a normalized audio document.</summary>
-    /// <param name="document">The normalized document (see <see cref="AudioDocumentStore.Load"/>).</param>
+    /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <param name="title">The cartridge header title.</param>
     /// <returns>The 32 KiB ROM image.</returns>
     public static byte[] Build(AudioDocument document, string title = "PUCKTUNE") => TuneGame.Build(document: document, title: title);

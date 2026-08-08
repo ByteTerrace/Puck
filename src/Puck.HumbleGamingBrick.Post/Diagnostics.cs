@@ -1,6 +1,7 @@
-using Puck.Capture;
+using Puck.Recording.Capture;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
+using Puck.Maths;
 using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -77,8 +78,8 @@ internal static class Diagnostics {
         }
 
         // --halt-share <rom> [warmFrames] [measureFrames] [dmg|cgb|agb]: measure the fraction of machine time the CPU
-        // spends halted — the idle-fast-forward lever's gate (machine-fleet-plan.md lever 4): the lever's ceiling is
-        // bounded by this share, and by how much of a halted cycle's cost is skippable at all (the PPU still draws).
+        // spends halted — the measurement that bounds an idle-fast-forward lever: its ceiling is capped by this share,
+        // and by how much of a halted cycle's cost is skippable at all (the PPU still draws).
         for (var index = 0; (index < (args.Length - 1)); ++index) {
             if (string.Equals(a: args[index], b: "--halt-share", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 var romPath = args[(index + 1)];
@@ -162,9 +163,9 @@ internal static class Diagnostics {
         // synthetic-cartridge self-check) a following knob like "--frames 120" must not be mistaken for a ROM path.
         var romBPath = ((romAPath is not null) ? PositionalAfter(args: args, index: hashDivergenceIndex, offset: 2) : null);
         var fine = (Array.IndexOf(array: args, value: "--fine") >= 0);
-        var framesArg = ArgValue(args: args, name: "--frames");
+        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
         var frames = (((framesArg is not null) && int.TryParse(s: framesArg, result: out var parsedFrames)) ? parsedFrames : 600);
-        var perturbArg = ArgValue(args: args, name: "--perturb-at");
+        var perturbArg = CommandLineArguments.Value(args: args, name: "--perturb-at");
         var perturbAtFrame = (((perturbArg is not null) && int.TryParse(s: perturbArg, result: out var parsedPerturb)) ? parsedPerturb : (int?)null);
 
         exitCode = HashDivergenceProbe.Run(romAPath: romAPath, romBPath: romBPath, frames: frames, fine: fine, perturbAtFrame: perturbAtFrame);
@@ -177,15 +178,6 @@ internal static class Diagnostics {
             ? args[(index + offset)]
             : null);
     // The value following a named flag (e.g. --frames 300), or null when the flag is absent or has no following token.
-    private static string? ArgValue(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
-    }
     private static bool TryParseModel(string value, out ConsoleModel model) {
         if (string.Equals(a: value, b: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             model = ConsoleModel.Dmg;
@@ -323,7 +315,7 @@ internal static class Diagnostics {
     // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
     // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
     private static int DumpSnapshot(string[] args) {
-        var romPath = ArgValue(args: args, name: "--rom");
+        var romPath = CommandLineArguments.Value(args: args, name: "--rom");
         byte[] rom;
         string romLabel;
         var model = ConsoleModel.Dmg;
@@ -341,9 +333,9 @@ internal static class Diagnostics {
             return 2;
         }
 
-        var framesArg = ArgValue(args: args, name: "--frames");
+        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
         var frames = (((framesArg is not null) && int.TryParse(s: framesArg, result: out var parsedFrames)) ? parsedFrames : DefaultDumpSnapshotFrames);
-        var imagePath = (ArgValue(args: args, name: "--out") ?? Path.Combine("artifacts", "gb-post", "snapshot.bin"));
+        var imagePath = (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine("artifacts", "gb-post", "snapshot.bin"));
         var imageDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: imagePath));
 
         if (!string.IsNullOrEmpty(value: imageDirectory)) {
@@ -364,7 +356,7 @@ internal static class Diagnostics {
 
         // The same repo fingerprint HashDivergenceProbe hashes a snapshot with, so a --dump-snapshot fingerprint and a
         // --hash-divergence report describe the same instant the same way.
-        var fingerprint = StateFingerprint.Compute(data: snapshot.Data);
+        var fingerprint = Fnv1aHash.Compute(values: snapshot.Data);
 
         Console.WriteLine(value: $"  dump-snapshot {romLabel} ({model}, {frames} frames) -> {imagePath} ({snapshot.Size:N0} bytes) [fingerprint 0x{fingerprint:X16}], sections -> {sectionsPath}");
 

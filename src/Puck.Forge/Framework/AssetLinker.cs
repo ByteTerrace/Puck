@@ -113,31 +113,29 @@ internal sealed class AssetLinker {
     /// <param name="name">A diagnostic name for overrun messages.</param>
     /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
     /// <returns>The first allocated slot.</returns>
-    public byte AddBackgroundPalettes(string name, byte[] paletteData) {
-        ThrowIfSealed(sealedFlag: m_backgroundPalettesSealed, name: name, table: "background palette table");
-
-        var baseSlot = ValidatePalettes(name: name, paletteData: paletteData, currentCount: m_backgroundPaletteCount, plane: "background");
-
-        m_backgroundPaletteSegments.Add(item: paletteData);
-        m_backgroundPaletteCount += (paletteData.Length / PaletteByteCount);
-
-        return baseSlot;
-    }
+    public byte AddBackgroundPalettes(string name, byte[] paletteData) =>
+        AddPalettes(
+            name: name,
+            paletteData: paletteData,
+            count: ref m_backgroundPaletteCount,
+            segments: m_backgroundPaletteSegments,
+            sealedFlag: m_backgroundPalettesSealed,
+            table: "background palette table",
+            plane: "background");
 
     /// <summary>Allocates object palette slots and returns the first slot index.</summary>
     /// <param name="name">A diagnostic name for overrun messages.</param>
     /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
     /// <returns>The first allocated slot.</returns>
-    public byte AddObjectPalettes(string name, byte[] paletteData) {
-        ThrowIfSealed(sealedFlag: m_objectPalettesSealed, name: name, table: "object palette table");
-
-        var baseSlot = ValidatePalettes(name: name, paletteData: paletteData, currentCount: m_objectPaletteCount, plane: "object");
-
-        m_objectPaletteSegments.Add(item: paletteData);
-        m_objectPaletteCount += (paletteData.Length / PaletteByteCount);
-
-        return baseSlot;
-    }
+    public byte AddObjectPalettes(string name, byte[] paletteData) =>
+        AddPalettes(
+            name: name,
+            paletteData: paletteData,
+            count: ref m_objectPaletteCount,
+            segments: m_objectPaletteSegments,
+            sealedFlag: m_objectPalettesSealed,
+            table: "object palette table",
+            plane: "object");
 
     /// <summary>Links a parsed background: allocates its tiles and palette slots, relocates the map and attribute
     /// copies, and lands them as the <c>&lt;name&gt;-map</c> / <c>&lt;name&gt;-attributes</c> blocks.</summary>
@@ -225,28 +223,38 @@ internal sealed class AssetLinker {
     /// <summary>Seals the tile bank: concatenates every segment into the reserved <c>tile-bank</c> block (one boot
     /// copy to VRAM 0x8000). No further tile allocation is possible.</summary>
     /// <returns>The bank's table (its length is the boot's tile byte count).</returns>
-    public RomTable SealTileBank() {
-        SealGuard(sealedFlag: ref m_tileBankSealed, count: m_tileCount, table: "tile bank");
-
-        return m_data.Add(name: "tile-bank", bytes: Concatenate(segments: m_tileSegments));
-    }
+    public RomTable SealTileBank() =>
+        SealSegments(sealedFlag: ref m_tileBankSealed, count: m_tileCount, table: "tile bank", name: "tile-bank", segments: m_tileSegments);
 
     /// <summary>Seals the background palette table into the reserved <c>bg-palette-table</c> block (the boot spec's
     /// <c>BgPalettes</c>).</summary>
     /// <returns>The table.</returns>
-    public RomTable SealBackgroundPalettes() {
-        SealGuard(sealedFlag: ref m_backgroundPalettesSealed, count: m_backgroundPaletteCount, table: "background palette table");
-
-        return m_data.Add(name: "bg-palette-table", bytes: Concatenate(segments: m_backgroundPaletteSegments));
-    }
+    public RomTable SealBackgroundPalettes() =>
+        SealSegments(sealedFlag: ref m_backgroundPalettesSealed, count: m_backgroundPaletteCount, table: "background palette table", name: "bg-palette-table", segments: m_backgroundPaletteSegments);
 
     /// <summary>Seals the object palette table into the reserved <c>obj-palette-table</c> block (the boot spec's
     /// <c>ObjPalettes</c>).</summary>
     /// <returns>The table.</returns>
-    public RomTable SealObjectPalettes() {
-        SealGuard(sealedFlag: ref m_objectPalettesSealed, count: m_objectPaletteCount, table: "object palette table");
+    public RomTable SealObjectPalettes() =>
+        SealSegments(sealedFlag: ref m_objectPalettesSealed, count: m_objectPaletteCount, table: "object palette table", name: "obj-palette-table", segments: m_objectPaletteSegments);
 
-        return m_data.Add(name: "obj-palette-table", bytes: Concatenate(segments: m_objectPaletteSegments));
+    /// <summary>Owns palette-table allocation, capacity validation, and segment accounting for both hardware planes.</summary>
+    private static byte AddPalettes(string name, byte[] paletteData, ref int count, List<byte[]> segments, bool sealedFlag, string table, string plane) {
+        ThrowIfSealed(sealedFlag: sealedFlag, name: name, table: table);
+
+        var baseSlot = ValidatePalettes(name: name, paletteData: paletteData, currentCount: count, plane: plane);
+
+        segments.Add(item: paletteData);
+        count += (paletteData.Length / PaletteByteCount);
+
+        return baseSlot;
+    }
+
+    /// <summary>Owns the one-time concatenation and ROM landing of a segmented graphics table.</summary>
+    private RomTable SealSegments(ref bool sealedFlag, int count, string table, string name, List<byte[]> segments) {
+        SealGuard(sealedFlag: ref sealedFlag, count: count, table: table);
+
+        return m_data.Add(name: name, bytes: Concatenate(segments: segments));
     }
 
     // Map relocation: every cell rebases onto the bank (cells reference the section's tiles zero-based).

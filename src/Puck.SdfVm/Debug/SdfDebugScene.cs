@@ -72,7 +72,7 @@ public sealed class SdfDebugScene {
     /// <summary>The carve-pool cap — the frame source folds a worst-case pool of this many carves into its capacity
     /// probe (each carve is one static subtraction instance), so a live carve can never outgrow the engine's frozen
     /// buffers. Sized to sit comfortably under <see cref="SdfProgramBuilder.MaxInstances"/> (16384); raised 1024→4096
-    /// when the mask-first instance cull flattened the beam's O(instances) wall (docs/sdf-bench-notes.md).</summary>
+    /// when the mask-first instance cull flattened the beam's O(instances) wall.</summary>
     public const int MaxCarves = 4096;
 
     /// <summary>The default carve radius when <c>sdf.carve</c> / the pad chord omit one.</summary>

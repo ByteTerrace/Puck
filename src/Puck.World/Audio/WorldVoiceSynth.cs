@@ -1,4 +1,4 @@
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.Maths;
 
 namespace Puck.World.Audio;
@@ -127,7 +127,6 @@ public sealed class WorldVoiceSynth {
         Sustain,
         Release,
     }
-
     private struct Voice {
         public bool Active;
         public int EmitterId;
@@ -278,8 +277,7 @@ public sealed class WorldVoiceSynth {
     // Ceiling division keeps every envelope phase within its DECLARED frame count — a truncated step would leave a
     // sub-step residue that overstays the phase by several samples.
     private static long CeilingStep(long travelQ32, int frames) =>
-        (((travelQ32 + frames) - 1L) / frames);
-
+        travelQ32.CeilingDivide(divisor: ((long)frames));
     private static void EnterRelease(ref Voice voice) {
         if ((voice.Patch.ReleaseFrames > 0) && (voice.EnvelopeLevelQ32 > 0L)) {
             voice.Envelope = EnvelopePhase.Release;
@@ -365,7 +363,6 @@ public sealed class WorldVoiceSynth {
 
         voice.ControlCountdown = ControlIntervalFrames;
     }
-
     private static int OscillatorSample(ref Voice voice) {
         switch (voice.Patch.Oscillator) {
             case SynthOscillator.Sine:
@@ -373,45 +370,44 @@ public sealed class WorldVoiceSynth {
 
                 return ((int)voice.Rotor.Imaginary.Value);
             case SynthOscillator.Saw: {
-                voice.Phase += voice.PhaseIncrement;
+                    voice.Phase += voice.PhaseIncrement;
 
-                return ((int)(((long)(voice.Phase >> 15)) - 65536L));
-            }
-            case SynthOscillator.Triangle: {
-                voice.Phase += voice.PhaseIncrement;
-
-                var saw = (((long)(voice.Phase >> 15)) - 65536L);
-
-                return ((int)(65536L - (2L * Math.Abs(value: saw))));
-            }
-            case SynthOscillator.Noise: {
-                var draw = voice.Noise.NextUInt32();
-                var white = ((((int)(draw >> 16)) - 32768) * 2);
-                var polynomial = voice.Patch.Polynomial;
-
-                if (polynomial == 0) {
-                    return white;
+                    return ((int)(((long)(voice.Phase >> 15)) - 65536L));
                 }
+            case SynthOscillator.Triangle: {
+                    voice.Phase += voice.PhaseIncrement;
 
-                // One-pole tilt: k darkens as the low seven bits rise; the top bit flips to the high-pass
-                // complement (bright family). A minimum-viable character map — liftable when patches want more.
-                var k = ((128 - (polynomial & 127)) << 9);
+                    var saw = (((long)(voice.Phase >> 15)) - 65536L);
 
-                voice.NoiseTiltState += ((int)((((long)k) * (white - voice.NoiseTiltState)) >> 16));
+                    return ((int)(65536L - (2L * Math.Abs(value: saw))));
+                }
+            case SynthOscillator.Noise: {
+                    var draw = voice.Noise.NextUInt32();
+                    var white = ((((int)(draw >> 16)) - 32768) * 2);
+                    var polynomial = voice.Patch.Polynomial;
 
-                return ((polynomial < 128) ? voice.NoiseTiltState : (white - voice.NoiseTiltState));
-            }
+                    if (polynomial == 0) {
+                        return white;
+                    }
+
+                    // One-pole tilt: k darkens as the low seven bits rise; the top bit flips to the high-pass
+                    // complement (bright family). A minimum-viable character map — liftable when patches want more.
+                    var k = ((128 - (polynomial & 127)) << 9);
+
+                    voice.NoiseTiltState += ((int)((((long)k) * (white - voice.NoiseTiltState)) >> 16));
+
+                    return ((polynomial < 128) ? voice.NoiseTiltState : (white - voice.NoiseTiltState));
+                }
             case SynthOscillator.Pulse:
             default: {
-                voice.Phase += voice.PhaseIncrement;
+                    voice.Phase += voice.PhaseIncrement;
 
-                var raw = ((voice.Phase < voice.Patch.DutyThresholdQ32) ? 65536 : -65536);
+                    var raw = ((voice.Phase < voice.Patch.DutyThresholdQ32) ? 65536 : -65536);
 
-                return (raw - voice.Patch.DutyDcOffsetQ16);
-            }
+                    return (raw - voice.Patch.DutyDcOffsetQ16);
+                }
         }
     }
-
     private static int ApplyFilter(ref Voice voice, int sample) {
         if (voice.Patch.FilterMode == WorldVoiceFilterMode.Bypass) {
             return sample;
@@ -433,7 +429,6 @@ public sealed class WorldVoiceSynth {
             _ => high,
         });
     }
-
     private static void RenderVoice(ref Voice voice, Span<int> accumulator) {
         for (var n = 0; (n < accumulator.Length); n++) {
             if (voice.ControlCountdown <= 0) {
@@ -456,7 +451,6 @@ public sealed class WorldVoiceSynth {
             voice.ControlCountdown--;
         }
     }
-
     private int AllocateVoice() {
         var quietest = 0;
         var quietestLevel = long.MaxValue;

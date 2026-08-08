@@ -1,0 +1,13 @@
+[package]
+name = "puck-addon-eventwatch"
+version = "0.1.0"
+edition = "2021"
+description = "The blank-slate campaign's senses-lane PROOF guest: asks for a Mutate handle over section:hud and reacts to Observation event cells the host pushes once mounted under an observe region:<name> events:<n> grant — a region-enter event writes a visible HUD row ('entered'), a region-exit event writes 'exited', and the row also carries this mount's own per-mount EVENT GAP counter, so a console script can read the overflow doctrine's resync signal directly off the guest's own visible reaction rather than trusting only the host's stderr line."
+publish = false
+
+# cdylib, not rlib: this crate IS the built .wasm module, mirroring every other addon crate here.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }

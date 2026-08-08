@@ -40,15 +40,6 @@ internal static partial class Diagnostics {
 
     // Reads the value following a named flag (e.g. "--frames 600" -> "600"), or null when the flag is absent — the
     // same lookup Program.cs uses for its own knobs, duplicated here since local functions don't cross class scopes.
-    private static string? ArgValue(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
-    }
     private static bool TryLoad(string romPath, string name, out AgbMachineInstance instance) {
         instance = null!;
 

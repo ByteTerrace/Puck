@@ -45,6 +45,19 @@ dotnet_diagnostic.CA1505.severity = suggestion
 dotnet_diagnostic.CA1506.severity = suggestion
 # IDE0005: flag unnecessary using directives.
 dotnet_diagnostic.IDE0005.severity = warning
+# VER001/VER002/VER003/VER004/VER005 (Puck.Analyzers): a [VerifiedCode]-branded declaration's fingerprint drifted
+# from VerifiedCode.json, a manifest entry's brand was never encountered, a branded declaration is a shape
+# (partial, or carrying a preprocessor directive) the fingerprint refuses to cover, a brand's Basis disagrees with
+# the manifest's recorded basis, or a manifest entry's symbol textually names an assembly whose own namespace tree
+# does not back that name up (the namespace-equals-assembly-name convention VER002 relies on is broken). Errors,
+# not WellKnownDiagnosticTags.NotConfigurable — TreatWarningsAsErrors already makes these build failures, and
+# leaving suppression possible means an in-progress refactor can quiet one locally instead of someone
+# ripping the analyzer out.
+dotnet_diagnostic.VER001.severity = error
+dotnet_diagnostic.VER002.severity = error
+dotnet_diagnostic.VER003.severity = error
+dotnet_diagnostic.VER004.severity = error
+dotnet_diagnostic.VER005.severity = error
 # Rule: const fields must be PascalCase.
 dotnet_naming_rule.constant_fields_pascal_case.severity = warning
 dotnet_naming_rule.constant_fields_pascal_case.style = pascal_case_style

@@ -19,21 +19,7 @@ public sealed class NativeWindowOptionsValidator : IValidateOptions<NativeWindow
 
         var failures = new List<string>(capacity: 5);
 
-        if (string.IsNullOrWhiteSpace(value: options.Title)) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Title)} must be provided.");
-        }
-
-        if (options.Width == 0) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Width)} must be greater than zero.");
-        } else if (options.Width > int.MaxValue) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Width)} must be less than or equal to {int.MaxValue}.");
-        }
-
-        if (options.Height == 0) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Height)} must be greater than zero.");
-        } else if (options.Height > int.MaxValue) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Height)} must be less than or equal to {int.MaxValue}.");
-        }
+        WindowOptionsValidation.AddFailures(failures: failures, title: options.Title, width: options.Width, height: options.Height);
 
         if (
             (options.Mode == NativeWindowMode.PlatformWindow) &&

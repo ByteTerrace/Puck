@@ -1,0 +1,74 @@
+{
+  "description": "The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the listener policy \u2014 see WorldAudioDefaults) \u2014 a REQUIRED section every document carries.",
+  "type": "object",
+  "properties": {
+    "masterGain": {
+      "description": "The master gain the mix path applies over every emitter (1 = unity), bounded by MaxLevel.",
+      "type": "number"
+    },
+    "defaultSpeakerRadius": {
+      "description": "The audible support radius a point emitter coalesces to when its row declares no attenuation/radius.",
+      "type": "number"
+    },
+    "defaultCurve": {
+      "description": "The falloff curve a point emitter coalesces to: CurveSmoothstep or CurveLinear.",
+      "type": "string"
+    },
+    "defaultBedFadeSeconds": {
+      "description": "The presence slew bound a bed coalesces to when it declares none.",
+      "type": "number"
+    },
+    "listener": {
+      "description": "The listener policy: ListenerFocus (the active view camera\u0027s pose listens), seat:\u003Cn\u003E (that seat\u0027s view camera), or a declared camera name \u2014 so a stage or museum world can pin its listener without touching the runtime.",
+      "type": "string"
+    },
+    "cues": {
+      "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "type": "array",
+      "items": {
+        "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s CUE TABLE: when the named engine event fires, the referenced patch voices through a short-lived TRANSIENT emitter placed per Placement. Event tokens are a CLOSED, published vocabulary of engine MECHANISMS (EventTokens): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "event": {
+            "description": "The event token (must be one of EventTokens).",
+            "type": "string"
+          },
+          "patchId": {
+            "description": "The referenced Id the cue voices (must resolve).",
+            "type": "string"
+          },
+          "gainThousandths": {
+            "description": "The cue\u0027s voice gain in thousandths (1000 = unity), or null for unity. Bounded by MaxLevel \u00D7 1000 \u2014 the shared audio gain ceiling in the cue table\u0027s integer unit.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "placement": {
+            "description": "Where the cue sounds: PlacementAtSite (spatial, at the event\u0027s world position \u2014 the shimmer\u0027s audio twin; events with no derivable site fall back to the listener), PlacementListener (UI feedback \u2014 rides the listener pose, so distance 0 renders full gain and the mixer\u0027s on-top-of-listener pan hold centers it), or emitter:\u003Cname\u003E (sounds from the named speaker\u0027s resolved pose and support radius).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "patchId",
+          "gainThousandths",
+          "placement"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "masterGain",
+    "defaultSpeakerRadius",
+    "defaultCurve",
+    "defaultBedFadeSeconds",
+    "listener",
+    "cues"
+  ],
+  "additionalProperties": false
+}

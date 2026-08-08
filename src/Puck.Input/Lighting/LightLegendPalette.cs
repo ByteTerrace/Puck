@@ -6,7 +6,7 @@ namespace Puck.Input.Lighting;
 /// Maps each <see cref="BindCategory"/> to the lamp color that represents it, plus the incidental colors the
 /// composer layers use (the faint idle wash on unbound keys, the held-modifier highlight, the activation flash,
 /// and the availability dim factor). Data-tunable: start from <see cref="CreateDefault"/> and override any entry
-/// with <see cref="WithCategory"/> — a host can drive the whole palette from a run-document field.
+/// with <see cref="WithCategory"/> — a host can drive the whole palette from a document field.
 /// </summary>
 public sealed class LightLegendPalette {
     private readonly LampColor[] m_byCategory;

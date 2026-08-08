@@ -1,0 +1,19 @@
+{
+  "description": "The profileless locomotion speeds (see WorldMotionDefaults). Jump feel is per-kit.",
+  "type": "object",
+  "properties": {
+    "moveSpeed": {
+      "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+      "type": "number"
+    },
+    "turnSpeed": {
+      "description": "Turn speed in radians per second (the profileless fallback counterpart to MoveSpeed).",
+      "type": "number"
+    },
+    "maxSmoothError": {
+      "description": "The largest server-correction position error, in world units, that presentation may ease instead of snapping.",
+      "type": "number"
+    }
+  },
+  "additionalProperties": false
+}

@@ -3,14 +3,14 @@ namespace Puck.Storage;
 internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backends) : IObjectBlobStore {
     private readonly IObjectBlobStoreBackend[] m_backends = [.. backends];
 
-    private IObjectBlobStoreBackend ResolveBackend(ObjectStorageTarget target, ObjectBlobAddress address) {
+    private IObjectBlobStoreBackend ResolveBackend(ObjectStorageTarget target, Guid objectId) {
         foreach (var backend in m_backends) {
             if (backend.Supports(target: target)) {
                 return backend;
             }
         }
 
-        throw new InvalidOperationException(message: $"No object blob store backend is registered for target type '{target.GetType().Name}' (objectId: {address.ObjectId}).");
+        throw new InvalidOperationException(message: $"No object blob store backend is registered for target type '{target.GetType().Name}' (objectId: {objectId}).");
     }
 
     public ValueTask<ObjectBlobContent?> ReadAsync(
@@ -21,7 +21,7 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
         ArgumentNullException.ThrowIfNull(target);
 
         return ResolveBackend(
-            address: address,
+            objectId: address.ObjectId,
             target: target
         ).ReadAsync(
             address: address,
@@ -40,7 +40,7 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
         ArgumentNullException.ThrowIfNull(target);
 
         return ResolveBackend(
-            address: address,
+            objectId: address.ObjectId,
             target: target
         ).WriteAsync(
             address: address,
@@ -48,6 +48,24 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
             content: content,
             ifMatchVersion: ifMatchVersion,
             mode: mode,
+            target: target
+        );
+    }
+    public ValueTask<IReadOnlyList<string>> ListAsync(
+        ObjectStorageTarget target,
+        Guid objectId,
+        string keyPrefix,
+        CancellationToken cancellationToken = default
+    ) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return ResolveBackend(
+            objectId: objectId,
+            target: target
+        ).ListAsync(
+            cancellationToken: cancellationToken,
+            keyPrefix: keyPrefix,
+            objectId: objectId,
             target: target
         );
     }

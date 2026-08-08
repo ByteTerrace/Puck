@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
@@ -110,15 +112,13 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // The all-0xFF stream an unplugged port would shift in has a fixed FNV fingerprint per length; a real exchange never
     // matches it. Compares against the FNV of `completions` copies of 0xFF.
     private static bool IsIdle(ulong hash, int completions) {
-        const ulong fnvOffsetBasis = 0xCBF29CE484222325ul;
-        const ulong fnvPrime = 0x100000001B3ul;
-        var idle = fnvOffsetBasis;
+        var idle = Fnv1aHash.Create();
 
         for (var index = 0; (index < completions); ++index) {
-            idle = ((idle ^ 0xFF) * fnvPrime);
+            idle.Add(value: byte.MaxValue);
         }
 
-        return (hash == idle);
+        return (hash == idle.Value);
     }
 
     // The single menu-walk script both consoles follow (identical inputs on each side to reach the shared handshake).

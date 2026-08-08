@@ -23,19 +23,18 @@ public sealed class MatroskaMuxer : IDisposable {
     private const long NanosecondsPerMillisecond = 1_000_000L;
 
     private sealed class TrackDeclaration {
-        public required int Number { get; init; }
-        public required ulong Uid { get; init; }
-        public required byte Type { get; init; }
+        public int ChannelCount { get; init; }
+        public long CodecDelayNanoseconds { get; init; }
         public required string CodecId { get; init; }
         public required ReadOnlyMemory<byte> CodecPrivate { get; init; }
-        public int Width { get; init; }
         public int Height { get; init; }
-        public int ChannelCount { get; init; }
+        public required int Number { get; init; }
         public double SamplingFrequency { get; init; }
-        public long CodecDelayNanoseconds { get; init; }
         public long SeekPreRollNanoseconds { get; init; }
+        public required byte Type { get; init; }
+        public required ulong Uid { get; init; }
+        public int Width { get; init; }
     }
-
     private readonly record struct CuePoint(long TimeMilliseconds, int Track, long ClusterPosition);
 
     private static void WriteInfo(Stream stream, out long durationOffset) {
@@ -62,7 +61,6 @@ public sealed class MatroskaMuxer : IDisposable {
         stream.Write(buffer: infoContent);
         durationOffset = durationFileOffset;
     }
-
     private static void WriteTrackEntry(Stream stream, TrackDeclaration track) {
         using var content = new MemoryStream();
 
@@ -271,9 +269,9 @@ public sealed class MatroskaMuxer : IDisposable {
         var blockMilliseconds = ((relativeNs + (NanosecondsPerMillisecond / 2L)) / NanosecondsPerMillisecond);
         var isVideo = (trackNumber == m_videoTrackNumber);
         var mustBreak =
-            !m_clusterOpen ||
+            (!m_clusterOpen ||
             (isVideo && isKeyframe) ||
-            ((blockMilliseconds - m_clusterBaseMilliseconds) >= MaxClusterSpanMilliseconds);
+            ((blockMilliseconds - m_clusterBaseMilliseconds) >= MaxClusterSpanMilliseconds));
 
         if (mustBreak) {
             FlushCluster();
@@ -284,7 +282,7 @@ public sealed class MatroskaMuxer : IDisposable {
 
         relative = Math.Clamp(value: relative, min: short.MinValue, max: short.MaxValue);
 
-        var payloadLength = (1 + 2 + 1 + data.Length);
+        var payloadLength = (((1 + 2) + 1) + data.Length);
 
         EbmlWriter.WriteId(stream: m_clusterBuffer, id: MatroskaIds.SimpleBlock);
         EbmlWriter.WriteSize(stream: m_clusterBuffer, size: payloadLength);
@@ -345,7 +343,6 @@ public sealed class MatroskaMuxer : IDisposable {
             Track: cueTrack
         ));
     }
-
     private void FlushCluster() {
         if (!m_clusterOpen) {
             return;
@@ -363,7 +360,6 @@ public sealed class MatroskaMuxer : IDisposable {
         m_cues[index] = (m_cues[index] with { ClusterPosition = clusterPosition });
         m_clusterOpen = false;
     }
-
     private void WriteCues() {
         if (m_cues.Count == 0) {
             return;
@@ -400,7 +396,6 @@ public sealed class MatroskaMuxer : IDisposable {
         EbmlWriter.WriteMasterHeader(stream: m_output, id: MatroskaIds.Cues, contentSize: cuesContent.Length);
         m_output.Write(buffer: cuesContent);
     }
-
     private void PatchDuration() {
         if ((m_durationOffset < 0L) || !m_output.CanSeek) {
             return;
@@ -416,7 +411,6 @@ public sealed class MatroskaMuxer : IDisposable {
         m_output.Write(buffer: buffer);
         m_output.Position = end;
     }
-
     private void WriteEbmlHeader() {
         using var content = new MemoryStream();
 
@@ -435,7 +429,6 @@ public sealed class MatroskaMuxer : IDisposable {
         EbmlWriter.WriteMasterHeader(stream: m_output, id: MatroskaIds.Ebml, contentSize: header.Length);
         m_output.Write(buffer: header);
     }
-
     private void ThrowIfStarted() {
         if (m_started) {
             throw new InvalidOperationException(message: "The muxer has already started.");

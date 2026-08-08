@@ -25,10 +25,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     private const int SaveFlushIntervalFrames = 300;
 
     private static readonly Vector128<byte> RepackShuffle = Vector128.Create(
-        (byte)2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15
+        e0: (byte)2, e1: 1, e10: 8, e11: 11, e12: 14, e13: 13, e14: 12, e15: 15, e2: 0, e3: 3, e4: 6, e5: 5, e6: 4, e7: 7, e8: 10, e9: 9
     );
     private static readonly Vector128<byte> RepackAlpha = Vector128.Create(value: 0xFF000000u).AsByte();
-
     private readonly int m_width;
     private readonly int m_height;
     private readonly int m_frameByteLength;
@@ -454,7 +453,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             core.Dispose();
         }
     }
-
     private void DrainWorker() {
         using var completion = new ManualResetEventSlim(initialState: false);
 
@@ -472,7 +470,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         completion.Wait();
         ThrowIfWorkerFaulted();
     }
-
     private void WorkerLoop(IQueuedMachineCore core) {
         var current = default(WorkItem);
         var stagedNativeFrame = core.NativeFrameIndex;
@@ -574,7 +571,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             Console.Error.WriteLine(value: $"[{m_workerName}] worker stopped ({exception.GetType().Name}: {exception.Message})");
         }
     }
-
     private WorkItem TakeWork() {
         lock (m_workLock) {
             while (m_work.Count == 0) {
@@ -584,13 +580,11 @@ public sealed class QueuedMachineWorker : IDisposable {
             return m_work.Dequeue();
         }
     }
-
     private void ThrowIfWorkerFaulted() {
         lock (m_workLock) {
             ThrowIfWorkerFaultedLocked();
         }
     }
-
     private void ThrowIfWorkerFaultedLocked() {
         if (m_workerFault is { } fault) {
             throw new InvalidOperationException(message: $"The {m_workerName} worker faulted.", innerException: fault);
@@ -605,7 +599,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         // machine advances FastForwardFactor frames of emulated time per submitted frame, and only the final frame is
         // staged/published, so presentation frames are skipped. Read on the worker thread; mutated only via the queue.
         var factor = (ulong)(m_timeTravel?.FastForwardFactor ?? 1);
-        var scaled = checked(((ticks * factor) * core.CyclesPerSecond) + m_cycleRemainder);
+        var scaled = checked((((ticks * factor) * core.CyclesPerSecond) + m_cycleRemainder));
 
         m_cycleRemainder = (scaled % EngineTicks.PerSecond);
 
@@ -658,18 +652,16 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_audioWriteFrame = 0;
         }
     }
-
     private void StageMachineFrame(IQueuedMachineCore core) {
         // Present the runahead lookahead's framebuffer while it is live and primed; otherwise the authoritative machine's
         // own. The real machine stays the tick-locked audio authority either way.
-        var pixels = ((m_timeTravel is { } timeTravel) && timeTravel.TryGetDisplayFramebuffer(framebuffer: out var lookahead))
+        var pixels = (((m_timeTravel is { } timeTravel) && timeTravel.TryGetDisplayFramebuffer(framebuffer: out var lookahead))
             ? lookahead
-            : core.Framebuffer;
+            : core.Framebuffer);
         var light = RepackFramebuffer(pixels: pixels, target: m_rgbaBack);
 
         PublishBackBuffer(light: light);
     }
-
     private void PublishBackBuffer(Vector3 light) {
         lock (m_frameLock) {
             var previousFront = m_rgbaFront;
@@ -690,7 +682,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             ++m_frameVersion;
         }
     }
-
     private void StageBlackFrame() {
         Array.Clear(array: m_rgbaBack);
 
@@ -711,9 +702,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     private static Vector3 RepackFramebuffer(ReadOnlySpan<uint> pixels, byte[] target) {
         var count = pixels.Length;
         var index = 0;
-        long sumRed = 0;
-        long sumGreen = 0;
-        long sumBlue = 0;
+        var sumRed = 0L;
+        var sumGreen = 0L;
+        var sumBlue = 0L;
 
         if (Vector128.IsHardwareAccelerated && (count >= Vector128<uint>.Count)) {
             var source = MemoryMarshal.Cast<uint, byte>(span: pixels);
@@ -722,12 +713,13 @@ public sealed class QueuedMachineWorker : IDisposable {
 
             for (; (index < vectorCount); index += Vector128<uint>.Count) {
                 var src = Vector128.LoadUnsafe(source: ref MemoryMarshal.GetReference(span: source), elementOffset: (nuint)(index * 4));
-                var packed = (Vector128.Shuffle(vector: src, indices: RepackShuffle) | RepackAlpha);
+                var packed = Vector128.Shuffle(vector: src, indices: RepackShuffle) | RepackAlpha;
 
-                packed.StoreUnsafe(destination: ref target[index * 4]);
+                packed.StoreUnsafe(destination: ref target[(index * 4)]);
 
                 var (widenedLow, widenedHigh) = Vector128.Widen(source: src);
                 var partial = (widenedLow + widenedHigh);
+
                 var (channelLow, channelHigh) = Vector128.Widen(source: partial);
 
                 accumulator += (channelLow + channelHigh);
@@ -913,13 +905,13 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="address">A machine-defined bus address.</param>
     /// <param name="value">The byte to store.</param>
     public void PokeByte(int address, byte value) =>
-        RunMemoryAccess(request: new MemoryRequest { Address = address, Value = value, IsWrite = true });
+        RunMemoryAccess(request: new MemoryRequest { Address = address, IsWrite = true, Value = value });
 
     // Marshals a time-travel command onto the worker thread (the single-producer discipline: rewind/runahead manipulate
     // machine state and must never be driven cross-thread), blocking until it completes. A no-op returning a default
     // status when no core is attached.
     private TimeTravelRequest RunTimeTravel(TimeTravelOp op, int arg) {
-        var request = new TimeTravelRequest { Op = op, Arg = arg };
+        var request = new TimeTravelRequest { Arg = arg, Op = op };
         var worker = m_worker;
 
         if (worker is null) {
@@ -979,7 +971,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         Memory,
         Reconfigure,
     }
-
     private enum TimeTravelOp {
         SetRewindEnabled,
         RewindBy,
@@ -1013,7 +1004,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         public bool Ok;
         public string Reason = string.Empty;
     }
-
     private readonly record struct WorkItem(
         WorkKind Kind,
         ulong DeltaTicks,
@@ -1027,22 +1017,16 @@ public sealed class QueuedMachineWorker : IDisposable {
     ) {
         public static WorkItem Step(ulong deltaTicks, in MachinePadState input, bool forceStage) =>
             new(Kind: WorkKind.Step, DeltaTicks: deltaTicks, Input: input, ForceStage: forceStage, ForceFlush: false, Completion: null, TimeTravel: null, Memory: null, Reconfigure: null);
-
         public static WorkItem Flush(bool force, ManualResetEventSlim completion) =>
             new(Kind: WorkKind.Flush, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: force, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
-
         public static WorkItem Barrier(ManualResetEventSlim completion) =>
             new(Kind: WorkKind.Barrier, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
-
         public static WorkItem Stop(ManualResetEventSlim completion) =>
             new(Kind: WorkKind.Stop, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: null);
-
         public static WorkItem ForTimeTravel(TimeTravelRequest request, ManualResetEventSlim completion) =>
             new(Kind: WorkKind.TimeTravel, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: request, Memory: null, Reconfigure: null);
-
         public static WorkItem ForMemory(MemoryRequest request, ManualResetEventSlim completion) =>
             new(Kind: WorkKind.Memory, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: request, Reconfigure: null);
-
         public static WorkItem ForReconfigure(ReconfigureRequest request, ManualResetEventSlim completion) =>
             new(Kind: WorkKind.Reconfigure, DeltaTicks: 0UL, Input: default, ForceStage: false, ForceFlush: false, Completion: completion, TimeTravel: null, Memory: null, Reconfigure: request);
     }

@@ -1,0 +1,38 @@
+# Case K: the declared-channel-name bound (AddonAbi.MaxChannelNames = 64), unresolved-name disclosure, and
+# per-act attenuation. All three addon rows mount at BOOT from the world document — there is no console verb to
+# mount one live (world.addon.reload/.enable/.disable only act on an ALREADY-mounted row) — so the mount/fault
+# outcomes below are already settled and printed to stderr before this script's first line ever runs; this
+# script's job is to confirm the settled STATE (world.addons) and to prove the unresolved `walkonly` channel's
+# continuous per-act attenuation never faults the guest over time, not to trigger the mount itself.
+#
+# Expect in the CAPTURED BOOT LOG (stderr, merged into stdout by the driver recipe), before line 1 below ever
+# runs:
+#   [world.addon: mounted channelwalk (...) ...]
+#   [world.addon: channelwalk declares 1 channel name(s) the host table does not recognize — inert, never faults
+#    the mount: walkonly]
+#   [world.addon: mounted channelwalk-bound64 (...) ...]
+#   [world.addon: channelwalk-bound64 declares 64 channel name(s) the host table does not recognize — inert,
+#    never faults the mount: ch00, ch01, ..., ch63]
+#   [world.addon: channelwalk-bound65 faulted — addon channelwalk-bound65: BadExport — descriptor 0: input
+#    VerbCount 65 out of range [1, 64]]
+# The 64-variant MUST mount (RED would be a fault there); the 65-variant MUST fault BadExport naming the bound
+# (RED would be a silent mount, or a fault citing something other than the VerbCount/64 bound).
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+replay.status
+world.wait 5
+# Settled mount state: channelwalk and channelwalk-bound64 ENABLED; channelwalk-bound65 absent entirely (a
+# row that faulted before joining the tick set produces no receipt and is invisible to world.addons — the
+# runtime's own documented behavior, not a defect of this script).
+world.addons
+# Grant channelwalk a body so its walkonly act actually runs every tick (its own reach cannot legally include
+# 'walkonly' at all -- it is not a declared WORLD channel, so 'channels:walkonly' is itself refused by the grant
+# parser; the point of this case is that the act reaches the host with NO reach over it whatsoever and still
+# only ever attenuates, never faults).
+world.grant addon:channelwalk drive body:0 budget:60
+world.wait 300
+# Still ENABLED, no FaultDetail, fuel-total climbing — proves per-tick acts against the unresolved 'walkonly'
+# ordinal answer AttenuatedToEmpty forever, never a fault.
+world.addons
+world.wait 2000
+world.addons

@@ -3,59 +3,6 @@ using Puck.Abstractions.Presentation;
 namespace Puck.World;
 
 /// <summary>
-/// The explicit token maps the host section speaks in — the ONE spelling shared by the JSON converters
-/// (<see cref="WorldBackendPreferenceJsonConverter"/>, <see cref="SurfaceFormatJsonConverter"/>) and the
-/// <c>world.host.tune</c> value grammar, so the document and the verb never disagree. The two enum families that would
-/// serialize badly under the generic camelCase policy (<see cref="WorldBackendPreference.DirectX"/> → <c>directX</c>;
-/// <see cref="SurfaceFormat.R8G8B8A8Unorm"/> → <c>r8G8B8A8Unorm</c>) get an explicit name here instead.
-/// </summary>
-internal static class WorldHostTokens {
-    public const string BackendAuto = "auto";
-    public const string BackendDirectX = "directx";
-    public const string BackendVulkan = "vulkan";
-    public const string SurfaceFormatRgba = "r8g8b8a8";
-    public const string SurfaceFormatBgra = "b8g8r8a8";
-
-    /// <summary>The document/verb token for a backend preference.</summary>
-    /// <param name="backend">The backend preference.</param>
-    /// <returns>The lowercase token.</returns>
-    public static string BackendToken(WorldBackendPreference backend) => backend switch {
-        WorldBackendPreference.DirectX => BackendDirectX,
-        WorldBackendPreference.Vulkan => BackendVulkan,
-        _ => BackendAuto,
-    };
-
-    /// <summary>Parses a backend token (case-insensitive), or <see langword="null"/> when the token names none.</summary>
-    /// <param name="token">The token.</param>
-    /// <returns>The parsed backend, or <see langword="null"/>.</returns>
-    public static WorldBackendPreference? ParseBackend(string? token) => token?.ToLowerInvariant() switch {
-        BackendAuto => WorldBackendPreference.Auto,
-        BackendDirectX => WorldBackendPreference.DirectX,
-        BackendVulkan => WorldBackendPreference.Vulkan,
-        _ => null,
-    };
-
-    /// <summary>The document/verb token for a surface format (only the two authorable values have one).</summary>
-    /// <param name="format">The surface format.</param>
-    /// <returns>The lowercase token, or the enum name for a non-authorable value.</returns>
-    public static string SurfaceFormatToken(SurfaceFormat format) => format switch {
-        SurfaceFormat.R8G8B8A8Unorm => SurfaceFormatRgba,
-        SurfaceFormat.B8G8R8A8Unorm => SurfaceFormatBgra,
-        _ => format.ToString(),
-    };
-
-    /// <summary>Parses a surface-format token (case-insensitive), or <see langword="null"/> when the token names no
-    /// authorable format (<c>unknown</c> is rejected by name, not accepted-then-validated).</summary>
-    /// <param name="token">The token.</param>
-    /// <returns>The parsed surface format, or <see langword="null"/>.</returns>
-    public static SurfaceFormat? ParseSurfaceFormat(string? token) => token?.ToLowerInvariant() switch {
-        SurfaceFormatRgba => SurfaceFormat.R8G8B8A8Unorm,
-        SurfaceFormatBgra => SurfaceFormat.B8G8R8A8Unorm,
-        _ => null,
-    };
-}
-
-/// <summary>
 /// The world's EFFECTIVE host-section values after the CLI window/backend flags override the world-doc defaults — the
 /// direct twin of <see cref="WorldStorageSettings"/> for the presentation host-section. Resolved ONCE at boot by
 /// <see cref="Resolve"/> (a pure static) and registered as a singleton the <c>Program</c> registrations and the
@@ -65,6 +12,9 @@ internal static class WorldHostTokens {
 /// satisfy is an author preference (<see cref="BackendDowngraded"/> → hosts on Vulkan with a loud line), because a
 /// shared world file must never brick on someone else's machine.
 /// </summary>
+/// <param name="Presentation">The effective boot shape — <see cref="WorldHostPresentation.Windowed"/> composes the GPU
+/// host and render root, <see cref="WorldHostPresentation.None"/> composes the authoritative core alone. See
+/// <see cref="Headless"/>.</param>
 /// <param name="HostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
 /// <param name="RequestedBackend">The backend the resolution started from (CLI override, else the document preference).</param>
 /// <param name="BackendFromCli">Whether the backend request came from the CLI (an operator assertion) rather than the document.</param>
@@ -80,7 +30,10 @@ internal static class WorldHostTokens {
 /// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
 /// <param name="Timing">Whether GPU per-pass timing boots armed.</param>
 /// <param name="Genlock">The external-clock election policy (SHAPE-only), or <see langword="null"/> for automatic election.</param>
+/// <param name="Listen">The effective TCP listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
+/// loopback-only.</param>
 internal sealed record WorldHostSettings(
+    WorldHostPresentation Presentation,
     bool HostsOnDirectX,
     WorldBackendPreference RequestedBackend,
     bool BackendFromCli,
@@ -95,11 +48,16 @@ internal sealed record WorldHostSettings(
     int ExitAfterSeconds,
     bool RayQuery,
     bool Timing,
-    string? Genlock
+    string? Genlock,
+    string? Listen
 ) {
+    /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
+    /// audio device. The single predicate <c>Program.cs</c> branches boot-shape registration on.</summary>
+    public bool Headless => (Presentation == WorldHostPresentation.None);
+
     /// <summary>The launcher present target: the boot Hz, or <see langword="null"/> for automatic display pacing (the
     /// <c>0</c>-means-automatic convention <see cref="Puck.Launcher.PresentPacingControl"/> uses).</summary>
-    public double? TargetRenderRate => (TargetHertz > 0.0 ? TargetHertz : null);
+    public double? TargetRenderRate => ((TargetHertz > 0.0) ? TargetHertz : null);
 
     /// <summary>Resolves the effective host settings by overlaying the CLI window/backend flags over the world-doc host
     /// defaults (an absent flag keeps the authored default). Stays PURE: it returns the degraded backend plus the
@@ -112,6 +70,11 @@ internal sealed record WorldHostSettings(
     /// <param name="heightOverride">The <c>--height</c> value, or <see langword="null"/>.</param>
     /// <param name="exitAfterSecondsOverride">The <c>--exit-after-seconds</c> value, or <see langword="null"/>.</param>
     /// <param name="presentModeOverride">The parsed <c>--present-mode</c> value, or <see langword="null"/>.</param>
+    /// <param name="presentationOverride">The parsed <c>--headless</c> reflection (<see cref="WorldHostPresentation.None"/>
+    /// for a bare/true flag, <see cref="WorldHostPresentation.Windowed"/> for an explicit <c>--headless false</c>), or
+    /// <see langword="null"/> to let the document's <see cref="WorldHostDefaults.Presentation"/> decide.</param>
+    /// <param name="listenOverride">The <c>--listen</c> value, or <see langword="null"/> to let the document's
+    /// <see cref="WorldHostDefaults.Listen"/> decide.</param>
     /// <returns>The effective host settings.</returns>
     public static WorldHostSettings Resolve(
         WorldHostDefaults defaults,
@@ -120,11 +83,16 @@ internal sealed record WorldHostSettings(
         int? widthOverride,
         int? heightOverride,
         int? exitAfterSecondsOverride,
-        PresentMode? presentModeOverride
+        PresentMode? presentModeOverride,
+        WorldHostPresentation? presentationOverride = null,
+        string? listenOverride = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
-        var requested = (backendOverride ?? defaults.Backend);
+        // The document's own backend is settled by WorldDrawBootResolver before anything reaches here (a drawn
+        // backendDraw becomes an ordinary literal), so a null at this point means the document authored neither —
+        // which reads as Auto, exactly as it did when the field was non-nullable.
+        var requested = (backendOverride ?? (defaults.Backend ?? WorldBackendPreference.Auto));
         var fromCli = (backendOverride is not null);
         var wantsDirectX = requested switch {
             WorldBackendPreference.DirectX => true,
@@ -148,6 +116,7 @@ internal sealed record WorldHostSettings(
         }
 
         return new WorldHostSettings(
+            Presentation: (presentationOverride ?? defaults.Presentation),
             HostsOnDirectX: wantsDirectX,
             RequestedBackend: requested,
             BackendFromCli: fromCli,
@@ -162,7 +131,8 @@ internal sealed record WorldHostSettings(
             ExitAfterSeconds: (exitAfterSecondsOverride ?? defaults.ExitAfterSeconds),
             RayQuery: defaults.RayQuery,
             Timing: defaults.Timing,
-            Genlock: defaults.Genlock
+            Genlock: defaults.Genlock,
+            Listen: (listenOverride ?? defaults.Listen)
         );
     }
 }

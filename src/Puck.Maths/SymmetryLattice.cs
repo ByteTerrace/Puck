@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -12,8 +14,8 @@ namespace Puck.Maths;
 /// is a Weyl reflection, and <see cref="Cycle(int)"/> is the Coxeter element — the same rotation
 /// <see cref="CyclicRotation"/> exposes as four planes. The cycle partitions the nodes into <see cref="RingCount"/> orbits
 /// of <see cref="RingSize"/> — the eight rings of thirty that <see cref="Project(int)"/> lays out — and the eight ring
-/// radii fall into four exact golden-ratio pairs, the 4D 600-cell (H₄) that lives inside E₈. Every accessor is a single
-/// baked lookup with no allocation; the nodes, their coordinates, and the closure that builds them are computed once at
+/// radii fall into four golden-ratio pairs, the 4D 600-cell (H₄) that lives inside E₈. Every accessor is an allocation-free,
+/// bounds-checked baked lookup; the nodes, their coordinates, and the closure that builds them are computed once at
 /// load (by reflection closure of eight seed nodes, in exact integer arithmetic) and then discarded — only the index
 /// maps survive, so results are identical on every machine.
 /// </remarks>
@@ -26,6 +28,10 @@ public static class SymmetryLattice {
     public const int RingCount = 8;
     /// <summary>The size of every cycle orbit — equal to <see cref="CyclicRotation.Period"/>, the order of the cycle.</summary>
     public const int RingSize = 30;
+    /// <summary>The number of antipodal ray pairs.</summary>
+    public const int RayCount = (NodeCount / 2);
+    /// <summary>The order induced by <see cref="Cycle(int)"/> after antipodal nodes are identified as rays.</summary>
+    public const int RayCycleOrder = (RingSize / 2);
 
     // The eight seed nodes (the E₈ simple roots), each scaled by two so its half-integer coordinates are integers in [-2, 2].
     private static readonly sbyte[][] SeedNodes = [
@@ -38,7 +44,7 @@ public static class SymmetryLattice {
         [0, 0, 0, 0, -2, 2, 0, 0],
         [0, 0, 0, 0, 0, -2, 2, 0],
     ];
-    // The two orthonormal Coxeter-plane basis vectors (FixedQ4816 raw, Q16): the e^{2πi/30}-eigenspace of the cycle,
+    // Q16 approximations to two orthonormal Coxeter-plane basis vectors: the e^{2πi/30}-eigenspace of the cycle,
     // isolated once and baked. Projecting a node onto this plane sorts it into one of the eight rings.
     private static readonly long[] PlaneBasisX = [-6338L, -30797L, -16271L, -872L, 14726L, 29842L, 43815L, -3694L];
     private static readonly long[] PlaneBasisY = [-388L, 5935L, 11658L, 14236L, 13557L, 9649L, 2684L, 60307L];
@@ -49,6 +55,7 @@ public static class SymmetryLattice {
     private static readonly int[] CycleMap;
     private static readonly int[] RingMap;
     private static readonly FixedVector2[] Projection;
+    private static readonly ImmutableArray<BinaryPolynomial> RayCycleFactorStorage = [.. BinaryPolynomial.FactorOddCycle(cycleOrder: RayCycleOrder)];
 
     static SymmetryLattice() {
         var nodes = new sbyte[NodeCount][];
@@ -58,12 +65,12 @@ public static class SymmetryLattice {
         void Admit(ReadOnlySpan<sbyte> node) {
             var key = Pack(node: node);
 
-            if (index.ContainsKey(key)) { return; }
+            if (index.ContainsKey(key: key)) { return; }
 
             var stored = node.ToArray();
 
             nodes[index.Count] = stored;
-            frontier.Enqueue(index.Count);
+            frontier.Enqueue(item: index.Count);
             index[key] = (index.Count);
         }
 
@@ -83,19 +90,20 @@ public static class SymmetryLattice {
         // The cycle c = s₁s₂…s₈ (the Coxeter element), as a permutation of the nodes, and the orbits it cuts them into.
         CycleMap = new int[NodeCount];
         Span<sbyte> image = stackalloc sbyte[Dimension];
+
         for (var i = 0; (i < NodeCount); ++i) {
-            nodes[i].CopyTo(image);
+            nodes[i].CopyTo(destination: image);
 
             for (var s = (SeedNodes.Length - 1); (s >= 0); --s) {
                 ReflectRaw(node: image, mirror: SeedNodes[s], result: scratch);
-                scratch.CopyTo(image);
+                scratch.CopyTo(destination: image);
             }
 
             CycleMap[i] = index[Pack(node: image)];
         }
 
         // Every Weyl reflection as an index map: ReflectMap[i · NodeCount + j] = index of node i reflected through node j.
-        ReflectMap = new ushort[NodeCount * NodeCount];
+        ReflectMap = new ushort[(NodeCount * NodeCount)];
         for (var i = 0; (i < NodeCount); ++i) {
             for (var j = 0; (j < NodeCount); ++j) {
                 ReflectRaw(node: nodes[i], mirror: nodes[j], result: scratch);
@@ -106,6 +114,7 @@ public static class SymmetryLattice {
         RingMap = new int[NodeCount];
         Array.Fill(array: RingMap, value: -1);
         var nextRing = 0;
+
         for (var i = 0; (i < NodeCount); ++i) {
             if (RingMap[i] >= 0) { continue; }
 
@@ -163,21 +172,97 @@ public static class SymmetryLattice {
     /// <param name="node">The node to reflect, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <param name="mirror">The node whose hyperplane reflects, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The index of the reflected node; composing reflections realizes the whole symmetry group W(E₈).</returns>
-    public static int Reflect(int node, int mirror) =>
-        ReflectMap[((node * NodeCount) + mirror)];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> or <paramref name="mirror"/> is outside the node range.</exception>
+    public static int Reflect(int node, int mirror) {
+        ValidateNode(node: node, paramName: nameof(node));
+        ValidateNode(node: mirror, paramName: nameof(mirror));
+
+        return ReflectMap[((node * NodeCount) + mirror)];
+    }
+    /// <summary>Returns the antipodal node, which represents the same unoriented ray.</summary>
+    /// <param name="node">The node in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <returns>The node opposite <paramref name="node"/>.</returns>
+    public static int Antipode(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return ReflectMap[((node * NodeCount) + node)];
+    }
+    /// <summary>Returns the smaller node index in an antipodal ray pair, providing a stable ray key.</summary>
+    /// <param name="node">Either node representing the ray.</param>
+    /// <returns>The canonical node index of the unoriented ray.</returns>
+    public static int CanonicalRay(int node) {
+        var antipode = Antipode(node: node);
+
+        return Math.Min(val1: node, val2: antipode);
+    }
+    /// <summary>Tests exact E₈ orthogonality through the reflection action.</summary>
+    /// <param name="first">The first node.</param>
+    /// <param name="second">The second node.</param>
+    /// <returns><see langword="true"/> exactly when the roots, and therefore their rays, are orthogonal.</returns>
+    public static bool AreOrthogonal(int first, int second) {
+        ValidateNode(node: first, paramName: nameof(first));
+        ValidateNode(node: second, paramName: nameof(second));
+
+        return (ReflectMap[((first * NodeCount) + second)] == first);
+    }
+    /// <summary>Gets the number of verified factors of <c>t^15 + 1</c> governing the order-15 action induced on
+    /// antipodal E₈ rays.</summary>
+    public static int RayCycleFactorCount => RayCycleFactorStorage.Length;
+    /// <summary>Gets one verified factor of <c>t^15 + 1</c>, by position.</summary>
+    /// <param name="index">The factor's position, in <c>[0, <see cref="RayCycleFactorCount"/>)</c>.</param>
+    /// <returns>The factor.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the factor range.</exception>
+    /// <remarks>
+    /// Count-and-index rather than a collection, because no collection type keeps this safe. The storage is a private
+    /// static shared by the whole process, and handing out any view of it hands out a route back to the array: a
+    /// <see cref="ReadOnlyMemory{T}"/> yields its backing store to <c>MemoryMarshal.TryGetArray</c>, and an
+    /// <see cref="ImmutableArray{T}"/> yields the same store to <c>ImmutableCollectionsMarshal.AsArray</c> — both
+    /// public, neither needing reflection or unsafe code. Either one let a consumer zero verified lattice metadata for
+    /// every later consumer in the process. <see cref="BinaryPolynomial"/> is a value type, so returning one by
+    /// position copies it and leaves the caller nothing to write through.
+    /// </remarks>
+    public static BinaryPolynomial RayCycleFactor(int index) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: index, paramName: nameof(index));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: RayCycleFactorStorage.Length, paramName: nameof(index));
+
+        return RayCycleFactorStorage[index];
+    }
     /// <summary>Advances a node one step around its ring — the order-30 cycle whose planes are <see cref="CyclicRotation"/>.</summary>
     /// <param name="node">The node to advance, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The index of the next node in the same ring; returning to the start after <see cref="RingSize"/> steps.</returns>
-    public static int Cycle(int node) =>
-        CycleMap[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Cycle(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return CycleMap[node];
+    }
     /// <summary>Returns which ring a node belongs to: the orbit it occupies under repeated <see cref="Cycle(int)"/>.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The ring in <c>[0, <see cref="RingCount"/>)</c>.</returns>
-    public static int Ring(int node) =>
-        RingMap[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Ring(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return RingMap[node];
+    }
     /// <summary>Projects a node onto the plane where the 240 nodes resolve into eight concentric rings of thirty.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The projected point; its ring is <see cref="Ring(int)"/> and one <see cref="Cycle(int)"/> step turns it 12°.</returns>
-    public static FixedVector2 Project(int node) =>
-        Projection[node];
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static FixedVector2 Project(int node) {
+        ValidateNode(node: node, paramName: nameof(node));
+
+        return Projection[node];
+    }
+
+    /// <summary>Rejects invalid public node indices before they can wrap a flattened lookup-table offset.</summary>
+    private static void ValidateNode(int node, string paramName) {
+        if ((uint)node >= ((uint)NodeCount)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                actualValue: node,
+                message: $"the node index must be in [0, {NodeCount})"
+            );
+        }
+    }
 }

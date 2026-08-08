@@ -1,4 +1,4 @@
-using Puck.Compositing;
+using Puck.Abstractions.Presentation;
 using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
@@ -22,9 +22,8 @@ internal sealed class WorldViewComposer {
     // The built-in ladder's own transition envelope (ScreenLayoutDirector's compiled 0.6 s / 0.5 scale), used only when
     // easing into or out of the built-in composition — an authored layout brings its own.
     private const float BuiltinTransitionSeconds = 0.6f;
-    private const float BuiltinTransitionRenderScale = 0.5f;
-
     private const string BuiltinName = "builtin";
+    private const float BuiltinTransitionRenderScale = 0.5f;
 
     private readonly List<WorldComposedSlot> m_slots = new();
     private readonly List<WorldComposedSlot> m_targetSlots = new();
@@ -32,7 +31,6 @@ internal sealed class WorldViewComposer {
     private readonly List<ViewBinding> m_toScratch = new();
     private readonly Dictionary<string, int> m_cameraIds = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_cameraNames = new();
-
     private ViewTransition? m_transition;
     private float m_transitionStart;
     private float m_transitionSeconds;
@@ -81,7 +79,7 @@ internal sealed class WorldViewComposer {
                 from: new ViewLayout(Bindings: m_currentBindings.ToArray()),
                 to: new ViewLayout(Bindings: m_toScratch.ToArray()),
                 durationSeconds: seconds,
-                easing: static t => (t * t * (3f - (2f * t)))
+                easing: static t => ((t * t) * (3f - (2f * t)))
             );
             m_transitionStart = elapsedSeconds;
             m_transitionSeconds = MathF.Max(x: seconds, y: 0.001f);
@@ -140,7 +138,6 @@ internal sealed class WorldViewComposer {
 
         return (BuiltinName, BuiltinName, BuiltinTransitionSeconds, BuiltinTransitionRenderScale);
     }
-
     private void ResolveLayoutSlots(WorldViewLayout layout) {
         m_targetSlots.Clear();
 
@@ -156,7 +153,6 @@ internal sealed class WorldViewComposer {
             }
         }
     }
-
     private void ResolveBuiltin(int joinedCount, int soleEditorIndex, float workbenchFraction) {
         m_targetSlots.Clear();
 
@@ -179,7 +175,6 @@ internal sealed class WorldViewComposer {
             }
         }
     }
-
     private void BuildBindings(List<WorldComposedSlot> slots, List<ViewBinding> into) {
         into.Clear();
 
@@ -189,7 +184,6 @@ internal sealed class WorldViewComposer {
             into.Add(item: new ViewBinding(View: id, Region: slot.Region));
         }
     }
-
     private void DecodeSlots() {
         m_slots.Clear();
 
@@ -201,7 +195,6 @@ internal sealed class WorldViewComposer {
                 : new WorldComposedSlot(Region: binding.Region, SeatOrder: -1, Camera: m_cameraNames[index: value])));
         }
     }
-
     private int CameraId(string name) {
         if (m_cameraIds.TryGetValue(key: name, value: out var id)) {
             return id;
@@ -213,7 +206,6 @@ internal sealed class WorldViewComposer {
 
         return id;
     }
-
     private static void CopyBindings(IReadOnlyList<ViewBinding> source, List<ViewBinding> into) {
         into.Clear();
 
@@ -221,7 +213,6 @@ internal sealed class WorldViewComposer {
             into.Add(item: source[index]);
         }
     }
-
     private static WorldViewLayout? FindLayout(IReadOnlyList<WorldViewLayout> layouts, string name) {
         foreach (var layout in layouts) {
             if (string.Equals(a: layout.Name, b: name, comparisonType: StringComparison.Ordinal)) {
@@ -231,7 +222,6 @@ internal sealed class WorldViewComposer {
 
         return null;
     }
-
     private static WorldViewLayout? FindBySeatCount(IReadOnlyList<WorldViewLayout> layouts, int seatCount) {
         foreach (var layout in layouts) {
             if (layout.SeatCount == seatCount) {

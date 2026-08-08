@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -42,10 +43,7 @@ internal readonly record struct Sm83SstVector(string Name, Sm83SstState Initial,
 
 /// <summary>Deserializes one opcode family's JSON file (1000 vectors) from the SingleStepTests/sm83 corpus layout
 /// (<c>v1/&lt;opcode&gt;.json</c>; CB-prefixed opcodes are named <c>"cb xx.json"</c>).</summary>
-internal static class Sm83SstVectorFile {
-    private static readonly JsonSerializerOptions Options = new() {
-        PropertyNameCaseInsensitive = true,
-    };
+internal static partial class Sm83SstVectorFile {
 
     /// <summary>Loads and maps every vector in one opcode family's file.</summary>
     /// <param name="path">The JSON file's full path.</param>
@@ -53,7 +51,7 @@ internal static class Sm83SstVectorFile {
     public static IReadOnlyList<Sm83SstVector> Load(string path) {
         using var stream = File.OpenRead(path: path);
 
-        var dtos = JsonSerializer.Deserialize<List<VectorDto>>(utf8Json: stream, options: Options)
+        var dtos = JsonSerializer.Deserialize(utf8Json: stream, jsonTypeInfo: Sm83SstJsonContext.Default.Vectors)
             ?? throw new InvalidDataException(message: $"'{path}' did not deserialize to a vector array.");
         var vectors = new List<Sm83SstVector>(capacity: dtos.Count);
 
@@ -129,5 +127,10 @@ internal static class Sm83SstVectorFile {
         public int? Ie { get; set; }
         public int? Ei { get; set; }
         public int[][]? Ram { get; set; }
+    }
+
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    [JsonSerializable(typeof(List<VectorDto>), TypeInfoPropertyName = "Vectors")]
+    private sealed partial class Sm83SstJsonContext : JsonSerializerContext {
     }
 }

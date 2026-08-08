@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -163,7 +165,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     public const int MaxViewports = 5;
 
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
-    private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams (16-byte rounded); word 6 = screenMask, word 7 = instanceMaskWordCount
+    private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + (sizeof(uint) * 2)); // 40-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the shadow estimator's deterministic net index), word 9 = the shadow accumulator's epoch + enable bit. Vulkan guarantees 128 bytes of push range, so this stays well inside the floor.
     /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (matches
     /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>). THIRTY-TWO SEPARATE combined-image-sampler bindings (not one
     /// array binding): DXC's <c>vk::combinedImageSampler</c> only fuses a SCALAR Texture2D+SamplerState pair, so a
@@ -244,6 +246,11 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
     private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the bbox origin (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
     private const uint ViewSourceBindingIndex = 4; // sdf-world-views.comp: sources[] LAST (after the fixed 1/2/3)
+    // The sun disc's angular radius in radians — the half-aperture the shadow estimator samples. tan(0.11) = 0.11045
+    // reproduces the retired parabola's 1/9 = 0.1111 penumbra half-slope to within 0.7%, so the shipped look is the
+    // same shadows sampled correctly rather than a jolt in penumbra width. KEEP IN SYNC with sdf-world.hlsli's
+    // SunAngularRadius, which is documentation on the GPU side: only the host evaluates tan().
+    private const double SunAngularRadius = 0.11d;
     private const uint WorkgroupEdge = 8;
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
     /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution (carve-bake plan §3).</summary>
@@ -255,6 +262,11 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // instances exist; invariant programs seed every slot once at UploadProgram. Instance-cull reads it at t3; views
     // at t42.
     private const uint FrameInstanceGridBindingIndex = 47;
+    // The area-light shadow estimator's host-baked sampler table (SdfShadowSamplerTables): the digital net's direction
+    // numbers plus the sun disc's quantized polar map. Stage 1 ONLY — it is the only kernel that shades. Binding 48;
+    // its Direct3D 12 register is POSITIONAL (views append it LAST, after the frame instance grid t42, so it resolves
+    // to t43). KEEP IN SYNC with sdf-world.hlsli's sdfSamplerTable.
+    private const uint SamplerTableBindingIndex = 48;
     private const uint BrickBakeRequestBindingIndex = 0; // sdf-brick-bake.comp: bakeRequest (register t0)
     private const uint BrickBakePoolBindingIndex = 1;    // sdf-brick-bake.comp: brickPool RW (register u0)
     private const int BrickBakePushByteLength = (sizeof(uint) * 4); // BrickBakePush { uint sliceVoxelStart, sliceVoxelCount, 2x pad }
@@ -268,11 +280,14 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuShaderModule m_beamShaderModule;
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
     // fence proves its previous frame retired, so a descriptor update can never race an in-flight command buffer.
+    // They cover ENGINE-OWNED views only — a host-owned view (a screen source, a child's storage image) is rebound
+    // unconditionally, since its handle value is not a durable identity (BindScreenSources' handle-identity rule).
     private readonly nint[][] m_boundScreenSourceViews = BuildRingViewCache(width: MaxScreenSurfaces);
     private readonly nint[][] m_boundSourceViews = BuildRingViewCache(width: MaxViewports);
     // The SDF_SHAPE_GLYPH font atlas: a STATIC texture uploaded once via SetGlyphAtlas (a re-set re-uploads). Held as an
     // IGpuSurfaceUpload (owns the image + staging + the returned view), the current sampleable view, and the last-bound
-    // view for the same change-detected (re)bind BindScreenSources does for the screen sources. Null/0 until set — the
+    // view for a change-detected (re)bind — sound here because the atlas is ENGINE-owned, and SetGlyphAtlas clears this
+    // cache itself when a re-upload retires the previous view. Null/0 until set — the
     // glyph binding then samples the neutral 1×1 filler (m_screenSourceFiller) and every SDF_SHAPE_GLYPH reads the
     // saturated band, so a glyph-free program with no atlas is safe.
     private IGpuSurfaceUpload? m_glyphAtlasUpload;
@@ -317,6 +332,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuStorageBuffer m_programBuffer;
     private readonly int m_programWordCapacity;
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
+    private readonly IGpuStorageBuffer m_samplerTableBuffer;
     private readonly nint m_screenSampler;
     private readonly IGpuStorageImage m_screenSourceFiller;
     private readonly nint[] m_screenSourceViews = new nint[MaxScreenSurfaces];
@@ -383,6 +399,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly uint m_viewportCapacity;
     private readonly IGpuStorageBuffer[] m_viewportBuffers = new IGpuStorageBuffer[FrameRingSize];
     private readonly byte[] m_viewportScratch;
+    // The RETAINED copy of the last produced frame's packed viewport rows, and the ring of buffers Stage 1 reprojects
+    // through. Held explicitly rather than by reading the ring's other slot: the ring slot's contents are only defined
+    // relative to the produced-frame count, and an engine whose caller ever produces an odd number of frames between
+    // two renders would silently reproject through the wrong camera.
     private readonly IGpuStorageBuffer m_viewsArgsBuffer;
     // The core-ops Stage 1 variant (see SdfViewsKernelVariant): same bindings array as m_viewsPipeline, so its
     // descriptor-set layout is identically defined — the per-slot m_viewsSets bind against WHICHEVER pipeline
@@ -398,6 +418,12 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private bool m_disposed;
     private bool m_imageInitialized;
     private double? m_lastFrameGpuMilliseconds;
+    // The CPU cost of the MOST RECENT produced frame's per-frame instance-grid rebuild (BuildFrameInstanceGrid + the
+    // ring slot's buffer write) — null whenever that frame's live program is grid-invariant (built once at
+    // UploadProgram) and so skipped the rebuild. A plain wall-clock Stopwatch span, not a GPU query: this is CPU-side
+    // work (host-built CSR bins), the counterpart to the GPU pass timings for measuring a per-frame-moving dynamic
+    // instance set's cost (a bench/ceiling-measurement seam — see SdfBenchScene.DynamicMatrix).
+    private double? m_lastInstanceGridRebuildMilliseconds;
     private SdfViewsKernelVariant? m_loggedViewsVariant;
     private int m_liveInstanceMaskWordCount;
     private SdfProgram m_liveProgram = null!;
@@ -433,6 +459,13 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // 820 KB decal buffer is revision-tracked, not re-hashed per frame — both setters change-detect first, since a
     // provider polled every produced frame, e.g. the diegetic terminal mirror, commonly re-supplies unchanged content).
     private ulong m_programRevision;
+    // The shadow accumulator's history lives in the per-view source texture's alpha lane, which is undefined until
+    // Stage 1 has written the pixel at least once. These force the recurrence to seed from the raw estimate for the
+    // first frames after construction — the textures are allocated once and never reallocated, so that is the only
+    // window in which the lane holds whatever the allocator left behind.
+    private const int ShadowAccumulationResetFrames = 2;
+
+    private int m_shadowAccumulationResetFrames = ShadowAccumulationResetFrames;
     private ulong m_decalRevision;
     // STEP 1 instrumentation (perf plan Phase 6.1 follow-up): the previous decided frame's INDEPENDENT per-span hashes
     // (each starting fresh from the FNV basis — unlike m_previousFrameSignature's chained fold, so one span's hash never
@@ -455,6 +488,8 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <param name="options">The construction options (scene program, capacities, child mask, export/timing seams).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero, or the viewport capacity is 0 or above <see cref="MaxViewports"/>.</exception>
+    /// <exception cref="InvalidOperationException">The loaded shader bytecode does not report the host's
+    /// <see cref="SdfIsa.Version"/>.</exception>
     public SdfWorldEngine(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(gpu);
         ArgumentNullException.ThrowIfNull(device);
@@ -534,7 +569,16 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         m_programWordCapacity = Math.Max(val1: options.Program.Words.Length, val2: options.ProgramWordCapacity);
         m_programBuffer = gpu.StorageBufferFactory.Create(deviceContext: device, sizeBytes: ((ulong)m_programWordCapacity * sizeof(uint)));
+        // The shadow sampler table is built ONCE here and uploaded ONCE — it is a pure function of the sun's angular
+        // radius, not of the frame or the program, so it never enters the per-frame ring. Rebuilding it per frame
+        // would be 65.8 KB of pointless traffic; that it can be built once is the whole reason the transcendentals
+        // live on the host.
+        m_samplerTableBuffer = gpu.StorageBufferFactory.Create(deviceContext: device, sizeBytes: ((ulong)SdfShadowSamplerTables.WordCount * sizeof(uint)));
 
+        var samplerTable = new uint[SdfShadowSamplerTables.WordCount];
+
+        SdfShadowSamplerTables.Build(sunAngularRadius: SunAngularRadius, destination: samplerTable);
+        m_samplerTableBuffer.Write<uint>(data: samplerTable);
         // The HOST-VISIBLE per-frame buffers are duplicated per ring slot (see FrameRingSize): slot k's copies are
         // only rewritten after slot k's fence proves frame k − FrameRingSize retired, so a frame's in-place upload
         // can never race the previous frame's in-flight reads.
@@ -564,6 +608,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // frame (m_liveInstanceMaskWordCount), which UploadProgram caps at this construction width.
         m_instanceMaskWordCount = Math.Max(val1: options.Program.InstanceMaskWordCount, val2: SdfProgram.InstanceMaskWordCountFor(instanceCount: options.InstanceCapacity));
         var instanceMaskStorageWordCount = (m_instanceMaskWordCount + ((m_instanceMaskWordCount + 31) / 32));
+
         m_instanceMaskBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(deviceContext: device, sizeBytes: (((((ulong)m_viewportCapacity * m_tileGridX) * m_tileGridY) * (uint)instanceMaskStorageWordCount) * sizeof(uint)));
 
         // The carve-bake brick pool (carve-bake plan §3): one persistent DEVICE-LOCAL f32 buffer — device-local so the
@@ -674,6 +719,9 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             new GpuComputeBinding(Binding: BrickPoolBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             // The frame-local instance grid resolves to t42, after the brick pool's t41.
             new GpuComputeBinding(Binding: FrameInstanceGridBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
+            // The shadow sampler table, APPENDED LAST so its SRV resolves to register t43 (after the frame instance
+            // grid t42). Immutable and shared across ring slots — bound once per slot at construction, never rewritten.
+            new GpuComputeBinding(Binding: SamplerTableBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
         ];
 
         // Stage 2 (source-agnostic composite): output image (0) + the source array (1) + the cull buffer read (3),
@@ -788,6 +836,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             // The brick pool (a stride-4 float SRV — the shared read side; the bake set below binds the same buffer as a UAV).
             WriteStorageBufferReadOnly(set: viewsSet, binding: BrickPoolBindingIndex, buffer: m_brickPoolBuffer);
             WriteStorageBufferReadOnly(set: viewsSet, binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridBuffers[slot]);
+            WriteStorageBufferReadOnly(set: viewsSet, binding: SamplerTableBindingIndex, buffer: m_samplerTableBuffer);
 
             var compositeSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_compositePipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
 
@@ -820,6 +869,8 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             }
         }
 
+        SdfIsa.VerifyShaderSet(device: device, kernels: kernels, verify: VerifyIsaVersion);
+
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the
         // single owner of per-program derived state (its capacity checks trivially pass for the construction program).
@@ -846,6 +897,102 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 }
             }
         }
+    }
+
+    private void VerifyIsaVersion() {
+        using var reportImage = m_gpu.StorageImageFactory.Create(deviceContext: m_deviceContext, format: Format, height: 1, width: 1);
+        using var sampledImage = m_gpu.StorageImageFactory.Create(deviceContext: m_deviceContext, format: Format, height: 1, width: 1);
+        using var readback = m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        var viewsSet = m_viewsSets[0];
+
+        for (var element = 0u; (element < MaxViewports); element++) {
+            m_descriptorAllocator.WriteStorageImage(arrayElement: element, binding: ViewSourceBindingIndex, descriptorSetHandle: viewsSet, deviceHandle: m_deviceHandle, imageViewHandle: reportImage.ImageViewHandle);
+        }
+
+        for (var element = 0; (element < ScreenSourceBindingIndices.Length); element++) {
+            m_descriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: ScreenSourceBindingIndices[element], descriptorSetHandle: viewsSet, deviceHandle: m_deviceHandle, imageViewHandle: sampledImage.ImageViewHandle, samplerHandle: m_screenSampler);
+        }
+
+        m_descriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: GlyphAtlasBindingIndex, descriptorSetHandle: viewsSet, deviceHandle: m_deviceHandle, imageViewHandle: sampledImage.ImageViewHandle, samplerHandle: m_screenSampler);
+        _ = BitConverter.TryWriteBytes(destination: m_pushConstant.AsSpan(start: (8 * sizeof(uint)), length: sizeof(uint)), value: SdfIsa.ReportRequest);
+
+        try {
+            var report = DispatchIsaReport(viewsPipeline: m_viewsPipeline, reportImage: reportImage, sampledImage: sampledImage, readback: readback, initializeImages: true);
+
+            SdfIsa.ValidateReport(report: report.Span, viewsVariant: "full views");
+
+            report = DispatchIsaReport(viewsPipeline: m_viewsCorePipeline, reportImage: reportImage, sampledImage: sampledImage, readback: readback, initializeImages: false);
+            SdfIsa.ValidateReport(report: report.Span, viewsVariant: "core views");
+        } finally {
+            Array.Clear(array: m_pushConstant);
+        }
+    }
+    private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline viewsPipeline, IGpuStorageImage reportImage, IGpuStorageImage sampledImage, IGpuSurfaceReadback readback, bool initializeImages) {
+        var commandBuffer = m_commandPools[0].CommandBufferHandle;
+        var recorder = m_gpu.ComputeRecorder;
+
+        recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle);
+
+        if (initializeImages) {
+            recorder.TransitionImageLayout(
+                commandBufferHandle: commandBuffer,
+                destinationAccessMask: GpuComputeAccess.ShaderRead,
+                destinationStageMask: GpuComputeStage.ComputeShader,
+                deviceHandle: m_deviceHandle,
+                imageHandle: sampledImage.ImageHandle,
+                newLayout: GpuImageLayout.ShaderReadOnly,
+                oldLayout: GpuImageLayout.Undefined,
+                sourceAccessMask: GpuComputeAccess.None,
+                sourceStageMask: GpuComputeStage.TopOfPipe
+            );
+        }
+
+        recorder.TransitionImageLayout(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuComputeAccess.ShaderWrite,
+            destinationStageMask: GpuComputeStage.ComputeShader,
+            deviceHandle: m_deviceHandle,
+            imageHandle: reportImage.ImageHandle,
+            newLayout: GpuImageLayout.General,
+            oldLayout: (initializeImages ? GpuImageLayout.Undefined : GpuImageLayout.ShaderReadOnly),
+            sourceAccessMask: (initializeImages ? GpuComputeAccess.None : GpuComputeAccess.ShaderRead),
+            sourceStageMask: (initializeImages ? GpuComputeStage.TopOfPipe : GpuComputeStage.ComputeShader)
+        );
+
+        if (initializeImages) {
+            recorder.BindComputePipeline(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, pipelineHandle: m_beamPipeline.Handle);
+            recorder.BindComputeDescriptorSet(commandBufferHandle: commandBuffer, descriptorSetHandle: m_beamSets[0], deviceHandle: m_deviceHandle, pipelineLayoutHandle: m_beamPipeline.LayoutHandle);
+            recorder.PushConstants(commandBufferHandle: commandBuffer, data: m_pushConstant, deviceHandle: m_deviceHandle, offset: 0, pipelineLayoutHandle: m_beamPipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+            recorder.Dispatch(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+            recorder.MemoryBarrier(
+                commandBufferHandle: commandBuffer,
+                destinationAccessMask: GpuComputeAccess.ShaderRead,
+                destinationStageMask: GpuComputeStage.ComputeShader,
+                deviceHandle: m_deviceHandle,
+                sourceAccessMask: GpuComputeAccess.ShaderWrite,
+                sourceStageMask: GpuComputeStage.ComputeShader
+            );
+        }
+
+        recorder.BindComputePipeline(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, pipelineHandle: viewsPipeline.Handle);
+        recorder.BindComputeDescriptorSet(commandBufferHandle: commandBuffer, descriptorSetHandle: m_viewsSets[0], deviceHandle: m_deviceHandle, pipelineLayoutHandle: viewsPipeline.LayoutHandle);
+        recorder.PushConstants(commandBufferHandle: commandBuffer, data: m_pushConstant, deviceHandle: m_deviceHandle, offset: 0, pipelineLayoutHandle: viewsPipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+        recorder.Dispatch(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+        recorder.TransitionImageLayout(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationStageMask: GpuComputeStage.ComputeShader,
+            deviceHandle: m_deviceHandle,
+            imageHandle: reportImage.ImageHandle,
+            newLayout: GpuImageLayout.ShaderReadOnly,
+            oldLayout: GpuImageLayout.General,
+            sourceAccessMask: GpuComputeAccess.ShaderWrite,
+            sourceStageMask: GpuComputeStage.ComputeShader
+        );
+        recorder.EndCommandBuffer(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle);
+        m_gpu.QueueSubmitter.SubmitAndWait(commandBufferHandles: [commandBuffer], deviceContext: m_deviceContext);
+
+        return readback.Read(bytesPerPixel: 4, deviceContext: m_deviceContext, format: Format, height: 1, sourceImageHandle: reportImage.ImageHandle, width: 1);
     }
 
     // Creates the TimingPoolCount rotating timestamp pools once. Called at construction in eager mode, or on the first
@@ -915,6 +1062,13 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// enabled at construction — the frame-start → composite-close bracket of the four per-pass marks — or
     /// <see langword="null"/> when timing is disabled or the timestamps were not yet readable.</summary>
     public double? LastFrameGpuMilliseconds => m_lastFrameGpuMilliseconds;
+    /// <summary>Gets the CPU wall-clock cost (milliseconds) of the MOST RECENT produced frame's per-frame instance-grid
+    /// rebuild (<see cref="SdfProgram.BuildFrameInstanceGrid"/> + the ring slot's buffer write), or <see langword="null"/>
+    /// when the live program's grid is invariant (built once at <see cref="UploadProgram"/>) and this frame skipped the
+    /// rebuild. The CPU-bound counterpart to <see cref="LastFrameGpuMilliseconds"/> — a per-frame-moving dynamic
+    /// instance set (e.g. <c>SdfBenchWorkload.DynamicMatrix</c>'s Moving rungs) forces this every frame; a static
+    /// program never sets it. Plain wall-clock timing (not a GPU query) — this work runs entirely on the CPU.</summary>
+    public double? LastInstanceGridRebuildMilliseconds => m_lastInstanceGridRebuildMilliseconds;
     /// <summary>Gets or sets the SDF debug view mode packed into each viewport row (<c>forward.w</c>); 0 renders the
     /// final lit image.</summary>
     public int DebugMode { get; set; }
@@ -941,10 +1095,12 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// The program must fit the buffers sized at construction (including its screen-surface table and its per-tile
     /// instance-mask width).</summary>
     /// <param name="program">The scene program to upload.</param>
-    /// <exception cref="ArgumentException">The program's instance count derives a wider per-tile mask than the
-    /// construction program's (the mask buffer cannot grow after construction).</exception>
+    /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>, or its
+    /// instance count derives a wider per-tile mask than the construction program's (the mask buffer cannot grow after
+    /// construction).</exception>
     public void UploadProgram(SdfProgram program) {
         ArgumentNullException.ThrowIfNull(program);
+        program.ValidateIsa();
 
         if (program.Words.Length > m_programWordCapacity) {
             throw new ArgumentException(message: $"The uploaded program has {program.Words.Length} packed words; the engine was constructed for {m_programWordCapacity} (construct the engine with the larger program).", paramName: nameof(program));
@@ -1030,7 +1186,9 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
     }
     /// <summary>Supplies the storage-image view a hosted CHILD produced for its viewport slot this frame; the next
-    /// frame binds it into the source arrays (deduplicated — rebinding the same view is free).</summary>
+    /// frame binds it into the source arrays. The host owns this view's lifetime, so the binding is rewritten every
+    /// frame rather than skipped on an unchanged handle value — a retired handle value can be re-issued for a
+    /// different image, which a value-keyed skip would bind stale (see <c>BindScreenSources</c>).</summary>
     /// <param name="slot">The child's viewport slot (a bit the construction <see cref="SdfWorldEngineOptions.ChildMask"/> set).</param>
     /// <param name="imageViewHandle">The child's same-device storage-image view (General layout; the child owns it).</param>
     public void SetChildSource(int slot, nint imageViewHandle) {
@@ -1048,9 +1206,12 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// screen-surface <c>ScreenSlab</c> overload) at <paramref name="screenIndex"/> samples this frame — a
     /// same-device storage-image view (General layout, shader-readable), typically a hosted child's or an emulator's
     /// NATIVE framebuffer image (not a pane-resampled one: Stage 1 samples it directly, so any fit/scale is the
-    /// sampling itself). The next frame binds it into the screen-source array (deduplicated — rebinding the same view
-    /// is free). Passing 0 clears the slot: a screen surface with no source bound falls back to the
-    /// flat/procedural screen material.</summary>
+    /// sampling itself). The next frame binds it into the screen-source array. The HOST owns this view's lifetime and
+    /// may retire it between any two frames, so a bound slot's descriptor is rewritten every frame instead of being
+    /// skipped on an unchanged handle value: a handle value is unique only among LIVE objects, and a retired one can
+    /// come back naming a different image (see <c>BindScreenSources</c>). Passing 0 clears the slot: a screen surface
+    /// with no source bound falls back to the flat/procedural screen material, and an unbound slot IS value-skipped
+    /// (its filler is engine-owned).</summary>
     /// <param name="screenIndex">The screen source slot (0..31, matching a program's declared
     /// <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
     /// <param name="imageViewHandle">The source's same-device storage-image view, or 0 to unbind.</param>
@@ -1108,6 +1269,12 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload(deviceContext: m_deviceContext);
         m_glyphAtlasView = m_glyphAtlasUpload.Upload(deviceContext: m_deviceContext, pixels: rgbaPixels, format: Format, width: width, height: height);
+
+        // A re-upload retires the previous view, and a retired handle value can come straight back as the new one (see
+        // BindScreenSources' handle-identity rule), so the value alone cannot tell BindScreenSources that this binding
+        // must be rewritten. Invalidate the per-ring-slot cache explicitly — the ring is already drained above, so the
+        // next frame in each slot rewrites the descriptor before anything samples it.
+        Array.Clear(array: m_boundGlyphAtlasViews);
     }
     /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the NEXT produced
     /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
@@ -1145,9 +1312,9 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // SdfEngineNode polls this every frame via transform providers, often with an unchanged value (a static screen,
         // or a rig sampled at the same pose) — only an actual change needs to dirty the ring (C5 perf plan Phase 1.2).
         var changed =
-            (floats[(b + 0)] != unitRight.X) || (floats[(b + 1)] != unitRight.Y) || (floats[(b + 2)] != unitRight.Z) || (floats[(b + 3)] != halfWidth) ||
+            ((floats[(b + 0)] != unitRight.X) || (floats[(b + 1)] != unitRight.Y) || (floats[(b + 2)] != unitRight.Z) || (floats[(b + 3)] != halfWidth) ||
             (floats[(b + 4)] != unitUp.X) || (floats[(b + 5)] != unitUp.Y) || (floats[(b + 6)] != unitUp.Z) || (floats[(b + 7)] != halfHeight) ||
-            (floats[(b + 8)] != origin.X) || (floats[(b + 9)] != origin.Y) || (floats[(b + 10)] != origin.Z);
+            (floats[(b + 8)] != origin.X) || (floats[(b + 9)] != origin.Y) || (floats[(b + 10)] != origin.Z));
 
         if (!changed) {
             return;
@@ -1620,6 +1787,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_tileBuffer.Dispose();
         m_instanceMaskBuffer.Dispose();
         m_programBuffer.Dispose();
+        m_samplerTableBuffer.Dispose();
 
         foreach (var requestBuffer in m_brickRequestBuffers) {
             requestBuffer?.Dispose();
@@ -1691,6 +1859,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // Re-bin only when an active maskable dynamic instance can move a grid entry. Invariant programs had every
         // ring slot seeded by UploadProgram; rewriting the same CSR words every frame would be pure CPU/upload work.
         if (m_rebuildInstanceGridPerFrame) {
+            var rebuildStopwatch = Stopwatch.StartNew();
             var frameGrid = m_liveProgram.BuildFrameInstanceGrid(
                 transforms: frame.DynamicTransforms,
                 inputScratch: m_instanceGridInputScratch,
@@ -1699,6 +1868,9 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             ValidateInstanceGridCapacity(words: frameGrid);
             m_instanceGridBuffers[slot].Write<uint>(data: frameGrid);
+            m_lastInstanceGridRebuildMilliseconds = rebuildStopwatch.Elapsed.TotalMilliseconds;
+        } else {
+            m_lastInstanceGridRebuildMilliseconds = null;
         }
         // The screen-surface table: UploadProgram seeds the host mirror once; any SetScreenSurface call since patches
         // it in place. Unlike the buffers above, this one is only re-uploaded when a value-changing SetScreenSurface
@@ -1724,14 +1896,35 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             m_decalDirty[slot] = false;
         }
 
-        // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint childMask; uint screenMask; uint instanceMaskWordCount; } — Stage 0/1 push.
+        // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint childMask; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_childMask; pushWords[6] = m_screenSourceMask; pushWords[7] = (uint)m_liveInstanceMaskWordCount;
+        // The shadow estimator's net index. It rides the push (not a buffer) because it changes every frame and
+        // nothing else does, and it is folded into ComputeFrameSignature below via m_pushConstant so the cadence gate
+        // can never skip a frame whose sample index moved.
+        pushWords[8] = frame.SampleIndex;
+        // Word 9 — the shadow accumulator's control word: bit 0 disables it, bit 1 forces a reset. The reset covers a
+        // freshly constructed engine, whose source textures have not yet carried a written alpha lane (the history's
+        // home), so the recurrence never folds in an undefined value. The textures are allocated once and never
+        // reallocated or cleared, so that is the only moment the lane is undefined.
+        //
+        // A PROGRAM UPLOAD DELIBERATELY DOES NOT RESET. The history is screen-space and every read is already validated
+        // by reprojection, the epoch, and the depth tolerance, so changed geometry is rejected per pixel rather than
+        // wholesale. A live world uploads a new program EVERY frame — tying the reset to the program revision pins the
+        // reset bit high forever and holds the accumulator at its raw single-frame estimate, which is a silent
+        // no-op rather than a visible failure.
+        //
+        // It is written BEFORE the cadence decision precisely so it IS hashed — an enable flip or a reset must force a
+        // render, or it would be latched and never applied.
+        pushWords[9] = (frame.DisableShadowAccumulation ? 1u : 0u) | ((m_shadowAccumulationResetFrames > 0) ? 2u : 0u);
+
+        if (m_shadowAccumulationResetFrames > 0) {
+            m_shadowAccumulationResetFrames--;
+        }
 
         BuildCompositePush(frame: frame);
         DecideCadenceSkip(frame: frame, viewportCount: viewportCount);
-
         return viewportCount;
     }
 
@@ -1801,10 +1994,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         var brickBaking = AnyBrickBaking();
 
         m_skipThisFrame =
-            m_hasPreviousFrameSignature &&
+            (m_hasPreviousFrameSignature &&
             (signature == m_previousFrameSignature) &&
             !m_programDeclaresScreenSlab &&
-            !brickBaking;
+            !brickBaking);
         m_previousFrameSignature = signature;
         m_hasPreviousFrameSignature = true;
 
@@ -1856,26 +2049,25 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // render), never make a changed frame look the SAME (a stale skip). A collision would require a 64-bit hash clash
     // across two genuinely different input sets — negligible, and still only presentation, never simulation.
     private ulong ComputeFrameSignature(uint viewportCount) {
-        var hash = FnvOffsetBasis;
+        var hash = Fnv1aHash.Create();
 
         Span<byte> revisions = stackalloc byte[(sizeof(ulong) * 3)];
 
         MemoryMarshal.Write(destination: revisions[..sizeof(ulong)], value: in m_programRevision);
         MemoryMarshal.Write(destination: revisions.Slice(start: sizeof(ulong), length: sizeof(ulong)), value: in m_decalRevision);
         var viewportCountWide = (ulong)viewportCount;
+
         MemoryMarshal.Write(destination: revisions.Slice(start: (sizeof(ulong) * 2), length: sizeof(ulong)), value: in viewportCountWide);
 
-        hash = Fold(hash: hash, bytes: revisions);
-        hash = Fold(hash: hash, bytes: m_pushConstant);
-        hash = FoldViewportsExcludingTime(hash: hash, viewportScratch: m_viewportScratch);
-        hash = Fold(hash: hash, bytes: m_dynamicTransformScratch);
-        hash = Fold(hash: hash, bytes: m_screenSurfaceScratch);
-        hash = Fold(hash: hash, bytes: m_screenLightScratch);
+        hash.Add(values: revisions);
+        hash.Add(values: m_pushConstant);
+        AddViewportsExcludingTime(hash: ref hash, viewportScratch: m_viewportScratch);
+        hash.Add(values: m_dynamicTransformScratch);
+        hash.Add(values: m_screenSurfaceScratch);
+        hash.Add(values: m_screenLightScratch);
 
-        return hash;
+        return hash.Value;
     }
-
-    private const ulong FnvOffsetBasis = 1469598103934665603UL;
 
     // STEP 1 instrumentation: the same six spans ComputeFrameSignature chains, but each hashed INDEPENDENTLY (fresh
     // from the FNV basis) so DecideCadenceSkip can name exactly which span changed frame-to-frame. Never used for the
@@ -1888,42 +2080,40 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         MemoryMarshal.Write(destination: revisions[..sizeof(ulong)], value: in m_programRevision);
         MemoryMarshal.Write(destination: revisions.Slice(start: sizeof(ulong), length: sizeof(ulong)), value: in m_decalRevision);
         var viewportCountWide = (ulong)viewportCount;
+
         MemoryMarshal.Write(destination: revisions.Slice(start: (sizeof(ulong) * 2), length: sizeof(ulong)), value: in viewportCountWide);
 
         return new CadenceSpanHashes(
-            Revisions: Fold(hash: FnvOffsetBasis, bytes: revisions),
-            Push: Fold(hash: FnvOffsetBasis, bytes: m_pushConstant),
-            Viewports: FoldViewportsExcludingTime(hash: FnvOffsetBasis, viewportScratch: m_viewportScratch),
-            Dynamics: Fold(hash: FnvOffsetBasis, bytes: m_dynamicTransformScratch),
-            ScreenSurfaces: Fold(hash: FnvOffsetBasis, bytes: m_screenSurfaceScratch),
-            ScreenLights: Fold(hash: FnvOffsetBasis, bytes: m_screenLightScratch)
+            Revisions: Fnv1aHash.Compute(values: revisions),
+            Push: Fnv1aHash.Compute(values: m_pushConstant),
+            Viewports: HashViewportsExcludingTime(viewportScratch: m_viewportScratch),
+            Dynamics: Fnv1aHash.Compute(values: m_dynamicTransformScratch),
+            ScreenSurfaces: Fnv1aHash.Compute(values: m_screenSurfaceScratch),
+            ScreenLights: Fnv1aHash.Compute(values: m_screenLightScratch)
         );
     }
 
-    private static ulong Fold(ulong hash, ReadOnlySpan<byte> bytes) {
-        foreach (var b in bytes) {
-            hash = ((hash ^ b) * 1099511628211UL); // FNV-1a prime
-        }
-
-        return hash;
-    }
-
-    // Folds m_viewportScratch a row at a time, skipping each 96-byte ViewportData row's presentation-TIME lane (byte
+    // Hashes m_viewportScratch a row at a time, skipping each 96-byte ViewportData row's presentation-TIME lane (byte
     // offset 12, one float — PackViewports' position.w) so the signature is invariant to time's per-frame advance.
     // Time-driven content is instead covered by DecideCadenceSkip's m_programDeclaresScreenSlab force-render — see the
     // SIGNATURE COVERAGE comment there. Allocation-free: no copy, just two folded spans per row instead of one.
-    private static ulong FoldViewportsExcludingTime(ulong hash, ReadOnlySpan<byte> viewportScratch) {
+    private static ulong HashViewportsExcludingTime(ReadOnlySpan<byte> viewportScratch) {
+        var hash = Fnv1aHash.Create();
+
+        AddViewportsExcludingTime(hash: ref hash, viewportScratch: viewportScratch);
+
+        return hash.Value;
+    }
+    private static void AddViewportsExcludingTime(ref Fnv1aHash hash, ReadOnlySpan<byte> viewportScratch) {
         const int TimeLaneOffset = (sizeof(float) * 3); // position.xyz precede time in each row (PackViewports)
         const int TimeLaneLength = sizeof(float);
 
         for (var rowStart = 0; (rowStart < viewportScratch.Length); rowStart += ViewportByteLength) {
             var row = viewportScratch.Slice(start: rowStart, length: ViewportByteLength);
 
-            hash = Fold(hash: hash, bytes: row[..TimeLaneOffset]);
-            hash = Fold(hash: hash, bytes: row[(TimeLaneOffset + TimeLaneLength)..]);
+            hash.Add(values: row[..TimeLaneOffset]);
+            hash.Add(values: row[(TimeLaneOffset + TimeLaneLength)..]);
         }
-
-        return hash;
     }
 
     // Whether any brick slot is mid-bake: a Baking slot has RecordBrickBakeSlices writing new voxels every frame, so the
@@ -1941,7 +2131,6 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         return false;
     }
-
     private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {
         if (words.Length > m_instanceGridWordCapacity) {
             throw new InvalidOperationException(message: $"The frame instance grid packed {words.Length} words into a {m_instanceGridWordCapacity}-word construction envelope.");
@@ -1960,15 +2149,21 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // (views) and Stage 2 (composite) sets: an SDF source texture for a normal slot, the hosted child's storage image
     // for a child slot. Array elements past the live viewport count duplicate slot 0 (Vulkan requires every bound
     // array element to be a valid descriptor); the kernels never read them. The change-detected cache is per ring
-    // slot (a slot's set is only rewritten after its fence proved the slot idle).
+    // slot (a slot's set is only rewritten after its fence proved the slot idle) and covers ENGINE-OWNED views only —
+    // a child slot's view is host-owned and is rewritten unconditionally (see BindScreenSources for why).
     private void BindSources(uint viewportCount) {
-        var fillerView = SourceViewForSlot(slot: 0);
+        const int fillerSlot = 0;
+
+        var fillerView = SourceViewForSlot(slot: fillerSlot);
+        var fillerIsHostOwned = IsChildSlot(slot: fillerSlot);
         var boundViews = m_boundSourceViews[m_currentSlot];
 
         for (var element = 0u; (element < MaxViewports); element++) {
-            var view = ((element < viewportCount) ? SourceViewForSlot(slot: (int)element) : fillerView);
+            var live = (element < viewportCount);
+            var view = (live ? SourceViewForSlot(slot: (int)element) : fillerView);
+            var hostOwned = (live ? IsChildSlot(slot: (int)element) : fillerIsHostOwned);
 
-            if (view == boundViews[element]) {
+            if (!hostOwned && (view == boundViews[element])) {
                 continue;
             }
 
@@ -1983,16 +2178,27 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // combined-image-sampler binding's required layout the instant any viewport-source dispatch ran). The shader
     // never samples an unbound slot (params.screenMask gates it), so the filler's content never reaches a pixel. Each
     // is a SCALAR binding, not one array (see ScreenSourceBindingIndices), so each is written at arrayElement 0; the
-    // change-detected rebind means an idle scene (few sources bound) only writes descriptors that actually changed.
+    // change-detected rebind means an idle scene (no sources bound) only writes descriptors that actually changed.
+    //
+    // THE HANDLE-IDENTITY RULE: a change-detected skip is sound ONLY for a view this engine's own lifetime covers. A
+    // HOST-SUPPLIED handle (a screen source, a child's storage image) names an object the host may destroy and replace
+    // between any two frames, and a handle value is unique only among LIVE objects — both backends recycle a retired
+    // one. Direct3D 12 mints the token as a GCHandle whose freed table slot the next Alloc reuses (measured: three
+    // successive QR authorings on one screen produced three different ID3D12Resources behind ONE token value);
+    // Vulkan hands back the driver's VkImageView, which a driver is equally free to re-issue after vkDestroyImageView.
+    // Skipping the write on a matching value therefore leaves this set's descriptor pointing at the RETIRED resource
+    // for the rest of the run, and the next sample of it removes the device. So: rewrite host-owned bindings every
+    // frame (a handful of descriptor writes per frame — the engine-owned filler and glyph atlas keep the skip).
     private void BindScreenSources() {
         var fillerView = m_screenSourceFiller.ImageViewHandle;
         var boundViews = m_boundScreenSourceViews[m_currentSlot];
         var viewsSet = m_viewsSets[m_currentSlot];
 
         for (var element = 0u; (element < MaxScreenSurfaces); element++) {
-            var view = ((0 != m_screenSourceViews[element]) ? m_screenSourceViews[element] : fillerView);
+            var hostView = m_screenSourceViews[element];
+            var view = ((0 != hostView) ? hostView : fillerView);
 
-            if (view == boundViews[element]) {
+            if ((0 == hostView) && (view == boundViews[element])) {
                 continue;
             }
 
@@ -2179,10 +2385,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // beam-published per-tile far bound (F1 A/B "off" side — the fine march ignores plane 3 and runs to MaxDistance
         // exactly as pre-F1); y = disable the F2 shadow light-side early exit (softShadow runs its full budget/reach); zw
         // reserved. Both levers default 0, so a frame that sets neither uploads zeros = both features ON (the shipped
-        // behavior). KEEP IN SYNC with sdf-world.hlsli's SdfFarFieldParams / worldFarBoundDisabled / worldShadowFarExitDisabled.
+        // behavior). KEEP IN SYNC with sdf-world.hlsli's SdfFarFieldParams / worldFarBoundDisabled / worldShadowEscapeExitDisabled.
         var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
 
-        floats[(farFieldBase + 0)] = (frame.DisableFarBound ? 1f : 0f); floats[(farFieldBase + 1)] = (frame.DisableShadowFarExit ? 1f : 0f); floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
+        floats[(farFieldBase + 0)] = (frame.DisableFarBound ? 1f : 0f); floats[(farFieldBase + 1)] = (frame.DisableShadowEscapeExit ? 1f : 0f); floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
     }
 
     // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint tileGridPacked; float4 rects[5];

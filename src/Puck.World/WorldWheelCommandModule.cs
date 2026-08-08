@@ -1,0 +1,150 @@
+using System.Globalization;
+using Puck.Commands;
+using Puck.World.Client;
+
+namespace Puck.World;
+
+/// <summary>
+/// The radial action menu's verb surface — the two bindable acts the wheel hold pages dispatch
+/// (<see cref="RingCommand"/> steps the active ring, the mouse-less twin of the mouse wheel;
+/// <see cref="CommitCommand"/> consumes the release-commit, bound on Tab's release edge) plus the pipe-assertable
+/// <c>world.view.wheel</c> read (the <c>world.view.pointer</c> sibling: live radial presentation state nothing else
+/// can echo). The wheel CONTENT is authored data — the binding substrate's <c>wheels</c> rows, edited through the
+/// ordinary binding layers — and a committed sector dispatches through the console door, so this module carries no
+/// authority of its own. A SEPARATE module from <see cref="WorldViewCommandModule"/> to keep every class under its
+/// analyzer ceilings.
+/// </summary>
+internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster roster) : ICommandModule {
+    /// <summary>The ring-cycle act — bound on the wheel hold pages (Arrow Up/Down, D-pad Up/Down) with a constant
+    /// Axis1D direction, and typed as <c>player.wheel.ring [next|prev] [player]</c>.</summary>
+    public const string RingCommand = "player.wheel.ring";
+
+    /// <summary>The release-commit act — bound on the wheel hold pages' Tab release edge, and typed as
+    /// <c>player.wheel.commit [player]</c> (committing whatever the open wheel currently hovers).</summary>
+    public const string CommitCommand = "player.wheel.commit";
+
+    private readonly WorldWheelFeed m_feed = feed;
+    private readonly PlayerRoster m_roster = roster;
+
+    /// <inheritdoc/>
+    public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: RingCommand,
+            description: "Cycles the open radial menu's ACTIVE ring (wrapping): player.wheel.ring [next|prev] [player] (player 1..4, default 1). The wheel hold pages bind it with a constant Axis1D direction on Arrow Up/Down and D-pad Up/Down — the mouse-less twin of the mouse wheel, which cycles the same ring while the wheel is open. REFUSES when no wheel is open for the seat (hold Tab to open the active group's wheel).",
+            handler: RingHandler,
+            // Every binding row targeting this verb carries a constant Axis1D value — declared so
+            // BindingVocabularyCheck admits the rows (the editor.cam.speed precedent).
+            valueKind: CommandValueKind.Axis1D
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: CommitCommand,
+            description: "Commits the open radial menu: player.wheel.commit [player] (player 1..4, default 1) — dispatches the hovered sector's command through the console door (echoing and refusing exactly like a typed line), or cancels when the cursor stands over the hub's dead zone, outside the outer ring, or nowhere known. The wheel hold pages bind it on Tab's RELEASE edge, so letting go of Tab over a sector is the commit gesture and a bare tap cancels. REFUSES when no wheel is open for the seat.",
+            handler: CommitHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.wheel",
+            description: "Echoes the radial action menu's last composed frame: world.view.wheel — the seat the pointer rides (1-based), open/closed, the presenting wheel's binding group and ring count, the active ring (1-based, with its label), the hovered sector (1-based, with its label and the command it would commit — or the reason nothing is hovered: dead-center | outside | no-cursor), and the hub's anchor in FRAME pixels. A query (always echoes) — the pipe-assertable radial read, the world.view.pointer sibling: live per-seat presentation state nothing else can echo.",
+            handler: (context, args) => new CommandResult(Output: Describe()),
+            routing: CommandRouting.Immediate
+        );
+    }
+
+    private CommandResult RingHandler(CommandContext context, WireArgs args) {
+        int slot;
+        int direction;
+
+        if (context.Source is not null) {
+            // A bound dispatch: the seat is the pressing device's, the direction the row's constant Axis1D value
+            // (the stepped-twin fold — never a sibling verb per direction).
+            slot = context.Slot;
+            direction = ((context.Value.AsAxis1D < 0f) ? -1 : 1);
+        } else {
+            var playerAt = 0;
+
+            direction = 1;
+
+            if (args.Count > 0) {
+                if (args.Is(index: 0, value: "prev")) {
+                    direction = -1;
+                    playerAt = 1;
+                } else if (args.Is(index: 0, value: "next")) {
+                    playerAt = 1;
+                }
+                // Anything else is left for the player-index parse below, whose own refusal names the grammar.
+            }
+
+            if (!WorldArgs.TryParseIndex(args: args, at: playerAt, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var player)) {
+                return CommandResult.Error(output: $"[{RingCommand}: expected [next|prev] [player], player an integer 1..{PlayerRoster.MaxSlots}]");
+            }
+
+            slot = PlayerRoster.SlotFromDisplay(number: player);
+        }
+
+        if (!m_feed.TryCycleRing(slot: slot, direction: direction, activeRing: out var activeRing, ringCount: out var ringCount, ringLabel: out var ringLabel)) {
+            return CommandResult.Error(output: $"[{RingCommand}: refused — no wheel is open for seat {PlayerRoster.DisplayNumber(slot: slot)} (hold Tab to open the active group's wheel)]");
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[{RingCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} ring {(activeRing + 1)}/{ringCount} '{ringLabel}']"
+        ));
+    }
+
+    private CommandResult CommitHandler(CommandContext context, WireArgs args) {
+        int slot;
+
+        if (context.Source is not null) {
+            slot = context.Slot;
+
+            // The router's synthesized focus-loss cancellation is the ONE non-release edge that reaches this
+            // handler (the bound row's ActivateOn gate passes only the real Completed edge and the Canceled
+            // synthesis) — an alt-tab mid-hold revokes silently, never commits.
+            if (context.Phase == CommandPhase.Canceled) {
+                m_feed.Revoke(slot: slot);
+
+                return CommandResult.None;
+            }
+        } else {
+            if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var player)) {
+                return CommandResult.Error(output: $"[{CommitCommand}: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+            }
+
+            slot = PlayerRoster.SlotFromDisplay(number: player);
+        }
+
+        var outcome = m_feed.Commit(slot: slot);
+
+        if (!outcome.Armed) {
+            return CommandResult.Error(output: $"[{CommitCommand}: refused — no wheel is open for seat {PlayerRoster.DisplayNumber(slot: slot)} (hold Tab to open the active group's wheel)]");
+        }
+
+        if (outcome.Dispatched is not { } command) {
+            return new CommandResult(Output: $"[{CommitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} cancelled ({outcome.Reason})]");
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[{CommitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} ring {(outcome.Ring + 1)} sector {(outcome.Sector + 1)} '{outcome.Label}' -> {command}]"
+        ));
+    }
+
+    private string Describe() {
+        var status = m_feed.Status;
+
+        if (!status.Open) {
+            return $"[world.view.wheel: player={PlayerRoster.DisplayNumber(slot: status.Slot)} open=false]";
+        }
+
+        var hover = ((status.HoverSector >= 0)
+            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"sector {(status.HoverSector + 1)} '{status.HoverLabel}' -> {status.HoverCommand}")
+            : status.HoverReason);
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.view.wheel: player={PlayerRoster.DisplayNumber(slot: status.Slot)} open=true group={status.Group} rings={status.RingCount} active={(status.ActiveRing + 1)} '{status.ActiveRingLabel}' hover={hover} center={status.Center.X:0.#},{status.Center.Y:0.#}{(status.CenterKnown ? string.Empty : " (unanchored)")}]"
+        );
+    }
+}

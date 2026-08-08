@@ -5,12 +5,11 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The font-atlas seam every overlay glyph consumer shares — the console panel, the binding bar, and the editor
-/// HUD: loads the pre-baked MTSDF atlas set (<see cref="MonoFont"/>, the uniform-grid console/terminal voice
-/// <see cref="OverlayGlyphSdfPack"/> requires, and the <see cref="UiFont"/> family — tight-packed with GPOS
-/// kerning) from a caller-supplied assets root. Loads a prepacked atlas and degrades LOUDLY if absent
-/// (<see cref="IsAvailable"/> is <see langword="false"/>, one clear message to <see cref="Console.Error"/>), never
-/// a raster fallback. The caller owns any runtime fallback atlas, supplied through the <c>monoFallback</c>
-/// constructor seam.
+/// HUD: loads the pre-baked MTSDF mono atlas (<see cref="MonoFont"/>), the uniform-grid console/terminal voice
+/// <see cref="OverlayGlyphSdfPack"/> requires, from a caller-supplied assets root. Loads a prepacked atlas and
+/// degrades LOUDLY if absent (<see cref="IsAvailable"/> is <see langword="false"/>, one clear message to
+/// <see cref="Console.Error"/>), never a raster fallback. The caller owns any runtime fallback atlas, supplied
+/// through the <c>monoFallback</c> constructor seam.
 /// </summary>
 /// <remarks>
 /// Each property loads once, lazily, on first access; results — including <see langword="null"/> — are cached so
@@ -27,9 +26,6 @@ public sealed class OverlayGlyphAtlasSet {
     private readonly string m_fontsDirectory;
     private readonly Lazy<FontAtlasImageData?> m_combinedImage;
     private readonly Lazy<FontAtlas?> m_monoFont;
-    private readonly Lazy<FontAtlas?> m_uiFont;
-    private readonly Lazy<FontAtlas?> m_uiFontMedium;
-    private readonly Lazy<FontAtlas?> m_uiFontSemiBold;
 
     /// <summary>Initializes a new instance of the <see cref="OverlayGlyphAtlasSet"/> class over a pre-baked
     /// font-atlas assets root.</summary>
@@ -47,9 +43,6 @@ public sealed class OverlayGlyphAtlasSet {
         m_fontsDirectory = fontsDirectory;
         m_combinedImage = new Lazy<FontAtlasImageData?>(valueFactory: TryDecodeCombinedImage, isThreadSafe: true);
         m_monoFont = new Lazy<FontAtlas?>(valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)), isThreadSafe: true);
-        m_uiFont = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-regular"), isThreadSafe: true);
-        m_uiFontMedium = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-medium"), isThreadSafe: true);
-        m_uiFontSemiBold = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-semibold"), isThreadSafe: true);
     }
 
     /// <summary>Whether the mono atlas resolved (pre-baked or fallback) — the cheap availability probe a
@@ -60,17 +53,6 @@ public sealed class OverlayGlyphAtlasSet {
     /// <summary>The console/terminal voice: the committed uniform-grid MTSDF mono atlas, the constructor-supplied
     /// fallback when the pre-baked file is absent, or <see langword="null"/> when neither resolves.</summary>
     public FontAtlas? MonoFont => m_monoFont.Value;
-
-    /// <summary>The UI grotesque (regular weight): pre-baked ONLY — tight-packed MTSDF with GPOS kerning baked into
-    /// its table; <see langword="null"/> when the committed atlas is absent (consumers fall back to
-    /// <see cref="MonoFont"/>).</summary>
-    public FontAtlas? UiFont => m_uiFont.Value;
-
-    /// <summary>The UI grotesque's medium weight (pre-baked only; <see langword="null"/> when absent).</summary>
-    public FontAtlas? UiFontMedium => m_uiFontMedium.Value;
-
-    /// <summary>The UI grotesque's semi-bold weight (pre-baked only; <see langword="null"/> when absent).</summary>
-    public FontAtlas? UiFontSemiBold => m_uiFontSemiBold.Value;
 
     /// <summary>
     /// Loads the overlay glyph pack through the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>):
@@ -85,7 +67,7 @@ public sealed class OverlayGlyphAtlasSet {
     /// startup uses the committed pack, and the loaded pack is bit-identical to the built one.</remarks>
     public OverlayGlyphSdfPack? LoadOverlayPack() {
         var imagePath = Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName);
-        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: (MonoFontName + ".json"));
+        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: $"{MonoFontName}.json");
 
         if (!File.Exists(path: imagePath) || !File.Exists(path: jsonPath)) {
             // No committed atlas: the ordinary path (which may resolve a caller-supplied fallback) decides loudly.
@@ -135,7 +117,7 @@ public sealed class OverlayGlyphAtlasSet {
     // FontAtlasImageData instance: every consumer (the overlay cell pack, a future decal bake) reads the pixels, and
     // one image means one upload.
     private FontAtlas? TryLoadPrebaked(string name) {
-        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: (name + ".json"));
+        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: $"{name}.json");
 
         if ((!File.Exists(path: jsonPath)) || (m_combinedImage.Value is not { } imageData)) {
             return null;

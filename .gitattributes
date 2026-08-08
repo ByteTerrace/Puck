@@ -37,3 +37,4 @@ experimental/**/*.cxx  linguist-vendored
 experimental/**/*.h    linguist-vendored
 experimental/**/*.hpp  linguist-vendored
 experimental/**/*.hxx  linguist-vendored
+*.patch -text

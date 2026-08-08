@@ -1,0 +1,867 @@
+[
+  {
+    "Id": "rigid.compose-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.op_Multiply \u2014 the dual-quaternion product whose Real block is the fused Hamilton product and whose every Dual lane is ONE FixedQ4816.RoundProductSum of its EIGHT leaf Q32 products, across both of FixedDual\u003CFixedQuaternion\u003E.MultiplyQuaternion\u0027s gates (the symmetric 2\u00B2\u2079 one and the asymmetric 2\u00B9\u2077/2\u2074\u00B2 rotation-carrying-translation one)",
+        "Against": "Oracles.DoublingDualProduct at two floors \u2014 the same product reached from the doubling recursion: each target key is an exclusive-or, each charge is Oracles.CayleyDicksonCharge, and each lane is ONE Oracles.RoundDyadic at shift 16 of the whole exact BigInteger sum. The only shared convention is the lane permutation, declared once in Subjects.RigidToDoublingLanes as two applications of the hypercomplex family\u0027s Subjects.QuaternionToDoublingLanes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Int128 accumulation may wrap and the exact-then-round oracle still agrees: ties-to-even is odd, so the kernel computes round-half-to-even of the Q32 sum over 2\u00B9\u2076, and a k\u00B72\u00B9\u00B2\u2078 wrap moves that by the EVEN k\u00B72\u00B9\u00B9\u00B2, which cannot flip a tie and does not survive the final 64-bit wrap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "composition is deliberately NOT normalized \u2014 the doc\u0027s own remark \u2014 and the comparison is made on the UNREPAIRED lanes, so a composition that quietly restored the unit norm would fail here; rigid.compose-normalized-twin is where the repaired form is pinned and where the repair is measured doing work",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.identity-and-inverse-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Identity is a two-sided identity for op_Multiply EXACTLY at every swept transform: against it every Real lane\u0027s four-term sum collapses to one product with 2\u00B9\u2076 and every Dual lane\u0027s eight-term sum to four, so the Q32 remainder is identically zero and the group\u0027s unit is not a rounding accident",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MultiplicativeIdentity IS Identity \u2014 one object read through two names, compared by value rather than assumed from the one-line body \u2014 and Identity\u0027s own lanes are ((0,0,0,2\u00B9\u2076),(0,0,0,0))",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Inverse \u2014 the two quaternion conjugations",
+        "Against": "the exact componentwise BigInteger negation of the six vector lanes wrapped by Oracles.WrapToRaw, with the two scalar lanes carried through unchanged, inline in Subjects.RigidIdentityAndInverseExact \u2014 exact on both sides, so the statement is precisely the sign pattern plus the two\u0027s-complement policy at long.MinValue",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inverse is an involution over the FULL raw range, the asymmetric minimum included, where double negation is a fixed point; and Value round-trips the positional constructor at every swept lane vector while Rotation reads Value.Real bit for bit, so a transposed lane fails here rather than surviving inside a symmetric product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "for the exactly-unit rotors of Subjects.RigidUnitRotors carrying the even translations of Subjects.RigidTranslationLadder, T \u00B7 T\u207B\u00B9 and T\u207B\u00B9 \u00B7 T are EXACTLY Identity \u2014 the derivation being that (q \u002B \u03B5d)(q* \u002B \u03B5d*) has real part qq* = 1 and dual part qd* \u002B dq* = \u00BD(t* \u002B t) = 0 for PURE t, and that on this ladder every product is a multiple of 2\u00B9\u2076 so nothing rounds. This is the only place the doc\u0027s bare \u0027valid for unit transforms\u0027 becomes a checkable statement, and the actual condition \u2014 \u27E8Real, Dual\u27E9 = 0, the very constraint Normalize exists to restore \u2014 is recorded here rather than left unstated",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.translation-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Translation \u2014 one fused Hamilton product dual\u00B7conj(real), one FixedQ4816.RoundProductSum per lane, then the EXACT wrapping doubling t.X \u002B t.X with no second rounding",
+        "Against": "Oracles.RigidTranslation \u2014 the doubling recursion\u0027s charged product of the dual block against an EXPLICITLY negated and wrapped real block, ONE Oracles.RoundDyadic at shift 16 per lane, then one Oracles.WrapToRaw of the exact left shift",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the doubling is a wrapping ADD and not a scaling: at a product lane above 2\u2076\u00B2 the returned component is the wrapped sum rather than a saturated one, and the law pins that rather than avoiding the region",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the DISCARDED scalar lane is measured, not assumed away: dual\u00B7conj(real) has scalar part exactly zero at every transform on the unit ladder, read through Oracles.RigidTranslation\u0027s fourth output \u2014 which is the orthogonality constraint real\u00B7dual = 0 observed through the accessor that silently drops it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Identity\u0027s translation is exactly the zero vector, and a transform whose real part is Identity has translation exactly twice its dual vector part, wrapping \u2014 the pure-translation reading of the encoding",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.from-rotation-translation",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FromRotationTranslation\u0027s dual part on the swept stream",
+        "Against": "Oracles.CayleyDicksonProduct of the pure translation quaternion against the RETURNED rotation at shift 17 \u2014 ONE ties-to-even rounding of each exact leaf sum with the \u00bd folded into the narrowing, which is the fused encoding the member computes. RULED: the prior two-step model (shift 16, then a halving at shift 1) double-rounded, landing one raw off the nearest encoding on about a quarter of components",
+        "Shared": "the normalized rotation itself, read off the subject\u0027s own RESULT rather than re-derived. FixedQuaternion.Normalize is the vector family\u0027s kernel and re-deriving it here would smuggle a second copy of it into this case \u2014 but a reference built from the subject\u0027s own output is a transcription and not a common upstream, so the leg is spelled as one and lands in the carriage register",
+        "Citation": "quaternion.normalize-unit-direction, which pins that normalizer against Oracles.FirstNonUnitLane; and leg 2 of this same case, the exact rotor-by-translation ladder, whose expectations are hand-derived from q\u0302 \u002B \u03B5\u00B7\u00BD\u00B7t\u00B7q\u0302 and know nothing of the subject\u0027s result",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FromRotationTranslation over Subjects.RigidUnitRotors \u00D7 Subjects.RigidTranslationLadder \u2014 eight exactly-unit rotors against five even-raw translations",
+        "Against": "the hand-derived source-and-sign map carried beside each rotor in Subjects.RigidUnitRotors, from which each expected dual lane is \u00B1t/2 exactly",
+        "Shared": "",
+        "Citation": "hand-derived from q\u0302 \u002B \u03B5\u00B7\u00BD\u00B7t\u00B7q\u0302 over the integers, with the four products t\u00B71, t\u00B7i, t\u00B7j and t\u00B7k written out from the Hamilton table i\u00B2 = j\u00B2 = k\u00B2 = ijk = \u22121 in the table\u0027s own comment. On this ladder the whole chain is exact: each rotor normalizes to itself bit-for-bit (DirectionShift(2\u00B9\u2076) = 29, preconditioned lane 2\u2074\u2075, squared sum 2\u2079\u2070, denominator exactly 2\u2076\u00B9, quotient exactly 2\u00B9\u2076 with zero remainder), every t\u00B7q\u0302 lane is a signed sum of products with \u00B12\u00B9\u2076 hence a multiple of 2\u00B9\u2076, and every translation raw is even so the halving is exact. Nothing here is toleranced and nothing shares code with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the round trip is EXACT on that ladder: FromRotationTranslation(q, t).Translation is t bit-for-bit and .Rotation is q bit-for-bit \u2014 the encoding and the two accessors closing on each other with no rounding anywhere, which is the strongest statement available about this member",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the zero rotation follows FixedQuaternion.Normalize\u0027s identity convention, as the doc says: FromRotationTranslation(default, t) is bit-identical to FromRotationTranslation(Identity\u0027s rotation, t)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rotation is normalized BEFORE it is encoded, and the law measures it: a ladder rotor scaled by 2, 2\u00B3, 2\u2077 and 2\u00B9\u2070 produces the same transform as the rotor itself to within 2 raws per lane, because the normalizer\u0027s power-of-two preconditioner divides the scale straight back out",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.normalize-unit-constraints",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Normalize\u0027s real block \u2014 FixedVectorMath.TryCreateNormalizationScale\u0027s power-of-two preconditioner, rounded square-root denominator and four applications of one shared ratio",
+        "Against": "Oracles.FirstNonUnitLane at tolerance 1 raw over the four exact real components: the ideal Q16 unit direction decided by surd comparisons a\u00B7\u221AS \u2264 b in BigInteger, squaring once with the signs read off first \u2014 no root, no preconditioner and no division on the oracle side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two constraints a unit rigid dual quaternion must satisfy, both measured exactly in BigInteger and neither assumed: the returned real block\u0027s four-square sum is within 8 raws of 2\u00B3\u00B2 through Oracles.NearestIntegerRoot, and the orthogonality residual Oracles.LaneDotProduct(real, dual) is inside a band DERIVED per operand from NormalizeCore\u0027s own three roundings \u2014 |S\u2080/2\u00B9\u2076|\u00B7|1 \u2212 N/2\u00B3\u00B2| plus a constant floor, where N is that measured four-square sum and S\u2080 the scaled dual\u0027s dot against the returned real block, bounded from the exact ratio |dual|\u00B72\u00B9\u2076/\u2016real\u2016. The projection Dual \u2190 Dual \u2212 Real\u00B7\u27E8Real, Dual\u27E9 is what earns the constraint, and a normalization that dropped it would fail here. ENVELOPE, stated rather than hidden: the band\u0027s growing term is set by the scaled INPUT dual and NOT by what survives the projection \u2014 a band read off the returned dual collapses exactly where the dual is nearly parallel to the real block, which is a live operand region and not a corner; and both halves of the dual statement are read only where the exact test (|dual|\u00B72\u00B9\u2076)\u00B2 \u003C (2\u2076\u00B2)\u00B2\u00B7S says the scaled dual has not wrapped the carrier, outside which it denotes nothing",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projection is not dead code: a hand-listed transform whose dual block is deliberately PARALLEL to its real block \u2014 exactly twice it \u2014 has its exact residual reduced by at least a factor of 1024, so the orthogonalization is observed doing work rather than merely running",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two documented poles: an all-zero real block returns Identity exactly, whatever the dual block carries, and every rotor of Subjects.RigidUnitRotors is a BIT-FOR-BIT fixed point of Normalize, by the exact 2\u2074\u2075/2\u2076\u00B9/2\u00B9\u2076 derivation recorded in that table\u0027s comment",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "normalization is idempotent \u2014 within 1 raw per real lane unconditionally, and inside the same derived band per dual lane wherever the scaled dual has not wrapped \u2014 and commutes EXACTLY with negating both blocks wherever no operand lane is the asymmetric minimum, which pins the eight signs independently of the magnitudes. The dual half carries the wrap guard because a wrapped dual is not a screw: at [256, \u2212258, \u221265534, 256 | 2\u00B3\u00B9, 2\u2076\u00B3\u22121, \u2026] the second pass moves a dual lane from 3.67e16 to \u22123.60e16, which is the encoding failing to denote and not the kernel failing to converge",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.from-dual-quaternion-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromDualQuaternion"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "TryFromDualQuaternion"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal predicate is exactly \u0027the real quaternion\u0027s four raws are all zero\u0027, over a hand-listed ladder that puts a zero real block against a zero dual block, a saturated dual block and each single dual lane in turn \u2014 so a predicate that also read the dual block would fail here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a refused TryFromDualQuaternion leaves Identity behind, and FromDualQuaternion throws ArgumentException naming the \u0027value\u0027 parameter, at every refused ladder row",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "TryFromDualQuaternion\u0027s success path",
+        "Against": "new FixedRigidTransform(value).Normalize() on the same input",
+        "Shared": "FixedRigidTransform.NormalizeCore reached with the identical FixedVectorMath.NormalizationScale \u2014 the two entry points compute the scale from the same four raws and hand it to the same body, so agreement proves the wiring and never the normalization",
+        "Citation": "rigid.normalize-unit-constraints, which pins NormalizeCore itself against Oracles.FirstNonUnitLane and the two exact constraint measurements",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromDualQuaternion reproduces TryFromDualQuaternion\u0027s value wherever it succeeds, checked on every accepted ladder row rather than inferred from the one-line body",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a NON-unit but nondegenerate input is genuinely repaired: the ladder\u0027s rotation-scale rows \u2014 one unit transform scaled by 3, by 2\u207B\u2074 and by 2\u00B9\u2075 \u2014 all reach the same transform within 2 raws per lane, which is the \u0027nondegenerate, rotation-scale dual quaternion\u0027 the doc admits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.compose-normalized-twin",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "ComposeNormalized"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedRigidTransform.ComposeNormalized",
+        "Against": "(left * right).Normalize() on the same operands",
+        "Shared": "the whole body \u2014 ComposeNormalized IS that expression at FixedRigidTransform.cs:49-50 \u2014 so agreement proves the wiring and nothing else",
+        "Citation": "rigid.compose-vs-oracle for the product and rigid.normalize-unit-constraints for the repair; the drift leg below is the only statement this member makes on its own",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the member\u0027s REASON is measured rather than assumed: over a chain of sixteen compositions of a deliberately off-unit transform whose real norm is 65537 rather than 2\u00B9\u2076, the raw op_Multiply chain\u0027s exact four-square norm drifts from 2\u00B9\u2076 by more than 8 raws while the ComposeNormalized chain stays inside 8 \u2014 so the normalized composer is observed doing the thing its doc says long chains need",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "composing with Identity through ComposeNormalized returns the NORMALIZED transform rather than the input bit-for-bit, which separates this member\u0027s contract from op_Multiply\u0027s exact identity (rigid.identity-and-inverse-exact\u0027s first leg) instead of letting the two be confused",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.transform-point-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "TransformPoint"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.TransformPoint \u2014 FixedQuaternion.Rotate\u0027s two fused stages (one FixedQ4816.RoundProductSum per component per stage, across BOTH the narrow 2\u00B9\u2077/2\u2074\u2070 gate and the Int128 path) followed by the componentwise wrapping add of a freshly recomputed Translation",
+        "Against": "Oracles.RigidPointAction \u2014 Oracles.QuaternionSandwich\u0027s two exactly accumulated BigInteger stages with one Oracles.RoundDyadic each, plus Oracles.RigidTranslation\u0027s independent doubling-recursion translation, combined by one Oracles.WrapToRaw",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "the SCHEDULE the oracle runs \u2014 sandwich first, then add a freshly formed translation",
+        "Against": "the subject\u0027s documented composition \u0027rotate, then translate\u0027 and FixedQuaternion.Rotate\u0027s documented two-stage remark",
+        "Shared": "the number and the order of the roundings, which over a rounding carrier is part of the answer and which no single-rounding oracle could stand beside",
+        "Citation": "the exact identity and pure-translation poles and the hand-derived geometric ladder in this same case, all of which read the transform\u0027s MEANING and know nothing of its schedule",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Identity fixes every swept point EXACTLY: both sandwich stages produce zero corrections against the unit scalar rotor and the translation is exactly zero, so the fixed point is bit-for-bit and not a rounding coincidence",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a pure-translation transform maps p to p \u002B t EXACTLY at every swept point over the even-translation ladder \u2014 the rotation stages vanish identically \u2014 which is the pole where the rotate-then-translate composition is fully checkable without a transcendental",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TransformPoint over the six-row rigid geometric ladder \u2014 the half turns about each axis carrying each ladder translation, applied to the three basis points and one interior point",
+        "Against": "Subjects.RigidPointLadder, a constant table of raws compared EXACTLY",
+        "Shared": "",
+        "Citation": "hand-derived from the rigid motion each row denotes in real three-space: a half turn about an axis negates the other two components and leaves that one, which the sandwich reproduces as a pure sign map with no rounding, and every translation raw is even, so every expected value is an exact integer rather than a toleranced one",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "composition agrees with action: (A \u00B7 B).TransformPoint(p) reaches A.TransformPoint(B.TransformPoint(p)) within 4 raws on the ladder\u0027s half turns \u2014 the statement that op_Multiply really is composition with right applied first, which neither the product law nor the action law makes alone",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.exp-log-seam",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Exp"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Log"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Exp\u0027s PURE-TRANSLATION branch \u2014 the path taken when FixedVectorMath.TryNormalizeWithMagnitude refuses the zero bivector (FixedRigidTransform.cs:131-139)",
+        "Against": "the exact inline expectation (Identity, (dual.X, dual.Y, dual.Z, 0)) \u2014 EXACT on both sides, no transcendental, no rounding, no wrap. This is the one branch of Exp that admits a fully classical statement, and the law makes it at the zero, at a unit slide, at a mixed triple and at the carrier\u0027s own extremes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Log\u0027s ROTATION-FREE branch (FixedRigidTransform.cs:372-377)",
+        "Against": "the exact inline expectation (FixedVector3.Zero, Value.Dual\u0027s vector part) \u2014 exact both sides. Taken with the leg above this closes Exp and Log as EXACT mutual inverses on the pure-translation submanifold, which is a genuine subgroup and not a corner case",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Exp over the nine-row screw ladder \u2014 the zero screw, two pure translations, a quarter turn with no slide, with an axial slide and with a pure moment, a half turn with a moment, a tilted screw axis and one bivector beyond a full turn",
+        "Against": "Subjects.RigidScrewLadder, a constant table of raws with a tolerance of 12 (rows 1-3 exact and untoleranced)",
+        "Shared": "",
+        "Citation": "hand-derived from the closed form (\u00FB\u00B7sin \u03B8, cos \u03B8) and dual = v\u00B7(sin \u03B8/\u03B8) \u002B \u00FB\u00B7(d/2)\u00B7(cos \u03B8 \u2212 sin \u03B8/\u03B8) with scalar \u2212(d/2)\u00B7sin \u03B8, evaluated over the reals at the value each raw denotes. The tolerance is derived, not fudged: \u22641 raw from the axis normalization, 0.51 ULP from SinCosRaw, \u22641 each from the sin \u03B8/\u03B8 and \u00FB\u00B7v quotients, and one fused rounding \u2014 4 for the real lanes, and 12 for the dual lanes where the slide difference carries two of those factors. ENVELOPE: diffQ46 arithmetic-right-shifts a possibly negative Int128, which FLOORS rather than truncating toward zero, so Exp is not exactly odd in its bivector at the last Q46 bit; and the fused dual sum can reach 2\u00B9\u00B2\u2077 for near-carrier dual operands, where the unchecked wrap is congruent but the value stops denoting a screw. The ladder stays inside the meaningful band and the two exact legs above run only on the exact branch",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.Log over the five-row unit-screw ladder",
+        "Against": "Subjects.RigidLogLadder, a constant table of raws with a tolerance of 8",
+        "Shared": "",
+        "Citation": "hand-derived from the closed form \u00FB\u00B7\u03B8 and v = Dv\u00B7(\u03B8/s) \u002B rv\u00B7(d/2)(1 \u2212 w\u00B7\u03B8/s)/s over the reals, \u03B8 = atan2(s, w). The subject folds those quotients into ONE FusedArithmetic.DivideProductSum rounding per lane \u2014 real lanes R\u00B7H/S, dual lanes (D\u00B7H\u00B7S\u00B2 \u2212 R\u00B7Dw\u00B7(K\u00B7S \u2212 W\u00B7H))/S\u00B3 over the raws \u2014 so the tolerance is DERIVED rather than absorbed: the closing 0.5 plus the arctangent\u0027s half-raw carried through the theta-sensitivity, at most 65536/s \u2264 16 at the sine floor, 8.5 worst-case, measured within 1 on every row. Every row keeps \u2016Real.vector\u2016 at or above 4096 raw \u2014 the floor below which the atan2-over-norm division stops carrying information. Corroborated in tree by quaternion.exp-log-seam, which declares the same 4096-raw floor for FixedQuaternion.Log, and by quaternion.exp-log-ladder-transcription, whose Log leg amplifies its enclosure bound by 65536/vectorLength for exactly that reason. The closed form is the evidence this leg rests on; the floor states where it is legitimate to make it",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "all three poles, exactly: the zero screw exponentiates to Identity bit-for-bit; Identity logs to (Zero, Zero); and the vector-free W \u003C 0 pole \u2014 the transform ((0,0,0,\u22122\u00B9\u2076), d) \u2014 logs to (Zero, d.vector) which is MINUS half its own Translation, because Translation is 2\u00B7d\u00B7conj(real) and conjugating (0,0,0,\u22122\u00B9\u2076) flips the sign. That sign consequence is what the member\u0027s \u003Creturns\u003E tag states",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two exact pins on the fused lanes, hand-picked where the fused and the chained formulations answer one raw apart: the axial-slide row\u0027s dual Z is exactly 32768 \u2014 the exactly-representable closed-form 0.5, which the chained quotients missed by one \u2014 and the pure-moment row\u0027s dual X is exactly 32769, the single correct rounding of its quantized-input rational. This is the leg a reintroduced quotient chain fails by name; the ladder\u0027s tolerance alone cannot distinguish the two formulations, whose deviations both measure within 1",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the round trip Exp(T.Log()) recovers T within 24 raws per lane \u2014 Exp\u0027s own screw-ladder budget of 12 plus the fused Log\u0027s single rounding, measured within 1 \u2014 over the Log ladder\u0027s rows, which is the doc\u0027s own \u0027inverse of Exp\u0027 claim read as a measurement and the strongest statement available without re-deriving two transcendentals",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedRigidTransform.Exp\u0027s REAL part",
+        "Against": "FixedQuaternion.Exp of the same bivector",
+        "Shared": "FixedVectorMath.TryNormalizeWithMagnitude and FixedQ4816.SinCosRaw \u2014 the IDENTICAL internal members on both sides \u2014 plus the (\u00FB\u00B7sin, cos) assembly, which is written out twice (FixedRigidTransform.cs:122-142,157-161 against FixedQuaternion.cs:166-185). The two must agree BIT-FOR-BIT at every screw-ladder row, which is what makes the duplication safe rather than merely present. The hypercomplex campaign\u0027s quaternion.exp-log-seam is where that shared block is pinned against a hand-derived closed form",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "Exp\u0027s and Log\u0027s transcendental and divisional machinery",
+        "Against": "FixedQ4816.SinCosRaw, FixedQ4816.Atan2, FixedQ4816.op_Division (Exp\u0027s quotients \u2014 Log\u0027s lanes now close through FusedArithmetic.DivideProductSum instead) and FixedVectorMath.TryNormalizeWithMagnitude, plus this file\u0027s own private DotOverAngle, SinOverAngleQ62 and RoundLogLane quotients",
+        "Shared": "the entire sine/cosine, arctangent, normalization and 128-by-64 division computation",
+        "Citation": "All four now carry a law case, so nothing here is OWED: FixedQ4816.Atan2 stands against Oracles.EncloseAtan2 in scalar.atan2-vs-series, FixedQ4816.op_Division against Oracles.RoundDyadicRatio in scalar.divide-vs-oracle, FixedQ4816.SinCosRaw against an angle-addition carriage of Oracles.EncloseSinCos over the whole unsigned width in quaternion.sincos-raw-full-unsigned-width, and FixedVectorMath.TryNormalizeWithMagnitude against Oracles.NearestIntegerRoot and Oracles.IdealUnitVector in vector.normalize-with-magnitude-full-unsigned-width. The last two are INTERNAL, so the coverage manifest cannot name them and only these citations record that they are pinned at all. DotOverAngle and SinOverAngleQ62 are PRIVATE to this file and are pinned only through the two ladders above, which is stated here rather than implied",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.sclerp-endpoints-and-screw",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "ScLerp"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Exp"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Log"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.ScLerp from Identity to the half turn about z carrying the translation (2, 0, 0) in world units, at the five amounts 0, \u00BC, \u00BD, \u00BE and 1",
+        "Against": "Subjects.RigidScLerpLadder, a constant table of raws with a tolerance of 96",
+        "Shared": "",
+        "Citation": "hand-derived from the real screw interpolation \u2014 at parameter t the rotation is the half-angle t\u00B7\u03C0/2, so the transform is ((0, 0, sin(t\u03C0/2), cos(t\u03C0/2)), (0, \u2212sin(t\u03C0/2), 0, 0)) and the chord the half turn sweeps is (1 \u2212 cos(t\u03C0), \u2212sin(t\u03C0), 0) \u2014 sharing no code with the subject. The tolerance is honest and large: ScLerp chains an inverse, a dual product, a vector norm, an Atan2, a fused Log (one DivideProductSum rounding per lane), a full Exp (itself two divisions and a SinCosRaw), a second dual product and a normalization; the band is dominated by the quantized delta operands and Exp, not by Log\u0027s closing roundings \u2014 fusing Log left the measured worst case unchanged. This ladder pins the screw\u0027s SHAPE, not a bit contract, and the case says so out loud",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both endpoints, as contracts rather than implementation details: ScLerp(a, b, Zero) is a.Normalize() BIT-FOR-BIT \u2014 the zero amount scales the screw to nothing, Exp returns Identity exactly, and the composition with Identity is exact \u2014 while ScLerp(a, b, One) reaches b.Normalize() inside the declared band",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "monotone traversal along the screw: over the ladder\u0027s five amounts the rotation\u0027s dot against \u0060from\u0060 is non-increasing and against \u0060to\u0060 non-decreasing, and the interpolated translation\u0027s swept chord \u2014 1 \u2212 cos(t\u03C0), the component the half turn actually moves \u2014 is non-decreasing and lands on its own hand-derived value, which a wrong weight pair would break even where both endpoints held",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BOTH gate arms are supplied at the threshold the source itself computes: one witness whose Dot(from.Real, to.Real) is EXACTLY the raw 65534 (the screw arm, since the gate is dot \u003E 65534) and one whose dot is exactly 65535 (the blend arm), both checked by value, and both required to return a unit transform. ENVELOPE, stated rather than implied: which arm ran is not observable through the public surface \u2014 at a dot that close the two arms agree to well inside any honest tolerance \u2014 so what this leg pins is the two dots exactly and the two outcomes, never a branch counter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the pure-translation case is exercised on the blend arm, where it is the accurate one by construction: two transforms sharing one rotation (dot exactly 2\u00B9\u2076, so the blend arm is forced) interpolate to the componentwise FixedVector3.Lerp of their translations within 8 raws at every ladder amount, which is the doc\u0027s \u0027exact for pure translations\u0027 claim read as a measurement",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the shortest-path flip is exercised in both directions: an operand pair whose rotation dot is negative and its negation reach the same transform within the declared band at every ladder amount, which is the statement that a dual quaternion and its negation name ONE rigid motion",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "ScLerp\u0027s screw arm",
+        "Against": "from \u00B7 Exp(amount \u00B7 Log(from.Inverse() \u00B7 to)) then normalized, assembled from the PUBLIC members on the same operands and required to agree BIT-FOR-BIT",
+        "Shared": "the entire computation \u2014 the member IS that identity (FixedRigidTransform.cs:315-326), reached through the private LogCore rather than the public Log but with the same body and the same sine",
+        "Citation": "rigid.exp-log-seam for Exp and Log, rigid.compose-vs-oracle for the product, rigid.identity-and-inverse-exact for the inverse and rigid.normalize-unit-constraints for the repair; the six legs above are what ScLerp states on its own",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rigid.round-trip-ladder-self-consistency",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Log"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Exp"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "ScLerp"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "TransformPoint"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at the ladder rotations and translations: composition agrees with sequential application within sixty-four raw, translation extraction within thirty-two, the inverse round trip within sixty-four, the screw exponential and logarithm round trip within sixteen, pure translation is the screw\u0027s EXACT pole with a bit-for-bit round trip, and the interpolation endpoints return the operands within thirty-two. Every comparison is self-consistency against the subject\u0027s own other members \u2014 there is no external reference here, and this leg does not claim one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

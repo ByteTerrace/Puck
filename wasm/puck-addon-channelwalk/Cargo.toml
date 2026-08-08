@@ -1,0 +1,30 @@
+[package]
+name = "puck-addon-channelwalk"
+version = "0.1.0"
+edition = "2021"
+description = "BATTERY-ONLY guest — never shipped, no shipped world pins it. Exercises the capability-channel verification battery: a finite 240-tick contribution window that hard-stops (per-tick expiry), an unresolved declared channel (report-and-inert, per-act attenuation), a pinned non-default threshold boundary walked as raw values `player.press` cannot express, and (via the bound64/bound65 features) the declared-channel-name ceiling (AddonAbi.MaxChannelNames = 64)."
+publish = false
+
+# cdylib, not rlib — see puck-addon-queryspam/src/lib.rs's module doc for why the frozen puck_* ABI exports live in
+# the crate that actually produces the .wasm rather than in puck-stdlib (a statically-linked rlib's unreferenced
+# #[no_mangle] exports can be dropped by the linker with no compile error).
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }
+
+# THREE build-time variants from one crate (the task's own sanctioned "cargo features" option), never three crates:
+# - default ("main"): the functional guest — {forward, walkonly, trigger}, the behavior every H/I/J-floor/K-inert
+#   script drives against.
+# - "bound64": declares exactly AddonAbi.MaxChannelNames (64) channel names — proves the ceiling MOUNTS at its own
+#   edge; carries no on_tick behavior of its own.
+# - "bound65": declares 65 — one past the ceiling — proves the host refuses it BadExport, naming the bound, at
+#   handshake before ever reading the guest's declared name bytes.
+# Exactly one must be selected; src/lib.rs's own compile_error! enforces that rather than letting a no-feature or
+# multi-feature build silently pick an arbitrary arm.
+[features]
+default = ["main"]
+main = []
+bound64 = []
+bound65 = []

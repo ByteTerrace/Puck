@@ -3,13 +3,13 @@ using Puck.Maths;
 namespace Puck.SdfVm.Queries.Debug;
 
 /// <summary>
-/// One point the drift instrument sampled and could not classify in agreement — kept for diagnostics (a failing
-/// Post stage prints the first handful so a regression is debuggable from the console line alone, not just a rate).
+/// One point the drift instrument sampled and could not classify in agreement — kept for diagnostics, so a caller
+/// can print the first handful and debug a regression from the console line alone rather than from a bare rate.
 /// </summary>
 /// <param name="Position">The sampled world position.</param>
 /// <param name="EvaluatorDistance">The <see cref="SdfFieldEvaluator"/>'s signed distance at <see cref="Position"/>.</param>
 /// <param name="Channel">Which comparison disagreed (<c>"gpu"</c> or <c>"baked"</c>) — a sample can appear in both lists.</param>
-public readonly record struct WorldQueryDriftSample(WorldCoord3 Position, FixedQ4816 EvaluatorDistance, string Channel);
+public readonly record struct WorldQueryDriftSample(FixedPosition Position, FixedQ4816 EvaluatorDistance, string Channel);
 
 /// <summary>
 /// The measured outcome of one <see cref="WorldQueryDriftInstrument.Evaluate"/> run: how many of the sampled points
@@ -83,10 +83,10 @@ public static class WorldQueryDriftInstrument {
     /// <param name="radius">The sampling sphere's radius (world units).</param>
     /// <param name="count">How many points to generate.</param>
     /// <param name="seed">The PRNG seed.</param>
-    /// <returns>The generated points, at cell (0,0,0) (<see cref="WorldCoord3.FromLocal"/>).</returns>
-    public static IReadOnlyList<WorldCoord3> GenerateSeededPoints(FixedVector3 center, FixedQ4816 radius, int count, int seed) {
+    /// <returns>The generated points, at cell (0,0,0) (<see cref="FixedPosition.FromLocal"/>).</returns>
+    public static IReadOnlyList<FixedPosition> GenerateSeededPoints(FixedVector3 center, FixedQ4816 radius, int count, int seed) {
         var random = new Random(Seed: seed);
-        var points = new List<WorldCoord3>(capacity: count);
+        var points = new List<FixedPosition>(capacity: count);
         var radiusDouble = (double)radius;
 
         while (points.Count < count) {
@@ -104,7 +104,7 @@ public static class WorldQueryDriftInstrument {
                 Z: FixedQ4816.FromDouble(value: (z * radiusDouble))
             );
 
-            points.Add(item: WorldCoord3.FromLocal(local: (center + offset)));
+            points.Add(item: FixedPosition.FromLocal(local: (center + offset)));
         }
 
         return points;
@@ -142,7 +142,7 @@ public static class WorldQueryDriftInstrument {
                 var cellMinX = x;
                 var cellMaxX = (x + cellSize);
                 var cellCenterX = (x + (cellSize * 0.5f));
-                var probeOrigin = WorldCoord3.FromLocal(local: new FixedVector3(
+                var probeOrigin = FixedPosition.FromLocal(local: new FixedVector3(
                     X: FixedQ4816.FromDouble(value: cellCenterX),
                     Y: FixedQ4816.Zero,
                     Z: FixedQ4816.FromDouble(value: cellCenterZ)
@@ -168,8 +168,9 @@ public static class WorldQueryDriftInstrument {
     /// <param name="points">The sample points (see <see cref="GenerateSeededPoints"/>).</param>
     /// <param name="epsilonShell">The exclusion half-width (see the type remarks).</param>
     /// <param name="gpuInsideOrNear">Resolves whether the GPU channel classifies a point as "inside or within its own
-    /// resolution floor of the surface" (<see langword="true"/>) or "outside" (<see langword="false"/>) — see the
-    /// Post stage's <c>world-field-drift</c> doc comment for how this is derived from a render readback.
+    /// resolution floor of the surface" (<see langword="true"/>) or "outside" (<see langword="false"/>). Deriving it
+    /// from a render readback is the caller's job; the <c>world-field-drift</c> stage that did so left the build on
+    /// 2026-08-02, and this instrument has had no caller since.
     /// <see langword="null"/> skips the GPU comparison entirely.</param>
     /// <param name="baked">A baked artifact covering the same program (see <see cref="BakeGroundHeightArtifact"/>);
     /// <see langword="null"/> skips the baked comparison.</param>
@@ -180,9 +181,9 @@ public static class WorldQueryDriftInstrument {
     /// <returns>The measured histogram.</returns>
     public static WorldQueryDriftHistogram Evaluate(
         SdfFieldEvaluator evaluator,
-        IReadOnlyList<WorldCoord3> points,
+        IReadOnlyList<FixedPosition> points,
         FixedQ4816 epsilonShell,
-        Func<WorldCoord3, bool>? gpuInsideOrNear,
+        Func<FixedPosition, bool>? gpuInsideOrNear,
         BakedWorldQuery? baked,
         FixedQ4816 groundProbeUp,
         FixedQ4816 groundProbeDown,

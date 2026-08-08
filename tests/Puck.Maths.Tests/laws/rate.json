@@ -1,0 +1,424 @@
+[
+  {
+    "Id": "rate.schedule-vs-ledger",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Remainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "TicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "FromRemainder"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRateAccumulator.Integrate driven through Subjects.RateSchedule \u2014 twelve steps whose Int128 numerator, Int128.DivRem truncating quotient and retained signed remainder are the whole member",
+        "Against": "Oracles.RateIntegrationLedger \u2014 the same schedule replayed in BigInteger with the division derived from the DEFINITION (magnitude quotient, sign re-applied, remainder by multiply-back) and NO checked cast anywhere, compared at EVERY STEP on both the advanced quantity and the retained remainder rather than only at the close",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ledger identity, checked at every PREFIX and not merely at the close: ticksPerSecond\u00B7\u03A3 advanced \u002B remainder equals \u03A3 rate\u00B7ticks \u002B the initial remainder, exactly, in BigInteger. This is the type\u0027s entire contract \u2014 that the discarded part is RETAINED rather than resolved \u2014 and it is the statement a rounding integrator would fail while still matching step-by-step magnitudes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the retained remainder never leaves (\u2212ticksPerSecond, ticksPerSecond) at any step, including across the schedule\u0027s sign change where truncation toward zero flips its sign, so FromRemainder\u0027s admission band and Integrate\u0027s reachable band are the SAME band",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a zero-tick step is a fixed point: it advances exactly zero and leaves the remainder bit-identical, which the schedule includes deliberately",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an overflowing step is ATOMIC: where the exact quotient leaves the signed 64-bit range the member throws OverflowException and the accumulator\u0027s Remainder and TicksPerSecond are unchanged, so a caller that catches and retries is not silently one step ahead. The oracle carries NO checked cast, so the refusal is judged from outside the subject\u0027s own boundary",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rate.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "FromRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Remainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "TicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Reset"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Integrate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the construction refusal ladder: 0, \u22121, \u221265536 and long.MinValue are all refused by the constructor AND by FromRemainder with ArgumentOutOfRangeException naming the \u0027ticksPerSecond\u0027 parameter, while 1, 2, 60 and long.MaxValue are admitted and read back through TicksPerSecond unchanged with Remainder exactly zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the default-initialized value is a distinct, LOUD state: default(FixedRateAccumulator) reports TicksPerSecond zero and Remainder zero, and Integrate throws InvalidOperationException rather than dividing by zero \u2014 the doc\u0027s explicit design choice, pinned",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromRemainder\u0027s admission band is exactly (\u2212N, N): the remainders N\u22121, \u2212(N\u22121) and 0 are admitted and round-trip through Remainder and TicksPerSecond, while N, \u2212N and long.MaxValue are refused with ArgumentOutOfRangeException naming the \u0027remainder\u0027 parameter \u2014 the boundary tested from BOTH sides at each of Subjects.RateBaseLadder\u0027s nine bases",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a restored accumulator CONTINUES the captured integration exactly, which is the doc\u0027s claim and not merely a field copy: running the tail of Subjects.RateSchedule against FromRemainder(r, N) reaches the same per-step advance as running the whole schedule against a fresh accumulator, at the step where its remainder was r, and closes on the same remainder",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Reset clears the remainder and PRESERVES the base, and a reset accumulator integrates exactly as a fresh one does \u2014 while the ledger identity is deliberately broken across the reset, which is what makes Reset the documented teleport hook rather than a no-op",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rate.unit-advance-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Remainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Reset"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "TicksPerSecond"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the documented headline \u2014 a constant rate advancing by exactly its own raw after ticksPerSecond one-tick calls \u2014 over Subjects.RateBaseLadder\u0027s bases at or below 1000, for the rate raws \u002B2\u00B9\u2076 and \u22122\u00B9\u2076 and for the swept rate",
+        "Against": "the ledger re-derived PER STEP in BigInteger from the accumulator\u0027s own invariant: carrying a remainder r in, the tick advances the truncation toward zero of (r \u002B R)/N and retains (r \u002B R) \u2212 N\u00B7that, so all N deltas and all N intermediate remainders are compared and not merely the closing pair. Summed, N\u00B7S \u002B r_N = N\u00B7R with |r_N| \u003C N forces S = R and r_N = 0 for either sign. The negative arm\u0027s asymmetry lives entirely in the middle \u2014 at N = 3 and R = \u22122\u00B9\u2076 the deltas are \u221221845, \u221221845, \u221221846 against the remainders \u22121, \u22122, 0 \u2014 and the law now ASSERTS those rather than describing them, which is what makes the truncating remainder\u0027s sign flip checked rather than narrated",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the claim is about a rate that CANNOT be represented per tick, and the law says so: at the two ladder bases above 2\u00B9\u2076 the FIRST one-tick call at a one-unit-per-second rate advances exactly zero and retains the whole rate as the remainder, and every one of the thousand prefix steps then lands on the exact truncated quotient \u2014 so an implementation that dropped the tail would sit at zero forever instead of letting the unit arrive late",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "route agreement for a single-signed schedule: k one-tick calls at one rate reach the same TOTAL and the same closing remainder as one k-tick call at that rate, at k = N for the loopable bases and k = 1000 for the two large ones. ENVELOPE, stated rather than hidden: this is claimed for single-signed schedules ONLY \u2014 with mixed signs the two routes may differ by one raw, because truncation toward zero is not associative across a sign change, and rate.schedule-vs-ledger\u0027s prefix identity is what covers that case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an arbitrary swept rate closes the same way, and a bounded prefix of a billion-tick base is pinned exactly rather than approximately: after k one-tick calls at raw rate R the total advanced is the exact truncated quotient of k\u00B7R by N and the remainder is exactly the rest, in BigInteger, at every one of the thousand steps",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Reset is exercised inside the closed turn: after the full N calls the accumulator\u0027s remainder is cleared and its base preserved, so the member is read at the one state where its \u0027preserve the base\u0027 half is distinguishable from constructing a fresh accumulator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rate.vector-axes-independent",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "TicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "FromRemainders"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Remainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "XRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "YRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "ZRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "Reset"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "ResetX"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "ResetY"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "ResetZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3RateAccumulator.Integrate over Subjects.RateSchedule, all three axes and all twelve steps",
+        "Against": "Oracles.RateIntegrationLedger run three times \u2014 three independent exact BigInteger ledgers over the same schedule \u2014 compared at every step on each axis\u0027s advanced quantity and retained remainder",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedVector3RateAccumulator.Integrate\u0027s three axes",
+        "Against": "three separate FixedRateAccumulator instances driven with the same schedule and the same base",
+        "Shared": "FixedRateAccumulator.IntegrateRaw \u2014 the IDENTICAL internal member on both sides, not a sibling copy (FixedRateAccumulator.cs:198-215 against 80-85) \u2014 so agreement proves the fan-out and never the arithmetic",
+        "Citation": "the classical leg above, which runs the exact ledger IN THIS CASE on the same operands, and rate.schedule-vs-ledger, which pins IntegrateRaw through the scalar face",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three axes never cross-contaminate: a schedule that drives one axis alone leaves the other two remainders exactly zero and returns exactly zero on those components at every step, checked for each of the three in turn \u2014 which is what \u0027three independent axes\u0027 means and which a shared accumulator field would break",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the four reset members are exactly as selective as their names: ResetX clears XRemainder and leaves YRemainder, ZRemainder and TicksPerSecond bit-identical, likewise ResetY and ResetZ, and Reset clears all three while preserving the base \u2014 checked from a state whose three remainders are DISTINCT and non-zero, so a transposed field fails here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Integrate is ATOMIC across axes: when the Z axis\u0027s quotient overflows the member throws OverflowException and NONE of the three remainders has advanced \u2014 because all three steps are computed before any is written \u2014 so a caught overflow leaves a coherent vector state rather than a torn one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the default-initialized vector accumulator throws InvalidOperationException from Integrate and reports TicksPerSecond zero, exactly as its scalar sibling does",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rate.vector-construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "FromRemainders"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "TicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "XRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "YRemainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3RateAccumulator",
+        "Name": "ZRemainder"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the construction refusal ladder matches the scalar sibling\u0027s exactly: 0, \u22121, \u221265536 and long.MinValue are refused by the constructor and by FromRemainders with ArgumentOutOfRangeException naming \u0027ticksPerSecond\u0027, and an admitted base leaves all three remainders exactly zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromRemainders refuses when ANY axis\u0027s magnitude reaches the base, tested one axis at a time at each of the nine ladder bases so all three validation calls are reached, and admits the boundary triple (N\u22121, 0, \u2212(N\u22121)), round-tripping all four readers",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every FromRemainders refusal NAMES THE FAILING AXIS by that axis\u0027s own parameter \u2014 an out-of-band X reports \u0027xRemainder\u0027, a Y reports \u0027yRemainder\u0027, a Z reports \u0027zRemainder\u0027 \u2014 each axis probed alone at every one of the nine ladder bases and each asserted against its OWN expected name, so a copy-pasted parameter name, a transposed argument or a re-used scalar validator fails here. A caller restoring a snapshot can therefore tell which axis was rejected, which the shared \u0027remainder\u0027 name could not say",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the axes are validated in X, Y, Z order and the refusal reports the FIRST axis out of band, which is what the member\u0027s \u003Cexception\u003E tag states: with all three axes out of band the refusal names \u0027xRemainder\u0027, and with Y and Z out of band it names \u0027yRemainder\u0027 \u2014 checked at every ladder base, so a reordered or short-circuited validation sequence is visible",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a restored vector accumulator continues each axis\u0027s captured integration exactly, checked by replaying the tail of Subjects.RateSchedule against FromRemainders of the three remainders the full run reached at that step and requiring the same per-step vector and the same closing triple",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

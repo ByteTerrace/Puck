@@ -44,7 +44,7 @@ public static class QueuedHostContractProbe {
             var submission = host.Submit(deltaTicks: EngineTicks.PerSecond, input: in input);
 
             if (submission == QueuedMachineSubmission.Rejected) {
-                return QueuedHostProbeResult.Fail(detail: $"healthy assigned host rejected segment {index + 1}");
+                return QueuedHostProbeResult.Fail(detail: $"healthy assigned host rejected segment {(index + 1)}");
             }
 
             ++accepted;
@@ -278,7 +278,6 @@ public static class QueuedHostContractProbe {
 
         return null;
     }
-
     private static QueuedHostProbeResult? VerifyConcurrentPokeStress<THost>(Func<THost> withContent, ulong budget, in MachinePadState input, int scratchAddress, int hammers)
         where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
         var padState = input;
@@ -325,7 +324,6 @@ public static class QueuedHostContractProbe {
             ? QueuedHostProbeResult.Fail(detail: $"the queue faulted under concurrent step/peek/poke: {fault}")
             : null);
     }
-
     private static void DriveOrderedPokeSchedule<THost>(THost host, int steps, ulong budget, in MachinePadState input, int scratchAddress)
         where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
         for (var step = 0; (step < steps); ++step) {
@@ -333,7 +331,6 @@ public static class QueuedHostContractProbe {
             host.PokeByte(address: scratchAddress, value: (byte)(step & 0xFF));
         }
     }
-
     private static byte[] SnapshotRegion<THost>(THost host, int start, int length)
         where THost : IMachineMemoryPeek {
         var region = new byte[length];
@@ -396,11 +393,11 @@ public static class QueuedHostContractProbe {
         ));
     }
 
-    private const int RewindDriveFrames = 90;
-    private const int RewindBackFrames = 30;
-    private const int RunaheadFrames = 6;
-    private const int LongHorizon = 240;
     private const int FastForwardFactor = 4;
+    private const int LongHorizon = 240;
+    private const int RewindBackFrames = 30;
+    private const int RewindDriveFrames = 90;
+    private const int RunaheadFrames = 6;
 
     // A deterministic varying full-input image for frame f: cycling face/dpad buttons plus a swept tilt and light level,
     // so the recorded ring carries — and a rewind replays — the whole sensor image, not just the buttons.
@@ -418,7 +415,6 @@ public static class QueuedHostContractProbe {
             LightLevel: (byte)((frame * 7) & 0xFF)
         );
     }
-
     private static void DriveSchedule<THost>(THost host, int from, int count, ulong budget)
         where THost : IScreenMachine {
         for (var frame = from; (frame < (from + count)); ++frame) {
@@ -427,7 +423,6 @@ public static class QueuedHostContractProbe {
             _ = host.Step(deltaTicks: budget, input: in input);
         }
     }
-
     private static QueuedHostProbeResult? VerifyRewindDeterminism<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
         // Held input over remainder-bearing 60 Hz submissions: the timeline is then a pure function of the tick→cycle
@@ -456,9 +451,9 @@ public static class QueuedHostContractProbe {
         // requiring the two states just before it to also match the original tail. A stale phase re-buys different
         // budgets and this three-in-a-row reconvergence never occurs.
         var probeSpan = (RewindBackFrames + 16);
-        var last = timeline[RewindDriveFrames - 1];
-        var prior1 = timeline[RewindDriveFrames - 2];
-        var prior2 = timeline[RewindDriveFrames - 3];
+        var last = timeline[(RewindDriveFrames - 1)];
+        var prior1 = timeline[(RewindDriveFrames - 2)];
+        var prior2 = timeline[(RewindDriveFrames - 3)];
         var first = 0L;
         var second = 0L;
 
@@ -477,7 +472,6 @@ public static class QueuedHostContractProbe {
 
         return QueuedHostProbeResult.Fail(detail: "a rewound-then-replayed run never re-traced the original timeline — the restored accumulator phase or recorded input did not reproduce the recorded budgets");
     }
-
     private static QueuedHostProbeResult? VerifyRunaheadLead<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IFeedbackMachine {
         // Held input over a long horizon (60 Hz submissions vs the ~59.73 Hz native cadence, so the authority completes
@@ -506,7 +500,7 @@ public static class QueuedHostContractProbe {
                 // it reads 0.
                 if (((status.RunaheadLeadFrames < RunaheadFrames) || (status.RunaheadLeadFrames > (RunaheadFrames + 1))) && (frame > 0)) {
                     return QueuedHostProbeResult.Fail(
-                        detail: $"runahead lead drifted to {status.RunaheadLeadFrames} (expected {RunaheadFrames} or {RunaheadFrames + 1}) at frame {frame} under x{factor} fast-forward — the lookahead did not track the authority's native-frame delta"
+                        detail: $"runahead lead drifted to {status.RunaheadLeadFrames} (expected {RunaheadFrames} or {(RunaheadFrames + 1)}) at frame {frame} under x{factor} fast-forward — the lookahead did not track the authority's native-frame delta"
                     );
                 }
 
@@ -538,7 +532,6 @@ public static class QueuedHostContractProbe {
 
         return null;
     }
-
     private static QueuedHostProbeResult? VerifyFastForwardCap<THost>(Func<THost> withContent, ulong budget)
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
         using var host = withContent();
@@ -620,9 +613,8 @@ public static class QueuedHostContractProbe {
 
         return (rejected
             ? null
-            : QueuedHostProbeResult.Fail(detail: $"a rewind budget below one span ({perSpan - 1L} B < {perSpan} B) was accepted instead of rejected"));
+            : QueuedHostProbeResult.Fail(detail: $"a rewind budget below one span ({(perSpan - 1L)} B < {perSpan} B) was accepted instead of rejected"));
     }
-
     private static QueuedHostProbeResult? VerifyRewindClearsAudio<THost>(Func<THost> withAudio, ulong budget)
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IAudioMachine {
         using var host = withAudio();
@@ -660,7 +652,6 @@ public static class QueuedHostContractProbe {
 
         return ((host.QueueFault is { } fault) ? QueuedHostProbeResult.Fail(detail: $"the audio-rewind host faulted: {fault}") : null);
     }
-
     private static QueuedHostProbeResult? VerifyPublicationLease<THost>(Func<THost> withContent)
         where THost : IScreenMachine, IQueuedScreenMachine {
         using var host = withContent();
@@ -674,7 +665,7 @@ public static class QueuedHostContractProbe {
             var submission = host.Submit(deltaTicks: EngineTicks.PerSecond, input: in input);
 
             if (submission == QueuedMachineSubmission.Rejected) {
-                return QueuedHostProbeResult.Fail(detail: $"healthy assigned host rejected priming segment {index + 1}");
+                return QueuedHostProbeResult.Fail(detail: $"healthy assigned host rejected priming segment {(index + 1)}");
             }
 
             ++accepted;
@@ -723,7 +714,7 @@ public static class QueuedHostContractProbe {
 
         secondPublish.Start();
         var progressed = SpinWait.SpinUntil(
-            condition: () => host.CompletedSteps >= (completedAtLease + 2L),
+            condition: () => (host.CompletedSteps >= (completedAtLease + 2L)),
             timeout: OperationTimeout
         );
         var serializedWhileBlocked = (upload.CallCount == 1);
@@ -766,7 +757,6 @@ public static class QueuedHostContractProbe {
 
         return null;
     }
-
     private static QueuedHostProbeResult? VerifyDeviceLossSerialization<THost>(Func<THost> empty)
         where THost : IScreenMachine {
         using var host = empty();
@@ -837,7 +827,6 @@ public static class QueuedHostContractProbe {
 
         return null;
     }
-
     private static QueuedHostProbeResult? VerifyDisposalSerialization<THost>(Func<THost> empty)
         where THost : IScreenMachine {
         var host = empty();
@@ -908,15 +897,14 @@ public static class QueuedHostContractProbe {
         private long m_frame;
 
         public long CycleCount => m_cycle;
-        public long NativeFrameIndex => m_frame;
         public ReadOnlySpan<uint> Framebuffer => default;
+        public long NativeFrameIndex => m_frame;
 
         // Advance one frame so successive keyframes carry distinct cycle/native-frame stamps.
         public void Advance() {
             m_cycle += 100L;
             ++m_frame;
         }
-
         public int CaptureState(ref byte[] buffer) {
             if (buffer.Length < stateBytes) {
                 buffer = new byte[stateBytes];
@@ -924,13 +912,11 @@ public static class QueuedHostContractProbe {
 
             return stateBytes;
         }
-
         public void RestoreState(byte[] buffer, int length) { }
         public void ApplyInput(in byte input) { }
         public void RunCycles(long cycles) { }
         public ITimeTravelLookahead<byte> CreateLookahead() => throw new NotSupportedException();
     }
-
     private sealed class BlockingSurfaceUpload(bool blockFirstCall = true) : IGpuSurfaceUpload {
         private readonly ManualResetEventSlim m_entered = new(initialState: false);
         private readonly ManualResetEventSlim m_release = new(initialState: false);
@@ -981,10 +967,8 @@ public static class QueuedHostContractProbe {
                 _ = Interlocked.Decrement(location: ref m_activeCalls);
             }
         }
-
         public bool WaitUntilEntered(TimeSpan timeout) => m_entered.Wait(timeout: timeout);
         public void Release() => m_release.Set();
-
         public void Dispose() {
             if (0 != Interlocked.Exchange(location1: ref m_disposed, value: 1)) {
                 return;
@@ -1008,7 +992,6 @@ public static class QueuedHostContractProbe {
             }
         }
     }
-
     private sealed class TestGpuComputeServices(IGpuSurfaceTransferFactory factory) : IGpuComputeServices {
         public IGpuComputeCommandPoolFactory CommandPoolFactory => null!;
         public IGpuComputePipelineFactory ComputePipelineFactory => null!;
@@ -1020,21 +1003,18 @@ public static class QueuedHostContractProbe {
         public IGpuStorageImageFactory StorageImageFactory => null!;
         public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = factory;
     }
-
     private sealed class TestGpuDeviceContext : IGpuDeviceContext {
         public nint DeviceHandle => 1;
+
         public void WaitIdle() { }
     }
-
     private sealed class TestSurfaceTransferFactory(params IGpuSurfaceUpload[] uploads) : IGpuSurfaceTransferFactory {
-        private readonly Queue<IGpuSurfaceUpload> m_uploads = new(uploads);
+        private readonly Queue<IGpuSurfaceUpload> m_uploads = new(collection: uploads);
 
         public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) =>
             throw new NotSupportedException();
-
         public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
             throw new NotSupportedException();
-
         public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) {
             lock (m_uploads) {
                 return m_uploads.Dequeue();

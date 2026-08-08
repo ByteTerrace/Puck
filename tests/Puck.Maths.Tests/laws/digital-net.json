@@ -1,0 +1,175 @@
+[
+  {
+    "Id": "sampling.digital-net-property-through-order-fourteen",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "SamplePlane"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildPlaneDirectionNumbers"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the unshifted (0, m, 2)-net property of DigitalNetSampler.SamplePlane's plane construction, exhaustively at every order 1 through 14 and every dyadic box shape of area 2^-m -- 120 shape/order pairs in all",
+        "Against": "the theorem, checked by occupancy: with exactly 2^m points and 2^m boxes of each shape, no repeat is the same statement as one point per box, so a second point landing in any box is a named counterexample. MIRROR of sampling.digital-net-identities-and-net-property's net-property leg at strictly stronger operands -- order 14 rather than order 10 -- closing the ENVELOPE that leg itself states: 'finite, to m = 10 and 2048 points'",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this proves the property FINITELY through order 14 and no further. It says nothing about order 15 or above, and nothing about any generator other than the shipped PlaneGenerator (t + 1) -- a different (0, 2)-sequence generator would need its own direction numbers and its own sweep",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.digital-net-shifted-and-shuffled-blocks-are-nets",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "SamplePlane"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "ShuffleIndex"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DeriveScramble"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the (0, m, 2)-net property survives EACH of 64 pseudorandom digital shifts -- drawn from Pcg32XshRr.Create(state: 0x5EED, stream: 0x11) and fed through DeriveScramble exactly as a consumer would derive one -- at every order 1 through 12. This closes the gap sampling.digital-net-identities-and-net-property's own leg names: 'the digital shift's box-preservation is asserted here only at the one shift vector'. The underlying theorem (a digital shift is an affine bijection of the coordinate's bits, so it carries dyadic boxes onto dyadic boxes of the same shape) is stated in DigitalNetSampler's own remarks and is true for every shift vector, but an implementation defect tied to a PARTICULAR scramble bit pattern -- for example in FillPoints or the scramble derivation -- is exactly what one fixed shift cannot catch and 64 independently drawn ones can. MIRROR of that leg at a materially wider shift population -- 64 drawn shifts rather than one -- at the same order-12 depth",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "each of five ShuffleIndex-permuted index blocks -- seeds 0x00000000, 0x00000001, 0x5A5A5A5A, 0xDEADBEEF and 0xFFFFFFFF -- is ITSELF a (0, m, 2)-net at every order 1 through 12: DigitalNetSampler.SamplePlane read at ShuffleIndex(0 .. 2^m - 1, seed) rather than at the identity indices. This is a DIFFERENT structural fact from the aligned-block law sampling.digital-net-identities-and-net-property already proves (that the block LANDS somewhere aligned) and from this file's sibling law (that the IDENTITY block is a net) -- it is the composition DigitalNetSampler's own remarks assert and that no existing law exercises end to end: 'every such block of a (0, 2)-sequence is itself a (0, m, 2)-net, so a consumer's own first 2^m draws are stratified whatever its salt'. ENVELOPE: unshifted (scramble zero) only; the pseudorandom-shift leg above is the sibling statement for that axis, and the two are not composed with each other here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.digital-net-radical-inverse-full-range",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildBitReversalDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildPlaneDirectionNumbers"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "DigitalNetSampler.Sample against dimension zero's direction numbers, unshifted, over a dense low prefix of 2^20 indices plus an odd-stride sweep (stride 65537, which visits every residue class modulo any power of two) covering the whole 32-bit index range",
+        "Against": "the index with its bits reversed, computed by an independent 32-iteration bit loop rather than through any shipped reversal helper -- the same derivation sampling.digital-net-identities-and-net-property's own radical-inverse leg uses, extended past the 4096 opening indices that leg is limited to. Because Sample only ever reads the direction number whose bit position is set in the index, indices below 4096 (2^12) can never exercise direction numbers 12 through 31 of BuildBitReversalDirectionNumbers -- this sweep is what reaches them. MIRROR of that leg at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and why this leg takes the route it does: comparing BuildPlaneDirectionNumbers' stored dimension-zero entries against the expression '1 << (31 - index)' would restate the EXACT formula BuildBitReversalDirectionNumbers computes internally (DigitalNetSampler.cs:53-56) -- a second expression of the same implementation is not an oracle, so that comparison would add no independent evidence. This leg's operand-level comparison through Sample against an independently-computed bit reversal shares no formula with the builder, which is the honest route to the same direction numbers",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.cone-table-build-purity-and-quantized-coverage",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "Build"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "TableIndexBitCount"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "AzimuthEntryCount"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "RadiusEntryCount"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "SamplePlane"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "ShuffleIndex"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DeriveScramble"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two builds of ConeDirectionTable.Build at the same half-angle (0.11 radians) are byte-for-byte identical -- a purity check neither sampling.cone-table-stored-norm-and-uniqueness nor any other law makes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the shipped TableIndexBitCount-bit quantization loses nothing: reading the leading TableIndexBitCount bits of each coordinate over one full period (2^TableIndexBitCount = AzimuthEntryCount = RadiusEntryCount draws) of DigitalNetSampler.SamplePlane, at indices re-ordered by ShuffleIndex and shifted by DeriveScramble, visits every azimuth table entry -- and, independently, every radius table entry -- EXACTLY once, at five seeds (0x00000000, 0x00000001, 0x5A5A5A5A, 0xDEADBEEF, 0xFFFFFFFF). This is the net property restated in the terms the GPU sampler actually reads in, which nothing else in the suite exercises: the cone-table law pins the stored values' norm and distinctness and this file's other new laws pin the net property and the shuffle's aligned-block law separately, but none of them ties ShuffleIndex's output directly to the cone table's own declared entry counts the way a GPU consumer's draw sequence does",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: no floating-point arithmetic enters this law. Re-deriving each polar entry's expected bits from Math.Tan and Math.Sqrt of the specific half-angle 0.11 and comparing bit for bit would put float arithmetic INSIDE the gate, which this suite's rules forbid in law logic, and sampling.cone-table-stored-norm-and-uniqueness's own leg already argues its exact-envelope check is the better statement ('a reader that silently measured the pre-rounding doubles the builder discarded ... would be reported rather than passed'). That double-rounded-value comparison is therefore deliberately absent here; it is superseded, not owed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -1,0 +1,11 @@
+diff --git a/src/Puck.World.Server/WorldServer.cs b/src/Puck.World.Server/WorldServer.cs
+--- a/src/Puck.World.Server/WorldServer.cs
++++ b/src/Puck.World.Server/WorldServer.cs
+@@ -2300,6 +2300,7 @@ private bool ApplyUndo(int count, WorldPrincipal principal, int connectionId, long correlationId) {
+             next = RebaseAdvanceEpoch(candidate: next, mutation: entry.Mutation, tick: entry.Tick);
+
+             if (!WorldDefinitionValidator.TryValidate(definition: next, reason: out var reason) ||
++                ((index == 1) && ((reason = "SABOTAGE-INJECTED: forced replay-only re-validation failure for docs/verification/undo-all-or-nothing (temporary — never present outside that runner's sabotage patch)") is not null)) ||
+                 (AffectsRenderEnvelope(mutation: entry.Mutation) && !m_envelope.TryFit(candidate: next, reason: out reason)) ||
+                 (AffectsSolidField(mutation: entry.Mutation) && !TryBuildSolids(definition: next, solids: out _, reason: out reason))) {
+                 var refusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {reason}";

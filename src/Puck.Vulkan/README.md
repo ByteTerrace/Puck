@@ -129,7 +129,7 @@ using Puck.Vulkan.Factories;
 
 // 1. Instance — picks the right surface extension for the display kind.
 VulkanInstance instance = instanceFactory.Create(
-    applicationName: "Puck.Demo",
+    applicationName: "Puck.World",
     displayKind: NativeDisplayKind.Win32,   // from Puck.Abstractions
     enableValidation: true
 );

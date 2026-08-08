@@ -158,8 +158,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             );
 
             commandList->ResourceBarrier(
-                1,
-                &toCopyDestination
+                NumBarriers: 1,
+                pBarriers: &toCopyDestination
             );
         }
 
@@ -187,12 +187,12 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         };
 
         commandList->CopyTextureRegion(
-            in destinationLocation,
-            0,
-            0,
-            0,
-            in sourceLocation,
-            (D3D12_BOX?)null
+            DstX: 0,
+            DstY: 0,
+            DstZ: 0,
+            pDst: in destinationLocation,
+            pSrc: in sourceLocation,
+            pSrcBox: (D3D12_BOX?)null
         );
 
         var toShaderResource = CreateTransition(
@@ -202,8 +202,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         );
 
         commandList->ResourceBarrier(
-            1,
-            &toShaderResource
+            NumBarriers: 1,
+            pBarriers: &toShaderResource
         );
         commandList->Close();
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -211,8 +211,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         var executable = (ID3D12CommandList*)commandList;
 
         ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
-            1,
-            &executable
+            NumCommandLists: 1,
+            ppCommandLists: &executable
         );
         WaitForGpu();
     }
@@ -230,12 +230,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         };
 
         return barrier;
-    }
-    private static void Release(ref nint pointer) {
-        if (0 != pointer) {
-            _ = ((Windows.Win32.System.Com.IUnknown*)pointer)->Release();
-            pointer = 0;
-        }
     }
     // The byte size of one pixel for a supported upload format. Deriving it from the format (rather than assuming 4)
     // keeps the row-pitch + buffer-size math correct if a wider format is ever added — a hardcoded 4 would under-size
@@ -300,13 +294,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in textureHeapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &texture
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            pDesc: in textureDesc,
+            pHeapProperties: in textureHeapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &texture,
+            riidResource: in resourceIid
         );
         m_texture = (nint)texture;
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
@@ -330,13 +324,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         void* uploadBuffer;
 
         device->CreateCommittedResource(
-            in uploadHeapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in uploadDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &uploadBuffer
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            pDesc: in uploadDesc,
+            pHeapProperties: in uploadHeapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &uploadBuffer,
+            riidResource: in resourceIid
         );
         m_uploadBuffer = (nint)uploadBuffer;
 
@@ -385,9 +379,9 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         void* mapped;
 
         uploadBuffer->Map(
-            0,
-            (D3D12_RANGE*)null,
-            &mapped
+            Subresource: 0,
+            pReadRange: (D3D12_RANGE*)null,
+            ppData: &mapped
         );
 
         try {
@@ -410,31 +404,18 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             }
         } finally {
             uploadBuffer->Unmap(
-                0,
-                (D3D12_RANGE*)null
+                Subresource: 0,
+                pWrittenRange: (D3D12_RANGE*)null
             );
         }
     }
     private void WaitForGpu() {
-        var fence = (ID3D12Fence*)m_fence;
-        var value = m_fenceValue;
-
-        ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->Signal(
-            fence,
-            value
+        DirectXFence.SignalAndWait(
+            deviceContext: m_deviceContext,
+            fenceHandle: m_fence,
+            fenceEvent: m_fenceEvent,
+            fenceValue: ref m_fenceValue
         );
-        m_fenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                value,
-                m_fenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                hHandle: m_fenceEvent,
-                dwMilliseconds: uint.MaxValue
-            );
-        }
     }
     private void DisposeImageResources() {
         Release(pointer: ref m_uploadBuffer);

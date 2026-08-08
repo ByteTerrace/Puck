@@ -34,8 +34,8 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// The world audio mixer core: <see cref="MixBlock"/> is a synchronous pure function owning no
 /// thread — the future device pump and the offline hash proof are two drivers of the same code. Fixed-point end to
 /// end: s16 samples × Q16 composite gains → int32 accumulate → the deterministic polynomial soft-clip → s16.
-/// <para>Per block: each emitter's TARGET coefficients derive from the snapshot (finite-support squared-smoothstep
-/// attenuation — computed on SQUARED distances, no square root, and the zero of its support IS the cull;
+/// <para>Per block: each emitter's TARGET coefficients derive from the snapshot (finite-support authored
+/// attenuation, and the zero of its support IS the cull;
 /// equal-power pan from listener-relative azimuth via one <see cref="FixedQ4816.SinCos"/> per point emitter; beds
 /// center-pan with a presence envelope whose slew <see cref="WorldAudioEmitter.FadeFrames"/> bounds), then the
 /// LIVE coefficients ramp linearly from the previous block's across every frame — the zipper-noise killer.
@@ -50,8 +50,10 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// </summary>
 public sealed class WorldAudioMixer {
     /// <summary>The mixer rate: device-native, exactly <see cref="FramesPerSimStep"/> frames per 240 Hz
-    /// sim step, 21/20 engine ticks per frame.</summary>
-    public const int SampleRate = 48_000;
+    /// sim step, 21/20 engine ticks per frame. Single-sourced from <see cref="WorldMachineAudioRate.SampleRate"/> —
+    /// the rate every <c>Puck.World.Server.WorldMachineHost</c>-booted machine synthesizes at — so the two projects
+    /// on opposite sides of the presentation firewall can never disagree on it.</summary>
+    public const int SampleRate = WorldMachineAudioRate.SampleRate;
     /// <summary>Audio frames per 240 Hz sim step (stepTicks 210 of the 50400/s engine clock): 48000/240 = 200 —
     /// the offline proof's block size. A contract invariant, not a tunable.</summary>
     public const int FramesPerSimStep = 200;
@@ -65,8 +67,8 @@ public sealed class WorldAudioMixer {
 
     // Soft-clip constants: knee start H, knee width W = 3G, ceiling H + G = 32767; divisor 27·2^26 = G/W³ inverted.
     private const int ClipKneeStart = 24575;
-    private const int ClipLimit = 49151;
     private const long ClipKneeDivisor = (27L << 26);
+    private const int ClipLimit = 49151;
 
     // Pan constants: π/4 in Q16 raw (the equal-power quarter arc), and cos(π/4) for the bed's center pan.
     private const long QuarterPiRawQ16 = 51472L;
@@ -78,14 +80,12 @@ public sealed class WorldAudioMixer {
     private readonly int[] m_accumulateLeft = new int[MaxBlockFrames];
     private readonly int[] m_accumulateRight = new int[MaxBlockFrames];
     private readonly int[] m_synthScratch = new int[MaxBlockFrames];
-
     private readonly WorldAudioSourceKey[] m_sourceKeys = new WorldAudioSourceKey[MaxSources];
     private readonly IAudioBlockSource?[] m_sources = new IAudioBlockSource?[MaxSources];
     private readonly short[][] m_sourceScratch = new short[MaxSources][];
     private readonly int[] m_sourcePulledFrames = new int[MaxSources];
     private readonly bool[] m_sourcePulled = new bool[MaxSources];
     private int m_sourceCount;
-
     private readonly string[] m_patchIds = new string[MaxPatches];
     private readonly WorldVoicePatch[] m_patches = new WorldVoicePatch[MaxPatches];
     private int m_patchCount;
@@ -96,13 +96,12 @@ public sealed class WorldAudioMixer {
     private readonly int[] m_rowPreviousRight = new int[WorldAudioSnapshot.DefaultMaxEmitters];
     private readonly bool[] m_rowSeen = new bool[WorldAudioSnapshot.DefaultMaxEmitters];
     private int m_rowCount;
-
     private ulong m_lastTriggerSequence;
 
     /// <summary>Initializes the mixer with every scratch preallocated.</summary>
     public WorldAudioMixer() {
         for (var i = 0; (i < MaxSources); i++) {
-            m_sourceScratch[i] = new short[MaxBlockFrames * 2];
+            m_sourceScratch[i] = new short[(MaxBlockFrames * 2)];
         }
     }
 
@@ -141,7 +140,7 @@ public sealed class WorldAudioMixer {
         }
     }
 
-    /// <summary>Registers (or replaces) a synth patch under an id. A full table is CONTAINED loss (largechange-01): the
+    /// <summary>Registers (or replaces) a synth patch under an id. A full table is CONTAINED loss: the
     /// overflow row is dropped and <see cref="DroppedRegistrationCount"/> increments — never a throw, so a derived plan
     /// that outgrows the registry renders its overflow silent instead of crashing the reconcile.</summary>
     /// <param name="id">The patch id trigger events reference.</param>
@@ -169,7 +168,7 @@ public sealed class WorldAudioMixer {
         m_patchCount++;
     }
 
-    /// <summary>Reclaims patch slots whose id left the live derived plan — the compose-boundary reclaim (largechange-01)
+    /// <summary>Reclaims patch slots whose id left the live derived plan — the compose-boundary reclaim
     /// that keeps the bounded table from filling with the carcasses of churned sound emitters across reconciles. Compacts
     /// the table in place, preserving the surviving rows.</summary>
     /// <param name="live">The patch ids the current derived plan registers; every other slot is retired.</param>
@@ -194,7 +193,7 @@ public sealed class WorldAudioMixer {
         m_patchCount = write;
     }
 
-    /// <summary>Binds (or rebinds) a block source to a source identity. A full table is CONTAINED loss (largechange-01):
+    /// <summary>Binds (or rebinds) a block source to a source identity. A full table is CONTAINED loss:
     /// the bind is dropped and <see cref="DroppedRegistrationCount"/> increments — never a throw, so an overfull source
     /// registry renders the excess emitters silent instead of crashing the reconcile.</summary>
     /// <param name="key">The source identity emitters reference.</param>
@@ -207,7 +206,7 @@ public sealed class WorldAudioMixer {
         if (slot < 0) {
             if (m_sourceCount >= MaxSources) {
                 DroppedRegistrationCount++;
-                Console.Error.WriteLine(value: $"[world.audio: source table full ({MaxSources}); {key.Kind} '{key.Id ?? key.Slot.ToString()}' dropped — its emitters render silent]");
+                Console.Error.WriteLine(value: $"[world.audio: source table full ({MaxSources}); {key.Kind} '{(key.Id ?? key.Slot.ToString())}' dropped — its emitters render silent]");
 
                 return;
             }
@@ -340,20 +339,19 @@ public sealed class WorldAudioMixer {
         } else {
             var d = (ClipLimit - magnitude);
 
-            shaped = ((int)(32767L - ((d * d * d) / ClipKneeDivisor)));
+            shaped = ((int)(32767L - (((d * d) * d) / ClipKneeDivisor)));
         }
 
         return ((short)((sample < 0) ? -shaped : shaped));
     }
 
     // One Q16 raw value squared back into a Q16 quantity ((r·2^16)^2 >> 16 = r^2·2^16), computed in Int128 and
-    // saturated to long — the overflow-safe form of `raw * raw >> 16` (largechange-15).
+    // saturated to long — the overflow-safe form of `raw * raw >> 16`.
     private static long SaturatingSquareQ16(long valueRaw) {
         var wide = (((Int128)valueRaw * valueRaw) >> 16);
 
         return ((wide > long.MaxValue) ? long.MaxValue : ((long)wide));
     }
-
     private static void SmoothstepAttenuation(long d2Q16, long min2Q16, long max2Q16, out int attenuationQ16) {
         if (d2Q16 >= max2Q16) {
             attenuationQ16 = 0;
@@ -372,6 +370,38 @@ public sealed class WorldAudioMixer {
 
         attenuationQ16 = ((int)((((t * t) >> 16) * ((3L << 16) - (2L * t))) >> 16));
     }
+    private static void LinearAttenuation(long d2Q16, long minRaw, long maxRaw, out int attenuationQ16) {
+        var distanceRaw = FixedQ4816.Sqrt(value: FixedQ4816.FromRawBits(value: d2Q16)).Value;
+
+        if (distanceRaw >= maxRaw) {
+            attenuationQ16 = 0;
+
+            return;
+        }
+
+        if (distanceRaw <= minRaw) {
+            attenuationQ16 = 65536;
+
+            return;
+        }
+
+        attenuationQ16 = ((int)((((Int128)(maxRaw - distanceRaw)) << 16) / (maxRaw - minRaw)));
+    }
+
+    internal static int HalfRadiusAttenuationQ16(WorldAudioAttenuationCurve curve) {
+        const long halfDistanceSquaredQ16 = 16384;
+        const long unitRadiusQ16 = 65536;
+
+        if (curve == WorldAudioAttenuationCurve.Linear) {
+            LinearAttenuation(d2Q16: halfDistanceSquaredQ16, minRaw: 0, maxRaw: unitRadiusQ16, attenuationQ16: out var linear);
+
+            return linear;
+        }
+
+        SmoothstepAttenuation(d2Q16: halfDistanceSquaredQ16, min2Q16: 0, max2Q16: unitRadiusQ16, attenuationQ16: out var smoothstep);
+
+        return smoothstep;
+    }
 
     private void ComputeTargets(in WorldAudioListener listener, in WorldAudioEmitter emitter, int frames, out int left, out int right) {
         var dxRaw = (emitter.Position.X.Value - listener.Position.X.Value);
@@ -379,14 +409,20 @@ public sealed class WorldAudioMixer {
         var dzRaw = (emitter.Position.Z.Value - listener.Position.Z.Value);
 
         // Distance is 3D; azimuth ignores elevation. Every square stays exact in Int128, saturated to long — a raw Q16
-        // long product overflows above a ~46 340-unit radius (largechange-15), so the radius squares saturate the same
+        // long product overflows above a ~46 340-unit radius, so the radius squares saturate the same
         // way the distance square does rather than wrapping into a spurious attenuation.
-        var d2Wide = ((((Int128)dxRaw * dxRaw) + ((Int128)dyRaw * dyRaw) + ((Int128)dzRaw * dzRaw)) >> 16);
+        var d2Wide = (((((Int128)dxRaw * dxRaw) + ((Int128)dyRaw * dyRaw)) + ((Int128)dzRaw * dzRaw)) >> 16);
         var d2Q16 = ((d2Wide > long.MaxValue) ? long.MaxValue : ((long)d2Wide));
         var min2Q16 = SaturatingSquareQ16(valueRaw: emitter.MinRadius.Value);
         var max2Q16 = SaturatingSquareQ16(valueRaw: emitter.MaxRadius.Value);
 
-        SmoothstepAttenuation(d2Q16: d2Q16, min2Q16: min2Q16, max2Q16: max2Q16, attenuationQ16: out var attenuationQ16);
+        int attenuationQ16;
+
+        if (emitter.Curve == WorldAudioAttenuationCurve.Linear) {
+            LinearAttenuation(d2Q16: d2Q16, minRaw: emitter.MinRadius.Value, maxRaw: emitter.MaxRadius.Value, attenuationQ16: out attenuationQ16);
+        } else {
+            SmoothstepAttenuation(d2Q16: d2Q16, min2Q16: min2Q16, max2Q16: max2Q16, attenuationQ16: out attenuationQ16);
+        }
 
         if (attenuationQ16 == 0) {
             left = 0;
@@ -421,7 +457,6 @@ public sealed class WorldAudioMixer {
             }
         }
     }
-
     private static void ComputePan(in WorldAudioListener listener, long dxRaw, long dzRaw, out int panLeftQ16, out int panRightQ16) {
         if ((Math.Abs(value: dxRaw) | Math.Abs(value: dzRaw)) < PanEpsilonRaw) {
             // On top of the listener: azimuth is undefined; hold center.
@@ -442,12 +477,12 @@ public sealed class WorldAudioMixer {
 
         // Equal-power: φ = (p + 1)·π/4 ∈ [0, π/2]; gL = cos φ, gR = sin φ — ONE SinCos per emitter.
         var phi = (((p + 65536L) * QuarterPiRawQ16) >> 16);
+
         var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: phi));
 
         panLeftQ16 = ((int)Math.Clamp(value: cos.Value, min: 0L, max: 65536L));
         panRightQ16 = ((int)Math.Clamp(value: sin.Value, min: 0L, max: 65536L));
     }
-
     private void AccumulateEmitter(
         in WorldAudioEmitter emitter,
         int frames,
@@ -462,7 +497,7 @@ public sealed class WorldAudioMixer {
 
         // Synth voices advance even while inaudible — time flows for a culled creature; external sources simply
         // are not tapped, so a fully-silent emitter is BIT-IDENTICAL to an absent one (the cull contract).
-        var silent = (((previousLeft | previousRight) | (targetLeft | targetRight)) == 0);
+        var silent = ((previousLeft | previousRight | targetLeft | targetRight) == 0);
 
         if (isSynth) {
             var scratch = m_synthScratch.AsSpan(start: 0, length: frames);
@@ -503,7 +538,6 @@ public sealed class WorldAudioMixer {
             targetRight: targetRight
         );
     }
-
     private static void AccumulateMono(int frames, Span<int> left, int previousLeft, int previousRight, Span<int> right, ReadOnlySpan<int> source, int targetLeft, int targetRight) {
         // Linear coefficient ramp in Q32: prev → target across the block, one add per frame.
         var currentLeft = (((long)previousLeft) << 16);
@@ -521,7 +555,6 @@ public sealed class WorldAudioMixer {
             right[n] += ((int)((sample * (currentRight >> 16)) >> 16));
         }
     }
-
     private static void AccumulateStereoTap(
         WorldAudioChannel channel,
         int frames,
@@ -557,7 +590,6 @@ public sealed class WorldAudioMixer {
             right[n] += ((int)((sample * (currentRight >> 16)) >> 16));
         }
     }
-
     private void ConsumeTriggers(WorldAudioSnapshot snapshot) {
         var triggers = snapshot.Triggers;
 
@@ -581,7 +613,6 @@ public sealed class WorldAudioMixer {
             _ = m_synth.Trigger(patch: in m_patches[patch], seed: trigger.Seed, gainQ16: trigger.GainQ16, emitterId: trigger.EmitterId);
         }
     }
-
     private void PullSource(in WorldAudioSourceKey key, int frames) {
         var slot = FindSource(key: in key);
 
@@ -594,7 +625,6 @@ public sealed class WorldAudioMixer {
             ? source.Pull(interleavedStereo: m_sourceScratch[slot].AsSpan(), frames: frames)
             : 0);
     }
-
     private int FindSource(in WorldAudioSourceKey key) {
         for (var i = 0; (i < m_sourceCount); i++) {
             if (m_sourceKeys[i] == key) {
@@ -604,7 +634,6 @@ public sealed class WorldAudioMixer {
 
         return -1;
     }
-
     private int FindPatch(string id) {
         for (var i = 0; (i < m_patchCount); i++) {
             if (string.Equals(a: m_patchIds[i], b: id, comparisonType: StringComparison.Ordinal)) {
@@ -614,7 +643,6 @@ public sealed class WorldAudioMixer {
 
         return -1;
     }
-
     private int FindRow(int id) {
         for (var i = 0; (i < m_rowCount); i++) {
             if (m_rowIds[i] == id) {

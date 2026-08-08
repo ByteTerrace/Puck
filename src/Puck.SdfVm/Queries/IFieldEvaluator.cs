@@ -38,16 +38,16 @@ public interface IFieldEvaluator {
     /// <paramref name="position"/>), when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the wrapped program declares at least one shape to answer against (a
     /// shape-less program returns <see langword="false"/> rather than a meaningless sentinel distance).</returns>
-    bool TryDistance(WorldCoord3 position, out FixedQ4816 distance, out int material);
+    bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material);
 
     /// <summary>Evaluates the field's GRADIENT at <paramref name="position"/> — the unit-length direction of
     /// steepest distance INCREASE, i.e. the direction pointing directly away from the nearest surface.</summary>
     /// <param name="position">The world-space point to evaluate.</param>
     /// <param name="gradient">The unit-length gradient, when the method returns <see langword="true"/>. See
-    /// <see cref="SdfFieldEvaluator"/>'s remarks for the four-tap tetrahedron central-difference probe.</param>
+    /// <see cref="SdfFieldEvaluator"/>'s remarks for the six-tap per-axis central-difference probe.</param>
     /// <returns><see langword="true"/> when every probe <see cref="TryDistance"/> call succeeded and the raw
     /// (pre-normalize) gradient was non-zero (a point exactly on a flat/degenerate field answers
     /// <see langword="false"/>, matching <see cref="FixedVector3.Normalize"/>'s "no direction" convention for a
     /// zero vector).</returns>
-    bool TryFieldGradient(WorldCoord3 position, out FixedVector3 gradient);
+    bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient);
 }

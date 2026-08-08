@@ -4,27 +4,49 @@ using Puck.Input;
 namespace Puck.World;
 
 /// <summary>
-/// The engine-default binding document, authored as a data file rather than code. It is the FIRST layer of every
+/// The engine-default binding document. It is the FIRST layer of every
 /// seat's composed mapping (engine default ⊕ world overlays ⊕ profile bindings ⊕ live rebinds), code-authored
 /// (never serialized — a null profile <c>Bindings</c> section inherits
-/// it), and carries BOTH page groups: the <see cref="PlayGroup"/> rows below (the <c>player.*</c> vocabulary) and the
-/// <see cref="WorldEditorBindings"/> rows (group <c>editor</c>, always compiled in — entering the editor is a per-seat
-/// <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).
+/// it), and carries THREE page groups: the <see cref="PlayGroup"/> rows below (the <c>player.*</c> vocabulary), the
+/// <see cref="RosterGroup"/> row (a not-yet-active seat's group, selected by context row — see the class remarks),
+/// and the <see cref="WorldEditorBindings"/> rows (group <c>editor</c>, always compiled in — entering the editor is a
+/// per-seat <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).
 /// </summary>
 /// <remarks>
-/// The play group is FIVE pages, one per ordered trigger chord — the model every group in this document follows:
-/// <c>[]</c> base, <c>[lt]</c>, <c>[rt]</c>, <c>[lt, rt]</c>, <c>[rt, lt]</c>. Holding the triggers IS the page
-/// turn: the binding bar re-renders the page the held chord selects, so the chord vocabulary is discoverable by
-/// squeezing rather than memorized. Pages 1..4 are deliberately SPARSE — they carry only the stick routers (a held
-/// analog re-dispatches against the ACTIVE page each tick, so a page without them would stall movement while its
-/// chord is held) and wait to be authored through the binding document. Editor entry is Gamepad Back / Keyboard
-/// Tab on the base page; no trigger combination enters the editor.
-/// The classic doom keyboard layout (W/S forward/back, A/D turn, Q/E strafe; arrows mirror WASD) binds each movement
-/// source TWICE — a press edge (default phase) and a release edge (<see cref="CommandPhase.Completed"/>),
-/// <c>AnyModifiers</c> so an incidental Shift/Ctrl never breaks gameplay — so one verb handler reads the phase to
-/// hold-or-free its axis. Space is the primary action channel (both edges), Enter confirms, F1..F4 claim a slot
-/// carried as the binding's constant <see cref="CommandValue.Axis(float)"/>, the sticks route move/look, South/East
-/// are the primary/secondary gestures (both edges), and Start cycles.
+/// The play group is EIGHT pages, one per ordered chord — the model every group in this document follows:
+/// <c>[]</c> base, <c>[lt]</c>, <c>[rt]</c>, <c>[lt, rt]</c>, <c>[rt, lt]</c>, <c>[ctrl-l]</c>, <c>[ctrl-r]</c>,
+/// <c>[tab]</c>.
+/// Holding the chord IS the page turn: the binding bar re-renders the page the held chord selects, so the chord
+/// vocabulary is discoverable by squeezing (or pressing either Control key) rather than memorized. Pages 1..4 are
+/// deliberately SPARSE — they carry only the stick routers (a held analog re-dispatches against the ACTIVE page
+/// each tick, so a page without them would stall movement while its chord is held) and wait to be authored through
+/// the binding document. Pages 5 and 6, <see cref="ControlLeftPageId"/> and <see cref="ControlRightPageId"/>, carry
+/// the SAME keyboard movement rows as the base page for the identical reason — a held Control key must not strand a
+/// keyboard player's movement any more than a held trigger strands a gamepad player's — plus Ctrl+C firing
+/// <see cref="EditorCommandModule.StatusCommand"/>. Both pages are declared, carrying identical entries, because
+/// <see cref="InputSources.Keyboard"/> has no unified "either side" modifier source: a chord group that means
+/// either Control key declares both. Page 7, <see cref="WheelHoldPageId"/>, is the play group's WHEEL HOLD page:
+/// holding Tab selects it, and selecting it presents the group's radial action menu (the <c>wheels</c> row below) —
+/// deliberately NO keyboard movement rows there, because the radial is a modal gesture (the avatar stands while a
+/// sector is chosen); it carries the stick routers, the ring-cycle rows
+/// (<see cref="WorldWheelCommandModule.RingCommand"/> on Arrow Up/Down and D-pad Up/Down — the mouse-less twin of
+/// the mouse wheel), and Tab's own release edge firing <see cref="WorldWheelCommandModule.CommitCommand"/> (the
+/// press that turned the page latches this page's row, so the release commits through the ordinary chord-latch
+/// machinery). Editor entry is Gamepad Back on the base page, or the wheel's Editor sector — Tab belongs wholly to
+/// the wheel.
+/// The keyboard movement layout — W/S forward/back, A/D strafe left/right, Q/E turn left/right (crisp planar walk, no
+/// auto-facing); the arrow keys mirror it (up/down forward/back, left/right turn). Each movement source binds TWICE —
+/// a press edge (default phase) and a release edge (<see cref="CommandPhase.Completed"/>) — so one channel destination
+/// reads the phase to hold-or-free its axis. Enter confirms, F1..F4 claim a slot carried as the
+/// binding's constant <see cref="CommandValue.Axis(float)"/>, the sticks route structural movement and look, and
+/// Start cycles. Worlds author their action-channel bindings in overlays.
+/// The <see cref="RosterGroup"/> row: a <c>roster</c> context row (<see cref="WorldContextFamilies.Roster"/>) selects
+/// it for a seat whose participant lifecycle is not yet <see cref="WorldContextFamilies.RosterActive"/> — Gamepad
+/// South fires <see cref="PlayerCommandModule.ConfirmCommand"/> there instead of driving a channel, so a physical
+/// button never carries two meanings inside one command handler; the ACTIVE state ships no row, so an active seat
+/// falls through to its requested group (the play group by default). The roster group declares no wheel and no
+/// <c>[tab]</c> page — a not-yet-active seat's editor entry is Gamepad Back. No command name in this document ever
+/// names a physical button.
 /// </remarks>
 internal static class WorldDefaultBindings {
     /// <summary>The play group — the default page group every seat resolves in outside a mode.</summary>
@@ -41,12 +63,55 @@ internal static class WorldDefaultBindings {
     /// <summary>The play group's page 4 id (chord: RT then LT held — the reverse squeeze).</summary>
     public const string RightLeftPageId = "play-rt-lt";
 
+    /// <summary>The roster group — a not-yet-active seat's group, selected by a <c>roster</c> context row (see the
+    /// class remarks). Holds the roster-management verbs and the stick routers a pending seat's profile picker
+    /// needs; carries no channel destination, so no physical button drives gameplay while a seat sits here.</summary>
+    public const string RosterGroup = "roster";
+
+    /// <summary>The roster group's sole (resting) page id.</summary>
+    public const string RosterBasePageId = "roster-base";
+
     /// <summary>The left-trigger modifier id (chord vocabulary: <c>lt</c>). Declared here, on the engine default,
     /// because modifiers are document-global: every play and editor page chord references the same two
     /// declarations.</summary>
     public const string LeftTriggerModifierId = "lt";
     /// <summary>The right-trigger modifier id (chord vocabulary: <c>rt</c>).</summary>
     public const string RightTriggerModifierId = "rt";
+    /// <summary>The left Control key modifier id (chord vocabulary: <c>ctrl-l</c>) — a native OS-modifier key
+    /// declared as ordinary chord vocabulary via <see cref="InputSources.Keyboard.ControlLeft"/>, the same way
+    /// <see cref="LeftTriggerModifierId"/> declares a gamepad trigger. Paired with <see cref="RightControlModifierId"/>
+    /// per <see cref="InputSources.Keyboard"/>'s "either side declares both" rule; backs <see cref="ControlLeftPageId"/>.</summary>
+    public const string LeftControlModifierId = "ctrl-l";
+    /// <summary>The right Control key modifier id (chord vocabulary: <c>ctrl-r</c>) — <see cref="LeftControlModifierId"/>'s
+    /// mirror, declared via <see cref="InputSources.Keyboard.ControlRight"/> so holding EITHER physical Control key
+    /// reaches the equivalent page; backs <see cref="ControlRightPageId"/>.</summary>
+    public const string RightControlModifierId = "ctrl-r";
+
+    /// <summary>The play group's left-Ctrl-held page id (chord: left Control held). Fires <c>Ctrl+C</c> as
+    /// <see cref="EditorCommandModule.StatusCommand"/> — harmless (it only echoes the seat's active binding
+    /// group/page), and observable over stdout the moment it fires. Carries the keyboard movement rows (see
+    /// <see cref="ControlPageEntries"/>) so holding Ctrl never strands a keyboard player's movement.</summary>
+    public const string ControlLeftPageId = "play-ctrl-l";
+    /// <summary>The play group's right-Ctrl-held page id (chord: right Control held) — <see cref="ControlLeftPageId"/>'s
+    /// mirror, carrying identical entries, so <c>Ctrl+C</c> and movement behave the same whichever physical Control
+    /// key is held.</summary>
+    public const string ControlRightPageId = "play-ctrl-r";
+
+    /// <summary>The Tab modifier id (chord vocabulary: <c>tab</c>) — the radial action menu's hold key, declared via
+    /// <see cref="InputSources.Keyboard.Tab"/> the same way <see cref="LeftControlModifierId"/> declares a native
+    /// key. Tab belongs WHOLLY to the wheel: no page binds it to a command's press edge, and each wheel-bearing
+    /// group's hold page binds its RELEASE to <see cref="WorldWheelCommandModule.CommitCommand"/>.</summary>
+    public const string TabModifierId = "tab";
+
+    /// <summary>The play group's wheel hold page id (chord: Tab held) — see the class remarks.</summary>
+    public const string WheelHoldPageId = "play-wheel";
+
+    /// <summary>The play wheel's ring page ids, innermost first (see <see cref="PlayWheel"/>).</summary>
+    public const string WheelActRingId = "play-wheel-act";
+    /// <summary>The play wheel's middle ring page id.</summary>
+    public const string WheelWorldRingId = "play-wheel-world";
+    /// <summary>The play wheel's outer ring page id.</summary>
+    public const string WheelViewRingId = "play-wheel-view";
 
     // Trigger hysteresis: latch at a deliberate squeeze, release only on a clear letoff, so a trigger resting near
     // its threshold never flaps the active page mid-gesture.
@@ -61,6 +126,14 @@ internal static class WorldDefaultBindings {
             Modifiers: [
                 new BindingModifierDefinition(Id: LeftTriggerModifierId, Source: InputSources.Gamepad.LeftTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "LT"),
                 new BindingModifierDefinition(Id: RightTriggerModifierId, Source: InputSources.Gamepad.RightTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "RT"),
+                // Digital source, default thresholds: keyboard.controlLeft/Right read 0/1, so the 0.5/0.4 hysteresis
+                // band latches on press and releases on release with no flicker — the same defaults every digital
+                // modifier below the trigger pair would use. Declared as a pair (see the class remarks) because
+                // InputSources.Keyboard has no unified "either side" Control source.
+                new BindingModifierDefinition(Id: LeftControlModifierId, Source: InputSources.Keyboard.ControlLeft, Label: "Ctrl"),
+                new BindingModifierDefinition(Id: RightControlModifierId, Source: InputSources.Keyboard.ControlRight, Label: "Ctrl"),
+                // The wheel hold key — one physical key, one modifier (Tab has no left/right pair to declare).
+                new BindingModifierDefinition(Id: TabModifierId, Source: InputSources.Keyboard.Tab, Label: "Tab"),
             ],
             Chords: [
                 // The play resting page — first row, so "play" is the profile's DEFAULT group.
@@ -70,21 +143,11 @@ internal static class WorldDefaultBindings {
                     Page: new BindingPageDefinition(
                         Id: BasePageId,
                         Entries: [
-                            // Movement — each source press-and-release, AnyModifiers, onto the six hold/release verbs.
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 'w'), command: "player.forward"),
-                            .. HoldRelease(source: InputSources.Keyboard.ArrowUp, command: "player.forward"),
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 's'), command: "player.back"),
-                            .. HoldRelease(source: InputSources.Keyboard.ArrowDown, command: "player.back"),
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 'a'), command: "player.turn-left"),
-                            .. HoldRelease(source: InputSources.Keyboard.ArrowLeft, command: "player.turn-left"),
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 'd'), command: "player.turn-right"),
-                            .. HoldRelease(source: InputSources.Keyboard.ArrowRight, command: "player.turn-right"),
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 'q'), command: "player.strafe-left"),
-                            .. HoldRelease(source: InputSources.Keyboard.Letter(letter: 'e'), command: "player.strafe-right"),
-                            // Space = the primary action channel (both edges, AnyModifiers) — variable height under a jump kit.
-                            .. HoldRelease(source: InputSources.Keyboard.Space, command: PlayerCommandModule.PrimaryCommand),
+                            // Movement — each source press-and-release onto the six hold/release verbs. Shared with
+                            // the Ctrl pages (KeyboardMovementEntries) so a held Ctrl carries the identical rows.
+                            .. KeyboardMovementEntries(),
                             // Roster verbs on the keyboard: Enter confirms; F1..F4 claim a slot as the binding's Axis1D value.
-                            new BindingPageEntryDefinition(Source: InputSources.Keyboard.Enter, Command: PlayerCommandModule.ConfirmCommand, ActivateOn: CommandPhase.Started, AnyModifiers: true),
+                            new BindingPageEntryDefinition(Source: InputSources.Keyboard.Enter, Command: PlayerCommandModule.ConfirmCommand, ActivateOn: CommandPhase.Started),
                             Claim(function: 1),
                             Claim(function: 2),
                             Claim(function: 3),
@@ -93,15 +156,11 @@ internal static class WorldDefaultBindings {
                             // analog sample each tick).
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
-                            // South = the context-routed primary gesture (both edges), East = the secondary gesture (both edges).
-                            .. HoldRelease(source: InputSources.Gamepad.ButtonSouth, command: PlayerCommandModule.SouthCommand),
-                            .. HoldRelease(source: InputSources.Gamepad.ButtonEast, command: PlayerCommandModule.SecondaryCommand),
                             // Start = device cycle (press edge).
-                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started, AnyModifiers: true),
-                            // Editor entry — Gamepad Back (the view/menu button) and Keyboard Tab, both free here and
-                            // both deliberate. The triggers turn pages; they never enter a mode.
-                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
-                            new BindingPageEntryDefinition(Source: InputSources.Keyboard.Tab, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started),
+                            // Editor entry — Gamepad Back (the view/menu button); the keyboard's editor entry is the
+                            // wheel's Editor sector (hold Tab). The triggers turn pages; they never enter a mode.
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor"),
                         ],
                         Label: "Base"
                     )
@@ -112,11 +171,175 @@ internal static class WorldDefaultBindings {
                 SparsePage(chord: [RightTriggerModifierId], id: RightPageId, label: "RT"),
                 SparsePage(chord: [LeftTriggerModifierId, RightTriggerModifierId], id: LeftRightPageId, label: "LT+RT"),
                 SparsePage(chord: [RightTriggerModifierId, LeftTriggerModifierId], id: RightLeftPageId, label: "RT+LT"),
+                // The Ctrl-held pages — the default chord binding a native OS-modifier key drives: hold either
+                // Control key, then press C to fire editor.status (harmless; echoes the seat's active group/page
+                // over stdout). Proves keyboard.controlLeft/Right resolve through the same held-chord machinery a
+                // gamepad trigger does, end to end. Declared as a left/right pair, both carrying the identical
+                // ControlPageEntries (movement rows included — a page without them would strand a keyboard player's
+                // movement the same way a sparse trigger page would strand a gamepad player's), because
+                // InputSources.Keyboard's "either side declares both" rule leaves no single source to chord on.
+                new BindingChordDefinition(
+                    Group: PlayGroup,
+                    Chord: [LeftControlModifierId],
+                    Page: new BindingPageDefinition(Id: ControlLeftPageId, Entries: ControlPageEntries(), Label: "Ctrl")
+                ),
+                new BindingChordDefinition(
+                    Group: PlayGroup,
+                    Chord: [RightControlModifierId],
+                    Page: new BindingPageDefinition(Id: ControlRightPageId, Entries: ControlPageEntries(), Label: "Ctrl")
+                ),
+                // The wheel hold page — holding Tab selects it, and its selection presents the play wheel (the
+                // wheels row below). Sticks stay routed so a gamepad hand keeps flying; keyboard movement is
+                // deliberately absent (the radial is a modal gesture — see the class remarks); the arrows and D-pad
+                // cycle the active ring, and Tab's own release edge commits (the press that turned the page latched
+                // this row, so the release resolves back to it through the ordinary chord-latch machinery).
+                new BindingChordDefinition(
+                    Group: PlayGroup,
+                    Chord: [TabModifierId],
+                    Page: new BindingPageDefinition(
+                        Id: WheelHoldPageId,
+                        Entries: [
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
+                            .. WheelHoldEntries(),
+                        ],
+                        Label: "Wheel"
+                    )
+                ),
+                // The roster group's sole page — a not-yet-active seat's group (see the class remarks and
+                // RosterContextRows below). Carries the roster-management verbs (confirm/cycle/claim), editor entry,
+                // and the stick routers a pending seat's profile picker needs (PlayerRoster.RouteMove's own picker
+                // for a gamepad; the "turn" channel rows in KeyboardMovementEntries for a keyboard) — the same set
+                // the play group's base page carries outside its two gameplay channel rows (Space/East), so a seat
+                // loses no roster or editor-entry capability while it sits here, only gameplay itself.
+                new BindingChordDefinition(
+                    Group: RosterGroup,
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: RosterBasePageId,
+                        Entries: [
+                            .. KeyboardMovementEntries(),
+                            new BindingPageEntryDefinition(Source: InputSources.Keyboard.Enter, Command: PlayerCommandModule.ConfirmCommand, ActivateOn: CommandPhase.Started),
+                            Claim(function: 1),
+                            Claim(function: 2),
+                            Claim(function: 3),
+                            Claim(function: 4),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.ButtonSouth, Command: PlayerCommandModule.ConfirmCommand, ActivateOn: CommandPhase.Started),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started),
+                            new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor"),
+                        ],
+                        Label: "Roster"
+                    )
+                ),
                 // The editor group (always compiled in; editor.enter flips the seat's active group onto it).
                 .. WorldEditorBindings.Rows(),
+            ],
+            Contexts: RosterContextRows(),
+            Wheels: [
+                PlayWheel(),
+                .. WorldEditorBindings.Wheels(),
             ]
         );
     }
+
+    /// <summary>The rows every wheel hold page carries beside its own stick routers: the ring-cycle pair on Arrow
+    /// Up/Down and D-pad Up/Down (the mouse-less twin of the mouse wheel — Up cycles outward, matching a wheel
+    /// notch away from the user), and Tab's release edge firing the commit (see the class remarks on the
+    /// chord-latch machinery that makes the release resolve back to this page).</summary>
+    /// <returns>The shared hold-page entries.</returns>
+    public static BindingPageEntryDefinition[] WheelHoldEntries() => [
+        RingStep(source: InputSources.Keyboard.ArrowUp, direction: 1f),
+        RingStep(source: InputSources.Keyboard.ArrowDown, direction: -1f),
+        RingStep(source: InputSources.Gamepad.DpadUp, direction: 1f),
+        RingStep(source: InputSources.Gamepad.DpadDown, direction: -1f),
+        new BindingPageEntryDefinition(Source: InputSources.Keyboard.Tab, Command: WorldWheelCommandModule.CommitCommand, ActivateOn: CommandPhase.Completed),
+    ];
+
+    // One ring-cycle row: press edge, direction carried as the constant Axis1D value the player.wheel.ring handler
+    // reads (the stepped-twin fold — see WorldEditorBindings.PressValue's doctrine comment).
+    private static BindingPageEntryDefinition RingStep(string source, float direction) => new(
+        Source: source,
+        Command: WorldWheelCommandModule.RingCommand,
+        Value: CommandValue.Axis(value: direction),
+        ActivateOn: CommandPhase.Started,
+        Label: ((direction > 0f) ? "Ring+" : "Ring-"),
+        Icon: ((direction > 0f) ? "edit.next" : "edit.prev")
+    );
+
+    // The play wheel — the engine-default radial the play group presents while Tab holds WheelHoldPageId open.
+    // Three rings of six, innermost first: acts, world read-backs, view read-backs. Every sector commits an
+    // ordinary console line (bare, no arguments), so each verb here must answer a bare invocation; the Editor
+    // sector carries the editor entry Tab used to bind directly.
+    private static BindingWheelDefinition PlayWheel() => new(
+        Group: PlayGroup,
+        HoldPage: WheelHoldPageId,
+        Rings: [
+            new BindingPageDefinition(
+                Id: WheelActRingId,
+                Entries: [
+                    Sector(command: EditorCommandModule.EnterCommand, label: "Editor", icon: "edit.place"),
+                    Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
+                    Sector(command: "world.console", label: "Console", icon: "edit.op"),
+                    Sector(command: "player.bindings", label: "Bindings", icon: "edit.link"),
+                    Sector(command: "player.where", label: "Where", icon: "action.target"),
+                    // NOT wire.errors: the registry's text-path built-ins carry no metadata, so a sector naming one
+                    // reads as unregistered at the vocabulary gate and is skipped with a narration.
+                    Sector(command: "world.addons", label: "Addons", icon: "edit.link"),
+                ],
+                Label: "Act"
+            ),
+            new BindingPageDefinition(
+                Id: WheelWorldRingId,
+                Entries: [
+                    Sector(command: "world.status", label: "Status", icon: "action.target"),
+                    Sector(command: "world.state", label: "State", icon: "edit.style"),
+                    Sector(command: "world.rules", label: "Rules", icon: "edit.link"),
+                    Sector(command: "world.grants", label: "Grants", icon: "edit.material"),
+                    Sector(command: "world.attachments", label: "Attach", icon: "edit.place"),
+                    Sector(command: "world.refusals", label: "Refusals", icon: "edit.delete"),
+                ],
+                Label: "World"
+            ),
+            new BindingPageDefinition(
+                Id: WheelViewRingId,
+                Entries: [
+                    Sector(command: "world.view.state", label: "Layout", icon: "edit.style"),
+                    Sector(command: "world.view.pointer", label: "Pointer", icon: "action.target"),
+                    Sector(command: "world.view.orbit", label: "Orbit", icon: "edit.op"),
+                    Sector(command: "world.hud", label: "HUD", icon: "edit.link"),
+                    Sector(command: "world.fps", label: "FPS", icon: "edit.next"),
+                    Sector(command: "world.gpu", label: "GPU", icon: "edit.record"),
+                ],
+                Label: "View"
+            ),
+        ]
+    );
+
+    /// <summary>One wheel sector row — a bare command destination plus display metadata, the narrowed page-entry
+    /// shape <see cref="BindingWheelDefinition"/> documents.</summary>
+    /// <param name="command">The console-dispatchable command the sector commits.</param>
+    /// <param name="label">The sector's display label.</param>
+    /// <param name="icon">The sector's display icon id.</param>
+    /// <returns>The sector row.</returns>
+    public static BindingPageEntryDefinition Sector(string command, string label, string icon) => new(
+        Source: null,
+        Command: command,
+        Label: label,
+        Icon: icon
+    );
+
+    // Selects RosterGroup for every roster state short of active — unjoined, claimed, and pending. ACTIVE ships no
+    // row: with no row a seat falls through to its requested group (see WorldSeatBindings.DeriveActiveGroup), which
+    // is the play group by default. Claimed mapping to the roster group is deliberate: player.confirm's own handler
+    // already refuses a claimed slot, so an exclusive claim's refusal is reported through the ordinary confirm path
+    // rather than silently swallowed by a channel destination that never fires while pending.
+    private static BindingContextDefinition[] RosterContextRows() => [
+        new BindingContextDefinition(Family: WorldContextFamilies.Roster, State: WorldContextFamilies.RosterUnjoined, Group: RosterGroup),
+        new BindingContextDefinition(Family: WorldContextFamilies.Roster, State: WorldContextFamilies.RosterClaimed, Group: RosterGroup),
+        new BindingContextDefinition(Family: WorldContextFamilies.Roster, State: WorldContextFamilies.RosterPending, Group: RosterGroup),
+    ];
 
     // One of the play group's four held-chord pages: labelled for the bar, carrying only the stick routers (a held
     // analog re-dispatches against the ACTIVE page each tick, so omitting them would freeze movement mid-chord).
@@ -133,20 +356,63 @@ internal static class WorldDefaultBindings {
         )
     );
 
-    // A source bound to a command on BOTH edges (the HoldRelease pattern): a press-edge entry (default phase, fires on
-    // Started/Active) and a release-edge entry (ActivateOn Completed), both AnyModifiers.
-    private static BindingPageEntryDefinition[] HoldRelease(string source, string command) => [
-        new BindingPageEntryDefinition(Source: source, Command: command, AnyModifiers: true),
-        new BindingPageEntryDefinition(Source: source, Command: command, ActivateOn: CommandPhase.Completed, AnyModifiers: true),
+    // The three movement channel names every shipped world declares identically (see the class remarks on
+    // ChannelRef.Role's retirement) — the engine default binds the keyboard to these NAMES directly rather than
+    // through the former role indirection, since channel.role.<v> and channel.name.<v> always resolved to one
+    // identical destination.
+    private const string ForwardChannelName = "forward";
+    private const string StrafeChannelName = "strafe";
+    private const string TurnChannelName = "turn";
+
+    // The base page's keyboard movement rows — each source press-and-release onto a CHANNEL destination with a
+    // scale into three movement channels, each fed by two opposing-scale rows. Shared
+    // with the Ctrl-held pages (ControlPageEntries) so holding either Control key carries the same movement the base
+    // page does, rather than stalling it the way a sparse-trigger-style page (stick routers only) would.
+    private static BindingPageEntryDefinition[] KeyboardMovementEntries() => [
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 'w'), channel: ForwardChannelName, scale: 1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.ArrowUp, channel: ForwardChannelName, scale: 1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 's'), channel: ForwardChannelName, scale: -1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.ArrowDown, channel: ForwardChannelName, scale: -1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 'a'), channel: StrafeChannelName, scale: -1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.ArrowLeft, channel: TurnChannelName, scale: 1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 'd'), channel: StrafeChannelName, scale: 1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.ArrowRight, channel: TurnChannelName, scale: -1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 'q'), channel: TurnChannelName, scale: 1f),
+        .. HoldReleaseChannel(source: InputSources.Keyboard.Letter(letter: 'e'), channel: TurnChannelName, scale: -1f),
     ];
 
-    // A function-key claim entry: press edge, AnyModifiers, carrying the 1-based slot as the constant Axis1D value the
+    // The Ctrl-held pages' shared entries: the keyboard movement rows (so a keyboard player keeps moving under
+    // either held Control key), the gamepad sticks (so a gamepad player keeps flying under it too), and Ctrl+C's
+    // editor.status entry — the default binding proving a native OS-modifier key resolves through this same
+    // held-chord machinery.
+    private static BindingPageEntryDefinition[] ControlPageEntries() => [
+        .. KeyboardMovementEntries(),
+        new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
+        new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
+        new BindingPageEntryDefinition(Source: InputSources.Keyboard.Letter(letter: 'c'), Command: EditorCommandModule.StatusCommand, ActivateOn: CommandPhase.Started, Label: "Status"),
+    ];
+
+    // A source bound to a command on BOTH edges (the HoldRelease pattern): a press-edge entry (default phase, fires on
+    // Started/Active) and a release-edge entry (ActivateOn Completed).
+    private static BindingPageEntryDefinition[] HoldRelease(string source, string command) => [
+        new BindingPageEntryDefinition(Source: source, Command: command),
+        new BindingPageEntryDefinition(Source: source, Command: command, ActivateOn: CommandPhase.Completed),
+    ];
+
+    // A source bound to a CHANNEL destination on both edges — the channel-generic twin of HoldRelease: a press-edge
+    // row and a release-edge row, both carrying the same scale (a digital source's constant activation value; see
+    // BindingProfile.Compile's synthesis). Default scale +One.
+    private static BindingPageEntryDefinition[] HoldReleaseChannel(string source, string channel, float scale = 1f) => [
+        new BindingPageEntryDefinition(Source: source, Channel: new ChannelRef.Name(Value: channel), Scale: scale),
+        new BindingPageEntryDefinition(Source: source, Channel: new ChannelRef.Name(Value: channel), Scale: scale, ActivateOn: CommandPhase.Completed),
+    ];
+
+    // A function-key claim entry: press edge, carrying the 1-based slot as the constant Axis1D value the
     // player.claim handler reads.
     private static BindingPageEntryDefinition Claim(int function) => new(
         Source: InputSources.Keyboard.Function(number: function),
         Command: PlayerCommandModule.ClaimCommand,
         ActivateOn: CommandPhase.Started,
-        AnyModifiers: true,
         Value: CommandValue.Axis(value: function)
     );
 }

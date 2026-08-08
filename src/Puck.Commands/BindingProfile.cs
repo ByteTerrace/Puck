@@ -13,6 +13,21 @@ namespace Puck.Commands;
 /// whole document (they address pages in editors and guided sessions). The first row's group is the DEFAULT group.
 /// </remarks>
 public static class BindingProfile {
+    /// <summary>The command-name prefix a CHANNEL destination compiles down to (see
+    /// <see cref="BindingPageEntryDefinition.Channel"/>/<see cref="BindingCommandDefinition.Channel"/>). Compiling a
+    /// channel destination to a synthesized command keeps the runtime dispatch machinery here (<see cref="CommandBinding"/>,
+    /// <see cref="InputRouter"/>, <see cref="CommandRegistry"/>) entirely command-shaped — this project never learns
+    /// what a "channel" is — while the consuming layer (a world/kit document's channel table) registers the matching
+    /// handler per declared channel under this exact prefix, so the two sides agree without either referencing the
+    /// other's vocabulary type.</summary>
+    public const string ChannelCommandPrefix = "channel.";
+
+    /// <summary>The synthesized command name a channel destination named <paramref name="channel"/> compiles down to.</summary>
+    public static string ChannelCommandName(ChannelRef channel) => channel switch {
+        ChannelRef.Name name => $"{ChannelCommandPrefix}name.{name.Value}",
+        _ => throw new ArgumentException(message: "A channel reference must be a declared name.", paramName: nameof(channel)),
+    };
+
     /// <summary>Validates and compiles a profile document.</summary>
     /// <param name="document">The profile document to compile.</param>
     /// <returns>The compiled profile.</returns>
@@ -66,7 +81,8 @@ public static class BindingProfile {
         // built in a second pass so each page view can carry its whole group's command-chord hints.
         var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var groupNames = new List<string>();
-        var pageIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // Page id → (owning group, chord row) — the uniqueness set AND the wheel section's hold-page resolver.
+        var pageRowsById = new Dictionary<string, (int GroupIndex, int RowIndex)>(comparer: StringComparer.Ordinal);
         var restingByGroup = new List<int>();
         var rowChords = new int[documentRows.Count][];
         var rowGroups = new int[documentRows.Count];
@@ -127,7 +143,7 @@ public static class BindingProfile {
                     throw new ArgumentException(message: "A page id must be non-empty.", paramName: nameof(document));
                 }
 
-                if (!pageIds.Add(item: page.Id)) {
+                if (!pageRowsById.TryAdd(key: page.Id, value: (GroupIndex: groupIndex, RowIndex: rowIndex))) {
                     throw new ArgumentException(message: $"Duplicate page id \"{page.Id}\".", paramName: nameof(document));
                 }
 
@@ -135,8 +151,22 @@ public static class BindingProfile {
                     restingByGroup[groupIndex] = rowIndex;
                 }
             } else {
-                if (string.IsNullOrEmpty(value: row.Command!.Command)) {
-                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command it fires.", paramName: nameof(document));
+                var chordCommand = row.Command!;
+
+                if ((chordCommand.Command is null) == (chordCommand.Channel is null)) {
+                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one destination — a command or a channel.", paramName: nameof(document));
+                }
+
+                ValidateValue(value: chordCommand.Value, path: $"Chord row {rowIndex} (group \"{row.Group}\")", isChannel: (chordCommand.Channel is not null), paramName: nameof(document));
+
+                if (chordCommand.Channel is { } channel) {
+                    ValidateChannelRef(channel: channel, path: $"Chord row {rowIndex} (group \"{row.Group}\")", paramName: nameof(document));
+
+                    if ((chordCommand.Scale is { } scale) && ((scale < -1f) || (scale > 1f))) {
+                        throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(document));
+                    }
+                } else if (string.IsNullOrEmpty(value: chordCommand.Command)) {
+                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command or channel it fires.", paramName: nameof(document));
                 }
 
                 // Rule 2's command half: an empty chord has no completion edge — the resting row must be a page.
@@ -153,6 +183,134 @@ public static class BindingProfile {
             }
         }
 
+        // Context rows — the structural half only (shape, key uniqueness, group existence); family/state admission
+        // against the engine's published registry is the host's vocabulary gate. Every refusal names the offending row.
+        var contextRows = (document.Contexts ?? []);
+        var seenContextKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var contextIndex = 0; (contextIndex < contextRows.Count); contextIndex++) {
+            var context = (contextRows[contextIndex]
+                ?? throw new ArgumentException(message: $"Contexts row {contextIndex} is null.", paramName: nameof(document)));
+
+            if (string.IsNullOrEmpty(value: context.Family)) {
+                throw new ArgumentException(message: $"Contexts row {contextIndex} must name a family.", paramName: nameof(document));
+            }
+
+            if (string.IsNullOrEmpty(value: context.State)) {
+                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\") must name a state.", paramName: nameof(document));
+            }
+
+            if (string.IsNullOrEmpty(value: context.Group)) {
+                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") must name a group.", paramName: nameof(document));
+            }
+
+            if (!seenContextKeys.Add(item: $"{context.Family}\0{context.State}")) {
+                throw new ArgumentException(message: $"Contexts row {contextIndex} re-declares (family \"{context.Family}\", state \"{context.State}\") — exactly one group per (family, state).", paramName: nameof(document));
+            }
+
+            if (!groupIndexByName.ContainsKey(key: context.Group)) {
+                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") names group \"{context.Group}\", which no chord row declares.", paramName: nameof(document));
+            }
+        }
+
+        // The wheel section: one radial menu per group, its rings ordinary pages worn as concentric shells. The
+        // structural rules mirror the chord rows' own (declared group, resolvable hold page, unique ring page ids)
+        // plus the wheel's presentation bounds; every refusal names the offending wheel and enumerates the
+        // admissible values. Sector rows deliberately narrow the page-entry shape — see BindingWheelDefinition.
+        var wheels = (document.Wheels ?? []);
+        var wheelViewByRow = new Dictionary<int, BindingWheelView>();
+
+        foreach (var wheel in wheels) {
+            if (wheel is null) {
+                throw new ArgumentException(message: "A wheels row is null.", paramName: nameof(document));
+            }
+
+            if (string.IsNullOrEmpty(value: wheel.Group) || !groupIndexByName.TryGetValue(key: wheel.Group, value: out var wheelGroupIndex)) {
+                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" names a group no chord row declares.", paramName: nameof(document));
+            }
+
+            if (string.IsNullOrEmpty(value: wheel.HoldPage) ||
+                !pageRowsById.TryGetValue(key: wheel.HoldPage, value: out var holdRow) ||
+                (holdRow.GroupIndex != wheelGroupIndex)) {
+                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" holds on page \"{wheel.HoldPage}\", which no chord row of that group declares.", paramName: nameof(document));
+            }
+
+            if (wheelViewByRow.ContainsKey(key: holdRow.RowIndex)) {
+                throw new ArgumentException(message: $"Group \"{wheel.Group}\" declares two wheels — exactly one wheel per group.", paramName: nameof(document));
+            }
+
+            var ringCount = (wheel.Rings?.Count ?? 0);
+
+            if ((ringCount < BindingWheelDefinition.MinRings) || (ringCount > BindingWheelDefinition.MaxRings)) {
+                throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" declares {ringCount} rings; a wheel presents {BindingWheelDefinition.MinRings}..{BindingWheelDefinition.MaxRings}.", paramName: nameof(document));
+            }
+
+            var ringViews = new BindingWheelRingView[ringCount];
+
+            for (var ringIndex = 0; (ringIndex < ringCount); ringIndex++) {
+                var ring = (wheel.Rings![ringIndex]
+                    ?? throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" ring {ringIndex} is null.", paramName: nameof(document)));
+
+                if (string.IsNullOrEmpty(value: ring.Id)) {
+                    throw new ArgumentException(message: $"Wheel for group \"{wheel.Group}\" ring {ringIndex} must carry a page id.", paramName: nameof(document));
+                }
+
+                // Ring pages share the document-wide page-id namespace (they ARE pages) — but hold no chord row,
+                // so they enter the map with a sentinel row that nothing resolves.
+                if (!pageRowsById.TryAdd(key: ring.Id, value: (GroupIndex: wheelGroupIndex, RowIndex: -1))) {
+                    throw new ArgumentException(message: $"Duplicate page id \"{ring.Id}\".", paramName: nameof(document));
+                }
+
+                var sectorCount = (ring.Entries?.Count ?? 0);
+
+                if ((sectorCount < BindingWheelDefinition.MinSectorsPerRing) || (sectorCount > BindingWheelDefinition.MaxSectorsPerRing)) {
+                    throw new ArgumentException(message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") declares {sectorCount} sectors; a ring presents {BindingWheelDefinition.MinSectorsPerRing}..{BindingWheelDefinition.MaxSectorsPerRing}.", paramName: nameof(document));
+                }
+
+                var sectorViews = new BindingWheelSectorView[sectorCount];
+
+                for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
+                    var sector = (ring.Entries![sectorIndex]
+                        ?? throw new ArgumentException(message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex} is null.", paramName: nameof(document)));
+                    var sectorPath = $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex}";
+
+                    if (string.IsNullOrEmpty(value: sector.Command)) {
+                        throw new ArgumentException(message: $"{sectorPath} must name the command it commits.", paramName: nameof(document));
+                    }
+
+                    // The narrowed sector shape — each foreign member refused BY NAME rather than ignored, so an
+                    // authored field never silently means nothing.
+                    if (!string.IsNullOrEmpty(value: sector.Source)) {
+                        throw new ArgumentException(message: $"{sectorPath} carries a source — the radial gesture is a sector's trigger.", paramName: nameof(document));
+                    }
+                    if (sector.Activator is not null) {
+                        throw new ArgumentException(message: $"{sectorPath} carries an activator — the radial gesture is a sector's trigger.", paramName: nameof(document));
+                    }
+                    if (sector.Channel is not null) {
+                        throw new ArgumentException(message: $"{sectorPath} carries a channel destination — a sector commits a console-dispatchable command, never a folded channel.", paramName: nameof(document));
+                    }
+                    if (sector.Value is not null) {
+                        throw new ArgumentException(message: $"{sectorPath} carries a constant value — a committed console line carries none.", paramName: nameof(document));
+                    }
+                    if (sector.Scale is not null) {
+                        throw new ArgumentException(message: $"{sectorPath} carries a scale — a sector has no channel to scale.", paramName: nameof(document));
+                    }
+                    if (sector.ActivateOn is not null) {
+                        throw new ArgumentException(message: $"{sectorPath} carries an activation phase — the wheel's release-commit is a sector's only edge.", paramName: nameof(document));
+                    }
+                    if (sector.Mode != BindingEntryMode.Hold) {
+                        throw new ArgumentException(message: $"{sectorPath} sets mode {sector.Mode} — a sector carries no held state.", paramName: nameof(document));
+                    }
+
+                    sectorViews[sectorIndex] = new BindingWheelSectorView(Command: sector.Command!, Label: sector.Label, Icon: sector.Icon);
+                }
+
+                ringViews[ringIndex] = new BindingWheelRingView(PageId: ring.Id, Label: ring.Label, Sectors: sectorViews);
+            }
+
+            wheelViewByRow[holdRow.RowIndex] = new BindingWheelView(Group: wheel.Group, HoldPageId: wheel.HoldPage, Rings: ringViews);
+        }
+
         // Second pass: the per-group command-chord hint lists (shared by every page view of the group), then the rows.
         var commandRowsByGroup = new int[groupNames.Count][];
         var hintsByGroup = new IReadOnlyList<BindingChordCommandView>[groupNames.Count];
@@ -166,10 +324,12 @@ public static class BindingProfile {
                     continue;
                 }
 
+                var effectiveCommand = ((command.Channel is { } channel) ? ChannelCommandName(channel: channel) : command.Command!);
+
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
                     Chord: [.. rowChords[rowIndex].Select(selector: index => modifiers[index].Id)],
-                    Command: command.Command,
+                    Command: effectiveCommand,
                     HoldRelease: command.HoldRelease,
                     Icon: command.Icon,
                     Label: command.Label,
@@ -182,6 +342,7 @@ public static class BindingProfile {
         }
 
         var rows = new CompiledBindingProfile.CompiledChordRow[documentRows.Count];
+        var nextActivatorIndex = 0;
 
         for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
             var row = documentRows[rowIndex];
@@ -189,11 +350,14 @@ public static class BindingProfile {
             var groupIndex = rowGroups[rowIndex];
 
             if (row.Page is { } page) {
+                var (table, activators) = BuildTable(page: page, nextActivatorIndex: ref nextActivatorIndex);
+
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
                     Command: null,
                     GroupIndex: groupIndex,
-                    Table: BuildTable(page: page),
+                    Table: table,
+                    Activators: ((activators.Count > 0) ? activators : null),
                     View: BuildView(
                         chord: [.. chord],
                         group: groupNames[groupIndex],
@@ -204,12 +368,14 @@ public static class BindingProfile {
                 );
             } else {
                 var command = row.Command!;
-                var pressValue = (command.Value ?? CommandValue.Digital(active: true));
+                var isChannel = (command.Channel is not null);
+                var pressValue = (command.Value ?? (isChannel ? CommandValue.Axis(value: (command.Scale ?? 1f)) : CommandValue.Digital(active: true)));
+                var effectiveCommand = (isChannel ? ChannelCommandName(channel: command.Channel!) : command.Command!);
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
                     Command: new CompiledBindingProfile.CompiledChordCommand(
-                        Command: command.Command,
+                        Command: effectiveCommand,
                         DispatchRelease: command.HoldRelease,
                         PressValue: pressValue,
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
@@ -228,37 +394,156 @@ public static class BindingProfile {
             modifierIndexBySource: modifierIndexBySource,
             modifiers: modifiers,
             restingRowByGroup: [.. restingByGroup],
-            rows: rows
+            rows: rows,
+            activatorCount: nextActivatorIndex,
+            wheelViewByRow: wheelViewByRow
         );
     }
 
-    private static IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> BuildTable(BindingPageDefinition page) {
+    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, ref int nextActivatorIndex) {
         var entries = (page.Entries ?? []);
         // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
-        // expressiveness (activation edge, incidental-modifier tolerance, constant value). Built directly here rather
-        // than through InputBindingDefinition, which is the reduced (edge + required-modifiers) shape.
+        // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
+        // source (BindingPageEntryDefinition.Activator) is excluded from this table entirely and collected into
+        // `activators` — PagedInputBindings evaluates those out-of-band, one RowActivatorTracker per entry.
         var grouped = new Dictionary<string, List<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var activators = new List<CompiledBindingProfile.CompiledActivatorEntry>();
+        // OrdinalIgnoreCase to match how a sequence member is actually compared at runtime (RowActivatorTracker,
+        // BindingSourceComponent) — a case-variant duplicate ("Gamepad.LeftTrigger" vs "gamepad.leftTrigger") is
+        // the SAME shadowed activator there and must be refused here too, not admitted as two distinct rows.
+        var seenActivatorKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
             var entry = entries[entryIndex];
+            var hasSource = !string.IsNullOrEmpty(value: entry.Source);
+            var hasActivator = (entry.Activator is not null);
 
-            if (string.IsNullOrEmpty(value: entry.Source) || string.IsNullOrEmpty(value: entry.Command)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry without a source or command.", paramName: nameof(page));
+            if (hasSource == hasActivator) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry that must name exactly one trigger — a source or an activator.", paramName: nameof(page));
+            }
+
+            var label = EntryLabel(entry: entry);
+
+            if ((entry.Command is null) == (entry.Channel is null)) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} must carry exactly one destination — a command or a channel.", paramName: nameof(page));
+            }
+
+            ValidateValue(value: entry.Value, path: $"Page \"{page.Id}\" entry for {label}", isChannel: (entry.Channel is not null), paramName: nameof(page));
+
+            if ((entry.Mode == BindingEntryMode.Toggle) && (entry.Channel is null)) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.", paramName: nameof(page));
+            }
+
+            string effectiveCommand;
+            CommandValue? effectiveValue;
+            float? channelScale;
+
+            if (entry.Channel is { } channel) {
+                ValidateChannelRef(channel: channel, path: $"Page \"{page.Id}\" entry for {label}", paramName: nameof(page));
+
+                if ((entry.Scale is { } scale) && ((scale < -1f) || (scale > 1f))) {
+                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(page));
+                }
+
+                effectiveCommand = ChannelCommandName(channel: channel);
+                // The scale rides ChannelScale, never Value: Value is an UNCONDITIONAL override (see CommandBinding's
+                // own remarks), which would replace an analog source's live sample with the constant scale (the B2
+                // defect). InputRouter decides constant-vs-multiply from the live signal's OWN value kind.
+                effectiveValue = null;
+                channelScale = (entry.Scale ?? 1f);
+            } else if (string.IsNullOrEmpty(value: entry.Command)) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry without a command or channel.", paramName: nameof(page));
+            } else {
+                effectiveCommand = entry.Command;
+                effectiveValue = entry.Value;
+                channelScale = null;
+            }
+
+            if (hasActivator) {
+                var activator = entry.Activator!;
+
+                if (entry.ActivateOn is not null) {
+                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.", paramName: nameof(page));
+                }
+
+                if (activator.Sequence is not { Count: > 0 }) {
+                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator sequence must be non-empty.", paramName: nameof(page));
+                }
+
+                foreach (var step in activator.Sequence) {
+                    if (string.IsNullOrEmpty(value: step)) {
+                        throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator sequence carries an empty control name.", paramName: nameof(page));
+                    }
+                }
+
+                if (activator.Mode == BindingActivatorMode.Held) {
+                    var seenSteps = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var step in activator.Sequence) {
+                        if (!seenSteps.Add(item: step)) {
+                            throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} repeats control \"{step}\" in a Held activator sequence — a simultaneous hold cannot distinguish a repeat.", paramName: nameof(page));
+                        }
+                    }
+
+                    if (activator.TimeoutTicks is not null) {
+                        throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} sets timeoutTicks on a Held activator — timeout only applies to a Tapped sequence.", paramName: nameof(page));
+                    }
+                } else if ((activator.TimeoutTicks is { } timeout) && (timeout <= 0)) {
+                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator timeoutTicks must be positive.", paramName: nameof(page));
+                }
+
+                var shadowKey = $"{activator.Mode}\0{string.Join(separator: ',', values: activator.Sequence)}";
+
+                if (!seenActivatorKeys.Add(item: shadowKey)) {
+                    throw new ArgumentException(message: $"Page \"{page.Id}\" declares two activators for the same {activator.Mode} sequence [{string.Join(separator: ", ", values: activator.Sequence)}] — the second can never fire (shadowed).", paramName: nameof(page));
+                }
+
+                var pressValue = (entry.Value ?? ((channelScale is { } scale) ? CommandValue.Axis(value: scale) : CommandValue.Digital(active: true)));
+
+                activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
+                    ActivatorIndex: nextActivatorIndex++,
+                    Activator: activator,
+                    Command: effectiveCommand,
+                    // A CHANNEL destination MUST dispatch its release edge: CommandRegistry.ApplySnapshot skips any
+                    // entry whose Dispatch is false, so a release that never dispatches never reaches the channel
+                    // verb's handler, which is the ONLY thing that calls seat.ReleaseChannel — a gate that closed
+                    // (or a tap that completed) would otherwise leave the channel held forever. A COMMAND
+                    // destination keeps the chord-command row's own default (HoldRelease false, BindingProfile.cs
+                    // above): a dispatched verb is momentary by default and does not need to be told it released.
+                    DispatchRelease: (channelScale is not null),
+                    PressValue: pressValue,
+                    ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                ));
+
+                continue;
+            }
+
+            // A plain-source entry may name an axis COMPONENT (gamepad.leftStick.x) instead of a bare control — the
+            // table key is always the BASE source (what a raw InputSignal actually carries); the component rides
+            // the compiled CommandBinding and is extracted at resolve time (see InputRouter's ResolveValue).
+            if (!BindingSourceComponent.TrySplit(source: entry.Source!, baseSource: out var baseSource, component: out var component)) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {entry.Source} names a malformed axis component — the final segment must be \"x\" or \"y\".", paramName: nameof(page));
+            }
+
+            if ((component is not null) && (channelScale is null)) {
+                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {entry.Source} names an axis component, which is only meaningful on a channel destination.", paramName: nameof(page));
             }
 
             if (!grouped.TryGetValue(
-                key: entry.Source,
+                key: baseSource,
                 value: out var list
             )) {
                 list = [];
-                grouped[entry.Source] = list;
+                grouped[baseSource] = list;
             }
 
             list.Add(item: new CommandBinding(
                 ActivateOn: entry.ActivateOn,
-                AnyModifiers: entry.AnyModifiers,
-                Command: entry.Command,
-                Value: entry.Value
+                ChannelScale: channelScale,
+                Command: effectiveCommand,
+                Value: effectiveValue,
+                Component: component,
+                Mode: entry.Mode
             ));
         }
 
@@ -268,7 +553,14 @@ public static class BindingProfile {
             table[source] = list;
         }
 
-        return table;
+        return (table, activators);
+    }
+
+    // A stable label for error messages — an activator entry has no Source, so it identifies by its sequence.
+    private static string EntryLabel(BindingPageEntryDefinition entry) {
+        return (entry.Source ?? ((entry.Activator is { } activator)
+            ? $"activator[{string.Join(separator: ',', values: activator.Sequence)}]"
+            : "(unset)"));
     }
     private static BindingPageView BuildView(
         HashSet<int> chord,
@@ -283,10 +575,12 @@ public static class BindingProfile {
             var entry = page.Entries![entryIndex];
 
             buttons[entryIndex] = new BindingPageButtonView(
-                Command: entry.Command,
+                Command: ((entry.Channel is { } channel) ? ChannelCommandName(channel: channel) : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
-                Source: entry.Source
+                // An activator entry has no Source — EntryLabel's synthetic "activator[...]" label stands in, so a
+                // binding-bar consumer never renders a null/blank chip for it.
+                Source: EntryLabel(entry: entry)
             );
         }
 
@@ -314,4 +608,29 @@ public static class BindingProfile {
             PageId: page.Id
         );
     }
+    private static void ValidateChannelRef(ChannelRef channel, string path, string paramName) {
+        switch (channel) {
+            case ChannelRef.Name { Value.Length: > 0 }:
+                return;
+            case ChannelRef.Name:
+                throw new ArgumentException(message: $"{path} channel name must be non-empty.", paramName: paramName);
+            default:
+                throw new ArgumentException(message: $"{path} channel reference is not a declared name variant.", paramName: paramName);
+        }
+    }
+    private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {
+        if (value is not { } constant) {
+            return;
+        }
+        if (isChannel) {
+            throw new ArgumentException(message: $"{path} carries a Value on a channel destination; Scale is the channel constant.", paramName: paramName);
+        }
+        if (!Enum.IsDefined(value: constant.Kind)) {
+            throw new ArgumentException(message: $"{path} Value kind {(int)constant.Kind} is not declared.", paramName: paramName);
+        }
+        if (!float.IsFinite(f: constant.Raw.X) || !float.IsFinite(f: constant.Raw.Y) || !float.IsFinite(f: constant.Raw.Z) || !float.IsFinite(f: constant.Raw.W)) {
+            throw new ArgumentException(message: $"{path} Value components must be finite.", paramName: paramName);
+        }
+    }
+
 }

@@ -1,0 +1,140 @@
+{
+    "format": 1,
+    "entries": {
+        "invertible-bit-mix.mix": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.InvertibleBitMix.Mix(System.UInt32)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "68721f164713f6e87d9c0f438756438b6ed35aaece24c83e6260c22be4ede2c9",
+            "basis": [ "exact-by-proof", "exhaustive" ],
+            "argument": "Both multipliers are odd, hence units modulo 2^32, so each multiply is a bijection; and an xor-shift x ^= x >>> k inverts by xoring the iterated shifts until the shift leaves the word, which terminates because the shift grows without bound. A composition of bijections is a bijection. Confirmed independently by execution over the entire carrier.",
+            "dependencies": [
+                "F:Puck.Maths.InvertibleBitMix.FirstMultiplier",
+                "F:Puck.Maths.InvertibleBitMix.FirstMultiplierInverse",
+                "F:Puck.Maths.InvertibleBitMix.FirstShift",
+                "F:Puck.Maths.InvertibleBitMix.MiddleShift",
+                "F:Puck.Maths.InvertibleBitMix.SecondMultiplier",
+                "F:Puck.Maths.InvertibleBitMix.SecondMultiplierInverse"
+            ],
+            "laws": [ "sampling.bit-mix-is-a-permutation", "sampling.bit-mix-constants-invert" ]
+        },
+        "invertible-bit-mix.unmix": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.InvertibleBitMix.Unmix(System.UInt32)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "0325bc9bab13f1b8011cbc0f4d1794fb4b638d59237376e0eade99315f75f37b",
+            "basis": [ "exact-by-proof", "exhaustive" ],
+            "argument": "The inverse of that composition in reverse order: the recorded multiplier inverses satisfy m * m' = 1 modulo 2^32, and each xor-shift inversion carries exactly the terms whose shift has not yet left the word — one term at a shift of sixteen, two at fifteen. Confirmed independently by execution over the entire carrier.",
+            "dependencies": [
+                "F:Puck.Maths.InvertibleBitMix.FirstMultiplier",
+                "F:Puck.Maths.InvertibleBitMix.FirstMultiplierInverse",
+                "F:Puck.Maths.InvertibleBitMix.FirstShift",
+                "F:Puck.Maths.InvertibleBitMix.MiddleShift",
+                "F:Puck.Maths.InvertibleBitMix.SecondMultiplier",
+                "F:Puck.Maths.InvertibleBitMix.SecondMultiplierInverse"
+            ],
+            "laws": [ "sampling.bit-mix-is-a-permutation", "sampling.bit-mix-constants-invert" ]
+        },
+
+        "fixed-q4816.add": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_Addition(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "c7b21bfd6520a69975dfa52263e36a4b65422f6eb0e150f15bdc2c535b31e3ad",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Q48.16 is a linear encoding — a value is its raw over 2^16 — so (a/2^16) + (b/2^16) = (a+b)/2^16 exactly. Raw addition IS the operation: there is no rounding step and so nothing an oracle could disagree with. The body carries no algorithm of its own, and the one open question, what happens past the representable range, is answered by having two operators — this one wraps, its checked sibling refuses. Linearity holds at any scale, so the scale itself is not part of the argument; the carrier is.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.add-vs-oracle" ]
+        },
+        "fixed-q4816.add-checked": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_CheckedAddition(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "159fae9bc58796ba3595c6f355fe67c78af2b706da8b23ef666ce9cca4987047",
+            "basis": [ "exact-by-construction" ],
+            "argument": "The exact-addition argument, with the boundary answered by refusal rather than wrapping: the carrier's own checked add raises OverflowException precisely when the sum leaves the representable range.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.add-vs-oracle", "scalar.checked-ops-refuse" ]
+        },
+        "fixed-q4816.subtract": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_Subtraction(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "935110dccdd71789b906019ec81b5c9b189a0721bf502914235b5f69a98ccc9d",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Linearity again: (a/2^16) - (b/2^16) = (a-b)/2^16 exactly, so raw subtraction is the operation and nothing rounds.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle" ]
+        },
+        "fixed-q4816.subtract-checked": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_CheckedSubtraction(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "1943e88e68e0eb248e708e17111ac712f66f1bde80237aa991653b438b75d1db",
+            "basis": [ "exact-by-construction" ],
+            "argument": "The exact-subtraction argument, with the boundary answered by refusal rather than wrapping.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle", "scalar.checked-ops-refuse" ]
+        },
+        "fixed-q4816.negate": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_UnaryNegation(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "0d7a11ef1c4424646d2b3c9aae647fc8e0d33ef2fb80abd1ba5e7cf861644ba9",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Negating a linear encoding is negating the raw. The single value with no positive counterpart, the carrier minimum, wraps to itself — the documented two's-complement behaviour, and the reason the checked sibling exists.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle" ]
+        },
+        "fixed-q4816.negate-checked": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_CheckedUnaryNegation(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "484a83495675bd65e0a631486fa5e842af2daf4ca4823dc81a608a5331db21df",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Negation as above, refusing at the one operand whose negation is unrepresentable instead of wrapping to it.",
+            "dependencies": [ "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle", "scalar.checked-ops-refuse" ]
+        },
+        "fixed-q4816.increment": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_Increment(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "9445a7a93e39624ea0d77836be140e892173343ca5b87c3ba5c0ec4465a8d79f",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Adding the encoding's own unit, whose raw is exactly 2^16, so the operation is a raw add of a compile-time constant and nothing rounds. Unlike plain addition this one does name the scale, so the fraction width the unit is built from is sealed alongside it.",
+            "dependencies": [ "F:Puck.Maths.FixedQ4816.FractionBitCount", "F:Puck.Maths.FixedQ4816.RawOne", "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle" ]
+        },
+        "fixed-q4816.increment-checked": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_CheckedIncrement(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "4359d9989ddbf683201ac8aa8809ec5b1e02f1ce666ba3ff6d403951bf7272fe",
+            "basis": [ "exact-by-construction" ],
+            "argument": "The increment argument, refusing rather than wrapping past the representable range.",
+            "dependencies": [ "F:Puck.Maths.FixedQ4816.FractionBitCount", "F:Puck.Maths.FixedQ4816.RawOne", "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle", "scalar.checked-ops-refuse" ]
+        },
+        "fixed-q4816.decrement": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_Decrement(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "9aab44df94ebae5257f06059417f6f4eb3c2e3c8631f43fdd0db8a96c7a514a8",
+            "basis": [ "exact-by-construction" ],
+            "argument": "Subtracting the encoding's own unit, raw 2^16, by the same argument as increment.",
+            "dependencies": [ "F:Puck.Maths.FixedQ4816.FractionBitCount", "F:Puck.Maths.FixedQ4816.RawOne", "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle" ]
+        },
+        "fixed-q4816.decrement-checked": {
+            "assembly": "Puck.Maths",
+            "symbol": "M:Puck.Maths.FixedQ4816.op_CheckedDecrement(Puck.Maths.FixedQ4816)",
+            "algorithm": "csharp-tokens-v1",
+            "sha256": "fff9f71402de5d51bb08dbd12c9dcccc333e59bd5e3e4286776486badbcaeec4",
+            "basis": [ "exact-by-construction" ],
+            "argument": "The decrement argument, refusing rather than wrapping past the representable range.",
+            "dependencies": [ "F:Puck.Maths.FixedQ4816.FractionBitCount", "F:Puck.Maths.FixedQ4816.RawOne", "P:Puck.Maths.FixedQ4816.Value" ],
+            "laws": [ "scalar.additive-ops-vs-oracle", "scalar.checked-ops-refuse" ]
+        }
+    }
+}

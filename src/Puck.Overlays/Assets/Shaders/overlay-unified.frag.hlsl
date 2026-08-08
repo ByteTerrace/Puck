@@ -88,7 +88,7 @@ bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
 
 // ---- THE WORLD ICON GRAMMAR ---------------------------------------------------------------------------------------
 // One geometric grammar for every procedural glyph, numeral, and icon — the artwork half of the token identity
-// (docs/ui-design-tokens.md, "precision-tool minimalism"). Symbols draw in [-1, 1] glyph space, y down:
+// ("precision-tool minimalism" — the token write-up is retired; DesignTokens.cs is the record). Symbols draw in [-1, 1] glyph space, y down:
 //   GRID   — symbol content lives in the +/-0.6 box; round forms may overshoot to +/-0.66 for optical balance.
 //   STROKE — every line is the ONE hairline weight (the GlyphStroke token) with round caps: unions of capsule
 //            segments and circular arcs, never a second weight.
@@ -134,11 +134,6 @@ float facePosition(uint position, float2 p) {
 }
 
 float glyphDistance(uint glyphId, float2 p) {
-    // Atlas ids (>= 1024) are the reserved texture path; until it exists they draw nothing.
-    if (glyphId >= 1024u) {
-        return 1e3;
-    }
-
     switch (glyphId) {
         case 1u: return chevron(p);                                    // ArrowUp
         case 2u: return chevron(float2(p.y, -p.x));                    // ArrowRight
@@ -239,7 +234,7 @@ float numberDistance(uint number, float2 p) {
 
 // Returns rgb = the icon tint, a = the symbol coverage, for a point in [-1, 1] icon space.
 float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
-    if ((iconId == 0u) || (iconId >= 1024u)) {
+    if (iconId == 0u) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 

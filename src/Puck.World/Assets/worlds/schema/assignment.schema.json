@@ -1,0 +1,17 @@
+{
+  "description": "The kit\u2192entity assignment policy (the realized policy-as-data seam).",
+  "type": "object",
+  "properties": {
+    "sequence": {
+      "$ref": "./common.schema.json#/$defs/WorldSequence5"
+    },
+    "rows": {
+      "$ref": "./common.schema.json#/$defs/StringList"
+    }
+  },
+  "required": [
+    "sequence",
+    "rows"
+  ],
+  "additionalProperties": false
+}

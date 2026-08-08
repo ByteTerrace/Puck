@@ -8,7 +8,7 @@ namespace Puck.Input;
 /// leaking the engine's neutral position vocabulary. <see cref="Describe"/> gives the family-specific short
 /// label; <see cref="DescribePosition"/> gives the family-neutral spoken form ("the south face button") for a
 /// prompt that must work before any pad is connected. Pure string mapping — the text mirror of the binding
-/// bar's <c>BindingGlyphResolver</c> shader glyphs.
+/// bar's family glyphs (<c>Puck.Overlays</c>' <c>OverlayIconography</c>).
 /// </summary>
 public static class InputSourceLabels {
     /// <summary>Describes a source with the connected family's own vocabulary (face letters/shapes, L1 vs LB vs ZL, Options vs Menu vs Plus).</summary>
@@ -71,6 +71,18 @@ public static class InputSourceLabels {
                 _ => "Touchpad (click)",
             },
             InputSources.Gamepad.Mute => "Mute",
+            InputSources.Gamepad.LeftGrip => family switch {
+                GamepadType.SteamControllerTriton => "L5",
+                _ => "Left Grip",
+            },
+            InputSources.Gamepad.RightGrip => family switch {
+                GamepadType.SteamControllerTriton => "R5",
+                _ => "Right Grip",
+            },
+            InputSources.Gamepad.LeftUpperGrip => "L4",
+            InputSources.Gamepad.RightUpperGrip => "R4",
+            InputSources.Gamepad.QuickAccess => "QAM",
+            InputSources.Gamepad.TouchpadLeft => "Left Trackpad (click)",
             InputSources.Gamepad.Touchpad0 => family switch {
                 GamepadType.SteamController or GamepadType.SteamControllerTriton => "Right Trackpad",
                 _ => "Touchpad (finger 1)",
@@ -112,6 +124,12 @@ public static class InputSourceLabels {
             InputSources.Gamepad.Guide => "the guide button",
             InputSources.Gamepad.Touchpad => "the touchpad (clicked)",
             InputSources.Gamepad.Mute => "the mute button",
+            InputSources.Gamepad.LeftGrip => "the lower-left rear grip paddle",
+            InputSources.Gamepad.RightGrip => "the lower-right rear grip paddle",
+            InputSources.Gamepad.LeftUpperGrip => "the upper-left rear grip paddle",
+            InputSources.Gamepad.RightUpperGrip => "the upper-right rear grip paddle",
+            InputSources.Gamepad.QuickAccess => "the quick access menu button",
+            InputSources.Gamepad.TouchpadLeft => "the left trackpad (clicked)",
             InputSources.Gamepad.Touchpad0 => "the touchpad (first finger)",
             InputSources.Gamepad.Touchpad1 => "the touchpad (second finger)",
             InputSources.Gamepad.LeftStick => "the left stick",

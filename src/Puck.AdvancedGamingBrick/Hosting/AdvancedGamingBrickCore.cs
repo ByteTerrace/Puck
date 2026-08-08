@@ -65,16 +65,7 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
         m_machine.SerializeState(writer: m_timeTravelWriter);
-
-        var written = m_timeTravelWriter.WrittenSpan;
-
-        if (buffer.Length < written.Length) {
-            buffer = new byte[written.Length];
-        }
-
-        written.CopyTo(destination: buffer);
-
-        return written.Length;
+        return SnapshotBuffer.CopyWrittenState(writer: m_timeTravelWriter, buffer: ref buffer);
     }
 
     /// <inheritdoc/>

@@ -168,7 +168,8 @@ public interface ISdfSceneEmitter {
     void Emit(SdfProgramBuilder builder, in SdfEmitContext context);
     int DynamicSlotCount => 0;
     void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) { }
-    int Revision => 0;
+    int RevisionComponentCount => 0;
+    void WriteRevision(Span<int> destination) { }
     bool OwnsMaterialScope => false;
 }
 ```
@@ -176,9 +177,17 @@ public interface ISdfSceneEmitter {
 Each emitter owns one concern — a room's fixed geometry, a sculpted scene, a
 pool of live creatures — and contributes to a *shared* builder instead of
 building its own program. `SdfCompositionFrameSource` holds a fixed list of
-these, assigns each one a contiguous range of dynamic-transform slots, sums
-their `Revision`s to know when to rebuild, and rebuilds by calling every
+these, assigns each one a contiguous range of dynamic-transform slots, compares
+their revision components to know when to rebuild, and rebuilds by calling every
 emitter's `Emit` in order against one builder.
+
+An emitter that watches several counters reports them *side by side* rather
+than as one number, and the host compares the flattened vector elementwise.
+That is not fussiness: not every counter is monotonic — one is assigned from a
+server-supplied snapshot value and can move down — so a sum lets one counter
+rising cancel another falling, leaving the host holding a stale program with
+nothing to report it. A digest would only make that collision unlikely; keeping
+the components apart makes it impossible.
 
 Why bother, instead of one big hand-written `BuildProgram`? Three reasons
 that only compound as a world grows:
@@ -311,6 +320,6 @@ someone hits it, not at build time.
 - [docs/sdf-wiki/materials-and-primitives.md](../sdf-wiki/materials-and-primitives.md)
   — the material-blend-at-seams background behind the material-scope
   mechanism.
-- [.agents/skills/sdf-world/SKILL.md](../../.agents/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
   — the composition/anchor surface contract this chapter's emitter section
   summarizes, and the C#↔HLSL sync-pair table for every op named above.

@@ -1,0 +1,9 @@
+{
+  "schema": "puck.sdf.v1",
+  "materials": [
+    { "albedo": [1, 1, 1] }
+  ],
+  "ops": [
+    { "op": "sphere", "radius": 1, "material": 0 }
+  ]
+}

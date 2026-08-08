@@ -1,0 +1,46 @@
+{
+  "description": "The simulation-affecting participant input-hold policy. Every checked-in world authors the section explicitly; measured tick counts arrive on tick-stamped intent submissions and never read a clock here.",
+  "type": "object",
+  "properties": {
+    "ceilingTicks": {
+      "description": "The maximum applied hold, in simulation ticks.",
+      "type": "integer"
+    },
+    "lowerAfterTicks": {
+      "description": "How many simulation ticks a lower target must remain unchanged before descent.",
+      "type": "integer"
+    },
+    "defaultTicks": {
+      "description": "The authored hold floor for participants without an override.",
+      "type": "integer"
+    },
+    "equalizeByDefault": {
+      "description": "Whether participants without an override share the maximum.",
+      "type": "boolean"
+    },
+    "participants": {
+      "description": "Participant-specific floor and distribution overrides, keyed by body index.",
+      "type": "array",
+      "items": {
+        "description": "One participant-specific input-hold override. An omitted body uses the section defaults.",
+        "type": "object",
+        "properties": {
+          "bodyIndex": {
+            "description": "The participant\u0027s 0-based population body index.",
+            "type": "integer"
+          },
+          "ticks": {
+            "description": "The authored hold floor, in simulation ticks.",
+            "type": "integer"
+          },
+          "equalized": {
+            "description": "Whether this participant contributes to and receives the shared maximum.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

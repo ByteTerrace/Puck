@@ -1,0 +1,2432 @@
+{
+  "$defs": {
+    "ShadowTier": {
+      "description": "The soft-shadow tier the preset selects.",
+      "enum": [
+        "Off",
+        "Low",
+        "Medium",
+        "High"
+      ]
+    },
+    "WorldRenderScaleTier": {
+      "description": "The render-scale tier the preset selects.",
+      "enum": [
+        "Native",
+        "ThreeQuarter",
+        "Half",
+        "Quarter",
+        "Eighth"
+      ]
+    },
+    "None": {
+      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, NEVER black).",
+      "properties": {
+        "$type": {
+          "const": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestPattern": {
+      "description": "The deterministic animated test pattern (TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
+      "properties": {
+        "$type": {
+          "const": "testPattern"
+        },
+        "width": {
+          "description": "The pattern framebuffer width in pixels.",
+          "type": "integer"
+        },
+        "height": {
+          "description": "The pattern framebuffer height in pixels.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "Machine": {
+      "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
+      "properties": {
+        "$type": {
+          "const": "machine"
+        },
+        "engine": {
+          "description": "The screen-machine engine id (e.g. gaming-brick).",
+          "type": "string"
+        },
+        "contentPath": {
+          "description": "The content file (a cartridge ROM) the machine boots, or empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+          "type": "string"
+        },
+        "options": {
+          "description": "The engine-specific options string, or null for the engine\u0027s defaults.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "engine",
+        "contentPath",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "WorldFeedProfile": {
+      "description": "The preferred capture extent and maximum upload cadence.",
+      "type": "object",
+      "properties": {
+        "width": {
+          "description": "Requested output width in pixels.",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Requested output height in pixels.",
+          "type": "integer"
+        },
+        "refreshRateHz": {
+          "description": "Maximum pull/upload cadence; it must divide the engine time base exactly.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Camera": {
+      "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
+      "properties": {
+        "$type": {
+          "const": "camera"
+        },
+        "profile": {
+          "$ref": "#/$defs/WorldFeedProfile"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "View": {
+      "description": "A named view from the presentation view stack, such as a monitor showing another camera\u0027s output.",
+      "properties": {
+        "$type": {
+          "const": "view"
+        },
+        "cameraName": {
+          "description": "The registered view name this slot samples.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cameraName"
+      ],
+      "additionalProperties": false
+    },
+    "WorldFeedProfile2": {
+      "description": "This capture consumer\u0027s output extent and maximum refresh cadence.",
+      "type": "object",
+      "properties": {
+        "width": {
+          "description": "Requested output width in pixels.",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Requested output height in pixels.",
+          "type": "integer"
+        },
+        "refreshRateHz": {
+          "description": "Maximum pull/upload cadence; it must divide the engine time base exactly.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Capture": {
+      "description": "A live compositor capture feed \u2014 a desktop window keyed by title, or a whole monitor keyed by index. The selector is the altitude of the primitive: MonitorIndex null is window mode; non-null is whole-monitor mode (and WindowTitle is unused).",
+      "properties": {
+        "$type": {
+          "const": "capture"
+        },
+        "windowTitle": {
+          "description": "The captured window\u0027s title (window mode; ignored when MonitorIndex is set).",
+          "type": "string"
+        },
+        "profile": {
+          "$ref": "#/$defs/WorldFeedProfile2"
+        },
+        "monitorIndex": {
+          "description": "The 0-based monitor to capture whole (0 = primary), or null for window mode.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "windowTitle",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "Console": {
+      "description": "A screen showing the DEVELOPER CONSOLE as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel AND process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the SAME content to the screen-space overlay. At most one console source may be LIVE (declared) at a time; an unselected console entry sitting in a magazine is legal.",
+      "properties": {
+        "$type": {
+          "const": "console"
+        },
+        "rows": {
+          "description": "Console text rows the framebuffer composes, 1..120. Sizes the CPU buffer.",
+          "type": "integer",
+          "default": 24
+        },
+        "columns": {
+          "description": "Console text columns, 1..400.",
+          "type": "integer",
+          "default": 64
+        },
+        "procedural": {
+          "description": "When true the slot shows the sibling generated pattern instead of console text \u2014 carried as a MODE of this variant rather than as a seventh union case.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "Qr": {
+      "description": "An AUTHORABLE QR code (ISO/IEC 18004) \u2014 the document names a payload string and the engine derives the scannable module grid (QrEncoder), rendered CPU-side into a STATIC B8G8R8A8 framebuffer and uploaded once, never re-derived from the tick like TestPattern. The driving case is a link one human hands another off an in-world screen. This record is the document-authored half only \u2014 nothing here mints a payload at runtime; screen.source \u003Cindex\u003E qr is the live-authoring twin, and world.identify is the one caller that MINTS its payload (the running world\u0027s own documentId and content-address pin) rather than being handed one.",
+      "properties": {
+        "$type": {
+          "const": "qr"
+        },
+        "payload": {
+          "description": "The encoded string, UTF-8 byte mode. Must fit within version MaxSupportedVersion at EcLevel \u2014 validation refuses an oversized payload BY NAME (its byte count against the level\u0027s capacity), never truncates it.",
+          "type": "string"
+        },
+        "ecLevel": {
+          "description": "The error-correction level: L, M, Q, or H (case-insensitive, parsed by TryParse). Defaults to M.",
+          "type": "string",
+          "default": "M"
+        },
+        "quietZoneModules": {
+          "description": "The white quiet-zone border width in modules on every side. ISO/IEC 18004 recommends at least 4; a smaller value authors a QR a real scanner may refuse to read (a borderless QR does not scan) \u2014 the document may still author it (validation only refuses a negative width), since a screen\u0027s physical framing sometimes supplies the margin itself.",
+          "type": "integer",
+          "default": 4
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "Entity": {
+      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+      "properties": {
+        "$type": {
+          "const": "entity"
+        },
+        "index": {
+          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "EntityPart": {
+      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+      "properties": {
+        "$type": {
+          "const": "entityPart"
+        },
+        "index": {
+          "description": "The 0-based entity index.",
+          "type": "integer"
+        },
+        "partId": {
+          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "partId"
+      ],
+      "additionalProperties": false
+    },
+    "Placement": {
+      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+      "properties": {
+        "$type": {
+          "const": "placement"
+        },
+        "placementId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        },
+        "shapeId": {
+          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "placementId",
+        "shapeId"
+      ],
+      "additionalProperties": false
+    },
+    "Int32List": {
+      "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated 0..127.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "integer"
+      }
+    },
+    "Group": {
+      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which Follow consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+      "properties": {
+        "$type": {
+          "const": "group"
+        },
+        "indices": {
+          "$ref": "#/$defs/Int32List"
+        },
+        "smoothRate": {
+          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "indices",
+        "smoothRate"
+      ],
+      "additionalProperties": false
+    },
+    "Follow": {
+      "description": "Follows the reference frame at a fixed offset.",
+      "properties": {
+        "$type": {
+          "const": "follow"
+        },
+        "offset": {
+          "description": "The eye offset in world or reference-local axes."
+        },
+        "worldAxes": {
+          "description": "Whether Offset uses world axes.",
+          "type": "boolean"
+        },
+        "spreadPullback": {
+          "description": "The group-spread multiplier applied to the offset.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset",
+        "worldAxes",
+        "spreadPullback"
+      ],
+      "additionalProperties": false
+    },
+    "Orbit": {
+      "description": "Orbits a reference-frame pivot.",
+      "properties": {
+        "$type": {
+          "const": "orbit"
+        },
+        "distance": {
+          "description": "The orbit distance.",
+          "type": "number"
+        },
+        "yaw": {
+          "description": "The orbit heading in radians.",
+          "type": "number"
+        },
+        "pitch": {
+          "description": "The orbit tilt in radians.",
+          "type": "number"
+        },
+        "pivotOffset": {
+          "description": "The world-axis offset from the reference-frame origin to the pivot."
+        }
+      },
+      "required": [
+        "distance",
+        "yaw",
+        "pitch",
+        "pivotOffset"
+      ],
+      "additionalProperties": false
+    },
+    "Static": {
+      "description": "Holds an eye position in world or reference-local axes.",
+      "properties": {
+        "$type": {
+          "const": "static"
+        },
+        "position": {
+          "description": "The eye position or offset."
+        },
+        "worldAxes": {
+          "description": "Whether Position is an absolute world position.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "position",
+        "worldAxes"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraTrackClockDomain": {
+      "description": "The clock that advances the track.",
+      "enum": [
+        "PresentationTime",
+        "AuthoritativeTick"
+      ]
+    },
+    "WorldCameraTrackInterpolation": {
+      "description": "The interpolation applied between adjacent keyframes.",
+      "enum": [
+        "Step",
+        "Linear"
+      ]
+    },
+    "WorldCameraTrackKeyframe": {
+      "description": "One camera-track keyframe at a clock-relative tick.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tick": {
+          "description": "The non-negative track-relative tick.",
+          "type": "integer"
+        },
+        "position": {
+          "description": "The camera position at the tick."
+        }
+      },
+      "required": [
+        "tick",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraTrack": {
+      "description": "The durable keyframes, interpolation, and clock domain.",
+      "type": "object",
+      "properties": {
+        "clockDomain": {
+          "$ref": "#/$defs/WorldCameraTrackClockDomain"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/WorldCameraTrackInterpolation"
+        },
+        "keyframes": {
+          "description": "The keyframes in strictly increasing tick order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldCameraTrackKeyframe"
+          }
+        }
+      },
+      "required": [
+        "clockDomain",
+        "interpolation",
+        "keyframes"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraTrackLoopMode": {
+      "description": "The end-of-track playback policy.",
+      "enum": [
+        "Once",
+        "Loop",
+        "PingPong"
+      ]
+    },
+    "WorldCameraTrackPlayback": {
+      "description": "The playback start and loop policy.",
+      "type": "object",
+      "properties": {
+        "startTick": {
+          "description": "The selected clock\u0027s absolute tick at which playback starts.",
+          "type": "integer"
+        },
+        "loopMode": {
+          "$ref": "#/$defs/WorldCameraTrackLoopMode"
+        }
+      },
+      "required": [
+        "startTick",
+        "loopMode"
+      ],
+      "additionalProperties": false
+    },
+    "Track": {
+      "description": "Evaluates a durable camera track through separate playback state.",
+      "properties": {
+        "$type": {
+          "const": "track"
+        },
+        "definition": {
+          "$ref": "#/$defs/WorldCameraTrack"
+        },
+        "playback": {
+          "$ref": "#/$defs/WorldCameraTrackPlayback"
+        },
+        "worldAxes": {
+          "description": "Whether evaluated positions are absolute world positions.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "definition",
+        "playback",
+        "worldAxes"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraMotion": {
+      "description": "The camera-local eye motion evaluated after its reference frame resolves.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Follow"
+        },
+        {
+          "$ref": "#/$defs/Orbit"
+        },
+        {
+          "$ref": "#/$defs/Static"
+        },
+        {
+          "$ref": "#/$defs/Track"
+        }
+      ]
+    },
+    "Anchor": {
+      "description": "Looks at an offset from the resolved reference frame.",
+      "properties": {
+        "$type": {
+          "const": "anchor"
+        },
+        "offset": {
+          "description": "The target offset."
+        },
+        "worldAxes": {
+          "description": "Whether Offset uses world axes.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "offset",
+        "worldAxes"
+      ],
+      "additionalProperties": false
+    },
+    "Forward": {
+      "description": "Looks along the reference frame\u0027s forward axis.",
+      "properties": {
+        "$type": {
+          "const": "forward"
+        },
+        "focusDistance": {
+          "description": "The finite target distance along forward.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "focusDistance"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPoint": {
+      "description": "Looks at a fixed world-space point.",
+      "properties": {
+        "$type": {
+          "const": "worldPoint"
+        },
+        "target": {
+          "description": "The world-space target."
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraAim": {
+      "description": "The framing policy that selects a target from the resolved eye and reference frame.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Anchor"
+        },
+        {
+          "$ref": "#/$defs/Forward"
+        },
+        {
+          "$ref": "#/$defs/WorldPoint"
+        }
+      ]
+    },
+    "WorldCameraLens": {
+      "description": "The optical state applied to the rendered camera.",
+      "type": "object",
+      "properties": {
+        "fieldOfViewRadians": {
+          "description": "The vertical field of view in radians.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "fieldOfViewRadians"
+      ],
+      "additionalProperties": false
+    },
+    "Disc": {
+      "description": "A planar disc centered on the consumer\u0027s origin.",
+      "properties": {
+        "$type": {
+          "const": "disc"
+        },
+        "radius": {
+          "description": "The disc radius.",
+          "type": "number"
+        },
+        "sampleCount": {
+          "description": "The radial fill count, or null to use the consumer\u0027s requested count.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "radius"
+      ],
+      "additionalProperties": false
+    },
+    "Points": {
+      "description": "A cycle of authored spawn poses, each expanded by a planar square.",
+      "properties": {
+        "$type": {
+          "const": "points"
+        },
+        "names": {
+          "description": "The spawn-point names.",
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "halfExtent": {
+          "description": "The square half-extent on X and Z.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "names",
+        "halfExtent"
+      ],
+      "additionalProperties": false
+    },
+    "Lattice": {
+      "description": "A finite two-axis lattice local to a placement.",
+      "properties": {
+        "$type": {
+          "const": "lattice"
+        },
+        "stepA": {
+          "description": "The first per-copy step."
+        },
+        "countA": {
+          "description": "The copy count along StepA.",
+          "type": "integer"
+        },
+        "stepB": {
+          "description": "The second per-copy step."
+        },
+        "countB": {
+          "description": "The copy count along StepB.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepA",
+        "countA",
+        "stepB",
+        "countB"
+      ],
+      "additionalProperties": false
+    },
+    "WorldDistributionRegion": {
+      "description": "The region to fill.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Disc"
+        },
+        {
+          "$ref": "#/$defs/Points"
+        },
+        {
+          "$ref": "#/$defs/Lattice"
+        }
+      ]
+    },
+    "WorldSequence": {
+      "description": "The per-index fill sequence.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSequence2": {
+      "description": "The angular phase sequence.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSequence3": {
+      "description": "The scalar weave-frequency variation sequence.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSequence4": {
+      "description": "The paired activity-rate and altitude variation sequence.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "WorldGeneratorSource": {
+      "description": "Which draw shape this source fires.",
+      "enum": [
+        "Markov",
+        "UniformRange",
+        "WeightedNumeric",
+        "StreamDraw"
+      ],
+      "default": "Markov"
+    },
+    "WorldGeneratorAlternative": {
+      "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves INTO after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key IS the process state, so an author folds exactly as much history into it as the chain needs.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "token": {
+          "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
+          "type": "string"
+        },
+        "weight": {
+          "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
+          "type": "integer"
+        },
+        "next": {
+          "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling)."
+        }
+      },
+      "required": [
+        "token",
+        "weight",
+        "next"
+      ],
+      "additionalProperties": false
+    },
+    "WorldGeneratorContext": {
+      "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "key": {
+          "description": "The stable context key, unique within the generator."
+        },
+        "alternatives": {
+          "description": "The weighted alternatives out of this context, or empty for a terminal context.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldGeneratorAlternative"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "WorldGeneratorContextList": {
+      "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldGeneratorContext"
+      },
+      "default": null
+    },
+    "WorldGeneratorMode": {
+      "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
+      "enum": [
+        "WithReplacement",
+        "WithoutReplacement",
+        "ReshuffleOnExhaustion"
+      ],
+      "default": "WithReplacement"
+    },
+    "WorldGeneratorWeightedNumeric": {
+      "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "value": {
+          "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
+          "type": "integer"
+        },
+        "weight": {
+          "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "WorldGeneratorWeightedNumericList": {
+      "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldGeneratorWeightedNumeric"
+      },
+      "default": null
+    },
+    "WorldGenerator": {
+      "description": "An inline anonymous source \u2014 or null when Source names a declared one.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/WorldGeneratorSource"
+        },
+        "start": {
+          "default": null
+        },
+        "bound": {
+          "description": "Markov only: the maximum tokens ONE emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
+          "type": "integer",
+          "default": 1
+        },
+        "contexts": {
+          "$ref": "#/$defs/WorldGeneratorContextList"
+        },
+        "mode": {
+          "$ref": "#/$defs/WorldGeneratorMode"
+        },
+        "rangeMin": {
+          "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. RAW-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site), UNLIKE a site row\u0027s own min/max, which a fixed row authors as decimal text: a source is not bound to one site, so this declaration cannot know the kind it will write and has no honest decimal spelling to offer.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "rangeMax": {
+          "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "weighted": {
+          "$ref": "#/$defs/WorldGeneratorWeightedNumericList"
+        }
+      },
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldDrawTiming": {
+      "description": "When this site draws and whether it may be redrawn (see WorldDrawTiming).",
+      "enum": [
+        "Boot",
+        "TickPeriod",
+        "Event"
+      ],
+      "default": "Boot"
+    },
+    "ActionFact": {
+      "enum": [
+        "Grounded",
+        "Airborne",
+        "Rising",
+        "Falling",
+        "AffectedBy",
+        "Submerged",
+        "AtSurface"
+      ]
+    },
+    "Now": {
+      "description": "The fact holds this tick.",
+      "properties": {
+        "$type": {
+          "const": "now"
+        },
+        "fact": {
+          "$ref": "#/$defs/ActionFact"
+        }
+      },
+      "required": [
+        "fact"
+      ],
+      "additionalProperties": false
+    },
+    "Recently": {
+      "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
+      "properties": {
+        "$type": {
+          "const": "recently"
+        },
+        "fact": {
+          "$ref": "#/$defs/ActionFact"
+        },
+        "windowSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fact",
+        "windowSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "ActionStateComparison": {
+      "description": "The comparison to apply.",
+      "enum": [
+        "Equal",
+        "NotEqual",
+        "Less",
+        "LessOrEqual",
+        "Greater",
+        "GreaterOrEqual"
+      ]
+    },
+    "CompareState": {
+      "description": "Compares a named state cell against either a fixed authored value, or \u2014 WORLD SCOPE ONLY \u2014 ANOTHER named state cell/reserved channel read live at the SAME evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a MOVING threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the SAME two-sided comparison, never a new mechanism.",
+      "properties": {
+        "$type": {
+          "const": "compareState"
+        },
+        "state": {
+          "description": "At BODY scope, a named counter slot the kit declares. At WORLD scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison"
+        },
+        "value": {
+          "description": "The authored constant comparand, or null when ComparandState spells the comparand instead. Required (non-null) at body scope, where a comparand row reference is refused.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "At WORLD scope, the CELL inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]). At body scope a non-null key is refused: a per-body action-state slot is not keyed, and a parsed-and-discarded field is worse than no field.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandState": {
+          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandKey": {
+          "description": "The CELL inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "TimerElapsed": {
+      "description": "Whether a named timer slot has drained.",
+      "properties": {
+        "$type": {
+          "const": "timerElapsed"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "All": {
+      "description": "Every inner predicate holds (conjunction).",
+      "properties": {
+        "$type": {
+          "const": "all"
+        },
+        "predicates": {
+          "$ref": "#/$defs/ActionPredicateList"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicate": {
+      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Now"
+        },
+        {
+          "$ref": "#/$defs/Recently"
+        },
+        {
+          "$ref": "#/$defs/CompareState"
+        },
+        {
+          "$ref": "#/$defs/TimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/All"
+        }
+      ]
+    },
+    "ActionPredicateList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ActionPredicate"
+      }
+    },
+    "All2": {
+      "description": "Every inner predicate holds (conjunction).",
+      "properties": {
+        "$type": {
+          "const": "all"
+        },
+        "predicates": {
+          "$ref": "#/$defs/ActionPredicateList"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicate2": {
+      "description": "The body-fact predicate that must hold for this row to win, or null for the always-row (permitted only as the final row).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Now"
+        },
+        {
+          "$ref": "#/$defs/Recently"
+        },
+        {
+          "$ref": "#/$defs/CompareState"
+        },
+        {
+          "$ref": "#/$defs/TimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/All2"
+        }
+      ],
+      "default": null
+    },
+    "MotionResponse": {
+      "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, FIRST match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "engageRate": {
+          "description": "The convergence rate (world units/second\u00B2) while the stick is deflected \u2014 acceleration toward the commanded target.",
+          "type": "number"
+        },
+        "releaseRate": {
+          "description": "The convergence rate while the stick is centered \u2014 deceleration toward rest (the coast).",
+          "type": "number"
+        },
+        "gate": {
+          "$ref": "#/$defs/ActionPredicate2"
+        }
+      },
+      "required": [
+        "engageRate",
+        "releaseRate"
+      ],
+      "additionalProperties": false
+    },
+    "MotionMoveFrame": {
+      "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
+      "enum": [
+        "Heading",
+        "World"
+      ]
+    },
+    "ActionPredicate3": {
+      "description": "The predicate that must hold to fire, or null for always.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Now"
+        },
+        {
+          "$ref": "#/$defs/Recently"
+        },
+        {
+          "$ref": "#/$defs/CompareState"
+        },
+        {
+          "$ref": "#/$defs/TimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/All2"
+        }
+      ]
+    },
+    "ActionTarget": {
+      "enum": [
+        "Self",
+        "ProducerTarget",
+        "AffectingSubject"
+      ],
+      "default": "Self"
+    },
+    "SetVerticalVelocity": {
+      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded model gravity owns its decay; under the free model it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
+      "properties": {
+        "$type": {
+          "const": "setVerticalVelocity"
+        },
+        "velocity": {
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget"
+        }
+      },
+      "required": [
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "ScaleVerticalVelocity": {
+      "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
+      "properties": {
+        "$type": {
+          "const": "scaleVerticalVelocity"
+        },
+        "factor": {
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget"
+        }
+      },
+      "required": [
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "PlanarImpulse": {
+      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the model\u0027s motion \u2014 integration itself is untouched.",
+      "properties": {
+        "$type": {
+          "const": "planarImpulse"
+        },
+        "bodyDirection": {},
+        "speed": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget"
+        }
+      },
+      "required": [
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "ActionTarget2": {
+      "description": "The addressed entity \u2014 body scope only; a non-Self target is refused at world scope, where there is no entity to select.",
+      "enum": [
+        "Self",
+        "ProducerTarget",
+        "AffectingSubject"
+      ],
+      "default": "Self"
+    },
+    "SetState": {
+      "description": "Writes a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
+      "properties": {
+        "$type": {
+          "const": "setState"
+        },
+        "state": {
+          "description": "The counter slot (body scope) or state row name (world scope).",
+          "type": "string"
+        },
+        "value": {
+          "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 WORLD SCOPE ONLY, exactly one of the two is authored (refused by name when both or neither are present, the SAME duality CompareState\u0027s own comparand carries). Required (non-null) at body scope, where a live copy source is refused.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget2"
+        },
+        "key": {
+          "description": "The CELL inside State at world scope \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name). Refused at body scope.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Value): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read LIVE at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the SAME operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The CELL inside FromState, on the same (row, key) terms as Key. Refused when FromState names a reserved channel or is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "ActionTarget3": {
+      "description": "The addressed entity \u2014 body scope only.",
+      "enum": [
+        "Self",
+        "ProducerTarget",
+        "AffectingSubject"
+      ],
+      "default": "Self"
+    },
+    "AddState": {
+      "description": "Adds to a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
+      "properties": {
+        "$type": {
+          "const": "addState"
+        },
+        "state": {
+          "description": "The counter slot (body scope) or state row name (world scope).",
+          "type": "string"
+        },
+        "value": {
+          "description": "The literal addend, or null when FromState spells a live addend instead \u2014 see Value\u0027s remarks; the same value/from duality, required (non-null) at body scope.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget3"
+        },
+        "key": {
+          "description": "The CELL inside State at world scope; refused at body scope.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "WORLD SCOPE ONLY \u2014 see FromState\u0027s remarks; here the addend is read live rather than the replacement.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The CELL inside FromState \u2014 see FromKey.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "StartTimer": {
+      "description": "Starts a named timer slot with an authored duration.",
+      "properties": {
+        "$type": {
+          "const": "startTimer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget"
+        }
+      },
+      "required": [
+        "state",
+        "seconds"
+      ],
+      "additionalProperties": false
+    },
+    "ActionTarget4": {
+      "description": "The subject source.",
+      "enum": [
+        "Self",
+        "ProducerTarget",
+        "AffectingSubject"
+      ],
+      "default": "AffectingSubject"
+    },
+    "Designate": {
+      "description": "Submits the selected subject into a named target register.",
+      "properties": {
+        "$type": {
+          "const": "designate"
+        },
+        "register": {
+          "description": "The authored target-register name.",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/ActionTarget4"
+        }
+      },
+      "required": [
+        "register"
+      ],
+      "additionalProperties": false
+    },
+    "Generate": {
+      "description": "Redraws a DRAW SITE (a state row declaring a WorldDraw) \u2014 the ONE effect admissible at BOTH scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the SAME WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s MOMENT is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is STAGED during the body\u0027s advance and enqueued for the NEXT tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the DOCUMENT rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
+      "properties": {
+        "$type": {
+          "const": "generate"
+        },
+        "row": {
+          "description": "The draw site\u0027s row name. One name, not a (source, destination) pair: a site\u0027s source is its own facet and a site is a scalar slot, so there is nothing else to address.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldHudRect": {
+      "description": "The panel\u0027s viewport rect, normalized to SCREEN space.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "description": "The rect\u0027s left edge, normalized.",
+          "type": "number"
+        },
+        "y": {
+          "description": "The rect\u0027s top edge, normalized.",
+          "type": "number"
+        },
+        "width": {
+          "description": "The rect\u0027s width, normalized \u2014 must be positive.",
+          "type": "number"
+        },
+        "height": {
+          "description": "The rect\u0027s height, normalized \u2014 must be positive.",
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldHudLayer": {
+      "description": "Which band the panel draws in.",
+      "enum": [
+        "Under",
+        "Over",
+        "Replace"
+      ]
+    },
+    "WorldHudPanelStyle": {
+      "description": "The panel\u0027s chrome recipe.",
+      "enum": [
+        "Panel",
+        "Strip",
+        "Chip"
+      ]
+    },
+    "WorldHudElementKind": {
+      "description": "The element\u0027s rendered kind.",
+      "enum": [
+        "Rect",
+        "Text",
+        "Gauge"
+      ]
+    },
+    "WorldHudRect2": {
+      "description": "The element\u0027s rect, normalized to the OWNING PANEL\u0027s local space.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "description": "The rect\u0027s left edge, normalized.",
+          "type": "number"
+        },
+        "y": {
+          "description": "The rect\u0027s top edge, normalized.",
+          "type": "number"
+        },
+        "width": {
+          "description": "The rect\u0027s width, normalized \u2014 must be positive.",
+          "type": "number"
+        },
+        "height": {
+          "description": "The rect\u0027s height, normalized \u2014 must be positive.",
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldHudStyleToken": {
+      "description": "The element\u0027s color role.",
+      "enum": [
+        "Primary",
+        "Dim",
+        "Accent",
+        "Positive",
+        "Warning",
+        "Danger"
+      ]
+    },
+    "WorldHudElement": {
+      "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its LOCAL rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound TEXT element\u0027s live value REPLACES the authored literal; a bound GAUGE element\u0027s live value drives its fill; an unbound gauge draws empty).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "id": {
+          "description": "The element\u0027s stable id (unique within the owning panel \u2014 the world.row.set hud.panels/ .remove mutation address).",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/WorldHudElementKind"
+        },
+        "rect": {
+          "$ref": "#/$defs/WorldHudRect2"
+        },
+        "style": {
+          "$ref": "#/$defs/WorldHudStyleToken"
+        },
+        "text": {
+          "description": "The authored literal string a Text element draws when neither Binding nor Template is set; ignored for Rect and Gauge. Omitted from the wire when null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "binding": {
+          "description": "A closed HudBindingVocabulary token, or null for an unbound element. Refused alongside Template \u2014 exactly one live-value source, never both. Omitted from the wire when null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "template": {
+          "description": "A Text element\u0027s TEMPLATE string \u2014 authored literal text interleaved with {token} placeholders, each a closed HudBindingVocabulary token resolved through the SAME operand path Binding uses (see HudTemplate for the brace/escape grammar). A richer binding source than Binding \u2014 many live facts composed into one string instead of one \u2014 never both on the same element. Ignored for Rect and Gauge (a gauge\u0027s fill is one fraction; it has no composed string to show). Omitted from the wire when null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "rect",
+        "style"
+      ],
+      "additionalProperties": false
+    },
+    "WorldHudElementList": {
+      "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldHudElement"
+      }
+    },
+    "WorldHudPanel": {
+      "description": "The whole panel row, elements included.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The panel\u0027s stable id (unique within the section \u2014 the world.row.set hud.panels/world.row.remove hud.panels mutation address).",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/WorldHudRect"
+        },
+        "layer": {
+          "$ref": "#/$defs/WorldHudLayer"
+        },
+        "style": {
+          "$ref": "#/$defs/WorldHudPanelStyle"
+        },
+        "elements": {
+          "$ref": "#/$defs/WorldHudElementList"
+        }
+      },
+      "required": [
+        "id",
+        "rect",
+        "layer",
+        "style",
+        "elements"
+      ],
+      "additionalProperties": false
+    },
+    "UpsertHudPanel": {
+      "description": "Upserts a whole HUD panel row \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no HUD panel of its own to author). Admits UpsertHudPanel into the world-rule effect set through the SAME seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
+      "properties": {
+        "$type": {
+          "const": "upsertHudPanel"
+        },
+        "panel": {
+          "$ref": "#/$defs/WorldHudPanel"
+        }
+      },
+      "required": [
+        "panel"
+      ],
+      "additionalProperties": false
+    },
+    "RemoveHudPanel": {
+      "description": "Removes a HUD panel row by id \u2014 WORLD SCOPE ONLY. See UpsertHudPanel\u0027s remarks.",
+      "properties": {
+        "$type": {
+          "const": "removeHudPanel"
+        },
+        "id": {
+          "description": "The panel id to remove.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "WorldDistribution": {
+      "description": "The placement distribution, or null for a single copy. Static placements currently accept a lattice region with a none fill. Refused together with Attach.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "region": {
+          "$ref": "#/$defs/WorldDistributionRegion"
+        },
+        "fill": {
+          "$ref": "#/$defs/WorldSequence"
+        }
+      },
+      "required": [
+        "region",
+        "fill"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldPlacementMirror": {
+      "description": "The authored local reflection plane, or null for no reflected copy. Refused together with Attach.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "normal": {
+          "description": "The plane normal."
+        },
+        "offset": {
+          "description": "The signed plane offset along the normalized Normal.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "normal",
+        "offset"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldEmission": {
+      "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement ROOT only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "patchId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        },
+        "level": {
+          "description": "The emitter level (1 = unity), bounded by MaxLevel.",
+          "type": "number"
+        },
+        "radius": {
+          "description": "The audible support radius in world units, or null for the audio defaults\u0027 DefaultSpeakerRadius.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "patchId",
+        "level"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldSolid": {
+      "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider ONLY (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the FIELD provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "margin": {
+          "description": "The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "margin"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldDistribution2": {
+      "description": "The region and deterministic fill sequence that place the bodies relative to the placement root.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "region": {
+          "$ref": "#/$defs/WorldDistributionRegion"
+        },
+        "fill": {
+          "$ref": "#/$defs/WorldSequence"
+        }
+      },
+      "required": [
+        "region",
+        "fill"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldPlacementInhabit": {
+      "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both SPAWN its own driven bodies and RIDE another body\u0027s pose.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "kit": {
+          "description": "The Name the bodies move under. Null resolves the creation\u0027s own Locomotion token AS a kit name \u2014 a creation declaring \u0022swim\u0022 inhabits the world\u0027s kit row named \u0022swim\u0022. Neither resolving is a loud rejection naming every kit the world declares.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "look": {
+          "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own CreationId.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "The live, idle, or named producer source the bodies wake on."
+        },
+        "count": {
+          "description": "How many bodies, bounded by the world\u0027s authored peer capacity.",
+          "type": "integer",
+          "default": 1
+        },
+        "distribution": {
+          "$ref": "#/$defs/WorldDistribution2"
+        }
+      },
+      "required": [
+        "kit",
+        "look",
+        "source"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldScreenSource": {
+      "description": "The screen source the face shows, in the existing WorldScreenSource vocabulary.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/None"
+        },
+        {
+          "$ref": "#/$defs/TestPattern"
+        },
+        {
+          "$ref": "#/$defs/Machine"
+        },
+        {
+          "$ref": "#/$defs/Camera"
+        },
+        {
+          "$ref": "#/$defs/View"
+        },
+        {
+          "$ref": "#/$defs/Capture"
+        },
+        {
+          "$ref": "#/$defs/Console"
+        },
+        {
+          "$ref": "#/$defs/Qr"
+        }
+      ]
+    },
+    "WorldPlacementPortal": {
+      "description": "The face\u0027s PORTAL facet (see WorldPlacementPortal) \u2014 absent (the default) means this face is not a door. OPTIONAL and TRAILING deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source \u2014 the door and the screen it shows are independent facts about the same face.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "destination": {
+          "description": "The Name of the references row naming the destination world. Must resolve to an existing row \u2014 an undeclared name refuses by name (see WorldDefinitionValidator). No boot-time file-existence check on the referenced document itself, exactly like WorldReference \u2014 resolving the DOCUMENT is a future consumer\u0027s job; resolving the NAME, against this document\u0027s own references section, is this facet\u0027s own.",
+          "type": "string"
+        },
+        "lifetime": {
+          "description": "How the destination instance is minted (see WorldPortalLifetime)."
+        },
+        "instance": {
+          "default": null
+        },
+        "travel": {
+          "default": null
+        }
+      },
+      "required": [
+        "destination",
+        "lifetime"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldPlacementFace": {
+      "description": "A per-instance override of one declared creation face\u0027s feed \u2014 the face twin of the emission facet\u0027s per-instance override channel.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "face": {
+          "description": "The declared Name to override.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/WorldScreenSource"
+        },
+        "portal": {
+          "$ref": "#/$defs/WorldPlacementPortal"
+        }
+      },
+      "required": [
+        "face",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementFaceList": {
+      "description": "Per-instance overrides of the creation\u0027s declared faces (null = every face shows its declared default). Omitted from the wire when null. Orthogonal to Attach (a content selector, not a transform) \u2014 composes freely, like every other facet that now tracks the dynamic pose.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldPlacementFace"
+      },
+      "default": null
+    },
+    "WorldPlacementRegion": {
+      "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a NAMED VOLUME the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "radius": {
+          "description": "The sensing radius, world units. Must be finite and positive (validated).",
+          "type": "number"
+        }
+      },
+      "required": [
+        "radius"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldPlacementAttach": {
+      "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "bodyIndex": {
+          "description": "The 0-based population entity index the placement rides \u2014 the SAME indexing Entity and the console\u0027s body:\u003Cn\u003E grant subject use, NOT the 1-based player.* seat number (body:1 is \u0022player 2\u0022). Validated within 0..the world\u0027s authored population capacity; the target need not be ACTIVE at author time (see remarks \u2014 an inactive body at RUNTIME makes the row contribute nothing, it does not refuse).",
+          "type": "integer"
+        },
+        "localOffset": {
+          "description": "The stamp\u0027s position offset in the body\u0027s own local frame, world units."
+        },
+        "localYawDegrees": {
+          "description": "The stamp\u0027s yaw offset from the body\u0027s own heading, degrees. Zero rides the body\u0027s exact facing.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "bodyIndex",
+        "localOffset"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "WorldPlacement": {
+      "description": "The whole placement row.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The row\u0027s stable string id (its mutation address).",
+          "type": "string"
+        },
+        "creationId": {
+          "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
+          "type": "string"
+        },
+        "position": {
+          "description": "The stamp position, world space. INERT (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+        },
+        "yawDegrees": {
+          "description": "The stamp yaw about \u002BY, degrees. Same ATTACH caveat as Position.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+          "type": "number"
+        },
+        "distribution": {
+          "$ref": "#/$defs/WorldDistribution"
+        },
+        "mirror": {
+          "$ref": "#/$defs/WorldPlacementMirror"
+        },
+        "emission": {
+          "$ref": "#/$defs/WorldEmission"
+        },
+        "solid": {
+          "$ref": "#/$defs/WorldSolid"
+        },
+        "inhabit": {
+          "$ref": "#/$defs/WorldPlacementInhabit"
+        },
+        "faceSources": {
+          "$ref": "#/$defs/WorldPlacementFaceList"
+        },
+        "region": {
+          "$ref": "#/$defs/WorldPlacementRegion"
+        },
+        "attach": {
+          "$ref": "#/$defs/WorldPlacementAttach"
+        }
+      },
+      "required": [
+        "id",
+        "creationId",
+        "position",
+        "yawDegrees",
+        "scale"
+      ],
+      "additionalProperties": false
+    },
+    "UpsertPlacement": {
+      "description": "Upserts a whole placement row \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no placement of its own to author). Admits UpsertPlacement into the world-rule effect set through the SAME seam Generate uses.",
+      "properties": {
+        "$type": {
+          "const": "upsertPlacement"
+        },
+        "placement": {
+          "$ref": "#/$defs/WorldPlacement"
+        }
+      },
+      "required": [
+        "placement"
+      ],
+      "additionalProperties": false
+    },
+    "RemovePlacement": {
+      "description": "Removes a placement row by id \u2014 WORLD SCOPE ONLY. See UpsertPlacement\u0027s remarks.",
+      "properties": {
+        "$type": {
+          "const": "removePlacement"
+        },
+        "id": {
+          "description": "The placement id to remove.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "Save": {
+      "description": "Writes a session snapshot of the world to its own loaded file \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no world file of its own to save). A rule gate now decides WHEN a save happens (an every-N-ticks cadence, a boss-defeated edge), closing the one gap the mutation substrate could not: a rule could already express any cadence over $tick or a state fact, but had nothing to FIRE that composed a save \u2014 every prior save was a human typing world.save, so a crashed server rewound to the last manual one.",
+      "properties": {
+        "$type": {
+          "const": "save"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ActionEffect": {
+      "description": "An authored operand row lowered to a BodyMotionOp and executed by the body instruction interpreter when its trigger fires.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SetVerticalVelocity"
+        },
+        {
+          "$ref": "#/$defs/ScaleVerticalVelocity"
+        },
+        {
+          "$ref": "#/$defs/PlanarImpulse"
+        },
+        {
+          "$ref": "#/$defs/SetState"
+        },
+        {
+          "$ref": "#/$defs/AddState"
+        },
+        {
+          "$ref": "#/$defs/StartTimer"
+        },
+        {
+          "$ref": "#/$defs/Designate"
+        },
+        {
+          "$ref": "#/$defs/Generate"
+        },
+        {
+          "$ref": "#/$defs/UpsertHudPanel"
+        },
+        {
+          "$ref": "#/$defs/RemoveHudPanel"
+        },
+        {
+          "$ref": "#/$defs/UpsertPlacement"
+        },
+        {
+          "$ref": "#/$defs/RemovePlacement"
+        },
+        {
+          "$ref": "#/$defs/Save"
+        }
+      ]
+    },
+    "ActionEffectList": {
+      "description": "The effects applied on fire, in order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ActionEffect"
+      }
+    },
+    "WorldSequence5": {
+      "description": "The sequence that selects a row.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "StringList": {
+      "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "CommandPhase": {
+      "enum": [
+        "Started",
+        "Active",
+        "Completed",
+        "Canceled",
+        null
+      ],
+      "default": null
+    },
+    "BindingActivatorDefinition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "mode": {
+          "enum": [
+            "Held",
+            "Tapped"
+          ],
+          "default": "Held"
+        },
+        "timeoutTicks": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "sequence"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "BindingPageEntryDefinition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "channel": {
+          "default": null
+        },
+        "scale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "activateOn": {
+          "$ref": "#/$defs/CommandPhase"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "default": null
+        },
+        "activator": {
+          "$ref": "#/$defs/BindingActivatorDefinition"
+        },
+        "mode": {
+          "enum": [
+            "Hold",
+            "Toggle"
+          ],
+          "default": "Hold"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "BindingPageEntryDefinitionList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BindingPageEntryDefinition"
+      }
+    },
+    "None2": {
+      "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
+      "properties": {
+        "$type": {
+          "const": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Machine2": {
+      "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index IS machine identity for screen-hosted machines. The validator checks only that the screen row EXISTS, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
+      "properties": {
+        "$type": {
+          "const": "machine"
+        },
+        "screenIndex": {
+          "description": "The declared Index whose hosted machine feeds this source.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "screenIndex"
+      ],
+      "additionalProperties": false
+    },
+    "Tune": {
+      "description": "A tune asset (WorldTune) played through a headless machine host \u2014 acquired while any speaker references it, released when orphaned (a runtime derivation, never a data concept).",
+      "properties": {
+        "$type": {
+          "const": "tune"
+        },
+        "tuneId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tuneId"
+      ],
+      "additionalProperties": false
+    },
+    "Synth": {
+      "description": "The world voice synth playing a patch asset (WorldPatch). Patches are MONO by construction: the feed\u0027s channel selectors degenerate to mix \u2014 documented, never rejected.",
+      "properties": {
+        "$type": {
+          "const": "synth"
+        },
+        "patchId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patchId"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSpeakerSource": {
+      "description": "The shared source identity this feed taps.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/None2"
+        },
+        {
+          "$ref": "#/$defs/Machine2"
+        },
+        {
+          "$ref": "#/$defs/Tune"
+        },
+        {
+          "$ref": "#/$defs/Synth"
+        }
+      ]
+    },
+    "WorldSpeakerFeed": {
+      "description": "The feed it plays (source \u002B channel \u002B gain).",
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/WorldSpeakerSource"
+        },
+        "channel": {
+          "description": "The stereo channel selector \u2014 ChannelMix, ChannelLeft, or ChannelRight.",
+          "type": "string"
+        },
+        "gain": {
+          "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "channel",
+        "gain"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSpeakerAttenuation": {
+      "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "radius": {
+          "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is CULLED (finite support IS the cull).",
+          "type": "number"
+        },
+        "curve": {
+          "description": "The falloff curve token (CurveSmoothstep or CurveLinear), or null for the audio-defaults curve.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "radius",
+        "curve"
+      ],
+      "additionalProperties": false,
+      "default": null
+    }
+  }
+}

@@ -1,0 +1,169 @@
+[
+  {
+    "Id": "reed-solomon.generator-roots-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "BuildGenerator"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ReedSolomon.BuildGenerator's produced coefficients at three byte-carried fields (degree 8 tail 0x1D, degree 8 tail 0x1B, degree 4 tail 0x03), both first-root conventions (0 and 1), and seven check-symbol counts from 1 through 68",
+        "Against": "Oracles.BinaryFieldPolynomialValue — the definition-form sum of coefficient times power, in BigInteger — applied to the produced coefficients at each root, where each root comes from Oracles.BinaryFieldRepeatedProduct's sequential fold. The generator is EVALUATED rather than rebuilt, so the reference performs a different operation from the subject entirely: the subject accumulates a product of linear factors leftward through a widening window, and nothing here forms a product of factors at all. A widening pass that shifted the wrong way, dropped the carried term, walked the roots in reverse, or started the run at the wrong power moves at least one root's value off zero. EXACT on both sides over GF(2), so the substrate condition does not arise.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the produced polynomial is monic and occupies exactly the requested degree, and it does NOT vanish one power past its declared root run. That second half is what gives the vanishing statement its teeth: a subject that returned the zero polynomial, or one whose root run is one longer than declared, satisfies every vanishing check and fails this one.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the one-power-past check is SKIPPED when that power has already appeared inside the declared root run, which happens at the degree-4 field once the check-symbol count approaches the multiplicative group's order of fifteen. There the generator legitimately vanishes at the next power and the assertion would be a false counterexample rather than evidence. The skip is decided from the oracle's own root set, never from the subject, and the degree-8 fields — where the group's order is 255 and every count here is far below it — carry the check at every swept count.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "reed-solomon.published-remainder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "BuildGenerator"
+      },
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "ComputeCheckSymbols"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BuildGenerator followed by ComputeCheckSymbols at GF(256) under the modulus t^8 + t^4 + t^3 + t^2 + 1, generator element 2, root run starting at the zeroth power, over the sixteen data codewords of the standard's worked example",
+        "Against": "A5 24 D4 C1 ED 36 C7 87 2C 55",
+        "Shared": "",
+        "Citation": "ISO/IEC 18004 Annex I's worked example — the numeric-mode string 01234567 at version 1, error-correction level M. The constant is authored outside this tree and outside this repository, by the body that defines the code, so agreement pins the generator construction, the division schedule, the modulus and the symbol order TOGETHER rather than one at a time. This is the leg that catches the class of defect no self-consistent check can: a transposed generator or a different degree-8 modulus still produces a well-formed code whose own syndromes vanish, and would pass every other law in this family while producing symbols that decode nowhere.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the OTHER degree-8 modulus — 0x11B, the catalog's BinaryFields.Degree8 — must NOT reproduce the published remainder. Without that assertion this claim would pass on a subject that ignored the field it was handed, since the published constant alone cannot distinguish reading the modulus from hard-coding its answer.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "reed-solomon.codeword-syndromes-vanish",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "BuildGenerator"
+      },
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "ComputeCheckSymbols"
+      },
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "ComputeSyndromes"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ReedSolomon.ComputeSyndromes at three byte-carried fields, both first-root conventions, seven check-symbol counts and eight message lengths from zero through 600 — read on the intact codeword AND on the same codeword with one bit flipped, so the agreement is over non-zero values rather than only over the all-zero answer",
+        "Against": "Oracles.BinaryFieldPolynomialValue, the definition-form sum of coefficient times power in BigInteger, at each root drawn from Oracles.BinaryFieldRepeatedProduct's sequential fold. The subject runs Horner — one multiply of a running accumulator per coefficient with the next coefficient folded in — so the two schedules touch different intermediate values in a different order, and a Horner loop that seeds wrong, folds on the wrong side of the multiply or walks the coefficients in the opposite order cannot agree with this by construction. EXACT on both sides over GF(2), so the substrate condition does not arise.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the systematic codeword — message followed by check symbols — vanishes at every root of its generator, the check span the subject writes is exactly the generator's degree long, and flipping ONE bit of any non-empty codeword disturbs at least one syndrome. The last of those is what stops the vanishing statement from being satisfied vacuously by a subject that answered zero unconditionally, and it is evaluated by the oracle rather than by the subject.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the message-length sweep reaches 600 symbols deliberately, which is past ReedSolomon's own stack threshold of 512, so the pooled working buffer and its clear-before-return are exercised rather than only the stack-allocated one. What no length here reaches is a working buffer large enough to fail the rent, and the pool's re-entry hygiene is asserted only in the sense that a later call at the same length produces the right answer — a renter from another consumer reading residue is not observable from inside this suite.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "reed-solomon.refusals-and-wide-carrier",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "BuildGenerator"
+      },
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "ComputeCheckSymbols"
+      },
+      {
+        "Type": "Puck.Maths.ReedSolomon",
+        "Name": "ComputeSyndromes"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every documented refusal of the three members, asserted by exception TYPE and by the parameter name it reports: a generator span too short to name a polynomial of degree one or more, a negative first root exponent, a check span whose length is not the generator's degree, and a generator whose leading coefficient is not one. A default-initialized BinaryField descriptor refuses all three members rather than answering — ComputeSyndromes included when no syndromes are requested at all, which is the one path that could otherwise return before the field was ever consulted. An empty message's check symbols are written as zeros rather than left as the caller found them.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the whole surface at the SIXTEEN-BIT carrier — BuildGenerator, ComputeCheckSymbols and ComputeSyndromes at GF(2^16) under tail 0x2B, over a forty-symbol message and eight check symbols",
+        "Against": "Oracles.BinaryFieldPolynomialValue at each root from Oracles.BinaryFieldRepeatedProduct, in BigInteger. The three byte-carried sweeps elsewhere in this family cannot see a defect that depends on the carrier's width — a truncation to eight bits, or a region call that narrowed its span wrongly — because at a byte carrier those are invisible. This leg is that operand class and claims nothing more.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the carrier sweep stops at sixteen bits. ReedSolomon is generic over every carrier BinaryField admits — uint, ulong and UInt128 as well — and none of those is reached by any law in this family, because the region ladder's vector rungs exist only at the byte and sixteen-bit widths and the wider carriers would run the same element-at-a-time path this leg already covers.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -52,7 +52,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
             // ID3D11Device1 carries OpenSharedResource1 (the NT-handle open).
             var device1Iid = ID3D11Device1.IID_Guid;
 
-            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(in device1Iid, out var device1), operation: "QueryInterface(ID3D11Device1)");
+            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
             m_device1 = (ID3D11Device1*)device1;
 
             // The event query CopyToTarget spins on: signaled when everything submitted before End has completed.

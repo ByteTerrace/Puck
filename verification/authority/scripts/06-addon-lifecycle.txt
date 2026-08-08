@@ -1,0 +1,13 @@
+world.addons
+world.revoke console mutate section:addons
+world.why console mutate section:addons
+world.addon.disable default
+world.addon.reload default
+world.addon.enable default
+world.addons
+world.grant console mutate section:addons
+world.addon.disable default
+world.addons
+world.addon.enable default
+world.addons
+wire.errors

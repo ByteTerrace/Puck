@@ -4,14 +4,17 @@ using Module = Wasmtime.Module;
 
 namespace Puck.Scripting;
 
-/// <summary>The static export-shape check run against a compiled module before it is ever instantiated: every
-/// required export (A.1) must be present with its exact signature and the linear memory must be exported. On
-/// failure the error names the offending export, matching the E.7 diagnostic shape.</summary>
+/// <summary>The static export-shape and import-surface check run against a compiled module before it is ever
+/// instantiated: every required export must be present with its exact signature, the linear memory must be
+/// exported, and — because an addon module is self-contained by contract — it must declare no import at all. On
+/// failure the error names the offending export or import.</summary>
 public static class AddonModuleValidator {
-    /// <summary>Validates that <paramref name="module"/> exports the frozen <c>puck.addon.v1</c> surface.</summary>
+    /// <summary>Validates that <paramref name="module"/> exports the frozen addon ABI surface and imports
+    /// nothing.</summary>
     /// <param name="module">The compiled module to validate.</param>
-    /// <param name="error">When this returns <see langword="false"/>, the offending-export message; otherwise empty.</param>
-    /// <returns><see langword="true"/> if the export surface matches the ABI; otherwise <see langword="false"/>.</returns>
+    /// <param name="error">When this returns <see langword="false"/>, the offending-export or offending-import message; otherwise empty.</param>
+    /// <returns><see langword="true"/> if the export surface matches the ABI and the module declares zero imports;
+    /// otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="module"/> is <see langword="null"/>.</exception>
     public static bool TryValidate(Module module, out string error) {
         ArgumentNullException.ThrowIfNull(argument: module);
@@ -24,14 +27,24 @@ public static class AddonModuleValidator {
         }
 
         if (!RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.AbiVersion)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.SnapshotPtr)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.CommandsPtr)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.CommandsCap)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.OnTick)) {
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.OutPtr)
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.OutCap)
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.InPtr)
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.InCap)
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.ChannelsPtr)
+            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.ChannelsCount)) {
             return false;
         }
 
-        return ValidateOptionalInit(error: out error, exports: exports);
+        if (!RequireOnTick(error: out error, exports: exports)) {
+            return false;
+        }
+
+        if (!ValidateOptionalInit(error: out error, exports: exports)) {
+            return false;
+        }
+
+        return ValidateImports(error: out error, imports: module.Imports);
     }
 
     private static FunctionExport? FindFunction(IReadOnlyList<Export> exports, string name) {
@@ -63,6 +76,29 @@ public static class AddonModuleValidator {
 
         if ((function is null) || !IsNullaryI32(function: function)) {
             error = $"export '{name}' missing or not ()->i32";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+    private static bool RequireOnTick(IReadOnlyList<Export> exports, out string error) {
+        var function = FindFunction(
+            exports: exports,
+            name: AddonAbi.Exports.OnTick
+        );
+
+        if ((function is null) || (function.Parameters.Count != 1) || (function.Parameters[0] != ValueKind.Int32) || (function.Results.Count != 1) || (function.Results[0] != ValueKind.Int32)) {
+            error = $"export '{AddonAbi.Exports.OnTick}' missing or not (i32)->i32";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+    private static bool ValidateImports(IReadOnlyList<Import> imports, out string error) {
+        foreach (var import in imports) {
+            error = $"import '{import.ModuleName}::{import.Name}' — an addon module is self-contained and may import nothing";
             return false;
         }
 

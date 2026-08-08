@@ -37,12 +37,13 @@ reproducible measurements:
 
 - **[docs/sdf-wiki/](../sdf-wiki/README.md)** — technique references and
   current Puck applicability.
-- **[docs/sdf-bench-notes.md](../sdf-bench-notes.md)** — benchmark procedure
-  and representative measurements.
-- **[docs/engine-bench-plan.md](../engine-bench-plan.md)** — the benchmark's
-  full design: timing seams, the switch registry, scoring math, the scene
-  roster, and the hygiene machinery chapter 8 explains the *why* of.
-- **[.agents/skills/sdf-world/SKILL.md](../../.agents/skills/sdf-world/SKILL.md)**
+- **`Puck.Bench` (quarantined 2026-08-02, off limits)** — the benchmark harness in
+  code: timing seams, the switch sweep, scoring math, the report format. Both
+  documents that described it — the procedure-and-measurements notes and the
+  full design plan — were deleted on 2026-08-02, and the harness itself has no
+  host composing it, so it cannot be run. Chapter 8 carries the surviving
+  numbers and states that gap plainly.
+- **[.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)**
   — the agent-facing contract: the C#↔HLSL sync-pair tables and settled
   engine semantics, kept dense and exact for tooling. The handbook is the
   teaching view of the same system; the skill is the working contract.

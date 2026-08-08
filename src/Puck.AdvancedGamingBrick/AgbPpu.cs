@@ -186,9 +186,9 @@ public sealed partial class AgbPpu : IAgbPpu {
 
     /// <inheritdoc/>
     public uint ReadVideo(uint address, int width) => (address >> 24) switch {
-        0x5u => ReadArray(array: m_palette, index: address & 0x3FFu, width: width),
-        0x6u => ReadArray(array: m_vram, index: VramOffset(address: address), width: width),
-        _ => ReadArray(array: m_oam, index: address & 0x3FFu, width: width),
+        0x5u => AgbArrayAccess.Read(array: m_palette, index: address & 0x3FFu, width: width),
+        0x6u => AgbArrayAccess.Read(array: m_vram, index: VramOffset(address: address), width: width),
+        _ => AgbArrayAccess.Read(array: m_oam, index: address & 0x3FFu, width: width),
     };
 
     /// <inheritdoc/>
@@ -198,7 +198,7 @@ public sealed partial class AgbPpu : IAgbPpu {
                 if (width == 1) {
                     WriteDuplicatedByte(array: m_palette, index: address & 0x3FFu & ~1u, value: (byte)value);
                 } else {
-                    WriteArray(array: m_palette, index: address & 0x3FFu, width: width, value: value);
+                    AgbArrayAccess.Write(array: m_palette, index: address & 0x3FFu, width: width, value: value);
                 }
 
                 break;
@@ -209,7 +209,7 @@ public sealed partial class AgbPpu : IAgbPpu {
             default:
                 // 8-bit writes to OAM are dropped.
                 if (width != 1) {
-                    WriteArray(array: m_oam, index: address & 0x3FFu, width: width, value: value);
+                    AgbArrayAccess.Write(array: m_oam, index: address & 0x3FFu, width: width, value: value);
                 }
 
                 break;
@@ -882,7 +882,7 @@ public sealed partial class AgbPpu : IAgbPpu {
             return;
         }
 
-        WriteArray(array: m_vram, index: offset, width: width, value: value);
+        AgbArrayAccess.Write(array: m_vram, index: offset, width: width, value: value);
     }
     private static uint VramOffset(uint address) {
         var offset = address & 0x1FFFFu;
@@ -925,27 +925,5 @@ public sealed partial class AgbPpu : IAgbPpu {
     private static void WriteDuplicatedByte(byte[] array, uint index, byte value) {
         array[index] = value;
         array[(index + 1u)] = value;
-    }
-    private static uint ReadArray(byte[] array, uint index, int width) {
-        return width switch {
-            1 => array[index],
-            2 => (uint)(array[index] | (array[(index + 1u)] << 8)),
-            _ => (uint)(array[index]
-                | (array[(index + 1u)] << 8)
-                | (array[(index + 2u)] << 16)
-                | (array[(index + 3u)] << 24)),
-        };
-    }
-    private static void WriteArray(byte[] array, uint index, int width, uint value) {
-        array[index] = (byte)value;
-
-        if (width >= 2) {
-            array[(index + 1u)] = (byte)(value >> 8);
-        }
-
-        if (width == 4) {
-            array[(index + 2u)] = (byte)(value >> 16);
-            array[(index + 3u)] = (byte)(value >> 24);
-        }
     }
 }

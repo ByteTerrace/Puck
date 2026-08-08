@@ -58,7 +58,7 @@ public readonly record struct BloomHue(RgbaColor Ring, RgbaColor Halo);
 public readonly record struct CubicBezier(float X1, float Y1, float X2, float Y2);
 
 /// <summary>
-/// The canonical Puck UI design tokens — docs/ui-design-tokens.md, "Instrument + grafts" — transcribed to C#
+/// The canonical Puck UI design tokens ("Instrument + grafts"). THIS FILE is the record — the prose write-up it was transcribed from is retired
 /// constants. This is the design-token source of record: one C# definition every 2D overlay surface reads instead
 /// of hand-picked literals, so the whole UI shares one 4px grid, one radius/type scale, and one semantic palette.
 /// The palette reaches shaders only through the <see cref="OverlayTokenBlock"/> storage slab, never hand-mirrored

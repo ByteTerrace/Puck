@@ -1,0 +1,23 @@
+{
+  "skill_name": "symbol-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What implements ISdfFrameSource, including partial declarations, and which implementation handles CaptureFrame?",
+      "expected_output": "Uses compiler-backed puck references with --implementers, reads grouped resolved-definition output rather than text matches, accounts for multiple locations from partial declarations, and narrows the member query without conflating same-named symbols.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "AllocatorExtensions looks unused. Is it safe to delete the type and its Alloc extension method?",
+      "expected_output": "Uses puck references with --no-doc for semantic consumers, recognizes extension-method call sites that omit the containing type name, checks uncompiled files with exhaustive content search or declarations, distinguishes type and member results, and builds affected projects before declaring deletion safe.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "List every type and member declared by src/Puck.World.Server/WorldServer.cs, including anything excluded from normal compilation, without running a design-time build.",
+      "expected_output": "Uses puck declarations --members on the named file because the request is syntactic and build-free, reports that declarations can see uncompiled C# but cannot prove semantic usage, and treats a missing path as an error rather than an empty inventory.",
+      "files": []
+    }
+  ]
+}

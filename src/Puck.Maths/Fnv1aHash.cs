@@ -30,6 +30,13 @@ public struct Fnv1aHash {
         m_hash ^= value;
         m_hash *= Prime;
     }
+    /// <summary>Folds a byte span into the hash in order.</summary>
+    /// <param name="values">The bytes to fold.</param>
+    public void Add(ReadOnlySpan<byte> values) {
+        foreach (var value in values) {
+            Add(value: value);
+        }
+    }
     /// <summary>Folds a 32-bit value into the hash, least-significant byte first.</summary>
     /// <param name="value">The value to fold.</param>
     public void Add(uint value) {
@@ -48,4 +55,15 @@ public struct Fnv1aHash {
     /// <param name="value">The value to fold.</param>
     public void Add(long value) =>
         Add(value: unchecked((ulong)value));
+
+    /// <summary>Computes the 64-bit FNV-1a hash of a byte span.</summary>
+    /// <param name="values">The bytes to hash.</param>
+    /// <returns>The hash value.</returns>
+    public static ulong Compute(ReadOnlySpan<byte> values) {
+        var hash = Create();
+
+        hash.Add(values: values);
+
+        return hash.Value;
+    }
 }

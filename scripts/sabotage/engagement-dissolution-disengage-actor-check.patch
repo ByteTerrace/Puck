@@ -1,0 +1,15 @@
+diff --git a/src/Puck.World.Server/WorldEngagement.cs b/src/Puck.World.Server/WorldEngagement.cs
+index 22acc969..c7cb46ad 100644
+--- a/src/Puck.World.Server/WorldEngagement.cs
++++ b/src/Puck.World.Server/WorldEngagement.cs
+@@ -282,7 +282,9 @@ private DisengageOutcome ResolveDisengage(int entityIndex, WorldPrincipal acting
+             return DisengageOutcome.NotEngaged;
+         }
+
+-        if (!CheckEngage(target: target, actingPrincipal: actingPrincipal).IsAllowed) {
++        // SABOTAGE-INJECTED (docs/verification/engagement-dissolution): the ordinary-disengage actor check is
++        // short-circuited to never deny — temporary, never present outside that runner's sabotage patch.
++        if (false && !CheckEngage(target: target, actingPrincipal: actingPrincipal).IsAllowed) {
+             return DisengageOutcome.Denied;
+         }
+ 

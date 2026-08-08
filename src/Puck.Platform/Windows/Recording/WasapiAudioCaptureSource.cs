@@ -159,7 +159,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         _ = Marshal.ReleaseComObject(o: audioClient);
         CoUninitialize();
     }
-
     private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Initialize() {
         var enumeratorClsid = Wasapi.CLSID_MMDeviceEnumerator;
         var enumeratorIid = Wasapi.IID_IMMDeviceEnumerator;
@@ -219,7 +218,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             Wasapi.Check(hr: audioClient.GetBufferSize(pNumBufferFrames: out var bufferFrames));
 
             // Ring holds ~1 s of audio so a briefly-stalled consumer drops oldest rather than the device thread blocking.
-            m_ring = new AudioSampleRing(capacity: Math.Max(val1: ((int)bufferFrames * m_channels * 4), val2: (m_sampleRate * m_channels)));
+            m_ring = new AudioSampleRing(capacity: Math.Max(val1: (((int)bufferFrames * m_channels) * 4), val2: (m_sampleRate * m_channels)));
 
             var captureClientIid = Wasapi.IID_IAudioCaptureClient;
 
@@ -232,7 +231,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             Wasapi.CoTaskMemFree(pv: formatPointer);
         }
     }
-
     private static bool DetermineIsFloat(Wasapi.WaveFormatEx format, nint formatPointer) {
         if (format.wFormatTag == Wasapi.WaveFormatIeeeFloat) {
             return true;
@@ -240,18 +238,17 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
         if (format.wFormatTag == Wasapi.WaveFormatExtensible) {
             // The SubFormat GUID sits after the WAVEFORMATEX header + wValidBitsPerSample(2) + dwChannelMask(4).
-            var subFormat = Marshal.PtrToStructure<Guid>(ptr: (formatPointer + 18 + 2 + 4));
+            var subFormat = Marshal.PtrToStructure<Guid>(ptr: (((formatPointer + 18) + 2) + 4));
 
             return (subFormat == Wasapi.KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
         }
 
         return false;
     }
-
     private void RunCaptureLoop(IAudioClient audioClient, IAudioCaptureClient captureClient) {
         Wasapi.Check(hr: audioClient.Start());
 
-        var scratch = new float[m_sampleRate * m_channels];
+        var scratch = new float[(m_sampleRate * m_channels)];
 
         try {
             while (!m_stop) {
@@ -267,7 +264,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             _ = audioClient.Stop();
         }
     }
-
     private void DrainPackets(IAudioCaptureClient captureClient, float[] scratch) {
         while (captureClient.GetNextPacketSize(pNumFramesInNextPacket: out var packetFrames) >= 0) {
             if (packetFrames == 0) {
@@ -302,7 +298,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             }
         }
     }
-
     private void StampBaseIfNeeded(ulong qpcPosition) {
         if (m_baseStamped) {
             return;
@@ -317,7 +312,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         Volatile.Write(location: ref m_baseSampleNanoseconds, value: baseNanoseconds);
         m_baseStamped = true;
     }
-
     private static void ConvertInt16(nint source, Span<float> destination) {
         unsafe {
             var pointer = (short*)source;
@@ -327,7 +321,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             }
         }
     }
-
     [DllImport("Ole32.dll")]
     private static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
     [DllImport("Ole32.dll")]

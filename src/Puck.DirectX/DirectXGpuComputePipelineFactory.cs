@@ -1,8 +1,6 @@
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
-using Windows.Win32;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
@@ -37,18 +35,10 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         var cs = (DirectXGpuShaderModule)computeShaderModule;
         var hasDescriptorTable = (bindings.Count > 0);
         var hasRootConstants = (pushConstantBinding is not null);
-        var layout = new DirectXPipelineLayout();
-
-        if (hasDescriptorTable) {
-            layout.DescriptorTableParamIndex = 0;
-            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
-        } else {
-            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
-        }
-
-        if (hasRootConstants) {
-            layout.RootConstantsCount = ((pushConstantBinding!.Size + 3) / 4);
-        }
+        var layout = DirectXPipelineLayout.CreateForParameters(
+            hasDescriptorTable: hasDescriptorTable,
+            pushConstantBinding: pushConstantBinding
+        );
 
         // Pack heap slots in binding-list order: each binding occupies its Count consecutive slots starting right after
         // the previous binding's, so an array binding can never overlap a later binding regardless of the chosen index
@@ -73,7 +63,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             csLength: cs.BytecodeLength
         );
 
-        return new DirectXGpuComputePipeline(layout: layout);
+        return new DirectXGpuPipeline(layout: layout);
     }
 
     // Packs each binding to a base heap slot in binding-list order (an array binding consuming Count slots), returning a
@@ -228,41 +218,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             pStaticSamplers = ((sampledImageCount > 0) ? staticSamplers : null),
         };
 
-        return SerializeAndCreate(device: device, desc: in desc);
-    }
-    private static nint SerializeAndCreate(ID3D12Device* device, in D3D12_ROOT_SIGNATURE_DESC desc) {
-        ID3DBlob* sigBlob = null;
-        ID3DBlob* errBlob = null;
-
-        try {
-            PInvoke.D3D12SerializeRootSignature(
-                in desc,
-                D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1,
-                &sigBlob,
-                &errBlob
-            ).ThrowIfFailed(operation: "D3D12SerializeRootSignature");
-
-            void* rootSig;
-            var rootSigIid = ID3D12RootSignature.IID_Guid;
-
-            device->CreateRootSignature(
-                0,
-                sigBlob->GetBufferPointer(),
-                sigBlob->GetBufferSize(),
-                in rootSigIid,
-                out rootSig
-            );
-
-            return (nint)rootSig;
-        } finally {
-            if (sigBlob is not null) {
-                _ = sigBlob->Release();
-            }
-
-            if (errBlob is not null) {
-                _ = errBlob->Release();
-            }
-        }
+        return DirectXRootSignatures.Create(device: device, description: in desc);
     }
     private static nint BuildPso(ID3D12Device* device, nint rootSignature, nint csHandle, nuint csLength) {
         var psoDesc = new D3D12_COMPUTE_PIPELINE_STATE_DESC {
@@ -276,7 +232,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateComputePipelineState(in psoDesc, in psoIid, out pso);
+        device->CreateComputePipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
 
         return (nint)pso;
     }

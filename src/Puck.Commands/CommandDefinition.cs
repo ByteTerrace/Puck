@@ -7,36 +7,71 @@ namespace Puck.Commands;
 /// way the command can be driven.
 /// </summary>
 /// <remarks>
-/// The same definition is resolved both when a console line is parsed into a
-/// <see cref="CommandContext"/> and when a source dispatches a <see cref="CommandSignal"/> for the
-/// command's <see cref="Name"/>. <see cref="Handler"/> runs on every activation; continuous consumers
-/// instead poll the registry for the command's per-frame value.
+/// The same definition is resolved both when a console line is parsed into a <see cref="CommandContext"/> and when the
+/// snapshot mixer dispatches the command for a bound control. <see cref="Handler"/> runs on every activation,
+/// receiving that activation's value on <see cref="CommandContext.Value"/> and its stamped identity on
+/// <see cref="CommandContext.Principal"/>.
+/// <para>Definitions are built through <see cref="Verb"/> and <see cref="WithWireArgs"/> only, and the handler they
+/// carry is internal: what a command IS (its <see cref="CommandMetadata"/>) is public, what it DOES is reachable
+/// solely through the registry's stamped dispatch.</para>
 /// </remarks>
-/// <param name="Name">The unique name used to identify and dispatch the command.</param>
-/// <param name="Description">A human-readable description shown in help output.</param>
-/// <param name="ValueKind">The shape of the value the command carries.</param>
-/// <param name="TextCommand">The <see cref="Command"/> used to parse the command from a text line.</param>
-/// <param name="Handler">The delegate invoked on each activation.</param>
-/// <param name="ValueSelector">
-/// An optional delegate that maps a parsed text line to a <see cref="CommandValue"/> (for example,
-/// <c>move --x 1 --y 0</c>). When <see langword="null"/>, an impulse value derived from
-/// <paramref name="ValueKind"/> is used.
-/// </param>
-/// <param name="Map">
-/// The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>,
-/// which is always active.
-/// </param>
-public sealed record CommandDefinition(
-    string Name,
-    string Description,
-    CommandValueKind ValueKind,
-    Command TextCommand,
-    Func<CommandContext, CommandResult> Handler,
-    Func<ParseResult, CommandValue>? ValueSelector = null,
-    string Map = CommandMaps.Global
-) {
+public sealed record CommandDefinition {
+    /// <summary>Initializes a new instance of the <see cref="CommandDefinition"/> class.</summary>
+    /// <param name="Name">The unique name used to identify and dispatch the command.</param>
+    /// <param name="Description">A human-readable description shown in help output.</param>
+    /// <param name="ValueKind">The shape of the value the command carries.</param>
+    /// <param name="TextCommand">The <see cref="Command"/> used to parse the command from a text line.</param>
+    /// <param name="Bindability">Whether a binding document may name this command as a destination.</param>
+    /// <param name="Handler">The delegate invoked on each activation.</param>
+    /// <param name="ValueSelector">An optional delegate mapping a parsed text line to a <see cref="CommandValue"/>.</param>
+    /// <param name="Map">The command map that gates snapshot-driven activation.</param>
+    internal CommandDefinition(
+        string Name,
+        string Description,
+        CommandValueKind ValueKind,
+        Command TextCommand,
+        CommandBindability Bindability,
+        Func<CommandContext, CommandResult> Handler,
+        Func<ParseResult, CommandValue>? ValueSelector = null,
+        string Map = CommandMaps.Global
+    ) {
+        this.Bindability = Bindability;
+        this.Description = Description;
+        this.Handler = Handler;
+        this.Map = Map;
+        this.Name = Name;
+        this.TextCommand = TextCommand;
+        this.ValueKind = ValueKind;
+        this.ValueSelector = ValueSelector;
+    }
+
+    /// <summary>Gets whether a binding document may name this command as a destination.</summary>
+    public CommandBindability Bindability { get; init; }
+
+    /// <summary>Gets the human-readable description shown in help output.</summary>
+    public string Description { get; init; }
+
+    /// <summary>Gets the delegate invoked on each activation. INTERNAL: dispatch happens through the registry, which
+    /// is what stamps the <see cref="CommandContext.Principal"/> the handler acts on.</summary>
+    internal Func<CommandContext, CommandResult> Handler { get; init; }
+
+    /// <summary>Gets the command map that gates snapshot-driven activation.</summary>
+    public string Map { get; init; }
+
+    /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
+    public string Name { get; init; }
+
+    /// <summary>Gets the <see cref="Command"/> used to parse the command from a text line.</summary>
+    public Command TextCommand { get; init; }
+
+    /// <summary>Gets the shape of the value the command carries.</summary>
+    public CommandValueKind ValueKind { get; init; }
+
+    /// <summary>Gets the optional delegate that maps a parsed text line to a <see cref="CommandValue"/>.</summary>
+    public Func<ParseResult, CommandValue>? ValueSelector { get; init; }
+
     /// <summary>Gets the alternate names that also resolve to this command, on both the text and
-    /// source-driven paths. Empty by default.</summary>
+    /// snapshot-driven paths. Empty by default.</summary>
     public IReadOnlyList<string> Aliases { get; init; } = [];
 
     /// <summary>
@@ -61,18 +96,28 @@ public sealed record CommandDefinition(
     /// The raw wire-argument handler for a command built by <see cref="WithWireArgs"/> — the same delegate wrapped into
     /// <see cref="Handler"/>, exposed so the text-dispatch fast path can hand it a zero-copy <see cref="WireArgs"/> view
     /// over the submitted line (no substrings, no argument array) instead of running the System.CommandLine parse.
-    /// <see langword="null"/> only for a bare <see cref="Verb"/> or a hand-built definition, which stay on the full
-    /// parse.
+    /// <see langword="null"/> only for a bare <see cref="Verb"/>, which stays on the full parse.
     /// </summary>
     internal Func<CommandContext, WireArgs, CommandResult>? WireArgsHandler { get; init; }
+
+    /// <summary>Gets the publicly readable facts about this command — what <see cref="CommandRegistry.Definitions"/>
+    /// hands out.</summary>
+    public CommandMetadata Metadata => new(
+        Name: Name,
+        ValueKind: ValueKind,
+        Routing: Routing,
+        Bindability: Bindability
+    );
 
     /// <summary>Creates a definition whose text command is a bare verb with no arguments or options.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
     /// <param name="description">A human-readable description shown in help output.</param>
     /// <param name="valueKind">The shape of the value the command carries.</param>
     /// <param name="handler">The delegate invoked on each activation.</param>
+    /// <param name="bindability">Whether a binding document may name this command. Required — every registration
+    /// declares it, and <see cref="CommandBindability.Unspecified"/> is refused by name at registry construction.</param>
     /// <param name="map">
-    /// The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.
+    /// The command map that gates snapshot-driven activation. Defaults to <see cref="CommandMaps.Global"/>.
     /// </param>
     /// <param name="aliases">Optional alternate names that also resolve to the command.</param>
     /// <param name="routing">
@@ -85,6 +130,7 @@ public sealed record CommandDefinition(
         string description,
         CommandValueKind valueKind,
         Func<CommandContext, CommandResult> handler,
+        CommandBindability bindability,
         string map = CommandMaps.Global,
         IReadOnlyList<string>? aliases = null,
         CommandRouting routing = CommandRouting.Immediate
@@ -97,6 +143,7 @@ public sealed record CommandDefinition(
                 name: name,
                 description: description
             ),
+            Bindability: bindability,
             Handler: handler,
             Map: map
         ) {
@@ -118,18 +165,34 @@ public sealed record CommandDefinition(
     /// <param name="handler">The delegate invoked on each activation, given a <see cref="WireArgs"/> over the trailing
     /// tokens. A side-effecting verb MUST return <c>IsError: true</c> on every failure (so <c>wire.ack quiet</c> can
     /// safely drop only its successes) and SHOULD gate its success-echo construction on <see cref="WireArgs.Echo"/>.</param>
-    /// <param name="map">The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
+    /// <param name="bindability">Whether a binding document may name this command. Required — every registration
+    /// declares it, and <see cref="CommandBindability.Unspecified"/> is refused by name at registry construction.</param>
+    /// <param name="map">The command map that gates snapshot-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
     /// <param name="routing">The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>.</param>
     /// <param name="ackOnly">Whether the verb's success output is a bare acknowledgement <c>wire.ack quiet</c> may drop
     /// (see <see cref="AcknowledgementOnly"/>). Leave <see langword="false"/> for anything a caller reads back.</param>
+    /// <param name="valueKind">The value kind a BOUND dispatch of this verb carries. Defaults to
+    /// <see cref="CommandValueKind.Digital"/> — correct for the overwhelming majority of wire-native verbs, which
+    /// read their arguments from <see cref="WireArgs"/> and never look at <see cref="CommandContext.Value"/> at all.
+    /// Set this to the kind a binding row's CONSTANT <see cref="CommandValue"/> actually carries when a verb folds a
+    /// step/direction twin onto itself (a <c>.next</c>/<c>.prev</c>/<c>.up</c>/<c>.down</c> chord bound with no
+    /// argument, reading the sign of <see cref="CommandContext.Value"/> instead — see
+    /// <see cref="CommandBinding.Value"/>): <see cref="BindingVocabularyCheck"/> refuses a recompose whose dispatched
+    /// kind disagrees with this declaration, so a mismatched value here silently breaks every future
+    /// <c>player.bind</c>/<c>world.row.set bindingOverlays</c>/profile load, not merely the boot-time narration. A handler
+    /// distinguishing a bound dispatch from a typed one must read <see cref="CommandContext.Source"/> (non-null only
+    /// for a bound dispatch), never <see cref="CommandContext.Value"/>'s kind — the text path computes its own
+    /// impulse value from THIS declared kind, so a typed call carries the same kind a bound one would.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
         string description,
         Func<CommandContext, WireArgs, CommandResult> handler,
+        CommandBindability bindability,
         string map = CommandMaps.Global,
         CommandRouting routing = CommandRouting.Immediate,
-        bool ackOnly = false
+        bool ackOnly = false,
+        CommandValueKind valueKind = CommandValueKind.Digital
     ) {
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -139,10 +202,11 @@ public sealed record CommandDefinition(
         return new CommandDefinition(
             Name: name,
             Description: description,
-            ValueKind: CommandValueKind.Digital,
+            ValueKind: valueKind,
             TextCommand: new Command(description: description, name: name) {
                 rest,
             },
+            Bindability: bindability,
             // Fallback path (quoted lines / help / parse errors): adapt the parsed token array into an array-mode
             // WireArgs and invoke the SAME wire handler. Echo rides the registry's live ack mode so a quiet run
             // suppresses here identically to the fast path; a registry-less invocation defaults to echoing.

@@ -1,3 +1,5 @@
+using Puck.Maths.Research;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -25,6 +27,8 @@ public static class ContinuedFraction {
     /// <returns>The number of partial quotients written to <paramref name="terms"/> — <paramref name="periodStart"/> plus <paramref name="periodLength"/>. The block <c>terms[periodStart..]</c> repeats forever.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
     /// <exception cref="ArgumentException"><paramref name="terms"/> is too short to hold the pre-period and one period block.</exception>
+    /// <exception cref="OverflowException">A partial quotient is outside the signed 64-bit range.</exception>
+    /// <remarks>The recurrence is <see cref="QuadraticSurdRecurrence"/>, whose remarks carry the exactness contract these 64-bit parameters rest on: <c>q²·d</c> and the normalization by <c>r²</c> reach 315 bits, so the expansion itself runs in <see cref="System.Numerics.BigInteger"/>.</remarks>
     public static int Expand(long p, long q, long d, long r, Span<long> terms, out int periodStart, out int periodLength) {
         if (0L >= q) {
             throw new ArgumentOutOfRangeException(
@@ -56,77 +60,27 @@ public static class ContinuedFraction {
             );
         }
 
-        // Canonical form (P + √N) / Q with N = q²·d, then scale so that Q divides N − P² and every later step divides exactly.
-        var stateP = ((Int128)p);
-        var stateN = (((Int128)q * q) * d);
-        var stateQ = ((Int128)r);
+        var expansion = new QuadraticSurdExpansion(
+            rationalNumerator: p,
+            surdCoefficient: q,
+            radicand: d,
+            denominator: r
+        );
 
-        if (Int128.Zero != ((stateN - (stateP * stateP)) % stateQ)) {
-            var magnitude = Int128.Abs(value: stateQ);
-
-            stateP *= magnitude;
-            stateN *= (stateQ * stateQ);
-            stateQ *= magnitude;
-        }
-
-        var root = ((Int128)((UInt128)stateN).SquareRoot());
-        var seenP = new List<Int128>();
-        var seenQ = new List<Int128>();
-
-        while (true) {
-            var repeatAt = IndexOfState(
-                seenP: seenP,
-                seenQ: seenQ,
-                stateP: stateP,
-                stateQ: stateQ
-            );
-
-            if (0 <= repeatAt) {
-                periodStart = repeatAt;
-                periodLength = (seenP.Count - repeatAt);
-
-                return seenP.Count;
-            }
-
-            var count = seenP.Count;
-
-            if (count >= terms.Length) {
+        while (expansion.MoveNext()) {
+            if (expansion.Index >= terms.Length) {
                 throw new ArgumentException(
                     message: "terms is too short to hold the pre-period and one period block",
                     paramName: nameof(terms)
                 );
             }
 
-            // Floor of (P + √N) / Q: for a positive denominator the numerator floors with ⌊√N⌋; for a negative one the surd
-            // sits just below ⌊√N⌋ + 1, which is the bound that floors correctly once the sign flips the inequality.
-            var quotient = ((0 < stateQ)
-                ? FloorDivide(numerator: (stateP + root), denominator: stateQ)
-                : FloorDivide(numerator: ((stateP + root) + Int128.One), denominator: stateQ));
-
-            seenP.Add(item: stateP);
-            seenQ.Add(item: stateQ);
-            terms[count] = ((long)quotient);
-
-            var nextP = ((quotient * stateQ) - stateP);
-
-            stateQ = ((stateN - (nextP * nextP)) / stateQ);
-            stateP = nextP;
-        }
-    }
-
-    private static int IndexOfState(List<Int128> seenP, List<Int128> seenQ, Int128 stateP, Int128 stateQ) {
-        for (var index = 0; (index < seenP.Count); ++index) {
-            if ((seenP[index] == stateP) && (seenQ[index] == stateQ)) {
-                return index;
-            }
+            terms[expansion.Index] = checked((long)expansion.Quotient);
         }
 
-        return -1;
-    }
-    private static Int128 FloorDivide(Int128 numerator, Int128 denominator) {
-        var quotient = (numerator / denominator);
-        var remainder = (numerator - (quotient * denominator));
+        periodStart = expansion.PeriodStart;
+        periodLength = expansion.PeriodLength;
 
-        return (quotient - ((remainder != Int128.Zero) && (Int128.IsNegative(value: remainder) != Int128.IsNegative(value: denominator))).As<Int128>());
+        return expansion.Count;
     }
 }

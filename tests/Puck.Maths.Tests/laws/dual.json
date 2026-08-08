@@ -1,0 +1,558 @@
+[
+  {
+    "Id": "dual.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQ4816\u003E.op_Multiply via MultiplyScalar, both lanes, through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.QuadraticMultiply at (P, Q) = (0, 0) over BigInteger, rounded once at shift 32",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.twin-quad",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedDual\u003CFixedQ4816\u003E.op_Multiply (MultiplyScalar)",
+        "Against": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at the (0, 0) relation, integer lane",
+        "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) \u2014 the IDENTICAL internal member on both sides \u2014 plus the identical FusedArithmetic.RawMagnitude \u003C 2\u00B3\u00B9 gate",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin, on the same operand quad, in the same law",
+        "Against": "Oracles.QuadraticMultiply at (0, 0) \u2014 the Q48 form in BigInteger, one rounding per component at shift 32 (worklist A3). At this relation the root square annihilates, so the V lane is u\u2081\u00B7v\u2082 \u002B v\u2081\u00B7u\u2082 fused across the seam and the leg pins that ONE rounding directly",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQ4816\u003E.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits, at Laws.cs\u0027s same-process scope",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.additive-group-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Dual"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQ4816\u003E.op_Addition, both parts",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger sum, inline in Subjects.DualAdditiveGroupExact \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQ4816\u003E.op_Subtraction, both parts",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger difference, inline in the same body \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the positional constructor and the two part readers round-trip at every swept raw, so a swapped positional order fails here rather than hiding inside a symmetric product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "AdditiveIdentity is default(FixedDual\u003CFixedQ4816\u003E), is a two-sided identity for op_Addition, and a \u2212 a is exactly it, at every swept raw including both two\u0027s-complement extremes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "negation agrees with subtraction from the additive identity at every swept raw, the asymmetric minimum included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MultiplicativeIdentity is (One, Zero) and is a two-sided identity for op_Multiply at every swept raw, exactly: the real product becomes a\u00B72\u00B9\u2076 and the dual sum a\u00B70 \u002B b\u00B72\u00B9\u2076, so the single rounding has no remainder",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.seeds-and-identities",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Constant"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Variable"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Dual"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Constant(v) is (v, AdditiveIdentity) and Variable(v) is (v, MultiplicativeIdentity) at every swept raw \u2014 the two seeds differ in exactly one component, and Constant(One) is MultiplicativeIdentity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the forward-mode seed\u0027s defining property, read through op_Multiply: the dual part of Variable(x)\u00B7Variable(x)",
+        "Against": "Oracles.WrapToRaw of the exact derivative 2x \u2014 d(x\u00B2)/dx is 2x, and over this carrier the statement is EXACT because the fused dual sum is (x\u00B72\u00B9\u2076 \u002B 2\u00B9\u2076\u00B7x)/2\u00B9\u2076 with no remainder at all. A quantized chain rule is a weak thing to check with a tolerance; here it is a bit contract",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the dual part of Constant(x)\u00B7Variable(y) and of Variable(x)\u00B7Constant(y)",
+        "Against": "the exact one-sided derivatives x and y, inline in Subjects.DualSeedsAndIdentities \u2014 the product rule\u0027s two halves separated, so a dropped term cannot cancel against its twin",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Constant(x)\u00B7Constant(y) has a zero dual part at every swept raw: a constant carries no sensitivity, whatever the real parts do",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Divide"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual.Divide at the FixedQ4816 carrier \u2014 the JIT-folded fused seam: the carrier division for the real part, and one FusedArithmetic.DivideProductSum of the sign-magnitude numerator b\u00B7c \u2212 a\u00B7d over c\u00B2",
+        "Against": "Oracles.RoundDyadicRatio twice: the real part as one ties-to-even rounding of a\u00B72\u00B9\u2076/c, and the dual part as one ties-to-even rounding of (bc \u2212 ad)\u00B72\u00B9\u2076/c\u00B2, both over exact BigInteger operands. The remark\u0027s claim that the fused form beats the quotient-rule form \u2014 which would round a/c, feed it through a product and round again \u2014 is exactly what the single-rounding oracle states",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor substitution is identical on both sides: Subjects.DualDivisor maps a zero REAL part \u2014 whatever the dual part carries \u2014 onto One, and the substituted point is pinned by dual.divide-refusals",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.divide-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Divide"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MultiplicativeIdentity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Divide refuses a zero real divisor with DivideByZeroException at the FixedQ4816 carrier, for a zero and for a non-zero dual part alike \u2014 and it refuses BEFORE the dual denominator is squared, which the remark claims and which a non-zero dual part would otherwise mask",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the GENERIC branch refuses on its carrier\u0027s own terms: FixedDual\u003CFixedSplit\u003E.Divide by a divisor whose real part lies on the light cone throws the split algebra\u0027s DivideByZeroException, so the fallback path\u0027s refusal is the carrier\u0027s and not a second policy",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual.Divide over a five-row hand-derived quotient-rule ladder \u2014 Variable(x)/Constant(c), Constant(k)/Variable(x), and three rows with both parts live",
+        "Against": "Subjects.DualQuotientLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from (a/c, (bc \u2212 ad)/c\u00B2) evaluated in exact rationals and rounded once, sharing no code with the subject",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.transcendental-lifts",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Log2"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Dual"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the DUAL part of FixedDual.Log2 \u2014 one FusedArithmetic.DivideProductSum of the raw Q32 product b\u00B7Log2E over a\u00B72\u00B9\u2076",
+        "Against": "Oracles.RoundDyadicRatio(numerator: b\u00B794548, denominator: a, shift: 0) \u2014 one ties-to-even rounding of the exact rational in BigInteger. The constant 94548 is carried on the oracle side as its own literal with the provenance round(log\u2082e\u00B72\u00B9\u2076) = round(94548.4622), NOT read from the subject\u0027s private field",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the DUAL part of FixedDual.SinCos \u2014 angle.Dual\u00B7cos and \u2212(angle.Dual\u00B7sin)",
+        "Against": "Oracles.RoundDyadic at shift 16 of the exact BigInteger products b\u00B7cos and b\u00B7sin, the second negated AFTER rounding through Oracles.WrapToRaw",
+        "Shared": "the sine and cosine values themselves, which BOTH sides take from the subject\u0027s own FixedQ4816.SinCos call \u2014 this leg pins the LIFT (the chain rule\u0027s multiplication, its rounding and the placement of the negation after it), never the transcendental",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the DUAL part of FixedDual.Sqrt \u2014 value.Dual / (root\u00B7Two)",
+        "Against": "Oracles.RoundDyadicRatio(numerator: b, denominator: 2\u00B7root, shift: 16)",
+        "Shared": "the root itself, taken from the subject\u0027s own FixedQ4816.Sqrt call. The leg\u0027s own content is that root\u00B7Two is EXACTLY 2\u00B7root \u2014 the Q16 product 131072\u00B7root/2\u00B9\u2076 has no remainder \u2014 so the lift carries one rounding and not two",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both documented refusals hold: a non-positive real part makes Log2 return (MinValue, Zero) and Sqrt return (Zero, Zero), at every swept non-positive raw including the two\u0027s-complement minimum, which the total fold Subjects.NonPositiveRaw reaches rather than masking away",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Sqrt lift never divides by zero: the smallest positive raw roots to 256, so root\u00B7Two is at least 512 for every admitted operand \u2014 the reason the lift needs no guard of its own \u2014 and the floor is checked on every swept operand rather than argued",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "the REAL parts of all three lifts",
+        "Against": "FixedQ4816.Log2, FixedQ4816.SinCos and FixedQ4816.Sqrt",
+        "Shared": "the entire transcendental computation; the lift adds nothing to the real part",
+        "Citation": "scalar.log2-vs-series, scalar.sincos-vs-series and scalar.sqrt-exact, which pin the three kernels against Oracles.EncloseLog2, Oracles.EncloseSinCos and Oracles.IntegerSquareRoot respectively \u2014 repeated squaring, a Machin-derived series and a Newton descent, none sharing a step with the subject",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.quaternion-mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQuaternion\u003E.op_Multiply via MultiplyQuaternion \u2014 the production dual quaternion behind FixedRigidTransform, whose every dual lane accumulates EIGHT leaf Q32 products across the dual seam before one rounding, under a two-clause gate (the symmetric 2\u00B2\u2079 bound and the asymmetric rotation-below-2\u00B9\u2077 / translation-below-2\u2074\u00B2 bound)",
+        "Against": "Oracles.DoublingDualProduct at two floors \u2014 the exact charged sums a\u00B7d \u002B b\u00B7c formed lane by lane in BigInteger from the Cayley\u2013Dickson doubling recursion, ONE Oracles.RoundDyadic at shift 16 per lane. The oracle knows nothing of the subject\u0027s term layout: its charges come from the recursion (a,b)(c,d) = (a\u00B7c \u2212 d\u0304\u00B7b, d\u00B7a \u002B b\u00B7c\u0304) and its target key is an exclusive-or. The only shared convention is the lane permutation (X,Y,Z,W) \u2194 (e\u2081,e\u2082,e\u2083,e\u2080), declared once in Subjects.QuaternionToDoublingLanes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and the reason this case exists: FixedDual\u003CTValue\u003E.op_Multiply is ONE member id over THREE kernels \u2014 MultiplyScalar, MultiplyQuaternion and the generic fallback \u2014 and the manifest cannot tell them apart. Before this case and dual.generic-carrier-two-roundings the id was covered by dual.mul-vs-oracle alone, which reaches only the scalar seam, so two of the three kernels were green without ever having run",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the real block of the dual product is the plain Hamilton product of the two real parts, and the oracle forms it from the SAME doubling recursion quaternion.mul-vs-oracle\u0027s oracle uses \u2014 so the real lanes restate that case\u0027s statement at the dual carrier and the NEW content here is the dual block\u0027s eight-leaf fusion alone",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.generic-carrier-two-roundings",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedSplit\u003E.op_Multiply \u2014 the GENERIC fallback, reached because FixedSplit is neither of the two JIT-folded house carriers: Real = a\u00B7c and Dual = (a\u00B7d) \u002B (b\u00B7c) with the carrier\u0027s product formed TWICE and its wrapping add on top, so the dual part carries TWO roundings",
+        "Against": "Oracles.DualOverQuadraticProduct at the (0, \u002B1) relation \u2014 two independent Oracles.QuadraticMultiply results summed through Oracles.WrapToRaw, which is that discipline re-derived in BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this is the third and last kernel behind the op_Multiply member id, and the only one whose dual part is NOT fused. Its contract is deliberately weaker than the two house seams\u0027, and stating it here is what makes the fused seams\u0027 one-rounding claim a comparison rather than an assertion. No new type is introduced to reach it \u2014 FixedSplit already satisfies every constraint FixedDual\u003CTValue\u003E requires",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dual.chain-rule-ladder-and-exact-spot-checks",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Variable"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Constant"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.FixedDual",
+        "Name": "Divide"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the dual-number chain rule on f(x) = sqrt(x)\u00B7sin(x) + x\u00B2/(x+1) against an EXACT BigInteger derivative built from Oracles.EncloseSinCos, Oracles.IntegerSquareRoot and plain exact rational arithmetic",
+        "Against": "sin(x)/(2\u221Ax) + \u221Ax\u00B7cos(x) + (x\u00B2+2x)/(x+1)\u00B2, assembled in BigInteger: the sin/cos terms from Oracles.EncloseSinCos at raw x, sqrt(x) from Oracles.IntegerSquareRoot(x\u226016) \u2014 matching FixedQ4816.Sqrt\u0027s own proven-exact floor bit for bit, so it is reused as an established fact rather than re-derived \u2014 and the polynomial term from an exact rational bounded directly at guard scale (no oracle at all). Widened by the kernel\u0027s 3/4 raw ULP SinCos envelope propagated through the one division (attenuated by 2\u00B7\u221Ax) and one multiplication (scaled by \u221Ax) those two terms perform, plus one full raw ULP for each of the four remaining fused single-roundings the chain performs (Sqrt(x)\u0027s own Dual division, the sqrt(x)*sinD product\u0027s fused Dual rounding, x*x\u0027s Real rounding propagated into the quotient\u0027s numerator, and the quotient\u0027s own fused Dual rounding) \u2014 a safe, reasoned margin, not fitted to any observed output. No offline double computation anywhere",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two EXACT spot checks needing no ladder: the derivative of the square at three is exactly six, and of the square root at four is exactly one quarter \u2014 both exact rationals, and both independent of any offline computation",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

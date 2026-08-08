@@ -3,12 +3,10 @@ using Puck.Maths;
 namespace Puck.SdfVm.Queries;
 
 /// <summary>
-/// Bakes float-authored terrain/blocker rectangles into a deterministic <see cref="WorldQueryArtifact"/> — the
-/// query-namespace sibling of <c>Puck.Demo.World.WalkGridBaker</c>, following the SAME quantize-once-per-edge
-/// discipline (every rectangle edge is snapped to raw Q48.16 via <see cref="FixedQ4816.FromDouble"/> exactly once;
-/// every per-cell loop after that is pure integer arithmetic — float never touches the inner loop). This type
-/// cannot literally reuse <c>WalkGridBaker</c> (it lives in <c>Puck.Demo</c>, downstream of <c>Puck.SdfVm</c>) —
-/// it is an independent, self-contained generalization living entirely inside the engine-side query namespace.
+/// Bakes float-authored terrain/blocker rectangles into a deterministic <see cref="WorldQueryArtifact"/>, following
+/// a quantize-once-per-edge discipline: every rectangle edge is snapped to raw Q48.16 via
+/// <see cref="FixedQ4816.FromDouble"/> exactly once, and every per-cell loop after that is pure integer arithmetic —
+/// float never touches the inner loop.
 /// </summary>
 public static class WorldQueryBaker {
     /// <summary>The default cell edge length (world units) — matches the walk grid's own default, a reasonable
@@ -35,8 +33,8 @@ public static class WorldQueryBaker {
         var originZRaw = FixedQ4816.FromDouble(value: minZ).Value;
         var maxXRaw = FixedQ4816.FromDouble(value: maxX).Value;
         var maxZRaw = FixedQ4816.FromDouble(value: maxZ).Value;
-        var width = (int)Math.Max(val1: 0L, val2: FloorDiv(dividend: (maxXRaw - originXRaw), divisor: CellSizeRaw));
-        var height = (int)Math.Max(val1: 0L, val2: FloorDiv(dividend: (maxZRaw - originZRaw), divisor: CellSizeRaw));
+        var width = (int)Math.Max(val1: 0L, val2: (maxXRaw - originXRaw).FloorDivide(divisor: CellSizeRaw));
+        var height = (int)Math.Max(val1: 0L, val2: (maxZRaw - originZRaw).FloorDivide(divisor: CellSizeRaw));
         var cellCount = (width * height);
         var heightRaw = new long[cellCount];
         var blocked = new ulong[Math.Max(val1: 1, val2: ((cellCount + 63) / 64))];
@@ -107,19 +105,13 @@ public static class WorldQueryBaker {
     private static bool TryCellSpan(long originRaw, float minValue, float maxValue, int axisCells, out int minCell, out int maxCellExclusive) {
         var minRaw = FixedQ4816.FromDouble(value: minValue).Value;
         var maxRaw = FixedQ4816.FromDouble(value: maxValue).Value;
-        var minIndex = (int)Math.Clamp(value: FloorDiv(dividend: (minRaw - originRaw), divisor: CellSizeRaw), min: 0L, max: axisCells);
+        var minIndex = (int)Math.Clamp(value: (minRaw - originRaw).FloorDivide(divisor: CellSizeRaw), min: 0L, max: axisCells);
         var maxIndex = (int)Math.Clamp(value: CeilDiv(dividend: (maxRaw - originRaw), divisor: CellSizeRaw), min: 0L, max: axisCells);
 
         minCell = minIndex;
         maxCellExclusive = maxIndex;
 
         return (maxIndex > minIndex);
-    }
-    private static long FloorDiv(long dividend, long divisor) {
-        var quotient = (dividend / divisor);
-        var remainder = (dividend % divisor);
-
-        return (((remainder != 0L) && ((remainder < 0L) != (divisor < 0L))) ? (quotient - 1L) : quotient);
     }
     private static long CeilDiv(long dividend, long divisor) {
         var quotient = (dividend / divisor);

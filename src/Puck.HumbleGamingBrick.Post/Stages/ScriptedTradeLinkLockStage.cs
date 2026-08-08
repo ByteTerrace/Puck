@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
@@ -208,15 +210,13 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     // The all-0xFF stream an unplugged port shifts in has a fixed FNV fingerprint per length; a real exchange never
     // matches it.
     private static bool IsIdle(LinkSideTraffic traffic) {
-        const ulong fnvOffsetBasis = 0xCBF29CE484222325ul;
-        const ulong fnvPrime = 0x100000001B3ul;
-        var idle = fnvOffsetBasis;
+        var idle = Fnv1aHash.Create();
 
         for (var index = 0; (index < traffic.Completions); ++index) {
-            idle = ((idle ^ 0xFF) * fnvPrime);
+            idle.Add(value: byte.MaxValue);
         }
 
-        return (traffic.TrafficHash == idle);
+        return (traffic.TrafficHash == idle.Value);
     }
     private static string? ResolveRomPath() {
         var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);

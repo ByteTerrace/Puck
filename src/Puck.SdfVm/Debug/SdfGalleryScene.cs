@@ -3,8 +3,8 @@ using System.Numerics;
 namespace Puck.SdfVm.Debug;
 
 /// <summary>The curated exhibits of the SDF torture museum (<c>sdf.gallery</c>) — one hand-authored known-nasty scene
-/// each, sourced from the settled record (Post stages, docs/sdf-bench-notes.md, the negative-results ledger, and the
-/// live-defects section of docs/sdf-backlog.md). The enum VALUE is the exhibit index the <c>sdf.gallery &lt;index&gt;</c>
+/// each, sourced from the settled record (retired battery stages, retired bench notes, the negative-results ledger, and the
+/// live-defects record). The enum VALUE is the exhibit index the <c>sdf.gallery &lt;index&gt;</c>
 /// jump uses; the emission for each lives in <see cref="SdfDebugRenderer.EmitGallery"/> (reusing the shared shape/carve
 /// emitters), the camera pose + stdout plaque in <see cref="SdfGalleryScene"/>.</summary>
 public enum SdfGalleryExhibit {
@@ -111,7 +111,7 @@ public sealed class SdfGalleryScene {
                 "~256 hard carves packed onto one subject, densely overlapping the same screen tiles — the honest",
                 "destruction budget made visible (every overlapping carve is evaluated per covered tile: the views-cost",
                 "worst case). Measured ~1024 in-frame scattered carves at 60 fps; dense per-tile stacking is the real",
-                "ceiling (docs/sdf-bench-notes.md). Watch it with debug.view.mask — the tiles under the cluster run red.",
+                "ceiling. Watch it with debug.view.mask — the tiles under the cluster run red.",
             ]
         ),
         new ExhibitEntry(
@@ -135,8 +135,8 @@ public sealed class SdfGalleryScene {
             Target: new Vector3(x: 0f, y: 1f, z: 0f), Yaw: 0f, Pitch: 0.26f, Distance: 10f,
             Plaque: [
                 "A stacked-amplifier parity stress: LogSphere Droste + P6M wallpaper fold + a near-tie emissive",
-                "material seam + a deep smooth/chamfer chain + a far grazing wall, all in one frame. Shared verbatim",
-                "with Puck.Post's world-drift-monolith stage, so the exhibit and proof exercise identical geometry.",
+                "material seam + a deep smooth/chamfer chain + a far grazing wall, all in one frame. It was shared",
+                "verbatim with a world-drift-monolith proof stage; that stage is gone, so this exhibit is all there is.",
             ]
         ),
     ];

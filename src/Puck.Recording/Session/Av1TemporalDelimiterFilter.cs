@@ -33,10 +33,10 @@ internal static class Av1TemporalDelimiterFilter {
                 return -1;
             }
 
-            var obuType = ((headerByte >> 3) & 0xF);
-            var extensionFlag = ((headerByte >> 2) & 0x1);
-            var hasSizeField = ((headerByte >> 1) & 0x1);
-            var cursor = (index + 1 + extensionFlag);
+            var obuType = (headerByte >> 3) & 0xF;
+            var extensionFlag = (headerByte >> 2) & 0x1;
+            var hasSizeField = (headerByte >> 1) & 0x1;
+            var cursor = ((index + 1) + extensionFlag);
             int payloadLength;
 
             if (hasSizeField == 1) {

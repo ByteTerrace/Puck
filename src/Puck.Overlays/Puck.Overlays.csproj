@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the overlay HLSL to
              both SPIR-V (Vulkan) and DXIL (DirectX) — the overlay is backend-neutral.
              Override with /p:DxcCommand="path\to\dxc". -->
@@ -8,12 +12,11 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <!-- PngEncoder for the capture readback. -->
-        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <!-- PngEncoder for the capture readback. -->
+        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 
@@ -47,22 +50,14 @@
     </ItemGroup>
 
     <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
-        <Error
-            Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')"
-            Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source."
-        />
+        <Error Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')" Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source." />
     </Target>
 
     <!-- Compile each *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX). The vk::
          attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. An empty
          FragmentShaderSource/ComputeShaderSource batch (no *.frag.hlsl/*.comp.hlsl yet) runs the target with every
          Exec's FullPath condition false, so it is a no-op rather than an error. -->
-    <Target
-        BeforeTargets="PrepareForBuild"
-        Inputs="@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
-        Name="CompileShaders"
-        Outputs="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')"
-    >
+    <Target BeforeTargets="PrepareForBuild" Inputs="@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
         <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>

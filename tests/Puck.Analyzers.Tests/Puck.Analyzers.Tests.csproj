@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The harness dynamically compiles source and drives Roslyn workspaces through runtime-loaded assemblies. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The compiler this suite drives: every case is a source string compiled in memory and handed to the
+             analyzer, so the test project needs the same Roslyn surface the analyzer is written against. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
+        <!-- Workspaces supplies the AdhocWorkspace/Solution/AdditionalDocument model the code-fix cases apply
+             their changed solutions through. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
+        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension
+             (OutputItemType="Analyzer", ReferenceOutputAssembly="false"). This suite instead needs the analyzer as
+             an ordinary assembly reference, because it instantiates VerifiedCodeAnalyzer and
+             VerifiedCodeCodeFixProvider directly and drives them over compilations it builds itself. Running the
+             analyzer over this project as well would only add a second, uncontrolled execution whose diagnostics
+             are not the ones under test. -->
+        <ProjectReference
+            Update="..\..\src\Puck.Analyzers\Puck.Analyzers.csproj"
+            OutputItemType=""
+            ReferenceOutputAssembly="true"
+        />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Every case compiles the repository's real marker attribute rather than a copy of it, so a change to
+             the attribute's targets or properties reaches these tests instead of drifting away from them. -->
+        <EmbeddedResource Include="..\..\build\VerifiedCodeAttribute.cs" LogicalName="VerifiedCodeAttribute.cs" />
+    </ItemGroup>
+</Project>

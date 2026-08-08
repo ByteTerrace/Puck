@@ -12,11 +12,17 @@ namespace Puck.Input.Devices;
 [InlineArray(length: Count)]
 public struct GamepadButtonEdges : IEquatable<GamepadButtonEdges> {
     /// <summary>
-    /// The number of button bits in <see cref="GamepadButtons"/>; one stamp slot per bit. KEEP IN SYNC with the
-    /// highest <see cref="GamepadButtons"/> flag (currently <see cref="GamepadButtons.TouchpadLeft"/> = bit 22):
-    /// a flag past this count makes the coalescer's edge stamp throw on the device I/O thread and fault the pad
-    /// on every fresh press of that button — found on real hardware by a triple-press validation pass.
+    /// The number of button bits in <see cref="GamepadButtons"/>; one stamp slot per bit. Sized for the highest
+    /// <see cref="GamepadButtons"/> flag (currently <see cref="GamepadButtons.TouchpadLeft"/> = bit 22): a flag
+    /// past this count makes the coalescer's edge stamp throw on the device I/O thread and fault the pad on every
+    /// fresh press of that button — found on real hardware by a triple-press validation pass.
     /// </summary>
+    /// <remarks>
+    /// <see cref="InlineArrayAttribute"/> requires a compile-time constant, so this one hand-kept number can't be
+    /// derived from the enum at compile time — but it is no longer trusted silently: <c>GamepadCaptureSource</c>'s
+    /// static init walks every <see cref="GamepadButtons"/> flag and throws immediately if the highest bit exceeds
+    /// this count, so forgetting to bump it fails loudly at startup instead of faulting a device mid-session.
+    /// </remarks>
     public const int Count = 23;
 
     private ulong m_element0;

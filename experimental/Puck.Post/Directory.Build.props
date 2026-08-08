@@ -1,0 +1,21 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.props.
+
+        This file stops MSBuild's upward Directory.Build.props discovery at this folder, so a quarantined
+        tree does not inherit the engine's build context from the repository root. Moving a tree out of
+        src/ does not remove it from MSBuild's reach: the root props walk DOWN into experimental/ exactly
+        as readily as into src/, because the walk is upward from each project and nothing stopped it here.
+        The architecture gate makes that concrete — hooked at the root, it would run on a project
+        deliberately removed from the graph and judge it against a ledger that cannot describe it.
+
+        QUARANTINE MEANS UNGATED, and this pair is what makes that structural rather than a path filter
+        someone maintains. A filter that happens to exclude the right directories reads identically to one
+        that excludes the wrong ones.
+
+        Nothing here is built by the root build or listed in Puck.slnx. Anything in this tree that must
+        keep working belongs in a real project or a `puck` verb, not here.
+    -->
+
+</Project>

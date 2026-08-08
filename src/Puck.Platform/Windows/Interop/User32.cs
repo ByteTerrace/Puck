@@ -48,6 +48,8 @@ internal static partial class User32 {
     public static partial nint SetCursor(nint cursorHandle);
     [LibraryImport("user32.dll")]
     public static partial short GetKeyState(int virtualKey);
+    [LibraryImport("user32.dll", EntryPoint = "MapVirtualKeyW")]
+    public static partial uint MapVirtualKey(uint code, uint mapType);
     [LibraryImport("user32.dll", EntryPoint = "PeekMessageW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool PeekMessage(out Message message, nint windowHandle, uint filterMin, uint filterMax, uint removeMessage);

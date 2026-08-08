@@ -1,0 +1,23 @@
+{
+  "skill_name": "boy-scout",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "While implementing a requested parser change, I notice a typo and broken link in the same documentation paragraph I must update, plus an unrelated bug in another subsystem.",
+      "expected_output": "Fixes the typo and broken link as small in-passing or owed corrections with their documentation verification, leaves the unrelated behavioral bug untouched, and records that bug with a precise file and location in the final report rather than creating an unsolicited audit document or fix.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Rename a public concept and its documentation heading; the rename moves line citations and breaks inbound anchors in files outside the initially edited directory.",
+      "expected_output": "Classifies the moved citations and broken inbound links as owed because the primary change created them, performs the required search and orphan audit, updates every affected owned artifact despite directory boundaries, and verifies links and anchors without treating those edits as scope creep.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "During a documentation-only task, a comment beside the edited prose reveals that the implementation returns the wrong observable value. Fix it too and commit both changes.",
+      "expected_output": "Rejects the behavior fix as incidental cleanup, does not infer authorization to change code or create commits, corrects prose only if the code is the current contract, otherwise reports the discrepancy and routes it to the owning subsystem for a separately authorized ruled change and verification.",
+      "files": []
+    }
+  ]
+}

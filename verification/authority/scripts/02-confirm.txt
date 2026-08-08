@@ -1,0 +1,10 @@
+player.leave 2
+player.assign kbd 2
+world.players
+world.revoke console drive all
+player.confirm
+world.players
+world.grant console drive all
+player.confirm
+world.players
+wire.errors

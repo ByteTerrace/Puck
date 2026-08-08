@@ -1,0 +1,108 @@
+{
+  "description": "The window-composition defaults \u2014 the seat framing every seat wakes on plus the authored named layouts (see WorldViewDefaults). An empty layout list falls the composer through to the built-in seat ladder.",
+  "type": "object",
+  "properties": {
+    "seatRig": {
+      "description": "The chase framing every seat\u0027s view resolves through (the non-editing default).",
+      "type": "object",
+      "properties": {
+        "motion": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraMotion"
+        },
+        "aim": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraAim"
+        },
+        "lens": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraLens"
+        },
+        "smoothRate": {
+          "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "motion",
+        "aim",
+        "lens"
+      ],
+      "additionalProperties": false
+    },
+    "layouts": {
+      "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "type": "array",
+      "items": {
+        "description": "One named window composition \u2014 an ordered list of WorldViewSlots plus a transition envelope, selected for a given session shape by its SeatCount (0 = the catch-all for any joined-seat count). The data-side replacement for a compiled layout switch: an author can see it, change it, and add arrangements.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The layout\u0027s stable name (the view.override layout override handle; unique within the section).",
+            "type": "string"
+          },
+          "seatCount": {
+            "description": "The joined-seat count this layout composes for, or 0 for the catch-all.",
+            "type": "integer"
+          },
+          "transitionSeconds": {
+            "description": "How long the ease into this composition takes when it becomes active.",
+            "type": "number"
+          },
+          "transitionRenderScale": {
+            "description": "The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle), the compiled director\u0027s 0.5f now authored per layout.",
+            "type": "number"
+          },
+          "slots": {
+            "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+            "type": "array",
+            "items": {
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.",
+              "type": "object",
+              "properties": {
+                "x": {
+                  "description": "The rect\u0027s left edge, normalized [0, 1].",
+                  "type": "number"
+                },
+                "y": {
+                  "description": "The rect\u0027s top edge, normalized [0, 1].",
+                  "type": "number"
+                },
+                "width": {
+                  "description": "The rect\u0027s width, normalized (0, 1].",
+                  "type": "number"
+                },
+                "height": {
+                  "description": "The rect\u0027s height, normalized (0, 1].",
+                  "type": "number"
+                },
+                "camera": {
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "seatCount",
+          "transitionSeconds",
+          "transitionRenderScale",
+          "slots"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "seatRig",
+    "layouts"
+  ],
+  "additionalProperties": false
+}

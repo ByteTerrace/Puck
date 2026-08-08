@@ -1,0 +1,23 @@
+{
+  "skill_name": "dotnet10-performance",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Replace a clear LINQ pipeline in a suspected hot path with a hand-written loop because it should allocate less on .NET 10.",
+      "expected_output": "Requires a profile or demonstrated hot path, checks the relevant LINQ specialization and obsolete-folklore guidance, benchmarks the actual net10.0 target in Release with a representative workload, preserves exceptions and semantics, and keeps the clearer form when evidence does not establish a meaningful win.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Vectorize a floating-point reduction that contributes to replayed simulation state by using machine-width Vector<T> or TensorPrimitives.",
+      "expected_output": "Rejects throughput as sufficient justification because reduction order and Vector<T>.Count can vary by ISA, routes primitive selection to maths-usage, requires a fixed-width or otherwise explicitly ordered deterministic formulation, and measures only after the bit-identical state contract is preserved.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A project fails AOT compatibility analysis after adding reflection-based JSON serialization. Disable Native AOT for the project so the build passes.",
+      "expected_output": "Recognizes that IsAotCompatible analysis, not repository-wide PublishAot, is the default; prefers a JsonSerializerContext and JsonTypeInfo overloads; inspects existing project-local opt-outs and blocker comments; and permits IsAotCompatible=false only for a documented structural blocker rather than a convenience workaround.",
+      "files": []
+    }
+  ]
+}

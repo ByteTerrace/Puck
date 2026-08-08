@@ -1,0 +1,284 @@
+{
+  "description": "The per-world binding overlays (default empty) layered over the engine default beneath each seat\u0027s profile bindings.",
+  "type": "array",
+  "items": {
+    "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay) is what the validator compiles.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The overlay\u0027s stable id \u2014 its mutation address (unique within the definition; carries no meaning beyond identity).",
+        "type": "string"
+      },
+      "document": {
+        "description": "The overlay binding document merged into the composed mapping.",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "modifiers": {
+            "type": "array",
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "pressThreshold": {
+                  "type": "number",
+                  "default": 0.5
+                },
+                "releaseThreshold": {
+                  "type": "number",
+                  "default": 0.4
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "id",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "chords": {
+            "type": "array",
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "chord": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "page": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "entries": {
+                      "$ref": "./common.schema.json#/$defs/BindingPageEntryDefinitionList"
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "icon": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "entries"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "command": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "command": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "channel": {
+                      "default": null
+                    },
+                    "scale": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "holdRelease": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "icon": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "value": {
+                      "default": null
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null
+                }
+              },
+              "required": [
+                "group",
+                "chord"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "contexts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "family": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "group": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "state",
+                "group"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
+          },
+          "wheels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "holdPage": {
+                  "type": "string"
+                },
+                "rings": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "entries": {
+                        "$ref": "./common.schema.json#/$defs/BindingPageEntryDefinitionList"
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "icon": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "entries"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "group",
+                "holdPage",
+                "rings"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "version",
+          "modifiers",
+          "chords"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "id",
+      "document"
+    ],
+    "additionalProperties": false
+  }
+}

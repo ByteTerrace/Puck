@@ -1,0 +1,731 @@
+[
+  {
+    "Id": "presented.clifford-conformal-cells-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Clifford"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Compile"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "KeyCount"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Target"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TargetCount"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charge"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "every one of the conformal (4,1,0) signature's 32x32 compiled cells - the target key and the charge - read individually, past GeometricAlgebra.Create's four-generator cap",
+        "Against": "Oracles.CliffordCharge - the bubble-sort generator-list oracle, exact BigInteger/int arithmetic sharing no code with the compiled table",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the conformal signature compiles to exactly 32 normal forms, and every cell carries exactly one target entry - the twisted-group shape presented.clifford-charge-vs-oracle's certificate leg already asserts in aggregate, checked here cell by cell",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.sedenion-basis-vs-doubling-tower",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "CayleyDickson"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "the sedenion floor's 16x16 basis products over FixedQ4816/FixedMaterial",
+        "Against": "DoublingAlgebra<LeafOctonion>.Multiply's own nested product one doubling deeper (Floor4, the shipped LeafSedenion tower)",
+        "Shared": "FixedQ4816.RoundProductSum - the IDENTICAL kernel reached by MaterialOps.cs's FusedChargedSum on the presented side and DoublingAlgebra.cs's octonion-leaf multiply recursed one floor deeper on the doubling side, not a sibling copy. Operands are unit basis elements, so the shared rounding is INERT and this leg pins the sign structure only",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the sedenion floor's derived charge over BigInteger/IntegerMaterial at all 256 ordered basis pairs",
+        "Against": "Oracles.CayleyDicksonCharge(floors: 4) - the doubling sign recursion in plain int, no Puck.Maths call",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the octonion floor's two-term basis-pair sums produce zero divisor witnesses at NONE of the 441 ordered combinations (7 choose 2 = 21 pair-sums per side) - the same bounded search presented.sedenion-pair-zero-divisor-count runs one floor up, where it finds 84; the division-algebra property requires this floor's search to come back empty",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.quiver-counting-star-vs-walk-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Quiver"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Power"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TrySumOverAllLengths"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.SumClosureObstruction",
+        "Name": "Attempted"
+      },
+      {
+        "Type": "Puck.Maths.SumClosureObstruction",
+        "Name": "StepsTaken"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.CountingMaterial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PresentedAlgebra<BigInteger, CountingMaterial>.Power read as directed-walk counts at every length zero through the vertex count, on a five-vertex acyclic weighted digraph over the codiscrete quiver presentation",
+        "Against": "Oracles.WalkCount - repeated BigInteger matrix multiplication, a schedule distinct from Power's ascending-bit square-and-multiply, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "PresentedAlgebra.TrySumOverAllLengths' nilpotent total on the same digraph",
+        "Against": "the sum of Oracles.WalkCount across lengths zero through the vertex count, computed independently in the claim body",
+        "Shared": "one PresentedAlgebra<BigInteger, CountingMaterial> instance - TrySumOverAllLengths and Power both read the same compiled path algebra and CountingMaterial.FusedChargedSum; CountingMaterial is exact, so condition (B) drops out entirely",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.divisibility-cubed-divisor-count",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DivisibilityAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.DivisibilityAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.DivisibilityAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "DivisorCounts"
+      },
+      {
+        "Type": "Puck.Maths.DivisibilityAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryKey"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Item"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a window generated by every prime through 48 holds exactly 48 integers, the computed precondition DivisorCounts is read against",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "DivisibilityAlgebra.DivisorCounts(3), which is Power(Zeta, 3) — the ascending-bit power schedule one exponent past the already-covered order-2 case",
+        "Against": "the ordered-triple-factorization count read off the same prime factorization: the product over prime-power exponents e of C(e+2, 2)",
+        "Shared": "",
+        "Citation": "the reference reaches the shipped PrimeExtensions.Factorize (PrimeExtensions.cs:771), pinned by core.prime-extensions-vs-trial-division and, at full width, by core.factorization-full-width-sweep — the same citation presented.mobius-star-round-trip's DivisorCounts(2) leg uses for order 2",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.duality-weighted-equivalence-vs-enumeration",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.TokenPattern`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.TokenPattern`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Predicate"
+      },
+      {
+        "Type": "Puck.Maths.TokenPattern`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Concatenate"
+      },
+      {
+        "Type": "Puck.Maths.TokenPattern`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Union"
+      },
+      {
+        "Type": "Puck.Maths.TokenPattern`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Window"
+      },
+      {
+        "Type": "Puck.Maths.PatternMatcher`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryCompile"
+      },
+      {
+        "Type": "Puck.Maths.PatternMatcher`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AreEquivalent"
+      },
+      {
+        "Type": "Puck.Maths.PatternMatcher`2[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[Puck.Maths.PrimeFieldMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryMatch"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness`1[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "LeftValue"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness`1[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "RightValue"
+      },
+      {
+        "Type": "Puck.Maths.EquivalenceWitness`1[[System.UInt64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Word"
+      },
+      {
+        "Type": "Puck.Maths.PrimeFieldMaterial",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "PatternMatcher<ulong, PrimeFieldMaterial>.AreEquivalent — the pairing-radical decision over a NUMERIC field material, which every existing PatternMatcher/TokenPattern law leaves untested (they instantiate BooleanMaterial, over which AreEquivalent decides nothing, per the member's own remarks)",
+        "Against": "brute word enumeration to the window bound, deciding by running TryMatch on both compiled machines and comparing the field-valued weight",
+        "Shared": "the brute side runs the SAME compiled matchers TryCompile produced, so the enumeration and the radical share the automaton and differ only in decision procedure",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "on inequivalence, the reported witness carries the shortest separating span and the two field-valued weights the machines actually give it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.complement-wedge-and-incidence-beyond-euclidean",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.GradedComplement`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "OuterProduct"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "RightComplement"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "RegressiveProduct"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Clifford"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "GradedComplement.OuterProduct on EVERY ordered basis blade pair at a degenerate signature (3,0,1) and a mixed signature (4,1,0) — the top-grade-triple-only check presented.orientation-twins-determinant states stops at (3,0,0), where every generator is positive",
+        "Against": "WedgeSignOracle, a merge-permutation sign that reads no signature and no metric — exact over IntegerMaterial",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the double right complement's coefficient on every basis blade at (3,0,1) and (4,1,0)",
+        "Against": "the closed-form parity (−1)^(g·(n−g)) for the GENERAL generator count n, computed inline calling no Puck.Maths kernel — presented.orientation-twins-determinant pins only the n = 3 instance of this formula",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the projective (3,0,1) meets: two planes sharing a generator meet in that generator's line with unit coefficient at three hand-picked pairs, and a generator joined to a blade already containing it vanishes rather than surviving as a spurious meet — no other case in the suite exercises GradedComplement.RegressiveProduct in the degenerate PGA signature at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.transfer-functor-vs-legacy-copies",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ConvergentTransfer`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Entry"
+      },
+      {
+        "Type": "Puck.Maths.ConvergentTransfer`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Evaluate"
+      },
+      {
+        "Type": "Puck.Maths.ContinuedFraction",
+        "Name": "Expand"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticInflation",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystal",
+        "Name": "Compile"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystalIndex",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystalIndex",
+        "Name": "B"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystalIndex",
+        "Name": "C"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticQuasicrystalIndex",
+        "Name": "D"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticOstrowskiSystem",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticOstrowskiSystem",
+        "Name": "PartialQuotient"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticOstrowskiSystem",
+        "Name": "Evaluate"
+      },
+      {
+        "Type": "Puck.Maths.Research.SturmianReturnSpectrumResearch",
+        "Name": "PeriodicTail"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "ConvergentTransfer.Evaluate over the continued-fraction period",
+        "Against": "QuadraticInflation.FromQuadraticIrrational's A/B/C/D substitution matrix, at five quadratic irrationals",
+        "Shared": "ContinuedFraction.Expand, which supplies the period to both sides; ConvergentTransfer carries no arithmetic of its own and nothing in src/Puck.Maths references it, so no copy delegates back — IntegerMaterial is exact and (B) drops out on every leg here",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "ConvergentTransfer.Evaluate over the same period",
+        "Against": "QuadraticQuasicrystal.Compile's index A/B/C/D substitution matrix, at the same five irrationals",
+        "Shared": "the same ContinuedFraction.Expand period",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "ConvergentTransfer.Evaluate's (0,0) entry over a_1..a_k — QuadraticOstrowskiSystem does not appear in any other law in the suite",
+        "Against": "QuadraticOstrowskiSystem.Evaluate's convergent denominator q_k for the representation 1·q_k, at two irrationals and lengths one through eight",
+        "Shared": "the same period, read from QuadraticOstrowskiSystem.PartialQuotient rather than from ContinuedFraction.Expand directly — the two are the SAME recurrence stated two ways",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the periodic tail rebuilt from the transfer's own entries — SturmianReturnSpectrumResearch does not appear in any other law in the suite",
+        "Against": "SturmianReturnSpectrumResearch.PeriodicTail at the same period, start and step",
+        "Shared": "the transfer's own entries feed both sides directly, so this pins the ALGEBRAIC RECONSTRUCTION from those entries rather than a second independent derivation of the period",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.motor-sandwich-vs-geometric-algebra",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "GeometricProduct"
+      },
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "Reverse"
+      },
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "SandwichTransform"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Clifford"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "PresentedTwin",
+        "Flavor": "None",
+        "Subject": "the derived reverse, a per-grade sign computed from NormalFormWord(key).Length, over a deterministic catalogue of exact motors (180-degree unit-bivector rotors and null-generator translations, composed pairwise)",
+        "Against": "GeometricAlgebra.Reverse — negation only, no rounding on either side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "the derived (3,0,1) sandwich — two PresentedAlgebra.Multiply calls against the derived reverse — bit-identical over the same motor catalogue and five sample vectors, at every one of the sixteen blades",
+        "Against": "GeometricAlgebra.SandwichTransform, an independently authored kernel that never sees a presentation or a rewrite rule",
+        "Shared": "FixedQ4816.RoundProductSum — the identical rounding kernel both GeometricProductCore and PresentedAlgebra.Multiply's fused fold reach; not previously cited by any GeometricAlgebra.Reverse or GeometricAlgebra.SandwichTransform law, because none existed",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.shuffle-near-cap-basis",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Shuffle"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the generator and normal-form counts of Presentations.Shuffle across the full thirteen-tuple ladder, including the three NEAR-cap tuples (1, 511), (2, 8) and (511, 1) at 512, 511 and 512 words",
+        "Against": "the closed form sum over length 0..window of letters^length, summed in BigInteger inside this case",
+        "Shared": "",
+        "Citation": "elementary counting -- the words of length at most w over an alphabet of L number the geometric sum, and nothing in this tree derives that. The arithmetic shares no code with the presentation: the sum is BigInteger.Pow and addition, the subject is the presentation's own derived cap",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every one of the up-to-512 normal forms at each tuple is the one-letter word naming its own key, and HasFiniteNormalForms holds at every admitted tuple. This is the near side of the derived cap -- that the last admitted tuple is REACHED -- where presented.shuffle-limits-refuse gates the far side, that the tuple past it is REFUSED. A cap derived one too low would still satisfy the refusal case alone, so neither half implies the other",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.homology-torus-free-rank-two",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ExteriorCalculus`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ExteriorCalculus`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "CellsOfDegree"
+      },
+      {
+        "Type": "Puck.Maths.ExteriorCalculus`2[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Dimension"
+      },
+      {
+        "Type": "Puck.Maths.IntegerHomology",
+        "Name": "TryCompute"
+      },
+      {
+        "Type": "Puck.Maths.IntegerHomology",
+        "Name": "BettiNumber"
+      },
+      {
+        "Type": "Puck.Maths.IntegerHomology",
+        "Name": "Torsion"
+      },
+      {
+        "Type": "Puck.Maths.IntegerHomology",
+        "Name": "EulerCharacteristic"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IntegerHomology.TryCompute's Betti numbers on the minimal seven-vertex triangulation of the torus (faces {i, i+1, i+3} and {i, i+2, i+3} mod 7 -- the difference-set triangulation)",
+        "Against": "[1, 2, 1]",
+        "Shared": "",
+        "Citation": "the topological fact that the torus has first Betti number two (H1 is free of rank two) -- nothing in this tree computes it. STRICTLY STRONGER than every homology case presented.homology-torsion-and-betti already carries: the projective plane and the five torsion-free worlds all top out at Betti number one in every degree, so this is the suite's first free rank above one",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the torsion list in every degree of the same triangulation",
+        "Against": "empty in every degree -- the torus's integral homology is entirely free",
+        "Shared": "",
+        "Citation": "the topological fact that H1(torus; Z) = Z^2 with no torsion coefficient, unlike the projective plane's Z/2",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the triangulation reduces to seven vertices, twenty-one edges and fourteen triangles at dimension two, and the reported Euler characteristic is zero, matching both 7 - 21 + 14 and the alternating Betti sum 1 - 2 + 1",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -1,0 +1,504 @@
+[
+  {
+    "Id": "position.canonical-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellSizeLog2"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "FromLocal"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "WithLocal"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.TryCreate \u2014 the per-axis arithmetic-shift quotient, masked residue, half-cell carry compare and the unchecked (localRaw \u2212 (carry \u003C\u003C 36)) subtraction, FixedPosition.cs:265-284",
+        "Against": "Oracles.CellSplit \u2014 one Oracles.FloorQuotient of (localRaw \u002B 2\u00B3\u2075) over 2\u00B3\u2076 and one exact multiply-subtract in BigInteger, with no mask, no shift and no wrap anywhere. EXACT on both sides: the rounding substrate does not arise in this type at all, so the statement is the canonicalization rule itself. ENVELOPE, reached every run: at localRaw = long.MaxValue the subject\u0027s carry \u003C\u003C 36 forms 2\u2076\u00B3 and wraps to long.MinValue; the subtraction stays congruent mod 2\u2076\u2074 and the true offset is in band, and the oracle judges that without reproducing it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TryCreate\u0027s refusal predicate",
+        "Against": "the exact BigInteger test \u0027cell \u002B carry leaves [long.MinValue, long.MaxValue]\u0027 on ANY of the three axes, inline in Subjects.PositionCanonicalExact \u2014 and a refused call must leave FixedPosition.Zero, the WHOLE position, rather than the axes that did fit",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the canonical band is a fact the law states rather than the type asserts: every accepted position\u0027s three Local raws lie in [\u22122\u00B3\u2075, 2\u00B3\u2075) \u2014 half-open, carrying UP at exactly half a cell \u2014 and the declared cell size is read as an OBSERVABLE fact, an offset of exactly half a cell carrying into the next cell while minus half a cell and one raw below half a cell do not, which is what CellSizeLog2 == 20 and FixedQ4816.FractionBitCount == 16 together mean",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Normalize() returns a BIT-IDENTICAL value at every accepted position, which is the invariant claim its \u0027idempotent and O(1)\u0027 remark makes; taken with the band statement above this is a real claim about construction and not a tautology about the identity function",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two construction shorthands agree with the general one: FromLocal(v) equals TryCreate(0, 0, 0, v) and never refuses, and p.WithLocal(v) equals TryCreate(p.CellX, p.CellY, p.CellZ, v) \u2014 the replacement offset is relative to the CURRENT cell, so a shorthand that re-anchored to the origin would fail here, and where TryCreate refuses the replacement WithLocal must throw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Deconstruct hands back (CellX, CellY, CellZ, Local) in the declared order, so a transposed out-parameter fails here rather than surviving inside a symmetric claim. It carries no CoverRef: MemberSurface excludes Deconstruct from the ratchet",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the throwing constructor and TryCreate agree everywhere: the constructor reproduces TryCreate\u0027s value where it succeeds and throws OverflowException where it refuses, checked on every swept operand rather than inferred from the one-line body",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is default(FixedPosition), is canonical, and is the value a refused TryCreate leaves behind \u2014 one object read three ways",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "position.delta-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryDelta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Delta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.TryDelta \u2014 BOTH code paths: the narrow long path gated on a non-overflowing cell subtraction AND |cellDelta| \u2264 2\u00B2\u2076 (FixedPosition.cs:307-319) and the Int128 path beyond it",
+        "Against": "Oracles.CellDelta \u2014 the single exact BigInteger expression (cell \u2212 originCell)\u00B72\u00B3\u2076 \u002B (localRaw \u2212 originLocalRaw), one branch and no gate. EXACT on both sides; the oracle knows nothing of the conservative 2\u00B2\u2076 gate and therefore judges the two paths equally",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TryDelta\u0027s refusal predicate",
+        "Against": "the exact BigInteger test \u0027the displacement leaves [long.MinValue, long.MaxValue]\u0027 on ANY axis, inline in Subjects.PositionDeltaExact. ENVELOPE: the narrow path can never refuse \u2014 its gate makes the result provably representable, and 2\u00B2\u2077 would still have fitted \u2014 so this leg reads the wide path\u0027s range test alone, and the reached-paths leg is what proves the wide path actually runs",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a refused TryDelta leaves FixedVector3.Zero, and Delta then throws OverflowException while op_Subtraction is Delta \u2014 one member read through two names, checked by value on every swept pair rather than assumed from the one-line body",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BOTH delta paths are REACHED, not merely believed reachable, and both are COUNTED so a gate moved to a constant would leave one arm dark: a hand-listed witness ladder puts cell differences inside the 2\u00B2\u2076 gate, exactly at it, one past it, past what the carrier can hold, and at the pair whose cell subtraction overflows outright \u2014 each judged by the same one exact expression",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "antisymmetry, stated exactly rather than approximately: where both directions are representable, a.Delta(b) is the componentwise two\u0027s-complement negation of b.Delta(a) \u2014 which at raw long.MinValue means EQUAL rather than opposite, and the law says so instead of excluding the point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "position.translate-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryTranslate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.TryTranslate \u2014 the per-axis long add with the branchless exclusive-or overflow test then the long canonicalizer, and the Int128 fallback that recomputes ALL THREE components wide when any one add overflows (FixedPosition.cs:118-144)",
+        "Against": "Oracles.CellSplit of the EXACT BigInteger sum (localRaw \u002B delta) against the existing cell, per axis \u2014 one derivation covering both of the subject\u0027s paths, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TryTranslate\u0027s refusal predicate",
+        "Against": "the exact BigInteger test \u0027cell \u002B carry leaves the signed 64-bit range\u0027 on any axis, inline in Subjects.PositionTranslateExact; a refused translate must leave FixedPosition.Zero and op_Addition must throw OverflowException",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the branch is chosen by the WORST axis: one overflowing component moves the other two onto the Int128 canonicalizer, so the two normalizers are required to agree on components that did NOT need the wide path \u2014 which is the only place their two spellings of the carry can be compared at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BOTH translate paths are REACHED and counted: a canonical offset one raw below half a cell against a long.MaxValue displacement overflows the narrow add while the small edges do not, and the witness ladder carries both arms",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "translating by the zero vector is a BIT-IDENTICAL fixed point at every accepted position \u2014 the canonicalizer must not move an already-canonical offset, which is the claim FixedPosition.Normalize\u0027s O(1) body depends on",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "position.group-structure-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Delta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryDelta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryTranslate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "FromLocal"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the torsor law, exact: where p \u002B d is defined, (p \u002B d) \u2212 p is d BIT-FOR-BIT. This is the statement that makes FixedPosition a hierarchical coordinate rather than a lossy one, and it holds because both operations are exact integer arithmetic \u2014 no rounding is being tolerated here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "p \u2212 p is exactly the zero vector at every swept position, cell extremes included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromLocal(v) \u2212 Zero is exactly v at EVERY sampled offset, in band or not: the re-anchoring moves the STORED offset and never the displacement, which is where the cell/offset split shows itself to be a representation choice rather than a quantization",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the composition of two translations",
+        "Against": "Oracles.CellSplit of the single exact BigInteger sum localRaw \u002B d\u2081 \u002B d\u2082 against the base cell, per axis \u2014 so the sequential route is judged against the exact answer rather than against the composite route. Taken with the equality below, this states exactly where the two routes coincide: bit-for-bit whenever the carrier\u0027s own vector add did not wrap, and by that wrap where it did",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "associativity of displacement, stated with the carrier\u0027s wrap INCLUDED rather than excluded: (p \u002B d\u2081) \u002B d\u2082 equals p \u002B (d\u2081 \u002B d\u2082) bit-for-bit wherever the componentwise sum d\u2081 \u002B d\u2082 did not leave the carrier, checked against the exact BigInteger sum on every axis",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is a two-sided neutral: Zero \u002B the zero vector is Zero, and p \u2212 Zero is the same displacement p measures against a freshly constructed origin",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "position.render-relative-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "ToRenderRelative"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Delta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.ToRenderRelative over the eight-row render ladder \u2014 the origin, both unit signs, a whole cell, the far-from-origin pair, a cell-boundary crossing, the 2\u207B\u00B9\u2076 half unit and the reversed far pair",
+        "Against": "Subjects.PositionRenderLadder, a constant table of exactly representable binary32 literals compared with EXACT equality and no tolerance",
+        "Shared": "",
+        "Citation": "hand-derived from the displacement each row denotes in world units; every expected value is an integral or half-integral number of units below 2\u00B2\u2074, hence exactly representable in binary32, so the comparison needs no tolerance, the claim body forms no double, and the table shares no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "THE THESIS OF THE TYPE, measured: a camera one unit from a position a trillion cells from the world origin renders the IDENTICAL float triple as the same displacement at the origin, bit-for-bit \u2014 which is the precision claim the cell/offset split exists to make and which a flat 64-bit coordinate cannot make",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ToRenderRelative throws OverflowException exactly where Delta does, at the hand-listed unrepresentable pair, so the presentation seam does not silently saturate a displacement the exact path refuses",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedPosition.ToRenderRelative",
+        "Against": "Delta(origin).ToVector3() on the same operands",
+        "Shared": "the whole body \u2014 ToRenderRelative IS that expression (FixedPosition.cs:191-192), so agreement proves the wiring and never the conversion",
+        "Citation": "the published-constant leg above, which reads the FLOATS themselves against a hand-derived table and so pins the conversion independently of the delegation; and position.delta-vs-oracle, which pins Delta against Oracles.CellDelta",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three axes are not interchangeable: each ladder row carries a DIFFERENT value on X, Y and Z, so a transposed component fails on placement before any value is compared",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "position.print-members-invariant-cells",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.ToString at negative and positive cell indices and at the origin",
+        "Against": "hand-assembled constant strings: negative cells pin the invariant '-' sign and the 2^-16 local raw pins the exact dyadic expansion, both authored from the text contract rather than captured from the subject",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rendering is culture-free by construction: the hand-written PrintMembers names CultureInfo.InvariantCulture for the three long cell indices — closing the one ambient-culture read the synthesized formatter carried, which contradicted the library README's no-current-culture promise — and hands Local to FixedVector3's own bounded invariant formatter. ENVELOPE: InvariantGlobalization is on for this suite, so a hostile ambient-culture control cannot be constructed in-process; the statement is pinned by exact expected strings whose '-' and '.' could not survive a culture-honouring formatter under a culture that spells either differently",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

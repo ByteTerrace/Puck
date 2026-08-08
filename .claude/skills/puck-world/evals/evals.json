@@ -1,0 +1,23 @@
+{
+  "skill_name": "puck-world",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a tunable mouse-look sensitivity for one Puck.World seat without changing the other shipped worlds' behavior.",
+      "expected_output": "Reads the views and documents references, searches Puck.World.Data for existing vocabulary before designing anything, authors the value in the document model with a behavior-preserving default, validates it, sweeps every shipped world, binds it through the existing seat-camera path, and adds a read-back in the same change instead of introducing a flag or baked constant.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "world.row.set refuses when a peer tries to edit another player's state row even though that player has a broad grant. Diagnose the refusal and propose a verification run.",
+      "expected_output": "Reads the authority, mutation, ordered-domain, and console references; traces the acting principal stamped at ingress rather than constructing one; distinguishes grant composition from subject legitimacy; verifies with actor different from target; includes a success control; and runs the game while capturing both stdout and stderr.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Write a hermetic stdin script that mutates HUD state, reads it back, and captures the composed overlay for a pixel assertion.",
+      "expected_output": "Uses an isolated state directory, captures both streams, preserves BOM-less UTF-8, relies on the simulation drain barrier or world.wait, waits a frame after the screenshot reports pending, finds the capture announcement on stderr, distinguishes the pixel proof from authoritative replay proof, and does not create permanent verification infrastructure without approval.",
+      "files": []
+    }
+  ]
+}

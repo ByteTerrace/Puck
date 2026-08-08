@@ -252,7 +252,7 @@ the room's own frame.
 
 ## Related resources
 
-- [.agents/skills/sdf-world/SKILL.md](../../.agents/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
   — "Views" and "Composition, anchors, views, and queries" sections; the two
   content seams under "Engine semantics."
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,

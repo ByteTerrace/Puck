@@ -68,6 +68,7 @@
       "puck.commands": {
         "type": "Project",
         "dependencies": {
+          "Puck.Maths": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
         }
       },
@@ -78,6 +79,9 @@
           "Puck.Commands": "[1.0.0, )",
           "System.IO.Hashing": "[10.*, )"
         }
+      },
+      "puck.maths": {
+        "type": "Project"
       }
     }
   }

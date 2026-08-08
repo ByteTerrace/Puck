@@ -52,10 +52,10 @@ for the current hardware matrix.
 ## Production SDF world path
 
 These are the kernels loaded by `SdfWorldKernels` and recorded by
-`SdfWorldEngine` every world frame. Verification for ALL of them is the POST
-battery (`dotnet run --project src/Puck.Post -c Release`) — the world-path
-stages exercise every kernel, and stage names move too fast to pin here (the
-battery's own output is the source of truth for what covers what).
+`SdfWorldEngine` every world frame. **Nothing verifies them today.** The engine
+battery whose world-path stages exercised every one of them left the build in
+the 2026-08-02 quarantine and has no replacement, so a kernel change is judged
+by running `Puck.World` and looking at the pixels on both backends.
 
 | Shader | Role | Primary C# owner |
 |---|---|---|
@@ -69,6 +69,7 @@ battery's own output is the source of truth for what covers what).
 
 | Include | Role | Keep in sync with |
 |---|---|---|
+| `Sdf/sdf-isa.hlsli` | The shader-reported SDF ISA version. The production beam and both views variants write it through their existing tile/output bindings during initialization. | `SdfIsa.Version`, verified at runtime rather than trusted by duplication |
 | `Sdf/sdf-vm.hlsli` | The primary VM include: packed instruction stream decode, shape SDFs, blends, wallpaper folds, bounds skips, segment/instance merge, dynamic transforms, materials, and `map`/`mapMasked`. | `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfWallpaperGroup`, `SdfProgram`, `SdfProgramBuilder` |
 | `Sdf/sdf-world.hlsli` | World-render shared code: viewport push/data contract, screen-source sampling, camera ray generation, cone march, per-tile instance cull, and `renderView`. | `SdfWorldEngine`, `SdfFrame`, `SdfScreenSurface` |
 

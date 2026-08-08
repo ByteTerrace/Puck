@@ -36,5 +36,5 @@ The stored field includes its conservative scale and boundary floor. A missing
 or unavailable brick must fall back to an uncarved conservative result, never a
 hole.
 
-Per-segment bounds for placed creations remain an open priority. Track
-implementation work in [the SDF backlog](../sdf-backlog.md).
+Per-segment bounds for placed creations remain an open priority, tracked
+nowhere: this paragraph is the whole record of the item.

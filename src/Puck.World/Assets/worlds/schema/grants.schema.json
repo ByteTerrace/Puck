@@ -1,0 +1,71 @@
+{
+  "description": "The document-authored grant rows (default empty) \u2014 capability holds a world SHIPS with, reviewable here rather than only typed at a console (see WorldGrant). Applied at BOOT, in order, through the SAME Server.WorldServer.Grant path world.grant submits through, on top of the permissive seed \u2014 never in place of it. Empty (the default) is byte-identical to every world authored before this section existed: nothing here changes boot behavior unless a row is actually added.",
+  "type": "array",
+  "items": {
+    "description": "One grant row \u2014 the wire payload of world.grant/world.revoke: a principal holds a capability over a subject, optionally EXCLUSIVE (the engagement latch generalized \u2014 acquiring an exclusive grant a live holder owns is rejected). Revoke ignores Exclusive. The SAME shape doubles as the document row of Grants \u2014 a world SHIPPING a hold reviewably rather than only typing it live \u2014 applied at boot through the identical Server.WorldServer.Grant path world.grant submits through, so an illegitimate or conflicting authored row prints the same loud accept/reject line an operator would see typing it. One shape, one decision procedure, whichever door authority walks through.",
+    "type": "object",
+    "properties": {
+      "principal": {
+        "description": "The acting identity the grant is for."
+      },
+      "capability": {
+        "description": "The capability conferred.",
+        "enum": [
+          "Drive",
+          "Observe",
+          "Control",
+          "Mutate",
+          "Edit"
+        ]
+      },
+      "subject": {
+        "description": "The subject the capability scopes to."
+      },
+      "exclusive": {
+        "description": "Whether the grant is held exclusively (single holder per capability\u002Bsubject).",
+        "type": "boolean"
+      },
+      "budget": {
+        "description": "The per-tick DISPATCH allowance for the row\u0027s capability \u2014 compute, not space (a request costs a host dispatch, not a record in a region). Only an Observe or Drive grant to an UNTRUSTED principal (Addon/ Peer) may carry one TODAY: the grant door (Server.WorldGrants.TryGrant) REQUIRES it there (a defaulted budget would silently decide a DoS ceiling), REFUSES 0 (accepted-and-inert \u2014 grant nothing instead), and REFUSES it everywhere else (a trusted principal\u0027s grant, or Present/Control/ Mutate/Edit) \u2014 those doors do not meter yet, and a field admitted ahead of enforcement would be a lie in the schema. The effective ceiling at the addon door is min(Budget, Puck.Scripting.AddonAbi.MaxOutCells) \u2014 deliberately NOT enforced here at the grant door, so the grant schema and the ABI capacity constant stay free to move independently.",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reach": {
+        "description": "An untrusted contributor\u0027s channel reach on a Drive row, carried alone: which declared ordinals this contributor may touch at all. Reach is not consent; a reached channel contributes nothing until the occupying seat authors a positive ceiling for it."
+      },
+      "consent": {
+        "description": "The ordinals named by the occupying seat\u0027s ceiling gesture on its own Drive row. The seat may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the ordinals it names and leaves the rest unchanged, while revocation clears the whole ceiling value."
+      },
+      "ceiling": {
+        "description": "The pool ceiling c (raw Q16.16, 0 \u003C c \u2264 One) bounding how far the untrusted pool may pull the channels Consent names away from the human\u0027s own value. It is ONE NUMBER PER (SEAT, CHANNEL), AUTHORED BY THE SEAT, and the grant door enforces exactly that: a row carrying a ceiling must be the occupying seat\u0027s own row (seatN drive body:N) and must name the channels it applies to. It is never carried on a contributor\u0027s row and never derived across rows \u2014 no combination of contributor-declared numbers (max, sum, or min) is defensible, and a contract nobody can state as a single number is not one. 0 is REFUSED at the door, mirroring Budget\u0027s 0 refusal verbatim: pool-but-never-reach is accepted-and-inert, so grant nothing instead of a ceiling that can never fire. A ceiling authored in the WORLD DOCUMENT is WITHHELD at boot (the row itself still applies) \u2014 see Server.WorldServer\u0027s constructor: the document may pre-wire a contributor\u0027s reach, but consent is a thing only a seated human grants live.",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "kindMask": {
+        "description": "The MutationKindMask a row admits \u2014 legal ONLY on a Mutate row over a CONCRETE Section subject, or an Edit row over a CONCRETE State subject (never the wildcard \u2014 \u0022which kinds\u0022 presupposes one bounded target \u2014 and never any other capability). The grant door refuses a bit outside the target\u0027s own declared kind set (WorldMutationKindCatalog.KindsOf(section), or KindsOf(WorldSection.State) for an Edit row) and refuses an effective mask of zero (an admitted-but-inert bit set is a grant that lies \u2014 the identical \u0022grant nothing instead\u0022 rule Budget\u0027s 0 and Ceiling\u0027s 0 already enforce). On an Edit row this is what separates BUMPING a state row from REDEFINING it: verbs:UpsertStateCell,RemoveStateCell admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that could re-author the row\u0027s envelope. An UNMASKED Edit row keeps full reach over its subject, so deny-by-default plus opt-in narrowing holds and no seeded row changes meaning. A null mask on a RE-GRANT of the same (Principal, Capability, Subject) row CLEARS a previously-recorded mask \u2014 unlike Budget/Reach, which only ever WRITE when the incoming grant carries one and otherwise leave the prior value untouched; a mask a re-grant does not repeat is a mask the operator meant to take back, not one this door defaults into surviving silently. Revoking the row clears it outright. When a principal holds BOTH a concrete row and the (trusted-only) wildcard row, the DECIDING row from Rule governs which mask applies \u2014 ConcreteHold beats WildcardHold, exactly as it does for the bare allow/deny check."
+      },
+      "eventBudget": {
+        "description": "The per-tick EVENT-CELL allowance for an Observe row over an event-bearing subject (Body, Screen, Region, or Seat) \u2014 a grant-row property alongside Budget, metering a DIFFERENT cost: Budget meters query DISPATCH (a guest asking), this meters EVENT PUSH volume (the host telling) \u2014 two separate meters, never one renamed. A row with no EventBudget still observes normally (a bare observe body:\u003Cn\u003E keeps working exactly as before) but receives no events for that subject. REQUIRED (refused by name otherwise) on an Observe row over Region, Seat, or Screen, since those subject kinds carry no OTHER live meaning \u2014 an event-bearing subject with no event budget would be accepted-and-inert, the identical rule Budget\u0027s own 0-refusal enforces. That requirement STACKS with (never replaces) the PRE-EXISTING rule that every untrusted principal\u0027s Observe row also needs Budget: the dispatch meter does not know a subject carries no query verb, so an observe region:\u003Cname\u003E row needs BOTH Budget AND EventBudget today. REFUSED on any capability but Observe, and eventBudget:0 is refused unconditionally (grant nothing instead).",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "holdCeiling": {
+        "description": "The timed-channel-press ceiling in raw Q16.16 seconds. Legal only on a Drive row and bounded by the server\u0027s engine backstop. Omission selects DefaultHoldSeconds; zero forbids timed holds while leaving live held input untouched.",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "writeMask": {
+        "description": "The DocumentWriteMask a row admits on the CROSS-DOCUMENT durable-state write-back channel \u2014 legal ONLY on a Mutate row over a concrete State subject, the one door that speaks WorldDocumentWriteKind operations (see Server.WorldOwnedWorlds.Decide). A SEPARATE FIELD from KindMask, not a second reading of it: the two vocabularies share a bit-lane shape and nothing else, and collapsing them into one ulong made bit 0 mean UpsertKit on one row and Set on another. Same zero/inadmissible-bit refusals and same clear-on-re-grant rule as KindMask."
+      }
+    },
+    "additionalProperties": false
+  }
+}

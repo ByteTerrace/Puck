@@ -1,0 +1,388 @@
+[
+  {
+    "Id": "integer.floor-divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FloorDivide"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.FloorDivide<long> — T.DivRem plus the branchless XOR-sign borrow",
+        "Against": "Oracles.FloorQuotient — BigInteger.Divide plus a Sign-comparison correction; both sides exact integers, no rounding substrate on either. Subjects.Divisor substitutes 1 for b == 0 and for (long.MinValue, −1), so the value statement runs over every OTHER operand pair; leg 2 closes the envelope at those two",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two substituted pairs are REFUSED rather than answered, at all three floored members: DivideByZeroException at divisor zero and OverflowException at the signed minimum over minus one, which are the documented throws (worklist O1)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.ceiling-divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "CeilingDivide"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.CeilingDivide<long> — T.DivRem plus the XOR-sign carry, deliberately not routed through FloorDivide",
+        "Against": "Subjects.CeilingDivideOracle — Oracles.FloorQuotient raised by one iff quotient·divisor != a; a different derivation route, both sides exact",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.floor-divrem-quotient",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FloorDivRem"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.FloorDivRem<long>.Quotient — the pair's quotient half",
+        "Against": "Oracles.FloorQuotient — BigInteger.Divide plus a Sign-comparison correction; both sides exact integers. The borrow is textually identical to FloorDivide's, so what this adds over integer.floor-divide-vs-oracle is that the pair-returning member's quotient half is not mis-wired, not fresh evidence about the correction rule",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.floor-divrem-remainder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FloorDivRem"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.FloorDivRem<long>.Remainder — the truncated remainder with the divisor added back under the shared borrow",
+        "Against": "Subjects.FloorDivRemRemainderOracle — a − FloorQuotient(a,b)·b in BigInteger, derived from the quotient rather than from the remainder; both sides exact",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.symmetry-lattice-exact-structure",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RingSize"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RayCount"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RayCycleOrder"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RayCycleFactor"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Reflect"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Cycle"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Ring"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Antipode"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "CanonicalRay"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "AreOrthogonal"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Project"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SymmetryLattice.RingSize equals CyclicRotation.Period — two independently declared constants",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SymmetryLattice.RayCount is 120 and RayCycleOrder is 15 — the antipodal-ray quotient contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "SymmetryLattice.RayCycleFactor",
+        "Against": "their product, re-multiplied back to the cycle polynomial by BinaryPolynomial multiplication",
+        "Shared": "the ray-cycle factors are exactly the stored result of one BinaryPolynomial.FactorOddCycle call taken at the static constructor — so this proves SymmetryLattice threads the right order through and keeps the right field, not that FactorOddCycle or the product are correct",
+        "Citation": "FactorOddCycle's own multiply-back property is independently pinned at polynomial.factor-odd-cycle-vs-cyclotomic-cosets and its Deep mirror; the polynomial product at polynomial.multiply-vs-carryless-oracle and its Deep mirror",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every one of Reflect, Cycle, Ring, Project, Antipode, CanonicalRay and AreOrthogonal refuses an out-of-range argument with ArgumentOutOfRangeException naming the right parameter, at three probes each — Project's valid-node projected values are read and checked against the closed-form geometry by the Classical legs below",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Reflect is an involution over all 240 by 240 node and mirror pairs — the FULL carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "SymmetryLattice.AreOrthogonal",
+        "Against": "Reflect returning the node unchanged",
+        "Shared": "the subject's own definition — AreOrthogonal reads the same reflection map Reflect indexes through its own public accessor",
+        "Citation": "NONE — the leg restates the subject's own definition and cannot fail on the shared array; what it DOES catch is a wiring defect in AreOrthogonal's own expression. Reflect's involution and the group's transitivity are pinned by the structural legs in this same case",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "fifteen applications of SymmetryLattice.Cycle from a node",
+        "Against": "the central inversion via Reflect at the node against itself, and Antipode",
+        "Shared": "SymmetryLattice's baked index maps — the cycle map and reflection map are built in one static constructor from the same closure, so neither side wraps the other but both inherit that one derivation. ENVELOPE: this pins the RELATIONSHIP between the cycle and the central inversion, not that either baked map's underlying E8 geometry is itself correct",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CanonicalRay is antipode-invariant at every node",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the cycle partitions the 240 nodes into exactly 8 rings of exactly 30, and the cycle from node zero does not exceed the ring size before returning to it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "reflections act transitively: a breadth-first closure of Reflect from node zero reaches all 240 nodes, so the group the reflections GENERATE is the full symmetry group and not merely the order-30 cycle",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the eight projected ring radii, normalized to the innermost and compared as SQUARED ratios so no square root of the closed form is ever taken",
+        "Against": "the closed-form E8/Ising mass spectrum in cos(pi/30), cos(7pi/30), cos(2pi/15), cos(pi/5) and the golden ratio - each an exact BigInteger bracket, never a double: Oracles.EncloseSinCos (a Machin-series pi and an alternating trigonometric series) for the cosines, and an independent Newton-descent Oracles.IntegerSquareRoot for the golden ratio's sqrt(5), widened by a 1/1024 relative band. The measured deviation tops out near 1.1e-5 relative, from the projection basis's own Q16 baking (SymmetryLattice.cs:47-48) - under a hundredth of the declared band",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the golden-ratio pairing: exactly four of the twenty-eight sorted-radius ring pairs are in the golden ratio",
+        "Against": "the golden ratio squared, ((1+sqrt5)/2)^2, the same exact surd bracket as the mass-spectrum leg above",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the turn from Project(node) to Project(Cycle(node)), at every one of the 240 nodes",
+        "Against": "a twelve-degree CLOCKWISE rotation (the single direction confirmed to hold at every node) by Oracles.EncloseSinCos's exact bracket for cos(pi/15) and sin(pi/15), widened by eight raw Q16 ticks. The measured deviation tops out near 2.2 raw ticks, from the same Q16 basis baking",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "each projected ring is concentric: its floor radius (an exact Newton-descent Oracles.IntegerSquareRoot of the squared radius, never a double Math.Sqrt) spans no more than four raw Q16 ticks across all thirty of its nodes - measured at most three",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hilbert-curve-bijection-and-locality",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HilbertCurve",
+        "Name": "Decode"
+      },
+      {
+        "Type": "Puck.Maths.HilbertCurve",
+        "Name": "Encode"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Decode is a bijection onto the grid at every order one through nine: each cell is visited exactly once, tested at the DECODED point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "HilbertCurve.Encode",
+        "Against": "HilbertCurve.Decode, as its exact inverse over the full curve at orders one through nine",
+        "Shared": "the round trip calls BOTH members and nothing else, and both route through the private rotation helper, so a compensating error in Encode and Decode together — or a wrong-but-shared rotation — would survive it alone",
+        "Citation": "the locality leg below is what actually discriminates a wrong rotation: consecutive curve distances must land on grid neighbours, which a shared-but-wrong reflection breaks even though the round trip stays green",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "consecutive curve distances map to grid neighbours at Manhattan distance exactly one at every step of the full curve, orders one through nine — the defining locality property, and the leg that discriminates the rotation helper",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hilbert-curve-high-order-round-trip",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HilbertCurve",
+        "Name": "Encode"
+      },
+      {
+        "Type": "Puck.Maths.HilbertCurve",
+        "Name": "Decode"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "HilbertCurve.Encode composed with HilbertCurve.Decode at orders ten through thirty-one over a fixed deterministic pattern set per order",
+        "Against": "each other, as mutual inverses",
+        "Shared": "the private rotation helper both directions call; it is exact and non-rounding",
+        "Citation": "integer.hilbert-curve-bijection-and-locality is what actually pins that helper, via the locality statement at orders one through nine — this case only EXTENDS the round-trip pairing to bit widths that case cannot reach, and is a fixed PATTERN SAMPLE of each order, never an exhaustive one",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hilbert-curve-refuses-outside-its-domain",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.HilbertCurve", "Name": "Encode" },
+      { "Type": "Puck.Maths.HilbertCurve", "Name": "Decode" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every argument outside the documented domain is REFUSED rather than aliased onto one inside it: an order below one or past thirty-one, a coordinate at or past 2^order, a distance at or past 4^order. Nine cases, each of which previously returned a value: C# masks a shift count, so an order of 32 became a shift of zero and collapsed the grid to a single cell -- Decode(32, 12345), Decode(1, 4) and Decode(1, 0) all returned (0, 0), and Encode(1, 2, 0) matched Encode(1, 0, 0). A bijective spatial key that maps distinct inputs together absorbs the caller's corruption instead of surfacing it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the domain is REACHABLE at both edges -- order one at its far corner and far distance, and order thirty-one at coordinate 2^31 - 1 and distance 2^62 - 1 -- so the refusals above bound the domain rather than shrink it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.ray-cycle-factors-are-not-writable-by-consumers",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SymmetryLattice", "Name": "RayCycleFactor" },
+      { "Type": "Puck.Maths.SymmetryLattice", "Name": "RayCycleFactorCount" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "no public member of SymmetryLattice returns a collection a published marshal can unwrap into the process-wide backing array; a consumer's write to the value it IS handed does not survive to the next read; and the index bound refuses at both ends while staying reachable at the last position. Made by ATTEMPTING the escape rather than by reading a declared type, which is the error that let the first repair look complete: read-only is not ownership and neither is immutable. A ReadOnlyMemory yields its backing array to MemoryMarshal.TryGetArray and an ImmutableArray yields the same array to ImmutableCollectionsMarshal.AsArray -- both public, neither needing reflection or unsafe code, and either one let a consumer zero verified lattice metadata for every later consumer in the process. Count-and-index returning a value type by copy is the only shape with no route back",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -4,8 +4,9 @@ namespace Puck.Commands;
 /// Specifies the transition that a command activation represents.
 /// </summary>
 /// <remarks>
-/// Continuous consumers typically poll the command value and ignore the phase, whereas discrete
-/// consumers act on the edges represented by <see cref="Started"/> and <see cref="Completed"/>.
+/// A continuous handler typically reads <see cref="CommandContext.Value"/> on every dispatched activation
+/// and ignores the phase, whereas a discrete handler acts on the edges represented by <see cref="Started"/>
+/// and <see cref="Completed"/>.
 /// </remarks>
 public enum CommandPhase {
     /// <summary>The first frame on which the command became active, such as a digital press or the start of an impulse.</summary>

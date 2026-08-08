@@ -1,10 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckKind>Validation</PuckKind>
+        <PuckLayer>Validation</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
         <OutputType>Exe</OutputType>
         <RootNamespace>Puck.HumbleGamingBrick.Post</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- The capture sink, frame-hash observer and PNG encoder the diagnostics and link explorers write through. -->
+        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
     </ItemGroup>
 </Project>

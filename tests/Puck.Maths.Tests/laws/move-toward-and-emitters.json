@@ -1,0 +1,93 @@
+[
+  {
+    "Id": "vector.move-toward-boundaries-and-segment",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "MoveToward"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedVector3.MoveToward's boundary identities, asserted EXACTLY over eight segments — axis-aligned, diagonal, negative, mixed-sign and one separated by a single raw unit: a zero step returns the current point unchanged, a step equal to the remaining distance and every larger step return the TARGET itself rather than a point near it, and a degenerate segment whose endpoints coincide returns that point. The negative-step refusal is asserted by exception type AND by the parameter name it reports.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an INTERMEDIATE step, at six fractions of each segment's own length, satisfies three independent statements: what remains of the segment never grows, so the step cannot overshoot; the distance actually travelled is the distance asked for; and the travelled vector's cross product with the whole segment vanishes, so the point stays ON the segment rather than merely near the right distance. The three together are what a transposition of current and target, a dropped normalization, a negated step or a divide by the wrong length each fail — the first two of those are invisible to any one of the statements alone.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the travelled distance and the on-segment test",
+        "Against": "the step the subject was handed and zero",
+        "Shared": "FixedVector3.Length and FixedVector3.Cross — the IDENTICAL members the subject itself reaches through, since the subject divides by the very Length this claim measures with. A defect INSIDE Length that scaled every measurement alike would move the subject and this claim's expectation together and could not be caught here; Length's own agreement with an exact reference is vector.length-vs-oracle's statement, not this one's. What this claim does catch is everything ABOVE the norm — the early return, the operand order, the sign, and which vector is divided by which length.",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the two interpolation statements carry TOLERANCES rather than exact equality, because the step runs through a fixed-point divide, a scale and a norm and each rounds. The tolerances are stated from the representation — one part in 256 of the separation plus a raw unit for the distance, one part in 64 plus 256 raw units for the cross product — and are not tuned against observed output, so they bound gross structural defects and deliberately do not pin the last-unit rounding of the interpolating path. A correction to that rounding is expected to pass this law unchanged; a law that pinned it would belong to FixedQ4816's divide and scale rather than here.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.rust-port-emitters-are-pure-and-live",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816RustPort",
+        "Name": "EmitGenerated"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816RustPort",
+        "Name": "EmitVectors"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both emitters are PURE: each produces byte-identical text on two calls, and running one between two calls of the other does not disturb it. That is the property the type's own remarks claim — no wall clock, no unseeded source, an unchanged host giving byte-identical output every run — and it is the property a generated artifact committed to the tree depends on, since a drifting emitter makes every regeneration a spurious diff. A shared StringBuilder, a static cursor or a re-seeded generator all fail it.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the emitted text carries the LIVE values it claims to read: FixedQ4816.Atan2HalfPiQ61 and Atan2PiQ61 appear in the generated source as the invariant decimals the type currently holds, and the emitted vector file carries the raw value the live FixedQ4816.Sin returns for one. That is the whole design claim this file makes for itself — every table and coefficient read from the live type by NAME rather than transcribed — so a constant referenced by the wrong name, or a vector file that emitted its inputs without the host's answers, stops satisfying it.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, and it is the reason this is a purity-and-transcription law rather than a port-agreement one: NOTHING here executes the emitted Rust or compares it against the committed artifact, so this law says nothing about whether the ported algorithm still agrees with its host bit for bit. That statement needs the emitted text compiled and run against known-answer vectors, which no gate in this repository performs today — the stage that compared emitted text against what is committed left the build with Puck.Post, and the type's own remarks say so. OWED: a runner that regenerates and diffs, or that executes the port. Until one exists, drift in the PORT is caught only by a human regenerating and reading the diff, and only drift in the emitter's own determinism and constant references is caught here.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -10,9 +10,9 @@ using Puck.HumbleGamingBrick.Post;
 if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
     return diagnosticExitCode;
 }
-var artifactsDirectory = (ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post"));
-var tierFilter = ArgValue(args: args, name: "--tier");
-var nameFilter = ArgValue(args: args, name: "--filter");
+var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post"));
+var tierFilter = CommandLineArguments.Value(args: args, name: "--tier");
+var nameFilter = CommandLineArguments.Value(args: args, name: "--filter");
 var testRomRoot = ResolveTestRomRoot(args: args);
 var sstRoot = ResolveSstRoot(args: args);
 var stages = PostStages.Create()
@@ -23,19 +23,9 @@ var context = new PostContext(artifactsDirectory: artifactsDirectory, testRomRoo
 var report = new PostBattery(stages: stages).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
-static string? ArgValue(string[] args, string name) {
-    for (var index = 0; (index < (args.Length - 1)); ++index) {
-        if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return args[(index + 1)];
-        }
-    }
-
-    return null;
-}
-
 // The reference-ROM corpus root: --roms wins, else PUCK_GB_TESTROMS, else null (Tier-B stages skip when it is absent).
 static string? ResolveTestRomRoot(string[] args) {
-    var explicitRoot = ArgValue(args: args, name: "--roms");
+    var explicitRoot = CommandLineArguments.Value(args: args, name: "--roms");
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;
@@ -56,7 +46,7 @@ static string? ResolveTestRomRoot(string[] args) {
 // The SingleStepTests/sm83 vector corpus root: PUCK_GB_SST, else the known development-machine location (the
 // established corpus-clone location pattern), else null (the sst stage skips when it is absent).
 static string? ResolveSstRoot(string[] args) {
-    var explicitRoot = ArgValue(args: args, name: "--sst");
+    var explicitRoot = CommandLineArguments.Value(args: args, name: "--sst");
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;

@@ -1,4 +1,5 @@
 using Puck.HumbleGamingBrick.Timing;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick;
 
@@ -38,8 +39,8 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
         new(
             Version: CurrentVersion,
             Model: (int)model,
-            BootRomHash: StateFingerprint.Compute(data: bootRom),
-            RomHash: StateFingerprint.Compute(data: rom),
+            BootRomHash: Fnv1aHash.Compute(values: bootRom),
+            RomHash: Fnv1aHash.Compute(values: rom),
             RomLength: rom.Length
         );
 }
@@ -51,56 +52,11 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
 /// machine identity travel with it: a restore repositions the clock exactly and refuses a machine whose model/ROM
 /// identity differs.
 /// </summary>
-public sealed class MachineSnapshot {
-    private readonly SnapshotImage m_image;
+public sealed class MachineSnapshot : Puck.Snapshots.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
+    internal MachineSnapshot(MachineIdentity identity, Tick takenAt, SnapshotImage image)
+        : base(identity: identity, takenAt: takenAt, image: image) { }
 
-    internal MachineSnapshot(MachineIdentity identity, Tick takenAt, SnapshotImage image) {
-        Identity = identity;
-        TakenAt = takenAt;
-        m_image = image;
-    }
-
-    /// <summary>Gets the identity the snapshot was stamped with (format version + model + boot/cartridge ROM fingerprint).</summary>
-    public MachineIdentity Identity { get; }
-    /// <summary>Gets the instant on the master timeline at which this snapshot was taken.</summary>
-    public Tick TakenAt { get; }
-    /// <summary>Gets the size of the captured state, in bytes.</summary>
-    public int Size =>
-        m_image.Size;
-    /// <summary>Gets the component byte-range table this snapshot was written with (the divergence localizer's map from a
-    /// raw offset back to the component that owns it). Covers every byte in <see cref="Data"/>, in save order.</summary>
-    public IReadOnlyList<SnapshotSection> Sections =>
-        m_image.Sections;
-    /// <summary>Gets the raw, flat snapshot bytes — the same bytes a restore reads back. Exposed read-only for
-    /// diagnostics (hashing, byte-level diffing); never mutated in place.</summary>
-    public ReadOnlySpan<byte> Data =>
-        m_image.Data;
-
-    /// <summary>Indicates whether another snapshot captures byte-identical state (identity, instant, and all bytes). Two
-    /// machines driven from the same start by any mix of pacing — single ticks or run budgets — produce equal snapshots;
-    /// a difference is exactly a divergence.</summary>
-    /// <param name="other">The snapshot to compare with.</param>
-    /// <returns><see langword="true"/> when both snapshots hold identical state.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
-    public bool ContentEquals(MachineSnapshot other) {
-        ArgumentNullException.ThrowIfNull(argument: other);
-
-        return ((Identity == other.Identity)
-            && (TakenAt == other.TakenAt)
-            && m_image.BytesEqual(other: other.m_image));
-    }
-    /// <summary>Returns a copy of this snapshot with a single data byte overwritten — a cycle-cost-free way to inject a
-    /// controlled corruption (e.g. into the <c>SystemMemory</c> section's work-RAM range) for testing a
-    /// divergence-detection tool against itself. Identity, captured instant, and the section table are unchanged;
-    /// restoring the result repositions the machine to this exact instant except for the one poked byte. Never used by
-    /// real gameplay or save-state code — a diagnostic-only seam.</summary>
-    /// <param name="offset">The absolute byte offset within <see cref="Data"/> to overwrite.</param>
-    /// <param name="value">The replacement byte value.</param>
-    /// <returns>A new snapshot, identical except for the one byte.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is outside <see cref="Data"/>.</exception>
-    public MachineSnapshot WithPokedByte(int offset, byte value) =>
-        new(identity: Identity, takenAt: TakenAt, image: m_image.WithPokedByte(offset: offset, value: value));
-
-    internal StateReader OpenReader() =>
-        m_image.OpenReader();
+    /// <inheritdoc/>
+    protected override MachineSnapshot Create(MachineIdentity identity, Tick takenAt, SnapshotImage image) =>
+        new(identity: identity, takenAt: takenAt, image: image);
 }

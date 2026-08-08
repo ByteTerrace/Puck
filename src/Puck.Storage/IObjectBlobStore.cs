@@ -32,4 +32,28 @@ public interface IObjectBlobStore {
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Lists the keys of every blob under an object beneath <paramref name="keyPrefix"/> — the
+    /// cloud-discovery half of the store: a caller that only knows its local and previously-tracked ids uses this to
+    /// find objects it has never seen before. Matching is by whole path SEGMENT, not by raw characters: a prefix
+    /// <c>worlds</c> matches <c>worlds/a.json</c> and never a sibling <c>worlds2/a.json</c>. Keys come back
+    /// object-relative — the same shape <see cref="ObjectBlobAddress.Key"/> carries — so a discovered key addresses a
+    /// read directly. Version tokens are deliberately NOT returned: every consumer reads the blob it discovered, and
+    /// <see cref="ReadAsync"/> already yields the token with the bytes, so listing one would be a second answer to the
+    /// same question with a wider window for it to be stale in. On the Azure backend, an edge-shaped target (see
+    /// <c>AzureBlobObjectStorageTarget.EdgeNamespace</c>) can never serve LIST through the edge at all — it routes to
+    /// <c>AzureBlobObjectStorageTarget.DirectEndpoint</c> instead, or THROWS by name when that is unset, rather than
+    /// returning an empty result the caller cannot tell from an honestly empty prefix.</summary>
+    /// <param name="target">The storage target the object resolves against.</param>
+    /// <param name="objectId">The object (container) id to list within.</param>
+    /// <param name="keyPrefix">The key path to list beneath (relative, no dot segments); empty lists every key under
+    /// the object.</param>
+    /// <param name="cancellationToken">A token to observe.</param>
+    /// <returns>One object-relative key per matching blob, in backend-returned order.</returns>
+    ValueTask<IReadOnlyList<string>> ListAsync(
+        ObjectStorageTarget target,
+        Guid objectId,
+        string keyPrefix,
+        CancellationToken cancellationToken = default
+    );
 }

@@ -39,7 +39,7 @@ public static class RecordingDocumentValidator {
         var errors = new List<string>();
 
         if (!string.Equals(a: document.Schema, b: RecordingDocument.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
-            errors.Add(item: $"schema '{document.Schema ?? "(absent)"}' is not '{RecordingDocument.SchemaVersion}'.");
+            errors.Add(item: $"schema '{(document.Schema ?? "(absent)")}' is not '{RecordingDocument.SchemaVersion}'.");
         }
 
         ValidateVideo(video: document.Video, errors: errors);
@@ -63,7 +63,7 @@ public static class RecordingDocumentValidator {
         } else {
             foreach (var codec in ladder) {
                 if (Array.IndexOf(array: s_knownCodecs, value: codec) < 0) {
-                    errors.Add(item: $"video.codecLadder token '{codec ?? "(null)"}' is not one of av1, h264.");
+                    errors.Add(item: $"video.codecLadder token '{(codec ?? "(null)")}' is not one of av1, h264.");
                 }
             }
         }
@@ -76,15 +76,14 @@ public static class RecordingDocumentValidator {
             errors.Add(item: $"video.bitrateKbps {video.BitrateKbps} must be positive.");
         }
 
-        if (video.Width is { } width && (width <= 0)) {
+        if ((video.Width is { } width) && (width <= 0)) {
             errors.Add(item: $"video.width {width} must be positive when set.");
         }
 
-        if (video.Height is { } height && (height <= 0)) {
+        if ((video.Height is { } height) && (height <= 0)) {
             errors.Add(item: $"video.height {height} must be positive when set.");
         }
     }
-
     private static void ValidateAudio(RecordingDocument document, List<string> errors) {
         var audio = document.Audio;
 
@@ -113,7 +112,6 @@ public static class RecordingDocumentValidator {
             }
         }
     }
-
     private static void ValidateOverlays(IReadOnlyList<OverlayRow>? overlays, List<string> errors) {
         if (overlays is not { Count: > 0 }) {
             return;
@@ -128,7 +126,7 @@ public static class RecordingDocumentValidator {
             }
 
             if (!Rgba32.TryParse(value: row.Color, color: out _)) {
-                errors.Add(item: $"{path}.color '{row.Color ?? "(absent)"}' is not a #RRGGBBAA hex color.");
+                errors.Add(item: $"{path}.color '{(row.Color ?? "(absent)")}' is not a #RRGGBBAA hex color.");
             }
 
             switch (row.Kind) {
@@ -165,7 +163,6 @@ public static class RecordingDocumentValidator {
             }
         }
     }
-
     private static bool IsNormalized(float value) =>
         (float.IsFinite(f: value) && (value >= 0.0f) && (value <= 1.0f));
 }

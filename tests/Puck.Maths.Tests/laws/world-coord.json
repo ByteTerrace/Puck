@@ -1,0 +1,96 @@
+[
+  {
+    "Id": "core.binary-integer-signed-extremes-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "GreatestCommonDivisor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LeastCommonMultiple"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "EnumerateDigits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LogarithmBase10"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LeastSignificantDigit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "MostSignificantDigit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "DigitalRoot"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "Exponentiate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "GreatestCommonDivisor<int> at the zero fast paths and the ordinary mixed-sign general path: (other 0, value -3) -> 3, (other -7, value 0) -> 7, (other 8, value -12) -> 4, (other -24, value 54) -> 6",
+        "Against": "elementary Euclidean division verified by hand: gcd(3,0)=3, gcd(7,0)=7, gcd(12,8)=4, gcd(54,24)=6 -- a different algorithm and a different derivation route from the subject's Stein binary descent, sharing no line and no idea with it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two near-signed-minimum branches the member's own documentation describes: exactly one operand at int.MinValue returns the other operand's own highest power-of-two factor -- (other 1, value int.MinValue) -> 1 and (other 12, value int.MinValue) -> 4 -- and BOTH operands at int.MinValue throws OverflowException naming the unrepresentable magnitude, exactly as the member's <exception> doc states. This is the documented shortcut and its documented refusal, checked directly rather than against a second GCD algorithm that would only restate the same reasoning",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LeastCommonMultiple<int> over representable operands: (other 6, value 4) -> 12, (other 5, value 0) -> 0, (other 6, value -4) -> 12, (other -6, value 4) -> 12",
+        "Against": "elementary arithmetic verified by hand -- lcm(a,b) = |a*b| / gcd(a,b), with lcm(n,0) conventionally zero -- independent of the subject's divide-before-multiply order and its sign-of-the-operands correction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented overflow contract at (other 2, value int.MaxValue) -> -2 and (other 2, value -int.MaxValue) -> -2: the true product 2*(2^31-1) exceeds int and the member's own doc says the result WRAPS rather than throws, and that the sign correction reads the pre-multiplication operand signs rather than the wrapped product's sign -- no finite oracle decides a value the carrier cannot hold, so this states the carrier's own declared contract directly, matching its documentation rather than diverging from it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "EnumerateDigits, LogarithmBase10, LeastSignificantDigit, MostSignificantDigit and DigitalRoot at int.MinValue, whose magnitude 2147483648 = 2^31 is not representable in int and so is the one operand each member's XML doc calls out as the reason it abs-es a remainder or a quotient rather than the whole value",
+        "Against": "the decimal expansion of 2^31 = 2,147,483,648 worked out on paper: ten digits, least-significant-first [8,4,6,3,8,4,7,4,1,2], leading digit 2, ones digit 8, and a digit sum 2+1+4+7+4+8+3+6+4+8=47 reducing to 4+7=11 to 1+1=2 -- arithmetic on the literal, independent of and prior to any of the subject's DivRem or modulo-nine-residue implementations",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Exponentiate<int> rejects a negative exponent with ArgumentOutOfRangeException, exactly as its own doc requires ('must be non-negative, since a negative integer power is not representable'), asserted at exponent -1. The guard folds away to nothing for the unsigned UInt128 instantiation scalar.binary-integer-wide-carrier-vs-oracle already sweeps, so a SIGNED instantiation is the only place this branch is reachable at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

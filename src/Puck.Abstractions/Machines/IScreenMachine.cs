@@ -8,7 +8,7 @@ namespace Puck.Abstractions.Machines;
 /// screen. A machine holds content (a cartridge, a disc image, a program), advances by an exact integer tick budget with
 /// one normalized <see cref="MachinePadState"/> per frame, and exposes its native framebuffer as a shader-readable
 /// image-view handle. An SM83 GamingBrick is one implementation; an N64/GameCube/any-other engine is another — the host
-/// wires whichever the run document declares and never names a concrete machine. A machine authors nothing: it is a pure
+/// wires whichever the world document declares and never names a concrete machine. A machine authors nothing: it is a pure
 /// function of its content, the tick budget, and the sampled input.
 /// </summary>
 /// <remarks>Backend-neutral: the framebuffer publishes through the <see cref="Puck.Abstractions.Gpu"/> device/compute

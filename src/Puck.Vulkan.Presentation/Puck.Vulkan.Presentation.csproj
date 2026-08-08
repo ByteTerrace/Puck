@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Presentation</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the single
              HLSL source to SPIR-V. Override with /p:DxcCommand="path\to\dxc". -->
         <DxcCommand>dxc</DxcCommand>
@@ -7,7 +11,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.Vulkan\Puck.Vulkan.csproj" />

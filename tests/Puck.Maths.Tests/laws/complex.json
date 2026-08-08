@@ -1,0 +1,764 @@
+[
+  {
+    "Id": "complex.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Multiply, both the narrow long lane and the Int128 lane, through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.QuadraticMultiply at (P, Q) = (0, \u22121) \u2014 the Q48 form (u\u2081u\u2082\u00B72\u00B9\u2076 \u002B q\u00B7v\u2081v\u2082) rounded once at shift 32 in BigInteger, a different formulation of the same rational value from the subject\u0027s shift-16 Q32 form",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.twin-quad",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedComplex.op_Multiply",
+        "Against": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at the (0, \u22121) relation, integer lane (MultiplyFusedInteger)",
+        "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) \u2014 the IDENTICAL internal member on both sides, not sibling copies \u2014 plus the identical narrow gate FusedArithmetic.RawMagnitude \u003C 2\u00B3\u00B9",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin, on the same operand quad, in the same law",
+        "Against": "Oracles.QuadraticMultiply at (0, \u22121) \u2014 the Q48 form in BigInteger, one rounding per component at shift 32. The case previously leaned on the transitive bracket (complex.mul-vs-oracle and algebra.complex-lane-vs-oracle sweep bit-identical quads because they share the domain key \u0027complex\u0027 at the same frontier index); the third leg now runs INSIDE the twin, so the bracketing argument is no longer load-bearing here",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits, at the same-process scope Laws.cs states",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.conjugate-involution",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Conjugate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedComplex.Conjugate is an involution over the full raw range, including the asymmetric two\u0027s-complement minimum where double negation is a fixed point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.negate-involution",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_UnaryNegation is an involution over the full raw range, the two\u0027s-complement minimum included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.multiplicative-identity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the element (1, 0) is a two-sided multiplicative identity for FixedComplex.op_Multiply over the full raw range",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.conjugate-distributes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Conjugate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "conj(a\u00B7b) == conj(a)\u00B7conj(b) for FixedComplex on the exact bounded sublattice \u2014 the identity\u0027s exact home, since at MinValue the two\u0027s-complement negation is asymmetric and the identity is not a full-range law. UNCERTAIN (sweep): a fused-substrate reading is arguable, since both sides run the same multiply",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.additive-group-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Imaginary"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Addition, both components",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger sum, inline in Subjects.ComplexAdditiveGroupExact \u2014 EXACT on both sides, so the rounding condition drops out entirely and the statement is purely the two\u0027s-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Subtraction, both components",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger difference, inline in the same body \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the positional constructor and the two component readers round-trip: new FixedComplex(Real: a, Imaginary: b).Real == a and .Imaginary == b at every swept raw, so a swapped positional order fails here rather than hiding inside a symmetric product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "AdditiveIdentity is default(FixedComplex), is a two-sided identity for op_Addition and a right identity for op_Subtraction, and a \u2212 a is exactly it, at every swept raw including both two\u0027s-complement extremes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "negation agrees with subtraction from the additive identity \u2014 \u2212a == AdditiveIdentity \u2212 a \u2014 at every swept raw, the asymmetric minimum included, which is what ties the unary operator to the group",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.presentation-seam",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "ToComplex"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Imaginary"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.ToComplex \u2014 BOTH lanes, read as exact IEEE-754 bit patterns through BitConverter.DoubleToUInt64Bits at every swept element",
+        "Against": "Oracles.NearestBinary64Bits, the encoding assembled from the FORMAT in BigInteger with the fifty-three-bit rounding decided on twice the remainder; no floating-point arithmetic on the oracle side and none in the law. This is the same narrowing FixedQ4816\u0027s explicit double operator performs, pinned here rather than waived as presentation-only: a lossy map is still a decidable one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two lanes are carried in the DECLARED order: each of the seven ladder raws \u2014 both carrier extremes, both units, both single-raw quanta and zero \u2014 is placed at Real, then at Imaginary, with a sentinel raw beside it that is none of them, and reads back at exactly its own lane. A transposed pair fails on placement, which no symmetric magnitude or product law in this family could see",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.div-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Division, BOTH code paths \u2014 the narrow long path routed through FixedQ4816.op_Division\u0027s 128-by-64 divide-and-repair, and the full-width FusedArithmetic.AddProducts/DivideProductSum path with its bit-by-bit restoring division",
+        "Against": "Oracles.ComplexQuotient \u2192 Oracles.RoundDyadicRatio: the exact BigInteger numerators (ac\u002Bbd, bc\u2212ad) over the exact squared modulus, ONE ties-to-even rounding at shift 16, wrapped by Oracles.WrapToRaw. The oracle is PATH-INDEPENDENT, so agreement is also the proof of the source comment\u0027s \u0027exact-equivalent fast path\u0027 claim \u2014 the two branches are not compared with each other but each with the same rational. ENVELOPE: the quotient may leave the carrier and wrap; both sides wrap alike, by construction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor substitution is identical on both sides: Subjects.ComplexDivisor maps the additive identity \u2014 the only divisor the operation refuses \u2014 onto the multiplicative identity, so every sampled quad reaches a defined comparison rather than being skipped asymmetrically, and the substituted point is pinned by complex.div-refusal-and-unit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.div-refusal-and-unit",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Imaginary"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "dividing by the additive identity is REFUSED with DivideByZeroException from BOTH code paths \u2014 once with a small dividend, which takes the narrow branch, and once with a MaxValue dividend, which takes the full-width branch and its explicit denominator == UInt128.Zero guard",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MultiplicativeIdentity is (One, Zero) and is an EXACT right identity for op_Division over a fifteen-raw ladder spanning both carrier extremes, both narrow-gate neighbourhoods and zero: the numerators become u\u00B72\u00B9\u2076 and v\u00B72\u00B9\u2076 over the denominator 2\u00B3\u00B2, so the single rounding is exact and the quotient is the dividend bit-for-bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Division over a seven-row hand-derived quotient ladder \u2014 i/i, 1/i, (1\u002Bi)/(1\u2212i), (3\u002B4i)/(2\u2212i), and three rows straddling the 2\u00B3\u00B9 narrow gate",
+        "Against": "Subjects.ComplexQuotientLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the closed form (ac\u002Bbd, bc\u2212ad)/(c\u00B2\u002Bd\u00B2) evaluated in exact rationals, sharing no code and no substrate with the subject",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.magnitude-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Magnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "MagnitudeSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "TryMagnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "TryMagnitudeSquared"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.TryMagnitude \u2014 UInt128.SquareRoot seeded then settled by a remainder-versus-root compare",
+        "Against": "Oracles.NearestIntegerRoot of the exact BigInteger u\u00B2 \u002B v\u00B2, a BRACKETED INTEGER SEARCH whose predicate is one exact squaring (2t\u22121)\u00B2 \u2264 4S; no square root is taken anywhere on the oracle side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.TryMagnitudeSquared",
+        "Against": "Oracles.RoundToEvenUnits of the exact BigInteger u\u00B2 \u002B v\u00B2 at shift 16, taken UNWRAPPED so the range verdict is decided on the ideal value rather than on a reduced one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the saturation contract is one fact stated twice: Magnitude equals TryMagnitude\u0027s value exactly when it succeeds and FixedQ4816.MaxValue exactly when it refuses, and likewise for MagnitudeSquared \u2014 so a refusal can never be read as a value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the refusal PREDICATE of both Try members",
+        "Against": "the exact BigInteger test \u0027the rounded result exceeds long.MaxValue\u0027, inline in Subjects.ComplexMagnitudeExact \u2014 the two-square sum cannot overflow UInt128, so this is the only refusal there is and the ENVELOPE is closed",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.normalize-unit-direction",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "MultiplicativeIdentity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.Normalize \u2014 FixedVectorMath.Normalize\u0027s power-of-two preconditioner, rounded square-root denominator and restoring division",
+        "Against": "Oracles.FirstNonUnitLane at tolerance 1 raw: the exact Q16 unit direction decided by SURD COMPARISONS a\u00B7\u221AS \u2264 b over BigInteger, squaring once with the signs read off first. No square root, no preconditioning shift and no division on the oracle side. The tolerance is the total budget of the subject\u0027s three roundings \u2014 the preconditioner contributes below 2\u207B\u00B2\u2078 raw and the denominator below 2\u207B\u2074\u2075, so the ONLY term that reaches a raw is the final quotient\u0027s half",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a zero element normalizes to MultiplicativeIdentity \u2014 the documented \u0027no direction\u0027 answer \u2014 and every non-zero element normalizes to a non-zero one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "normalization commutes with negation: (\u2212a).Normalize() == \u2212(a.Normalize()) at every swept raw where the negation names a different element, which pins the sign handling independently of the magnitude. The two\u0027s-complement minimum is excluded because its negation is its own fixed point there, not because the statement fails",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.from-to-direction",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "FromTo"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "MultiplicativeIdentity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.FromTo \u2014 the exact Q32 dot and wedge, power-of-two rescaled into [2\u2074\u2075, 2\u2074\u2076) and normalized",
+        "Against": "Oracles.FirstNonUnitLane at tolerance 2 raws over the exact BigInteger pair (from\u00B7to, from\u2227to): the geometric product is formed exactly on the oracle side and its unit direction is decided by surd comparison. The tolerance is 2 rather than 1 because the subject\u0027s rescaling rounds the two sums before normalizing; that rescale moves the exact direction by below 2\u207B\u00B2\u2078 raw, so 2 is a ceiling with room, not a fitted constant",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both degenerate poles are EXACT: a vanishing geometric product \u2014 either operand zero, and the narrow branch\u0027s (dot | wedge) == 0 test \u2014 returns MultiplicativeIdentity, and the five hand-listed exactly antiparallel pairs return (\u2212One, Zero), because a single non-zero component always normalizes to exactly \u00B12\u00B9\u2076",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "scale freedom is BIT-EXACT, not toleranced: FromTo(from, to) == FromTo(from\u00B72\u1D4F, to\u00B72\u1D50) for the four shift pairs the ladder lists, wherever every sampled raw is below 2\u00B2\u2070 so the shifts cannot leave the carrier \u2014 a common power of two multiplies both exact product sums by it and the shared normalizer\u0027s preconditioner divides it straight back out",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.angle-seam",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "FromAngle"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Argument"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Imaginary"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Real"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.FromAngle over the eighteen-row angle ladder \u2014 the four quadrant boundaries, the \u03C0/6, \u03C0/4 and \u03C0/3 family, both signs, one and four turns of wrap-around, and \u00B11 radian",
+        "Against": "Subjects.ComplexAngleLadder, a constant expectation table of raws with a per-row tolerance of 2",
+        "Shared": "",
+        "Citation": "hand-derived from the real cosine and sine of the value each ANGLE RAW denotes, so the argument\u0027s own quantization is not counted as error; the tolerance is FixedQ4816.SinCos\u0027s documented 0.51 ULP envelope rounded up. Sharing no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromAngle(Zero) == MultiplicativeIdentity BIT-FOR-BIT: the turn-domain reduction of a zero raw is zero and the Q60\u2192Q16 narrowing of the unit cosine is exactly 2\u00B9\u2076, so the identity rotation is not a rounding accident",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.Argument over the sixteen-row atan2 ladder \u2014 all four axes, all four diagonals, both \u03C0/6 rays, a Pythagorean point, and three near-axis points",
+        "Against": "Subjects.ComplexArgumentLadder, a constant expectation table of raws with a per-row tolerance of 2",
+        "Shared": "",
+        "Citation": "hand-derived from the real two-argument arctangent of the values the raws denote; the tolerance is FixedQ4816.Atan2\u0027s documented 0.51 ULP envelope rounded up",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two documented poles are exact: Argument of the additive identity is Zero by the kernel\u0027s own both-zero branch, and Argument of MultiplicativeIdentity is Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the realized RAW range is the CLOSED |raw| \u2264 205887 at every ladder row and at nine hand-listed extremes, and the negative endpoint is ATTAINED: at (Real, Imaginary) = (\u22122\u00B2\u2070, \u22121) the octant fold\u0027s residual rounds away and the negated result reaches exactly \u2212205887. That is not a defect in the documented (\u2212\u03C0, \u03C0] range \u2014 205887 is round(\u03C0\u00B72\u00B9\u2076), which names an angle strictly BELOW \u03C0, so the value \u2212205887\u00B72\u207B\u00B9\u2076 is greater than \u2212\u03C0. scalar.atan2-vs-series states the same fact from the owning member\u0027s side",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rotation semantics are pinned at the two points where the arithmetic is exact: MultiplicativeIdentity rotates every raw of the fifteen-row ladder to itself bit-for-bit, and FromAngle(\u03C0/2) sends (One, Zero) to (Zero, One) exactly. complex.rotate-vs-oracle carries the value statement; these two carry the MEANING, which no oracle agreement implies",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedComplex.FromAngle\u0027s wiring and FixedComplex.Argument\u0027s wiring",
+        "Against": "FixedQ4816.SinCos and FixedQ4816.Atan2 \u2014 Real takes Cos and Imaginary takes Sin; Argument passes Imaginary as y and Real as x, so a swapped pair or a transposed argument fails",
+        "Shared": "the whole transcendental kernel: FixedComplex adds no arithmetic here at all",
+        "Citation": "scalar.sincos-vs-series and scalar.atan2-vs-series, which pin both kernels against Oracles.EncloseSinCos and Oracles.EncloseAtan2 \u2014 series enclosures over a Machin-derived \u03C0, sharing neither the reduction domain nor the polynomial with the subject",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.rotate-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Rotate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.Rotate, both lanes and BOTH gates \u2014 the narrow long path (rotor below 2\u00B9\u2077 and vector below 2\u2074\u2075, an ASYMMETRIC gate unlike op_Multiply\u0027s uniform 2\u00B3\u00B9) and the Int128 path",
+        "Against": "Oracles.QuadraticMultiply at (P, Q) = (0, \u22121) \u2014 the same Q48 form the complex product\u0027s own law uses, rounded once per component at shift 32 in BigInteger. Rotation IS the complex product applied to a vector, so the oracle is reused rather than rewritten, and the NEW content of this case is the asymmetric gate",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.division-multiply-full-width-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex multiplication and division over the FULL fourth-power edge cross product",
+        "Against": "a hand-written complex-division oracle computing the exact BigInteger product sum and division ratio",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "dividing the multiplicative identity by the additive identity throws DivideByZeroException",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "complex.from-to-full-width-alignment-and-scale-safety",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "FromTo"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Normalize"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedComplex.FromTo\u0027s DEFINING property \u2014 rotating the start direction aligns it with the target within an exact BigInteger cross and dot bound \u2014 holds over a fourth-power edge cross product, under an EXACT integer bound rather than a ULP-gated arctangent comparison",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "negation commutes with Normalize at the carrier\u0027s extreme; an epsilon-component complex normalizes to the multiplicative identity; FromTo of exact opposite epsilon-scale directions returns exactly minus one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

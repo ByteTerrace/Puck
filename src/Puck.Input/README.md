@@ -30,8 +30,10 @@ LED, adaptive triggers — hardware-verified). Bluetooth for the Switch Pro and 
 ## Architecture
 
 `Puck.Input` is **platform-agnostic**: it owns the gamepad protocol logic and the abstractions, and nothing
-else. Two acquisition transports feed one device manager, which exposes a single per-frame drain that two
-command seams consume.
+else. Two acquisition transports feed one device manager. The manager's per-frame `Drain` is **destructive**
+(the coalescer hands out its accumulated edges exactly once), so `InputArbiter` performs it exactly once per
+produced frame; everything downstream reads that one drain — the snapshot capture takes the whole drained set,
+and host registrants read per-device views through registered arbiter **lanes**.
 
 ```mermaid
 flowchart LR
@@ -45,8 +47,8 @@ flowchart LR
         xconn["XInputGamepadConnection"]
         coal["GamepadCoalescer<br/>high-rate → per-frame"]
         mgr["GamepadManager<br/>enumerate · hotplug · slots · Drain"]
-        capture["GamepadCaptureSource"]
-        direct["GamepadInputSource"]
+        arb["InputArbiter<br/>ONE destructive Drain per frame · lanes"]
+        capture["GamepadCaptureSource<br/>via GamepadSnapshotInputCapture"]
         kbd["WindowInputMapper<br/>keyboard / mouse"]
     end
 
@@ -58,8 +60,9 @@ flowchart LR
     hidsrc --> dev --> coal
     xboxsrc --> xconn --> coal
     coal --> mgr
-    mgr -->|"per-frame Drain"| capture --> router
-    mgr -->|"per-frame Drain"| direct --> registry
+    mgr -->|"DrainFrame — idempotent per frame key"| arb
+    arb -->|"DrainedDevices"| capture --> router
+    arb -->|"Sample(lane)"| lanes["host lane registrants<br/>(brick panes, shared cursors)"]
     kbd --> registry
 ```
 
@@ -75,16 +78,33 @@ flowchart LR
   `XInputGamepadConnection.Apply(state)` then `ServiceOutput()`. The connection presents the same
   `IGamepadConnection` surface as a HID device, so it flows through the identical coalescer → command pipeline.
 
-### Two command seams
+### One drain, many readers — the arbiter
 
-A drained frame reaches `Puck.Commands` through one of two seams. Both pull the manager's **destructive**
-per-frame `Drain` (the coalescer hands out its accumulated edges exactly once), so exactly one runs per frame —
-wiring both would let the first consume the other's button edges. The composition root picks which is live.
+`InputArbiter` (`IInputArbiter`) is the engine-owned **single-drainer**: because `GamepadManager.Drain` is
+destructive, nothing calls it directly. Registrants hold **lanes** instead; any of them may call
+`DrainFrame(frameKey)` defensively — it is idempotent per frame key, so only the first call per produced frame
+does real work — then `Sample(lane)` reads that lane's resolved `GamepadState` (neutral when unbound,
+disconnected, or not yet drained — a lane never throws for "nothing to read").
 
-| Seam | Path | Role |
-|---|---|---|
-| **`GamepadCaptureSource`** | → `InputRouter` → per-tick `CommandSnapshot` | The deterministic, timestamped, recordable path — the engine's input spine, and the direction of travel. Drives the overworld demo today. |
-| **`GamepadInputSource`** | → `BindingCommandSource` → `CommandRegistry` | The focus-gated command path. The default for every mode not on the router (console, cursor UI). |
+A lane's `InputLanePolicy` fixes how it resolves a device, orthogonal to a toggleable per-lane
+`SuppressLane` mute:
+
+| Mode | Resolution |
+|---|---|
+| `Multicast` | First connected device, with buttons OR-ed across **every** connected pad — "any pad drives this" (a shared attract-mode cursor, a lobby-ready check). Deliberately performs no per-device authorization; any device→player validation is the reader's job, downstream. |
+| `PerPlayer` | Whichever device currently resolves to the policy's player seat; tracks hotplug/re-slot automatically. |
+| `Owned` | Only a device explicitly bound via `SetLaneDevice` (a proximity takeover); neutral until bound. |
+| `Suppressed` | Always neutral — a permanent mute (use `SuppressLane` for temporary ones). |
+
+### The command seam
+
+One seam carries a drained frame into `Puck.Commands`: **`GamepadSnapshotInputCapture`**
+(an `ISnapshotInputCapture`, the standard host-loop contribution) calls `DrainFrame`, then hands the arbiter's
+`DrainedDevices` to **`GamepadCaptureSource`**, which turns every device's coalesced state into timestamped
+`InputSignal`s appended to an `InputRouter` — the deterministic, recordable path into the per-tick
+`CommandSnapshot`, the engine's input spine. `GamepadCaptureSource` itself **never drains**; the arbiter does.
+`Puck.World/Program.cs` wires exactly this chain: `GamepadManager` → `InputArbiter` →
+`GamepadSnapshotInputCapture` (focus-gated via `IInputFocus.IsActiveFor`) → `InputRouter`.
 
 ### The platform seam (so `Puck.Input` has no Windows code)
 
@@ -96,8 +116,10 @@ and is injected at the composition root.
 | `IHidDevice` / `IHidDeviceSource` (`Hid/`) | `Win32HumanInterfaceDevice` / `Win32HidDeviceSource` (`Windows/Hid/`) |
 | `IGamepadAcquisitionSource` + `IGamepadConnectionRegistry` (`Devices/`) | `Win32XboxAcquisitionSource` (`Windows/Gamepad/`) |
 
-`[InternalsVisibleTo("Puck.Platform")]` lets the relocated `XInputGamepadConnection` reuse the internal output
-plumbing (`GamepadOutput`, `GamepadOutputCommand`). CsWin32 and the `x64` pin live in `Puck.Platform` (its
+The relocated `XInputGamepadConnection` reuses the output plumbing (`GamepadOutput`,
+`GamepadOutputCommand`) directly: both are public, which is how a member reached across an assembly boundary
+is expected to be reachable here — this repository does not endorse `InternalsVisibleTo` outside a test
+project. CsWin32 and the `x64` pin live in `Puck.Platform` (its
 SetupAPI structs can't be AnyCPU); `Puck.Input` stays AnyCPU.
 
 ### Capabilities are derived, not declared
@@ -138,7 +160,7 @@ flowchart TD
         stamp --> fold["coalescer.Update — fold into the frame view"]
         fold --> drainout
     end
-    fold -.->|"frame thread, once per frame"| drain["manager.Drain → GamepadDrain → InputSignals"]
+    fold -.->|"frame thread, once per frame"| drain["arbiter.DrainFrame → manager.Drain → GamepadDrain → InputSignals"]
 ```
 
 ### Coalescing high-rate input to per-frame
@@ -312,28 +334,51 @@ XInput rumble is not separately rate-limited because it is already coalesced to 
 ## Keyboard & mouse
 
 Beyond controllers, `Puck.Input` owns the engine's physical-input **vocabulary** (`InputSources` — the
-`Keyboard` / `Pointer` / `Gamepad` source names) and the **keyboard/mouse neutral seam**. The native windows
+`Keyboard` / `Gamepad` source names) and the **keyboard/mouse neutral seam**. The native windows
 (`Puck.Platform`) decode raw OS keys and pointer motion into a provider-neutral `WindowInputEvent` (a `KeyCode`,
 typed text, or a pointer delta/position, each carrying a `CommandPhase`) and name no controls.
 `WindowInputMapper.ToInputSignal` then applies the `InputSources` vocabulary — exactly mirroring how
-`GamepadInputSource` maps neutral gamepad state. `Puck.Commands` keeps only the modality-agnostic bridge shapes
-(`InputSignal`, `InputModifiers`, `InputDeviceId`, `BindingCommandSource`, `CommandBinding`).
+`GamepadCaptureSource` maps neutral gamepad state. `Puck.Commands` keeps only the modality-agnostic bridge shapes
+(`InputSignal`, `InputDeviceId`, `CommandBinding`).
+
+- **The pointer has no vocabulary, deliberately.** `InputSources` names the keyboard and the gamepad and nothing
+  else. Cursor motion, absolute position, held mouse buttons, and the wheel are **browsing** state: continuous
+  rather than edge-shaped, presentation/session-only, and never an input a `CommandSnapshot` carries. The window
+  pump hands the four pointer `WindowInputKind`s to the `IWindowInputObserver` chain and then **skips** them, the same way
+  it skips `FocusLost` — they never reach `WindowInputMapper`, which has no case for them and throws. A pointer
+  act enters the simulation only when a consumer of that state dispatches an ordinary **console verb**, through
+  the same door a typed line uses. Mouse buttons and the wheel are therefore not bindable, and should not be
+  made so: a binding table must never be offered a control it must never bind.
+
+- **The OS-modifier keys are ordinary keyboard controls, not a side channel.** Control/Shift/Alt/Super each carry
+  a distinct left/right `KeyCode` (`ControlLeft`/`ControlRight`/…) and a matching `InputSources.Keyboard` source
+  (`keyboard.controlLeft`/…) — no unified "either side" id, no separate modifier-state field riding alongside
+  every signal. "Either Ctrl" is an authoring choice, expressed by a chord group declaring both sources, not a
+  distinction the vocabulary collapses for them. A held modifier is tracked the same way any other held source
+  is: through `BindingModifierDefinition` (below), never through platform-computed chord state.
+- **Win32** emits the full set (`ComputeModifiers`'s replacement — the `IsExtendedKey`/`ResolveShiftSide` side
+  resolution — lives directly in `Win32NativeWindow.HandleKeyDown`/`HandleKeyUp`). **Xcb (X11)** emits the same
+  eight modifier `KeyCode`s from their standard Linux evdev keycodes, alongside its existing navigation keys and
+  the full F1–F12 function-key range (F9–F12 are not contiguous with F1–F8 on the evdev keymap and are mapped
+  individually); it still does **not** emit letters, Space, Tab, or typed text — that gap is tracked separately
+  and is far larger than the modifier keys were.
 
 - **High-rate mouse (Win32).** Pointer motion comes from **Raw Input** (`WM_INPUT`) — un-accelerated, full-rate
-  relative deltas — **summed pump-level per frame**, so a 1000–8000 Hz mouse collapses to one `pointer.move`
-  that the command registry's last-wins polled value records exactly. Absolute mode (RDP / VM / tablet) is
-  detected via `RI_MOUSE_MOVE_ABSOLUTE` and converted from the previous sample rather than summed as garbage;
-  absolute position rides `pointer.position`. If raw registration fails, `WM_MOUSEMOVE` feeds the **same**
-  accumulator — never both for one motion.
-- **Press + release edges + pollable held state.** Keys and buttons emit both a press (`Started`) and a release
-  (`Completed`). `CommandBinding.ActivateOn` (default `Started`/`Active`, ignoring `Completed`) gates which
-  edges run a **handler**, but the registry records every activation: a held digital input **persists its polled
-  value** across frames (set on press, cleared on release), so a continuous consumer can `GetValue` "is it down"
-  without the source re-asserting it, and a held key never re-runs its press handler. This split is why
-  `CommandSignal` carries a `Dispatch` flag (update the value vs. run the handler). On focus loss the held set is
-  cleared (`CommandRegistry.ReleaseHeld`, wired into the launcher pump) so nothing sticks while undelivered
-  releases are missed. X11 auto-repeat (a release+press pair at the same timestamp) is de-duped in
-  `XcbNativeWindow`.
+  relative deltas — **summed pump-level per frame**, so a 1000–8000 Hz mouse collapses to one `PointerMove`
+  event per frame rather than flooding observers with every raw sample. Absolute mode (RDP / VM / tablet)
+  is detected via `RI_MOUSE_MOVE_ABSOLUTE` and converted from the previous sample rather than summed as garbage;
+  absolute position rides a separate `PointerPosition` event. If raw registration fails, `WM_MOUSEMOVE` feeds the
+  **same** accumulator — never both for one motion. The **wheel** (`WM_MOUSEWHEEL`) is not summed this way: a
+  scroll report is already a discrete act at human cadence, so each is emitted as it arrives, carrying notches as
+  a **float** (the signed high word over `WHEEL_DELTA`) so a free-spin or precision wheel's sub-notch reports
+  survive instead of rounding to zero.
+- **Press + release edges.** Keys and buttons emit both a press (`Started`) and a release (`Completed`).
+  `CommandBinding.ActivateOn` (default `Started`/`Active`, ignoring `Completed`) gates which edges run a
+  **handler**; `CommandEntry` carries a `Dispatch` flag for this, so a non-dispatching edge reaches the snapshot
+  without running anything. `InputRouter` is what tracks held state — a held digital re-asserts
+  every tick without re-running its press handler — and clears it on focus loss (`InputRouter.ReleaseHeld`,
+  wired into the launcher pump) so nothing sticks while undelivered releases are missed. X11 auto-repeat (a
+  release+press pair at the same timestamp) is de-duped in `XcbNativeWindow`.
 
 ## Binding chords (grouped modifier-chord profiles)
 
@@ -348,19 +393,38 @@ pre-snapshot fold**, so recorded `CommandSnapshot`s are already chord-resolved a
 `SetActiveGroup` flips a slot's group as a pointer-level runtime mode switch, and command chords fire synthesized
 edges (`IChordEdgeSource`) the router folds like bound presses. A press latches its binding list so its release
 completes as the same command even if the modifier — or the page, or the group — changed in between (no stuck
-held entries). Puck.Post's `BindingPageStage` (Tier A) proves hysteresis, press-order chords, chord remainders,
-group-scoped prefix resolution, command-chord edges, the latch across page AND group flips, the loud uniqueness
-rules, and bit-for-bit session determinism.
+held entries). **None of this is gated today.** The battery stage that proved hysteresis, press-order chords,
+chord remainders, group-scoped prefix resolution, command-chord edges, the latch across page AND group flips,
+the loud uniqueness rules, and bit-for-bit session determinism left the build with the 2026-08-02 quarantine,
+and nothing replaced it — the behaviour is verified by running `Puck.World` and driving the bindings by hand.
 
-The demo side (`Puck.Demo`): `BindingProfileDocuments.BuildDefault()` is an addon-style layout as data
-(triggers → 5 pages; South = jump / West = interact / left shoulder = target on the no-modifier page), persisted
-via `Puck.Storage` to `%LocalAppData%\Puck\Demo\<id>\bindings\gamepad.json` (edit + relaunch;
-`PagedInputBindings.Reload` supports live editors). The on-screen **binding bar** (`Puck.Demo/BindingBar/`) renders the cluster as
-a fullscreen SDF overlay confined to the overworld's room view (`OverworldRenderNode`, the default no-flags run):
-`BindingBarLayout` is the addon's modulo math in normalized units,
-`BindingGlyphResolver` picks PlayStation 5 shapes / Xbox / Switch letters per connected family
-(`GamepadManager.TryGetType`), and per-slot data rides a storage buffer into
-`binding-bar-overlay.frag.hlsl` (procedural glyphs now; icon ids ≥ 1024 are the reserved texture-atlas seam).
+The live consumer is `Puck.World`: each seat's binding document composes from four layers (engine default ⊕
+world-document overlays ⊕ profile bindings ⊕ live session rebinds, recomposed only on change), `player.bind`
+edits the session layer, and `identity.bindings.save` folds it durably into the seat's owned identity world. The seat's ACTIVE group
+derives there as context row → requested group → profile default: an optional `contexts` document section
+(`{family, state, group}` rows over the engine-published `roster`/`engagement` family states) overrides the
+requested-group mode pointer, first matching row in document order winning, with the derivation (including
+shadowed matches) echoed by `player.bindings`. Its on-screen **binding
+bar** is `Puck.Overlays`' `BindingBarStore`/`BindingBarLayout`, fed once per produced frame by
+`WorldOverlayFeed` with chips lit from `InputRouter.IsCommandHeld`.
+
+**A single binding ROW widens the same way, in three independent directions.** A `BindingPageEntryDefinition`
+may declare an `Activator` (`BindingActivatorDefinition`) instead of a plain `Source`: an ORDERED sequence of
+physical controls, arbitrary length, either `Held` (gates the entry exactly like a chord row's page/command
+meaning, generalized to one row — `RowActivatorTracker` reuses `HeldOrderTracker`) or `Tapped` (fires once on
+completing a sequence of discrete presses — the primitive a Konami-style easter egg needs, since a hold cannot
+express repeated steps; resets on wrong input or an optional `TimeoutTicks`, never on release).
+`PagedInputBindings` evaluates a page's activators out-of-band (not through the per-source table) and delivers
+their transitions through the same `IChordEdgeSource` edge queue a group's command chords use. Independently, an
+entry may set `Mode: Toggle` (`BindingEntryMode`) — valid only on a CHANNEL destination — so a press flips an
+input-side latch instead of tracking the physical hold; the latch lives in `InputRouter.ApplySignal` (gated on
+the SIGNAL's own digital kind, not the channel-scaled destination value's kind — a channel always resolves
+Axis1D), so the simulation still reads a plain held channel. And a channel-destination `Source` may name an
+axis COMPONENT (`gamepad.leftStick.x` — `BindingSourceComponent.TrySplit`), feeding the channel with that
+component's live magnitude instead of the constant a bare two-dimensional source falls back to. All three
+round-trip through `player.bindings` (an activator echoes as `activator:held[...]`/`activator:tapped[...]`, a
+toggle entry carries a trailing `[toggle]`) and refuse malformed authoring by name at `BindingProfile.Compile`
+(structural) or the vocabulary check (an unresolvable control, a non-Axis2D component base).
 
 ## Guided binding sessions — rebinding as gameplay
 
@@ -378,7 +442,7 @@ read like the player's own hardware.
   are rising edges only: digital `Started` edges with a required release in between (a platform's key
   auto-repeat can't confirm itself), and analog 1-D sources through the same press/release hysteresis band as
   page modifiers. The whole machine is a pure function of its signal sequence — no wall clock, no randomness —
-  so a recorded session replays bit-for-bit (Post gates it as the Tier-A `binding-session` stage).
+  so a recorded session replays bit-for-bit (the Tier-A `binding-session` stage gated this until it left the build).
 - **`BindingSessionResult.Apply`** folds the captures back into the `BindingProfileDocument` page: deviations
   rewrite entries, an uncaptured entry whose source a capture claimed is displaced-and-reported (never a silent
   duplicate), a captured command with no entry is appended. The session round-trips the one profile format —
@@ -387,7 +451,7 @@ read like the player's own hardware.
   does: `Describe(source, family)` says the south face button is **B** on a Switch Pro, **A** on Xbox/Steam,
   **X** on a DualSense (and L1 vs LB vs ZL, Options vs Menu vs Plus, …); `DescribePosition(source)` is the
   neutral spoken fallback ("the south face button") for prompts with no pad connected. It is the text mirror of
-  the demo's `BindingGlyphResolver` shader glyphs.
+  the family-specific glyphs the on-screen binding bar draws (`Puck.Overlays`' `OverlayIconography`).
 
 The machine is slot-agnostic — the host filters whose signals it feeds (one player's slot for a personal
 rebind, everything for a shared kiosk). **Host recipe:** build a `BindingSessionPlan.FromPage(document, pageId)`
@@ -441,6 +505,11 @@ LampArray. Two gotchas that cost real debugging and are load-bearing:
   active chord page's legend) → **activation flash** (decays over ~0.35 s). Stateful only in the flash decay.
 - `LightLegendDriver.Tick(state, dt)` — throttles to ≤30 Hz (never under the device floor), composes, and writes
   only the lamps whose color changed. Takes host control on first tick, restores autonomous mode on `Dispose`.
+- `LightCelebration` — a self-contained score celebration, independent of the legend: a tinted wavefront sweeps
+  the array twice along X, the board settles into a pulsing glow, then fades to black; the tint grades the score
+  against a reference (green at reference-or-better, amber within striking distance, ember below), so a bench
+  completion reads from the hardware with no screen. It writes the device directly, so a running legend driver
+  should repaint afterwards (`LightLegendDriver` documents the handoff). Implemented; no host arms one yet.
 
 **Hardware-verified.** On a Logitech G915 (native HID LampArray via the Virtual HID Framework): enumerated as a
 Keyboard, 115 lamps, 475×150×22 mm bounding box, 33 ms min update; per-lamp input bindings resolve (lamp 0 =
@@ -546,33 +615,15 @@ notable gaps:
 
 ```sh
 dotnet build Puck.slnx
-dotnet run --project src/Puck.Demo/Puck.Demo.csproj -- --exit-after-seconds 30
+dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 30
 ```
 
+`Puck.World` is the live host: a connected pad hotplugs into a seat (the first pad shares player one's avatar
+with the keyboard), and the console verbs `world.devices` / `world.players` echo the connected set and seat
+assignments over stdout for scripted verification. Which control drives which command is data — the binding
+document layers in `Puck.World` (`WorldDefaultBindings` + profile/session layers), not a hard-coded map here.
 Diagnostics go to **stderr** as `[gamepad]` / `[gameinput]` lines (device discovery, handshake, streaming,
-correlation, errors). The demo's gamepad bindings:
-
-| Source | Command | Effect |
-|---|---|---|
-| South (A/Cross/B) | `gamepad.a` | logs a press |
-| East (B/Circle/A) | `gamepad.rumble` | dual-motor rumble on the pressing pad |
-| West (X/Square/Y) | `gamepad.trigger-rumble` | impulse-trigger rumble (Xbox) or dual-motor fallback (others) |
-| North (Y/Triangle/X) | `gamepad.led` | sets the DualSense light bar cyan; `[unsupported]` elsewhere |
-| D-pad Up | `gamepad.trigger-effect` | arms DualSense adaptive-trigger resistance; pull L2/R2 to feel it |
-| D-pad Down | `gamepad.trigger-effect-off` | clears DualSense adaptive-trigger resistance |
-| Start | `gamepad.start` | logs a press |
-| Touchpad click | `gamepad.touchpad` | logs a press (DualSense) |
-| Mute button | `gamepad.mute` | logs a press (DualSense) |
-| Touchpad finger 1/2 | `gamepad.touch0` / `gamepad.touch1` | logs each finger's normalized 0..1 position |
-| Left stick | `gamepad.move` | logs the stick vector |
-| Gyro | `gamepad.gyro` | logs angular velocity (Switch / DualSense) |
-| Touchpad finger 1 | `cursor-touch` | absolute per-controller cursor (color matched to the LED) |
-| Left stick / accel | `cursor-nudge-stick` / `cursor-tilt` | nudge the cursor (relative) / marble-maze tilt |
-| Orientation | `gamepad.orientation` | drives the per-controller pitch/yaw/roll needle gauge |
-
-The cursor overlay (colored per-controller cursors + the orientation gauges) renders on the **Vulkan
-same-device producer**. It is a demo-owned overlay pass, so no cursor/gauge concept leaks into the
-reusable SDF engine.
+correlation, errors).
 
 **Steam Controller lives on a vendor collection, and there are several of them.** The receiver exposes, per
 slot, a keyboard (`0x01/0x06`), a mouse (`0x01/0x02`), and the controller (`0xFF00/0x01`) — plus a management
@@ -596,11 +647,13 @@ rejected.
 | File | Role |
 |---|---|
 | `GamepadManager.cs` | HID enumeration, hotplug rescan, player slots, per-frame drain, lifetime; drives an injected HID source + optional acquisition source |
-| `GamepadCaptureSource.cs` | the snapshot-path drain — stamps per-report arrival + per-button edge times and appends `InputSignal`s to an `InputRouter` |
-| `GamepadInputSource.cs` | the focus-gated `ICommandSource` — drains the manager and emits `InputSignal`s into the command registry |
-| `InputSources.cs` | the physical-control name vocabulary (`Keyboard` / `Pointer` / `Gamepad`) — the single home for source names |
+| `InputArbiter.cs` | the single-drainer: one destructive `GamepadManager.Drain` per produced frame (`DrainFrame` is idempotent per frame key); registered lanes (`Multicast` / `PerPlayer` / `Owned` / `Suppressed`) with a toggleable per-lane mute |
+| `GamepadSnapshotInputCapture.cs` | the standard host-loop `ISnapshotInputCapture` — arbiter drain, then capture of the drained set into the router |
+| `GamepadCaptureSource.cs` | the snapshot-path capture — turns the arbiter's already-drained per-device state into timestamped `InputSignal`s appended to an `InputRouter` (stamps per-report arrival + per-button edge times; never drains itself). Its button→source table is derived from `GamepadButtons` at type init (matching each flag to a same-named `InputSources.Gamepad` constant) rather than hand-kept, and the same pass asserts `GamepadButtonEdges.Count` still covers the highest flag bit — so a newly added button that's missing its source constant, or that outgrows the edge buffer, fails loudly at startup instead of silently never reaching an `InputSignal` |
+| `InputSources.cs` | the physical-control name vocabulary (`Keyboard` / `Gamepad`) — the single home for source names; the pointer deliberately has none |
+| `InputSourceValueAttribute.cs` / `InputSourceUnaddressableAttribute.cs` | annotate each `InputSources` const with the `CommandValueKind` its activation carries, and mark the handful an addon record structurally cannot carry beyond that kind — the single declaration site `Puck.Scripting.Simulation.AddonSourceCatalog` derives its addon-ABI shape table from, by reflection, instead of re-transcribing a per-id switch |
 | `KeyCode.cs` / `WindowInputEvent.cs` | the neutral keyboard/mouse seam the native windows emit (pre-vocabulary key/text/pointer events, each with a phase) |
-| `WindowInputMapper.cs` | maps a neutral `WindowInputEvent` → `InputSignal` via `InputSources` (the keyboard/mouse mirror of `GamepadInputSource`) |
+| `WindowInputMapper.cs` | maps a neutral key/text `WindowInputEvent` → `InputSignal` via `InputSources` (the keyboard mirror of `GamepadCaptureSource`); pointer kinds are skipped by the pump and throw if they arrive |
 | `Hid/IHidDevice.cs` / `IHidDeviceSource.cs` / `HidDeviceInfo.cs` | the HID transport abstraction the parsers + manager consume |
 | `Devices/IGamepadAcquisitionSource.cs` / `IGamepadConnectionRegistry.cs` | the seam a non-HID backend (the Xbox poll loop) uses to publish connections |
 | `Devices/IGamepadConnection.cs` | the uniform connection surface both transports implement |
@@ -615,6 +668,8 @@ rejected.
 | `Devices/ImuFusion.cs` / `Devices/ImuOrientationTracker.cs` | complementary gyro+accel orientation filter + shared per-device state (bias learning; `dt` supplied per call) |
 | `Output/*` | `IGamepadOutput` queue façade, `GamepadOutputCapabilities`, `RumbleEffect` / `TriggerRumbleEffect` / `LedColor` / `TriggerEffectSpec` |
 | `Output/DualSenseAdaptiveTrigger.cs` | encodes a `TriggerEffectSpec` into one DualSense trigger block — `Feedback` / `Weapon` / `Vibration` / per-zone `ContinuousCurve` |
+| `Lighting/*` | the bind-legend composer stack — `KeyboardUsageMap`, `BindCategory` + `LightLegendPalette`, `LightLegendState`, `LightLegendComposer`, `LightLegendDriver` (≤30 Hz, dirty-only writes) |
+| `Lighting/LightCelebration.cs` | self-contained lamp-array score celebration (sweep → glow → fade; tint grades score vs. reference); writes the device directly, no legend dependency — unhosted today |
 
 **`Puck.Platform` (Windows implementations of the above):**
 

@@ -1,0 +1,386 @@
+[
+  {
+    "Id": "presented.live-associator-vs-doubling-tower",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryNormalize"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "CayleyDickson"
+      },
+      {
+        "Type": "Puck.Maths.DoublingAlgebra`1[[Puck.Maths.FixedScalarRing, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Item"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Children"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Leaf"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Node"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Product"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Unit"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "the live-associator normalizer's octonion bracketings (TryNormalize, both bracketing shapes) over all 512 ordered basis triples of Presentations.CayleyDickson(3, liveAssociator: true)",
+        "Against": "DoublingAlgebra<LeafQuaternion>.Multiply's own nested products (Floor3 = DoublingAlgebra<DoublingAlgebra<DoublingAlgebra<FixedScalarRing>>>)",
+        "Shared": "FixedQ4816.RoundProductSum — the IDENTICAL kernel, reached by MaterialOps.cs's FusedChargedSum on the presented side and DoublingAlgebra.cs:308-324's octonion leaf multiply on the doubling side, not a sibling copy",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "the same at the sedenion floor over all 4096 ordered basis triples of Presentations.CayleyDickson(4, liveAssociator: true)",
+        "Against": "DoublingAlgebra<LeafOctonion>.Multiply's own nested products (Floor4)",
+        "Shared": "FixedQ4816.RoundProductSum, reached by recursion through the same octonion leaf kernel one doubling deeper",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the associator's support moves EXACTLY 168 of the 512 octonion triples and 1848 of the 4096 sedenion triples off the left-normed product — a regression pin set by observing the subject (Rule 2: not independently derived, so not a PublishedConstant), strictly stronger than presented.coherence-route-independence's loose floor of >150/>1600",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.sedenion-quadruple-bracketing-exhaustive",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TryNormalize"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AreEqual"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Presentation"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "CayleyDickson"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation`2[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Children"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Leaf"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Node"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Product"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.Term",
+        "Name": "Unit"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra`2+Element[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "MIRROR of presented.reassociation-route-coherent's 'all five bracketings of every quadruple' statement at strictly stronger operands — all five bracketings of EVERY ordered quadruple of the live sedenion floor (16^4 = 65,536 quadruples, vs the sibling's floor-3 cap of 4,096), through TryNormalize",
+        "Against": "their own nested Multiply chain, built from the same algebra instance",
+        "Shared": "one PresentedAlgebra<BigInteger, IntegerMaterial> instance and ChargedPresentation.TryRewriteToKeys; exact IntegerMaterial, so condition (B) drops out entirely",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

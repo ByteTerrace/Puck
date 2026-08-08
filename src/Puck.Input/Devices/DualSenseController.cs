@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.IO.Hashing;
 using System.Numerics;
 using Puck.Input.Hid;
@@ -83,11 +82,6 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     // the orientation fusion integrates over.
     private const int SensorTimestampOffset = 27;
     private const float SensorTimestampSecondsPerUnit = (1f / 3_000_000f);
-    // Rate-limit equal-or-weaker rumble writes to a >=30 ms coalescing cadence so a per-tick streamer can't flood
-    // the link. USB tolerates faster writes, but the deferred Bluetooth path needs this cadence to avoid dropping
-    // the link.
-    private const long RumbleWriteIntervalMilliseconds = 30L;
-
     // The 5-LED player-indicator bit patterns (the lightbar RGB comes from the shared GamepadPlayerColors).
     private static readonly byte[] PlayerLeds = [0x04, 0x0A, 0x15, 0x1B,];
     private readonly IHidDevice m_device;
@@ -102,8 +96,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     private bool m_lightbarSetupPending; // first Bluetooth write clears the boot light-bar animation
     private TriggerEffectSpec m_leftTriggerEffect;
     private TriggerEffectSpec m_rightTriggerEffect;
-    private long m_lastRumbleSendTicks;
-    private float m_lastRumbleIntensity;
+    private RumbleThrottle m_rumbleThrottle;
     private uint m_lastSensorTimestamp;
     private bool m_hasSensorTimestamp;
     private readonly ImuOrientationTracker m_tracker = new();
@@ -214,22 +207,10 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
         var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
         var intensity = MathF.Max(x: low, y: high);
-        var now = Stopwatch.GetTimestamp();
 
-        // Throttle equal-or-weaker updates inside the 30ms window; stops, the first write, and any intensity
-        // increase always go through (so rumble-off and stronger effects stay instant). A dropped intermediate
-        // weaker value persists until the next LED/light-bar write flushes the combined report, which is
-        // imperceptible for continuous rumble. See RumbleWriteIntervalMilliseconds.
-        if ((0f < intensity) && (intensity <= m_lastRumbleIntensity) && (0L != m_lastRumbleSendTicks)) {
-            var elapsedMilliseconds = (((now - m_lastRumbleSendTicks) * 1000L) / Stopwatch.Frequency);
-
-            if (elapsedMilliseconds < RumbleWriteIntervalMilliseconds) {
-                return ValueTask.CompletedTask;
-            }
+        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+            return ValueTask.CompletedTask;
         }
-
-        m_lastRumbleIntensity = intensity;
-        m_lastRumbleSendTicks = now;
         m_lastHigh = ((byte)(high * 255f));
         m_lastLow = ((byte)(low * 255f));
 
@@ -370,7 +351,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         var hasSensorTimestamp = (report.Length >= ((dataStart + SensorTimestampOffset) + 4));
         var hasTouch = (report.Length >= ((dataStart + Touch1Offset) + 4));
         var gyro = ReadGyro(report: report, offset: (dataStart + 15));
-        var accelerometer = (hasAccelerometer ? ReadVector3Int16(report: report, offset: (dataStart + AccelerometerOffset), scale: AccelerometerGPerLsb) : default);
+        var accelerometer = (hasAccelerometer ? GamepadNormalization.ReadVector3Int16(source: report, offset: (dataStart + AccelerometerOffset), scale: AccelerometerGPerLsb) : default);
         var sensorTimestamp = (hasSensorTimestamp ? BinaryPrimitives.ReadUInt32LittleEndian(source: report[(dataStart + SensorTimestampOffset)..]) : 0u);
 
         state = new GamepadState(
@@ -378,10 +359,10 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
             Buttons: buttons,
             Gyro: gyro,
             LeftStick: ReadStick(rawX: report[dataStart], rawY: report[(dataStart + 1)]),
-            LeftTrigger: NormalizeTrigger(raw: report[(dataStart + 4)]),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(raw: report[(dataStart + 4)], threshold: TriggerThreshold, range: TriggerRange),
             Orientation: UpdateOrientation(gyro: gyro, accelerometer: accelerometer, hasAccelerometer: hasAccelerometer, deltaSeconds: SensorDeltaSeconds(sensorTimestamp: sensorTimestamp, hasSensorTimestamp: hasSensorTimestamp)),
             RightStick: ReadStick(rawX: report[(dataStart + 2)], rawY: report[(dataStart + 3)]),
-            RightTrigger: NormalizeTrigger(raw: report[(dataStart + 5)]),
+            RightTrigger: GamepadNormalization.NormalizeTrigger(raw: report[(dataStart + 5)], threshold: TriggerThreshold, range: TriggerRange),
             SensorTimestamp: sensorTimestamp,
             Touch0: (hasTouch ? ReadTouch(report: report, offset: (dataStart + Touch0Offset)) : default),
             Touch1: (hasTouch ? ReadTouch(report: report, offset: (dataStart + Touch1Offset)) : default)
@@ -449,30 +430,8 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
             x: ((rawX - StickCenter) / StickRange),
             y: (-(rawY - StickCenter) / StickRange)
         );
-        var magnitude = stick.Length();
 
-        if (magnitude <= StickDeadzone) {
-            return Vector2.Zero;
-        }
-
-        var scaled = ((MathF.Min(x: magnitude, y: 1f) - StickDeadzone) / (1f - StickDeadzone));
-
-        return ((stick / magnitude) * scaled);
-    }
-    private static float NormalizeTrigger(byte raw) {
-        if (raw <= TriggerThreshold) {
-            return 0f;
-        }
-
-        return ((raw - TriggerThreshold) / (TriggerRange - TriggerThreshold));
-    }
-    // Three consecutive int16 LE axes (gyro angular velocity / accel specific force), scaled to physical units.
-    private static Vector3 ReadVector3Int16(ReadOnlySpan<byte> report, int offset, float scale) {
-        return new Vector3(
-            x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) * scale),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) * scale),
-            z: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 4)..]) * scale)
-        );
+        return GamepadNormalization.ApplyRadialDeadzone(stick: stick, deadzone: StickDeadzone);
     }
     private Vector3 ReadGyro(ReadOnlySpan<byte> report, int offset) {
         // Three int16 LE angular-velocity axes (pitch, yaw, roll), factory-calibrated to rad/s: subtract the

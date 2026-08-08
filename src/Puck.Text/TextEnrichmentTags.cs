@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Maths;
 using System.Numerics;
 using System.Text;
 
@@ -225,15 +226,14 @@ public static class TextEnrichmentTags {
 
         return effect;
     }
-    private static uint HashStringFnv1A(string value) {
-        var hash = 2166136261u;
+    private static ulong HashStringFnv1A(string value) {
+        var hash = Fnv1aHash.Create();
 
         foreach (var character in value) {
-            hash ^= character;
-            hash *= 16777619u;
+            hash.Add(value: character);
         }
 
-        return hash;
+        return hash.Value;
     }
     private static bool TryParseEffectParameter(string value, out TextEffectParameter parameter) {
         parameter = default;

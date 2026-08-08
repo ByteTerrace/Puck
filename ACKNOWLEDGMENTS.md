@@ -50,6 +50,8 @@ where the code uses them; the sources themselves are credited here.
 
 - **.NET** (Microsoft) — the runtime and scripting.
 - **APNG** — Mozilla's animated extension to the PNG specification (W3C/ISO).
+- **BenchmarkDotNet** ([dotnet/BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet)) — the statistically rigorous micro-benchmarking harness, with its disassembly and memory diagnosers, behind the on-demand `Puck.Maths` microscope, the `puck bench` verb in `src/Puck.Cli`.
+- **CsWin32** (Microsoft) — the source-generated Win32 interop used by the platform layer (HID, windowing).
 - **DXC** (the DirectX Shader Compiler, Microsoft) — single-source HLSL compiled to both SPIR-V and DXIL — and the **Vulkan SDK** (LunarG) — tooling and the validation layers.
 - **mimalloc** ([Microsoft](https://github.com/microsoft/mimalloc)) — the default unmanaged allocator behind `IAllocator`.
-- **CsWin32** (Microsoft) — the source-generated Win32 interop used by the platform layer (HID, windowing).
+- **RE#** ([Ian Erik Varatalu](https://github.com/ieviev/resharp-dotnet)) — the non-backtracking symbolic-derivatives regular-expression engine (linear-time, leftmost-longest, with intersection/complement/lookaround) behind the `puck rex` content-search verb in `src/Puck.Cli`.

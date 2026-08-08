@@ -80,6 +80,38 @@ public static class KeyboardUsageMap {
                 key = KeyCode.ArrowUp;
 
                 return true;
+            case 0xE0: // Keyboard Left Control
+                key = KeyCode.ControlLeft;
+
+                return true;
+            case 0xE1: // Keyboard Left Shift
+                key = KeyCode.ShiftLeft;
+
+                return true;
+            case 0xE2: // Keyboard Left Alt
+                key = KeyCode.AltLeft;
+
+                return true;
+            case 0xE3: // Keyboard Left GUI
+                key = KeyCode.SuperLeft;
+
+                return true;
+            case 0xE4: // Keyboard Right Control
+                key = KeyCode.ControlRight;
+
+                return true;
+            case 0xE5: // Keyboard Right Shift
+                key = KeyCode.ShiftRight;
+
+                return true;
+            case 0xE6: // Keyboard Right Alt
+                key = KeyCode.AltRight;
+
+                return true;
+            case 0xE7: // Keyboard Right GUI
+                key = KeyCode.SuperRight;
+
+                return true;
             default:
                 key = KeyCode.None;
 
@@ -119,6 +151,14 @@ public static class KeyboardUsageMap {
             KeyCode.ArrowLeft => InputSources.Keyboard.ArrowLeft,
             KeyCode.ArrowRight => InputSources.Keyboard.ArrowRight,
             >= KeyCode.F1 and <= KeyCode.F12 => InputSources.Keyboard.Function(number: ((key - KeyCode.F1) + 1)),
+            KeyCode.ControlLeft => InputSources.Keyboard.ControlLeft,
+            KeyCode.ControlRight => InputSources.Keyboard.ControlRight,
+            KeyCode.ShiftLeft => InputSources.Keyboard.ShiftLeft,
+            KeyCode.ShiftRight => InputSources.Keyboard.ShiftRight,
+            KeyCode.AltLeft => InputSources.Keyboard.AltLeft,
+            KeyCode.AltRight => InputSources.Keyboard.AltRight,
+            KeyCode.SuperLeft => InputSources.Keyboard.SuperLeft,
+            KeyCode.SuperRight => InputSources.Keyboard.SuperRight,
             _ => string.Empty,
         };
 

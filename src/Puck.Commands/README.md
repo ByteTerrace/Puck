@@ -11,10 +11,9 @@ target     net10.0
 deps       System.CommandLine 2.0.9
 ```
 
-A command can be driven two ways over one shared identity:
-
-- **Discretely** — a handler runs on each activation (a key press, a typed line).
-- **Continuously** — the current frame's value is polled (an analog stick, a mouse delta).
+A command carries a typed **value** (an analog stick, a mouse delta) alongside its
+**activation**: a handler runs on each activation (a key press, a typed line), receiving
+that activation's value on `CommandContext.Value`.
 
 For an authoritative simulation, use the fixed-step path: `InputRouter` captures every modality into ordered,
 per-slot `CommandSnapshot`s; Launcher applies one snapshot and calls one `IFixedStepSimulation.Step` for each exact
@@ -33,33 +32,52 @@ sealed class GameSimulation : IFixedStepSimulation {
 
 This registration is the easy path: Launcher owns the accumulator, input capture windows, held folding, console
 injection, snapshot application, catch-up, focus-loss release, and interpolation residual. A consumer does not build a
-second loop or recover seconds from floating point. The frame-oriented
-`BeginFrame` / `Collect` path below remains available to presentation-only or
-non-simulated consumers.
+second loop or recover seconds from floating point. It is also the ONLY path for bound input: a composition root
+without an `InputRouter` has no way to dispatch a binding at all, deliberately.
 
 ---
 
 ## Mental model
 
+```text
+ producers                 mixer                     registry                consumers
+ ---------                 -----                     --------                ---------
+ InputSignal --Capture()-> InputRouter --snapshot--> CommandRegistry ------> handler runs
+ (device / player.signal)  stamps the lane's         ApplySnapshot           (map-gated)
+                           principal
+
+ Submit("line") ---------> Simulation-routed lines fold in through the console
+                           injection sink, stamped Console -----------------> handler runs
+                           (text path: parse + run, never map-gated)
 ```
- producers                  registry                      consumers
- ─────────                  ────────                      ─────────
- ICommandSource ─Collect()→ CommandRegistry ─Push()→ handler runs (discrete)
-   (per frame, pull)            │  state[name] = value ─→ GetValue() (continuous)
-                                │
- Submit("line")  ────────────→ ┘  (text path: parse + run, never map-gated)
-```
 
-Every frame:
+There are exactly **three ingress doors**, and each stamps the acting `CommandPrincipal`
+itself:
 
-1. `BeginFrame()` clears the previous frame's values.
-2. `Collect()` pulls every registered `ICommandSource`, which **pushes**
-   `CommandSignal`s into the registry.
-3. A pushed signal is **gated by command maps** — only commands in an active map run.
-4. Consumers either receive a handler call or poll `GetValue(name, kind)`.
+1. **The mixer.** `InputRouter.SnapshotForTick` folds captured signals through the slot's
+   bindings and stamps each lane with `ICommandPrincipalResolver.PrincipalOf(slot)` — the
+   host's answer to *who is acting through this slot*, never a seat synthesized from the
+   slot number.
+2. **Text.** `Submit` runs the handler as `CommandPrincipal.Console`; a
+   `CommandRouting.Simulation` line folds into the snapshot stream through a
+   `CommandInjectionSink` that was **constructed** bound to Console.
+3. **The addon pump** (Puck.Scripting.Simulation), host-bound at mount and outside the
+   recorded text surface by design.
 
-The **text path** (`Submit`) is separate and deliberate: it parses a console line and runs
-the matching handler with **no map gating**.
+There is no fourth door, and it takes **two** closures to say so — the second is the one
+that is easy to miss:
+
+- **Dispatch needs a `CommandContext`**, which only the registry and the mixer can build,
+  and `CommandRegistry.Definitions` hands out `CommandMetadata` rather than an invocable
+  handler.
+- **`ApplySnapshot` needs a `CommandSnapshot`**, which only the mixer can build. That is a
+  separate closure because the entries it applies are not merely carried through: an entry's
+  `Principal` becomes the handler's verbatim, and an entry's `Text` is re-parsed and executed
+  with no map gate. `CommandEntry`, `CommandLane`, and `CommandSnapshot` are therefore
+  **internal to construct** — public to read, `internal init` to write. Without that, any
+  assembly holding the registry could hand-build one entry and dispatch an authority verb with
+  arguments of its choosing under an identity of its choosing, having entered by no door at
+  all; closing `CommandContext` alone does not reach that path.
 
 ---
 
@@ -67,23 +85,25 @@ the matching handler with **no map gating**.
 
 | Type | Role |
 |------|------|
-| `CommandRegistry` | The hub. Aggregates modules, owns sources, dispatches, gates by map, holds per-frame state. Implements `ICommandSink`. |
+| `CommandRegistry` | The hub. Aggregates modules, dispatches snapshots and text lines, gates by map. |
 | `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
-| `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, local device, parse result, text, registry). |
+| `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). **Internal to construct.** |
+| `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries, stamped at its door: `Console`, `Seat`, `Addon`, `Peer`. |
+| `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N* — what the mixer stamps from. |
+| `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
+| `CommandMetadata` | The public read-only face of a registration (name, value kind, routing, bindability) — what `Definitions` returns. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` | The per-frame value, tagged with its `CommandValueKind`, packed into a `Vector4`. |
 | `CommandValueKind` | Shape of the value: `Digital`, `Axis1D`, `Axis2D`, `Axis3D`, `Orientation`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
-| `CommandSignal` | One activation pushed by a source into a sink (named by command). |
-| `ICommandSource` / `ICommandSink` | Producer (`Collect`) / receiver (`Push`) contracts. |
 | `CommandMaps` | Well-known map names; `CommandMaps.Global` is always active. |
 | `InputSignal` | A raw input keyed by a physical source id, *before* binding. |
 | `CommandBinding` | Binds an input source id to a command (constant or pass-through value). |
-| `BindingCommandSource` | Rewrites `InputSignal`s into `CommandSignal`s via a binding table. |
-| `TextCommandSource` | Feeds queued command lines through the registry's text path. |
+| `CommandInjectionSink` | One pre-resolved-command door, bound to its principal and lane at construction. |
+| `TextCommandSource` / `CommandShell` | Queue and per-frame pump for command lines through the registry's text path. |
 | `InputRouter` | Captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
-| `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick; recordable and replayable without local device identities. |
+| `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
 ---
 
@@ -112,8 +132,8 @@ Vector2 v = move.AsAxis2D;        // read it back in its kind
 ## Maps (modality)
 
 A **command map** is a named group that can be toggled together. Only commands whose
-`Map` is active accept *pushed* (source-driven) signals — this is how you model gameplay
-vs. menu vs. console modes without consumers caring.
+`Map` is active dispatch from a snapshot — this is how you model gameplay vs. menu vs.
+console modes without consumers caring.
 
 ```csharp
 registry.ActivateMap(map: "Gameplay");
@@ -128,8 +148,9 @@ bool on = registry.IsMapActive(map: "Gameplay");
 ## Defining commands
 
 Implement `ICommandModule` and return `CommandDefinition`s. Use `CommandDefinition.Verb`
-for a bare verb, or the full constructor to attach a `System.CommandLine` `Command` (with
-options/arguments) plus a `ValueSelector` that maps the parsed line to a `CommandValue`.
+for a bare verb, or `CommandDefinition.WithWireArgs` for an argument-bearing one. Every
+registration declares its `bindability` — there is no default, and a registration that
+declared none fails at registry construction, by name.
 
 ```csharp
 using Puck.Commands;
@@ -141,18 +162,19 @@ public sealed class GameplayModule : ICommandModule {
             description: "Makes the avatar jump.",
             valueKind: CommandValueKind.Digital,
             handler: context => {
-                // context.Value, context.Phase, context.Parse, context.Registry
-                return CommandResult.None;        // continuous/effectful: no transcript output
+                // context.Value, context.Phase, context.Principal, context.Parse, context.Registry
+                return CommandResult.None;        // effectful: no transcript output
             },
+            bindability: CommandBindability.Bindable,
             map: "Gameplay"
         );
     }
 }
 ```
 
-A handler returns `CommandResult.None` when its effect is observed by polling the value;
-return `new CommandResult("...")` to write to the transcript, or `CommandResult.Cleared()`
-to request a transcript clear.
+A handler returns `CommandResult.None` when it has no transcript output; return
+`new CommandResult("...")` to write to the transcript, or `CommandResult.Cleared()` to
+request a transcript clear.
 
 ---
 
@@ -164,34 +186,26 @@ using Puck.Commands;
 // 1. Aggregate modules.
 var registry = new CommandRegistry(modules: [new GameplayModule()]);
 
-// 2. Register sources. A binding table turns physical inputs into commands.
-var bindings = new Dictionary<string, IReadOnlyList<CommandBinding>> {
-    ["Keyboard.Space"] = [new CommandBinding(Command: "jump")],
-};
-var inputs = new BindingCommandSource(bindings: bindings);
-registry.AddSource(source: inputs);
+// 2. The mixer. `bindings` resolves a slot's source-to-command table; `principals` is the
+//    host's roster, answering who acts through each slot.
+var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: principals);
 
-// Optional: pipe a scripted/console stream through the text path.
-registry.AddSource(source: new TextCommandSource(
-    registry: registry,
-    onResult: (line, result) => Console.WriteLine(value: result.Output)
-));
+// 3. Route Simulation-class text lines into the deterministic stream through the console door.
+registry.RouteSimulationTo(sink: router.ConsoleTextSink);
 
-// 3. Per frame:
-registry.BeginFrame();
-inputs.Enqueue(input: new InputSignal(            // producer feeds raw input
+// 4. Per frame: producers capture raw input; the host pulls one snapshot per fixed tick.
+router.Capture(signal: new InputSignal(
     Source: "Keyboard.Space",
     DeviceId: default,
     Value: CommandValue.Digital(active: true),
     Phase: CommandPhase.Started
 ));
-registry.Collect();                                // pull all sources -> push -> gate -> run
 
-// 4. Continuous consumers poll:
-var jump = registry.GetValue(name: "jump", kind: CommandValueKind.Digital);
-if (jump.AsDigital) { /* ... */ }
+var snapshot = router.SnapshotForTick(tick: tick, windowEndTick: windowEnd);
 
-// Console entry point (not map-gated):
+registry.ApplySnapshot(snapshot: in snapshot);
+
+// Console entry point (not map-gated), dispatched as CommandPrincipal.Console:
 CommandResult help = registry.Submit(line: "help");
 ```
 
@@ -200,8 +214,13 @@ CommandResult help = registry.Submit(line: "help");
 In a `CommandBinding`, leave `Value` `null` to **pass the input's own value through** (a
 mouse delta driving `look`, typed text driving `console.insert`); set it to send a
 **constant** instead (an arrow key driving a fixed `move` axis). One physical input may bind
-to several commands across different maps — map gating keeps whichever is active, so
-`BindingCommandSource` stays modality-agnostic.
+to several commands across different maps — map gating keeps whichever is active, so the
+binding table stays modality-agnostic.
+
+A binding may only name a command whose `Bindability` is `Bindable`. `BindingVocabularyCheck`
+refuses a page naming an unbindable destination, loudly, wherever a document enters: an
+authority verb reached from a page would be an escalation the grant table never sees, because
+the page rather than the principal chose the destination.
 
 ---
 
@@ -210,10 +229,16 @@ to several commands across different maps — map gating keeps whichever is acti
 - **One identity, many drivers.** A `CommandDefinition` is resolved both when a console
   line is parsed and when a source dispatches a signal for its `Name`. Don't model the same
   action twice.
-- **Push is gated, `Submit` is not.** Source-driven activation respects command maps;
+- **Names and aliases are claimed, not shared.** The registry's constructor throws if two
+  modules register the same command name or alias, or if either collides with a built-in
+  (`help`, `wire.ack`, `wire.errors`) — a collision is a composition-root bug, never a
+  silent last-writer-wins. A non-`Global` map is deliberately shared: it is how several
+  modules express one modality spanning them, exactly as `CommandMaps`' own doc says
+  ("gameplay, console, or menu"), so there is no analogous guard over map names.
+- **Snapshot dispatch is gated, `Submit` is not.** Bound activation respects command maps;
   the text path is the deliberate, always-available console seam.
-- **Frame discipline.** Call `BeginFrame()` then `Collect()` once per frame. Values are
-  transient — they live for one frame and are cleared.
+- **Handlers READ their principal, never construct one.** `context.Principal` is what the
+  door stamped. A handler that mints an identity is asserting one rather than carrying it.
 - **Unknown / inactive is silent.** A signal naming an unknown command, or one whose map
   is inactive, is ignored without error.
 - **`help` is built in.** The registry auto-registers a `help` command listing every

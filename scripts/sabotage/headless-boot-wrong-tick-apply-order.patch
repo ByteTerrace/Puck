@@ -1,0 +1,37 @@
+diff --git a/src/Puck.Launcher/FixedStepPump.cs b/src/Puck.Launcher/FixedStepPump.cs
+--- a/src/Puck.Launcher/FixedStepPump.cs
++++ b/src/Puck.Launcher/FixedStepPump.cs
+@@ -112,14 +112,6 @@ public int Advance(ulong deltaTicks, ulong maxFrameTicks, ulong stepTicks, Fixed
+                 timing.InputSnapshotTicks += (Stopwatch.GetTimestamp() - snapshotStart);
+             }
+
+-            var applyStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
+-
+-            m_registry.ApplySnapshot(snapshot: in commands);
+-
+-            if (timing is not null) {
+-                timing.CommandApplyTicks += (Stopwatch.GetTimestamp() - applyStart);
+-            }
+-
+             var fixedStep = new FixedStepContext(
+                 ElapsedTicks: stepElapsedTicks,
+                 StepTicks: stepTicks,
+@@ -132,6 +124,18 @@ public int Advance(ulong deltaTicks, ulong maxFrameTicks, ulong stepTicks, Fixed
+             if (timing is not null) {
+                 timing.SimulationStepTicks += (Stopwatch.GetTimestamp() - stepStart);
+             }
++
++            // SABOTAGE-INJECTED (docs/verification/headless-boot): wrong-tick apply order — ApplySnapshot now runs
++            // AFTER Step instead of before it, so a Simulation-routed console command submitted for tick N is not
++            // visible to the server until tick N has already stepped. Temporary; never present outside that
++            // runner's sabotage patch.
++            var applyStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
++
++            m_registry.ApplySnapshot(snapshot: in commands);
++
++            if (timing is not null) {
++                timing.CommandApplyTicks += (Stopwatch.GetTimestamp() - applyStart);
++            }
+         }
+
+         return (int)stepCount;

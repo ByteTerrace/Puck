@@ -26,8 +26,8 @@ internal static class Wasapi {
 
     // AUDCLNT_SHAREMODE + stream flags.
     public const int ShareModeShared = 0;
-    public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;
+    public const uint StreamFlagsLoopback = 0x00020000;
     // The render stream's exotic-endpoint safety net: the engine converts/resamples our s16 PCM
     // whenever the endpoint's shared-mode mix format is not already 48000 Hz — on a native-rate endpoint the
     // conversion is the trivial s16→float widen and the mixer path stays sample-exact.
@@ -39,8 +39,8 @@ internal static class Wasapi {
 
     // Format tags.
     public const ushort WaveFormatPcm = 0x0001;
-    public const ushort WaveFormatIeeeFloat = 0x0003;
     public const ushort WaveFormatExtensible = 0xFFFE;
+    public const ushort WaveFormatIeeeFloat = 0x0003;
 
     public static Guid KSDATAFORMAT_SUBTYPE_IEEE_FLOAT = new(g: "00000003-0000-0010-8000-00aa00389b71");
     public static Guid KSDATAFORMAT_SUBTYPE_PCM = new(g: "00000001-0000-0010-8000-00aa00389b71");

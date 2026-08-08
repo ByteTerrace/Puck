@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+    </PropertyGroup>
+    <!--
+        Puck.Scripting.Simulation — the Simulation-lane adapter of docs/capability-channels-plan.md's assembly
+        split: the one project allowed to hold both the neutral scripting core (Puck.Scripting) and the
+        engine's command/input vocabularies (Puck.Commands, Puck.Input). It owns AddonSimulationPump, the
+        vocabulary validator that turns a guest's decoded output batch into typed AddonActSubmission /
+        AddonQuerySubmission / AddonAskSubmission records, and AddonSourceCatalog, the InputSources-derived
+        source-id vocabulary — no longer read by the wasm ABI's own input channel (that now resolves declared
+        channel NAMES through Puck.World's IAddonChannelResolver), but still the one home for the engine's
+        provider-neutral source-id surface, consulted today by Puck.World's binding-vocabulary check. The core
+        itself references neither engine vocabulary by design.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+    </ItemGroup>
+</Project>

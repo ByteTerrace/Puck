@@ -15,6 +15,12 @@ public sealed record SdfWorldRender(
     /// the caller. <see langword="null"/> when no decorator is present (none specified, or resources absent).</summary>
     internal ICaptureRequestTarget? CaptureTarget { get; init; }
 
+    /// <summary>The path of a capture armed through <see cref="RequestCapture"/> that no frame has served yet, or
+    /// <see langword="null"/> when nothing is outstanding. Checked BOTH halves of the chain because a decorator that
+    /// drew nothing forwards its request down to <see cref="Producer"/>, which then owns it. A caller reports an
+    /// outstanding path rather than letting a run end with a requester believing a file exists.</summary>
+    public string? PendingCapturePath => (CaptureTarget?.PendingCapturePath ?? Producer.PendingCapturePath);
+
     /// <summary>Arms a one-shot capture of the NEXT produced frame on the OUTERMOST decorator (the console overlay,
     /// or the binding bar beneath it, whichever wraps the chain) so the readback sees what the player actually
     /// sees — the 2D overlays composite AFTER <see cref="Producer"/>'s own render. Falls back to <see cref="Producer"/>
@@ -43,11 +49,14 @@ public static class SdfWorldRenderBuilder {
     public static string BytecodeExtension(bool hostsOnDirectX) => (hostsOnDirectX ? ".dxil" : ".spv");
 
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
-    /// <param name="serviceProvider">The application service provider (resolves the neutral GPU compute factories).</param>
+    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
+    /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root; this factory
+    /// never resolves anything from it itself (Puck.Overlays' <c>OverlayServices.Build</c> precedent's one-shot
+    /// shape).</param>
     /// <param name="spec">The render spec.</param>
     /// <returns>The assembled producer and root.</returns>
-    public static SdfWorldRender Build(IServiceProvider serviceProvider, SdfWorldRenderSpec spec) {
-        ArgumentNullException.ThrowIfNull(serviceProvider);
+    public static SdfWorldRender Build(SdfViewGpuServices services, SdfWorldRenderSpec spec) {
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(spec);
 
         // The frame-source decorator seam (SdfWorldRenderSpec.DecorateFrameSource): a host wraps the scene's frame
@@ -73,7 +82,7 @@ public static class SdfWorldRenderBuilder {
             // Read straight off the frame source (ISdfFrameSource.ScreenSurfaceTransforms, default null) rather than
             // a spec field: this is the ONE place that needs to know the seam exists at all.
             screenSurfaceTransforms: frameSource.ScreenSurfaceTransforms,
-            serviceProvider: serviceProvider,
+            services: services,
             timingEnabled: spec.Timing,
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width

@@ -9,10 +9,11 @@ Vulkan and Direct3D 12.
 
 ## What it does
 
-- **Everything as data.** A run is one versioned JSON document
-  (`puck.run.v1`, [schema](schema/run.schema.json)) describing the window,
-  scene, viewports, and composition graph; the demo's CLI flags are just
-  synthesized documents. Annotated examples in [docs/examples](docs/examples).
+- **Everything as data.** A run is one versioned JSON document —
+  `puck.world.def.v1` describes the world, its screens, its entities, and its
+  composition; who is seated is an ordinary owned instance of the same
+  document, seeded from the world. One thick validator gates every instance
+  before anything swaps in.
 - **SDF-native rendering.** Scenes are programs for a small SDF virtual
   machine marched in compute shaders, with GPU-driven culling and a hardware
   ray-query tier (Vulkan ray query + DXR 1.1) sharing one HLSL source.
@@ -28,10 +29,9 @@ Vulkan and Direct3D 12.
   see the current stage count in its own summary line); the experimental
   emulator cores carry their own mirrored batteries.
 
-The full inventory — including controller input, live-camera and desktop
-content sources, VRR present timing, the GamingBrick emulator cores, and
-the bare-metal UEFI runtime — lives in the
-**[capability catalog](docs/capability-catalog.md)**.
+There is deliberately no capability catalog: the one that existed asserted a
+per-capability verification status that stopped being true when the engine's
+self-test was quarantined. Ask the code, or run `Puck.World`.
 
 ## Quick start
 
@@ -40,24 +40,22 @@ Requires Windows, .NET 10, `dxc` on `PATH`, and a supported GPU with Vulkan
 SDK.
 
 ```powershell
-# The overworld — the demo, and the default with no flags at all:
-dotnet run --project src/Puck.Demo -c Release
+# The overworld — the game, and the default with no flags at all:
+dotnet run --project src/Puck.World -c Release
 
-# Is the engine healthy on this machine?
-dotnet run --project src/Puck.Post -c Release
+# Bound the run and drive it over stdin (the console is the control plane):
+dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 10
 ```
 
 ## Layout
 
-- [src](src) — the engine, split into focused `Puck.*` projects; see the
-  [project map](docs/project-map.md)
-- [experimental](experimental) — independently layered GamingBrick emulator
-  cores (hosted from `src` through adapters) and the bare-metal runtime
-- [docs](docs/README.md) — capability catalog, project map,
-  [guide for contributors and agents](docs/agent-guide.md), handbooks, and
-  current roadmaps
-- [schema](schema) — the generated run-document JSON Schema
-- [tools](tools) — formatting, validation, checked-in baselines
+- [src](src) — the engine and the game, split into focused `Puck.*` projects;
+  see the [project map](docs/project-map.md)
+- [experimental](experimental) — the bare-metal runtime, and the quarantined
+  trees (`Puck.Demo`, `Puck.Post`, `tools`, `scripts`): out of the build and
+  off limits, see [experimental/README.md](experimental/README.md)
+- [docs](docs/README.md) — project map,
+  [guide for contributors and agents](docs/agent-guide.md), and the handbooks
 
 Standing on many shoulders — see [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
 

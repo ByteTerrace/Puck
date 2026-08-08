@@ -1,0 +1,161 @@
+{
+  "description": "The authored player-profile seed palette and picker tuning.",
+  "type": "object",
+  "properties": {
+    "identities": {
+      "description": "The identities used to seed an absent owned-world directory.",
+      "type": "array",
+      "items": {
+        "description": "One authored identity used to seed an owned world.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The stable profile id."
+          },
+          "name": {
+            "description": "The display name.",
+            "type": "string"
+          },
+          "color": {
+            "description": "The body color as #RRGGBB.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "neutralColor": {
+      "description": "The placeholder color used when no profile identity is available.",
+      "type": "string"
+    },
+    "colorSequence": {
+      "description": "The deterministic sequence used for generated profile colors.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "saturation": {
+      "description": "The saturation used for generated colors.",
+      "type": "number"
+    },
+    "value": {
+      "description": "The brightness used for generated colors.",
+      "type": "number"
+    },
+    "colorSearchLimit": {
+      "description": "The number of generated colors checked before accepting the next sequence value.",
+      "type": "integer"
+    },
+    "noseFactor": {
+      "description": "The body-color multiplier used for avatar accents.",
+      "type": "number"
+    },
+    "pickerThreshold": {
+      "description": "The stick magnitude that cycles a pending profile choice.",
+      "type": "number"
+    },
+    "pickerNeutralColor": {
+      "description": "The pending-avatar desaturation target.",
+      "type": "string"
+    },
+    "pickerNeutralBlend": {
+      "description": "The pending-avatar blend amount toward PickerNeutralColor.",
+      "type": "number"
+    },
+    "seatLook": {
+      "description": "The control feel a seat of this document wakes with. REQUIRED \u2014 there is no engine fallback, so a document either states what its seats should feel like or fails validation. Read per seat from whichever document owns it: the world\u0027s for an unclaimed seat, the joined identity\u0027s own for a claimed one, which is how a player\u0027s feel travels with their profile (see WorldSeatLook).",
+      "type": "object",
+      "properties": {
+        "yawSensitivity": {
+          "description": "The yaw response in radians per pixel of raw (un-accelerated) pointer motion along the X axis.",
+          "type": "number"
+        },
+        "pitchSensitivity": {
+          "description": "The pitch response in radians per pixel of raw pointer motion along the Y axis.",
+          "type": "number"
+        },
+        "invertYaw": {
+          "description": "Whether the yaw response is inverted.",
+          "type": "boolean"
+        },
+        "invertPitch": {
+          "description": "Whether the pitch response is inverted.",
+          "type": "boolean"
+        },
+        "minPitch": {
+          "description": "The pitch clamp floor in radians.",
+          "type": "number"
+        },
+        "maxPitch": {
+          "description": "The pitch clamp ceiling in radians.",
+          "type": "number"
+        },
+        "arming": {
+          "description": "What enables the orbit drag.",
+          "enum": [
+            "None",
+            "Always",
+            "LeftButton",
+            "RightButton",
+            "MiddleButton"
+          ]
+        },
+        "worldAxes": {
+          "description": "Whether the live orbit composes onto world axes rather than the seat body\u0027s own facing (an absolute orbit versus one that rides the body\u0027s yaw).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "yawSensitivity",
+        "pitchSensitivity",
+        "invertYaw",
+        "invertPitch",
+        "minPitch",
+        "maxPitch",
+        "arming",
+        "worldAxes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "identities",
+    "neutralColor",
+    "colorSequence",
+    "saturation",
+    "value",
+    "colorSearchLimit",
+    "noseFactor",
+    "pickerThreshold",
+    "pickerNeutralColor",
+    "pickerNeutralBlend",
+    "seatLook"
+  ],
+  "additionalProperties": false
+}

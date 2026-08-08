@@ -1,9 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.DirectX.Interop;
-using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
@@ -59,7 +57,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
                 InputSlotClass = D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                 InstanceDataStepRate = 0,
                 SemanticIndex = 0,
-                SemanticName = new PCSTR(positionSemantic),
+                SemanticName = new PCSTR(value: positionSemantic),
             };
 
             layout.PsoHandle = BuildPso(
@@ -85,18 +83,10 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
     ) {
         var hasDescriptorTable = ((textureSamplerCount > 0) || enableStorageBuffer);
         var hasRootConstants = (pushConstantBinding is not null);
-        var layout = new DirectXPipelineLayout();
-
-        if (hasDescriptorTable) {
-            layout.DescriptorTableParamIndex = 0;
-            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
-        } else {
-            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
-        }
-
-        if (hasRootConstants) {
-            layout.RootConstantsCount = ((pushConstantBinding!.Size + 3) / 4);
-        }
+        var layout = DirectXPipelineLayout.CreateForParameters(
+            hasDescriptorTable: hasDescriptorTable,
+            pushConstantBinding: pushConstantBinding
+        );
 
         // The descriptor table packs SRVs t0..tN-1 then the optional storage-buffer SRV — contiguous from slot 0 — so
         // the slot span is just their count (lets AllocateSet sub-allocate one pool across multiple sets). Each binding
@@ -213,41 +203,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             pStaticSamplers = &staticSampler,
         };
 
-        return SerializeAndCreate(device: device, desc: in desc);
-    }
-    private static nint SerializeAndCreate(ID3D12Device* device, in D3D12_ROOT_SIGNATURE_DESC desc) {
-        ID3DBlob* sigBlob = null;
-        ID3DBlob* errBlob = null;
-
-        try {
-            PInvoke.D3D12SerializeRootSignature(
-                in desc,
-                D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1,
-                &sigBlob,
-                &errBlob
-            ).ThrowIfFailed(operation: "D3D12SerializeRootSignature");
-
-            void* rootSig;
-            var rootSigIid = ID3D12RootSignature.IID_Guid;
-
-            device->CreateRootSignature(
-                0,
-                sigBlob->GetBufferPointer(),
-                sigBlob->GetBufferSize(),
-                in rootSigIid,
-                out rootSig
-            );
-
-            return (nint)rootSig;
-        } finally {
-            if (sigBlob is not null) {
-                _ = sigBlob->Release();
-            }
-
-            if (errBlob is not null) {
-                _ = errBlob->Release();
-            }
-        }
+        return DirectXRootSignatures.Create(device: device, description: in desc);
     }
     private static nint BuildPso(
         ID3D12Device* device,
@@ -317,7 +273,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateGraphicsPipelineState(in psoDesc, in psoIid, out pso);
+        device->CreateGraphicsPipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
 
         return (nint)pso;
     }

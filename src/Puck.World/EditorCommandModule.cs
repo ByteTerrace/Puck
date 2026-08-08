@@ -8,11 +8,14 @@ namespace Puck.World;
 /// The editor-mode console surface — the assist-layer twin of every editor chord act (pad chords are
 /// the primary interface; these verbs script and narrate the same acts over the pipe). <c>editor.enter</c>/<c>exit</c>
 /// flip a seat's mode through <see cref="WorldEditorSession"/> (binding mode layer + intent diversion + camera swap);
-/// the camera verbs (<c>editor.fly</c>/<c>orbit</c>/<c>cam.speed</c>/<c>cam.pose</c>) are the typed twins of the
-/// chord toggles plus the numeric setters a chord cannot express; the router/gesture verbs (<c>editor.stick.move</c>/
-/// <c>stick.look</c>/<c>ascend</c>/<c>descend</c>/<c>camera</c>/<c>faster</c>/<c>slower</c>) are the bound-control channels
-/// the editor pages dispatch. Every discrete chord act returns an echo line, so the pad's acts narrate on stdout
-/// exactly like typed verbs. A SEPARATE module to keep every class under its analyzer ceilings.
+/// the camera verbs (<c>editor.camera</c>/<c>cam.speed</c>/<c>cam.pose</c>) are the typed twins of the
+/// chord toggles plus the numeric setters a chord cannot express — <c>editor.camera [fly|orbit]</c> both toggles
+/// (no argument) and selects explicitly, and <c>editor.cam.speed [unitsPerSecond|faster|slower]</c> both sets and
+/// steps, so a chord's step/toggle twin is a BOUND dispatch of the same verb (a constant <see cref="CommandValue"/>
+/// riding the binding row) rather than a sibling command; the router/gesture verbs (<c>editor.stick.move</c>/
+/// <c>stick.look</c>/<c>ascend</c>/<c>descend</c>) are the bound-control channels the editor pages dispatch. Every
+/// discrete chord act returns an echo line, so the pad's acts narrate on stdout exactly like typed verbs. A SEPARATE
+/// module to keep every class under its analyzer ceilings.
 /// </summary>
 /// <remarks><c>editor.enter</c>/<c>exit</c> route Simulation (they divert intent through the same tick-applied
 /// <c>SetControl</c> wire as <c>player.control</c>, and the stdin barrier then serializes a following read); the
@@ -28,24 +31,22 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     public const string AscendCommand = "editor.ascend";
     /// <summary>The sink channel (Left Shoulder, both edges) — held vertical descent while flying.</summary>
     public const string DescendCommand = "editor.descend";
-    /// <summary>The camera-mode toggle chord act (South on the editor base page): fly ⇄ orbit.</summary>
+    /// <summary>The camera-mode act: <c>editor.camera [fly|orbit]</c>. Bound with no argument on the editor base
+    /// page's South (toggles fly ⇄ orbit); bound with a constant Axis1D value on the camera page's South (fly, +1)
+    /// and West (orbit, -1) for the explicit selection; typed with a literal <c>fly</c>/<c>orbit</c> token for the
+    /// same explicit selection, or with none at all to toggle.</summary>
     public const string CameraToggleCommand = "editor.camera";
-    /// <summary>The speed-step-up chord act (D-pad Up on the editor pages).</summary>
-    public const string FasterCommand = "editor.faster";
-    /// <summary>The speed-step-down chord act (D-pad Down on the editor pages).</summary>
-    public const string SlowerCommand = "editor.slower";
-    /// <summary>The mode entry act — bound on the DEFAULT page (Gamepad Back / Keyboard Tab) and typed as
-    /// <c>editor.enter [seat]</c>.</summary>
+    /// <summary>The mode entry act — bound on the DEFAULT page (Gamepad Back), committed by the play wheel's
+    /// Editor sector (hold Tab), and typed as <c>editor.enter [seat]</c>.</summary>
     public const string EnterCommand = "editor.enter";
-    /// <summary>The mode exit act — bound on the editor base page (East / Back / Tab) and typed as
-    /// <c>editor.exit [seat]</c>.</summary>
+    /// <summary>The mode exit act — bound on the editor base page (East / Back), committed by the editor wheel's
+    /// Exit sector (hold Tab), and typed as <c>editor.exit [seat]</c>.</summary>
     public const string ExitCommand = "editor.exit";
     /// <summary>The mode read-back — bound on the editor base page (West) and typed as <c>editor.status [seat]</c>.</summary>
     public const string StatusCommand = "editor.status";
-    /// <summary>The explicit fly-mode selection (the camera page's South; typed <c>editor.fly [seat]</c>).</summary>
-    public const string FlyCommand = "editor.fly";
-    /// <summary>The explicit orbit-mode selection (the camera page's West; typed <c>editor.orbit [seat]</c>).</summary>
-    public const string OrbitCommand = "editor.orbit";
+    /// <summary>The speed verb: <c>editor.cam.speed &lt;unitsPerSecond|faster|slower&gt;</c>. D-pad Up/Down on the
+    /// editor pages bind it with a constant Axis1D value (+1 faster, -1 slower) in place of an argument.</summary>
+    public const string SpeedCommand = "editor.cam.speed";
 
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldEditorSession m_session = session;
@@ -57,83 +58,79 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: EnterCommand,
-            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound Gamepad Back / Keyboard Tab — the triggers turn pages, they never enter a mode). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; the group's five ordered trigger chords select them: nothing held = resting, LT = camera, RT = select, LT-then-RT = place, RT-then-LT = the reverse page). Exit with East / Back / Tab or editor.exit.",
+            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound Gamepad Back, or the play wheel's Editor sector — hold Tab, release over it; the triggers turn pages, they never enter a mode). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; the group's five ordered trigger chords select them: nothing held = resting, LT = camera, RT = select, LT-then-RT = place, RT-then-LT = the reverse page). Exit with East / Back, the editor wheel's Exit sector, or editor.exit.",
             handler: EnterHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: ExitCommand,
-            description: "Leaves editor mode for a seat: editor.exit [force] [seat] (seat 1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing. REFUSES when the seat has an open sculpt with uncommitted edits (leaving would silently discard them) — commit with editor.sculpt.commit, discard explicitly with editor.sculpt.exit, or force through with 'editor.exit force'.",
+            description: "Leaves editor mode for a seat: editor.exit [force] [seat] (seat 1..4, default 1; the pressing device's seat on the bound East / Back, or the editor wheel's Exit sector — hold Tab, release over it). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing. REFUSES when the seat has an open sculpt with uncommitted edits (leaving would silently discard them) — commit with editor.sculpt.commit, discard explicitly with editor.sculpt.exit, or force through with 'editor.exit force'.",
             handler: ExitHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: StatusCommand,
             description: "Echoes a seat's editor state: editor.status [seat] (1..4, default 1) — editing/not-editing, the camera mode and speed, the active binding group and page (id + label), and the editor eye. The scripted assertion point for mode and group flips.",
             handler: StatusHandler
         );
         yield return CommandDefinition.WithWireArgs(
-            name: FlyCommand,
-            description: "Selects the FREE-FLY editor camera for a seat (the chord twin is South on the LT camera page): editor.fly [seat]. Sticks fly (left translates along the view, right looks, shoulders rise/sink); the switch adopts the orbit's vantage seamlessly.",
-            handler: (context, args) => ModeHandler(context: context, args: args, mode: EditorCameraMode.Fly, verb: FlyCommand)
+            bindability: CommandBindability.Bindable,
+            name: SpeedCommand,
+            description: "Sets or steps a seat's editor fly speed in world units per second (clamped 0.5..64): editor.cam.speed <unitsPerSecond|faster|slower> [seat]. 'faster'/'slower' step ×1.5 / ÷1.5 — the typed twins of the D-pad Up/Down speed-step chord, which binds this same verb with no argument (direction from the binding's constant value).",
+            handler: SpeedHandler,
+            // Every binding row targeting this verb carries a constant Axis1D value (no row sends a plain digital
+            // press) — declared here so BindingVocabularyCheck admits the row instead of rejecting every future
+            // recompose (player.bind / world.row.set bindingOverlays / profile load) that touches this seat.
+            valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(
-            name: OrbitCommand,
-            description: "Selects the ORBIT editor camera for a seat (the chord twin is West on the LT camera page): editor.orbit [seat]. The left stick orbits the seat's avatar (the orbit pivot may retarget onto the current selection); the right stick's Y zooms.",
-            handler: (context, args) => ModeHandler(context: context, args: args, mode: EditorCameraMode.Orbit, verb: OrbitCommand)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            name: "editor.cam.speed",
-            description: "Sets a seat's editor fly speed in world units per second (clamped 0.5..64; the chord twins are D-pad Up/Down speed steps): editor.cam.speed <unitsPerSecond> [seat].",
-            handler: SpeedHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "editor.cam.pose",
             description: "Teleports a seat's editor camera to an explicit pose — the console twin of stick flight (forces fly mode): editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>] [seat]. Yaw 0 looks down +Z (the camera-rig convention), pitch positive looks up (clamped). Accepted shapes: 3 values (pose, level, seat 1), 4 (+seat), 5 (+yaw+pitch), 6 (+yaw+pitch+seat).",
             handler: PoseHandler
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Bindable,
             name: MoveCommand,
             description: "The editor pages' left-stick flight channel (Axis2D) — routed to the editing seat's camera each tick; not meant to be typed (script the camera with editor.cam.pose instead).",
             valueKind: CommandValueKind.Axis2D,
             handler: MoveRouter
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Bindable,
             name: LookCommand,
             description: "The editor pages' right-stick look channel (Axis2D) — routed to the editing seat's camera each tick; not meant to be typed (script the camera with editor.cam.pose instead).",
             valueKind: CommandValueKind.Axis2D,
             handler: LookRouter
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Bindable,
             name: AscendCommand,
             description: "Holds the editing seat's vertical RISE channel while its button is down (Right Shoulder, both edges). A held control, not a typed verb — script the camera with editor.cam.pose.",
             valueKind: CommandValueKind.Digital,
             handler: context => VerticalHandler(context: context, ascend: true, name: AscendCommand)
         );
         yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Bindable,
             name: DescendCommand,
             description: "Holds the editing seat's vertical SINK channel while its button is down (Left Shoulder, both edges). A held control, not a typed verb — script the camera with editor.cam.pose.",
             valueKind: CommandValueKind.Digital,
             handler: context => VerticalHandler(context: context, ascend: false, name: DescendCommand)
         );
-        yield return CommandDefinition.Verb(
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: CameraToggleCommand,
-            description: "Toggles the editing seat's camera between fly and orbit (South on the editor base page). The typed twins are editor.fly / editor.orbit.",
-            valueKind: CommandValueKind.Digital,
-            handler: ToggleHandler
-        );
-        yield return CommandDefinition.Verb(
-            name: FasterCommand,
-            description: "Steps the editing seat's fly speed up ×1.5 (D-pad Up on the editor pages). The typed twin is editor.cam.speed <v>.",
-            valueKind: CommandValueKind.Digital,
-            handler: context => StepHandler(context: context, up: true, name: FasterCommand)
-        );
-        yield return CommandDefinition.Verb(
-            name: SlowerCommand,
-            description: "Steps the editing seat's fly speed down ÷1.5 (D-pad Down on the editor pages). The typed twin is editor.cam.speed <v>.",
-            valueKind: CommandValueKind.Digital,
-            handler: context => StepHandler(context: context, up: false, name: SlowerCommand)
+            description: "Toggles (no argument) or explicitly selects (fly|orbit) the editing seat's camera: editor.camera [fly|orbit] [seat]. The editor base page's South binds this with a constant zero value (toggle); the LT camera page's South/West bind it with a constant +1/-1 value selecting fly/orbit directly.",
+            handler: CameraHandler,
+            // The base page's toggle row ALSO carries a constant (Axis(0f), not a plain digital press) so every row
+            // targeting this verb dispatches the SAME kind — BindingVocabularyCheck refuses a recompose the moment
+            // any one row's dispatched kind disagrees with this declaration, so a mixed Digital/Axis1D row set on one
+            // verb is not an option.
+            valueKind: CommandValueKind.Axis1D
         );
     }
 
@@ -154,9 +151,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: at, min: 1, max: PlayerRoster.MaxSlots, fallback: null, value: out var seat)) {
-            return (Slot: -1, Error: new CommandResult(Output: $"[{verb}: seat must be an integer 1..{PlayerRoster.MaxSlots}]") {
-                IsError = true,
-            });
+            return (Slot: -1, Error: CommandResult.Error(output: $"[{verb}: seat must be an integer 1..{PlayerRoster.MaxSlots}]"));
         }
 
         return (Slot: PlayerRoster.SlotFromDisplay(number: seat), Error: null);
@@ -169,18 +164,20 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             return resolveError;
         }
 
-        return (m_session.Enter(slot: slot) switch {
+        var outcome = m_session.Enter(slot: slot);
+
+        return (outcome switch {
             EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} editing — group editor, sticks fly, LT camera page, East/Back exits]"),
             EditorModeOutcome.AlreadyThere => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is already editing]"),
-            EditorModeOutcome.Pending => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is pending — confirm a profile first (South/Enter or player.profile)]") {
-                IsError = true,
-            },
-            _ => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]") {
-                IsError = true,
-            },
+            EditorModeOutcome.Pending => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is pending — confirm an identity first (South/Enter or player.identity)]"),
+            EditorModeOutcome.NoBindingGroup => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)}'s profile declares no '{WorldEditorBindings.GroupId}' binding group, so editor verbs would resolve against the play page — the mode was NOT entered]"),
+            // Every outcome is named. The catch-all used to report NotJoined, so a new outcome would have been
+            // announced under someone else's reason — a refusal naming the wrong cause is worse than silence, because
+            // it sends the reader to fix a thing that is not broken.
+            EditorModeOutcome.NotJoined => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]"),
+            _ => throw new InvalidOperationException(message: $"unhandled {nameof(EditorModeOutcome)} '{outcome}'"),
         });
     }
-
     private CommandResult ExitHandler(CommandContext context, WireArgs args) {
         // A leading 'force' literal overrides the dirty-sculpt refusal; the seat token (if any) follows it.
         var forced = args.Is(index: 0, value: "force");
@@ -196,17 +193,14 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         // than discard uncommitted sculpt work by side effect — the codebase's verification culture exists to prevent
         // exactly this silent-discard shape.
         if (!forced && m_session.IsEditing(slot: slot) && (m_workbench.UncommittedEdits(slot: slot) > 0)) {
-            return new CommandResult(Output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has {m_workbench.UncommittedEdits(slot: slot)} uncommitted sculpt edit(s) — editor.sculpt.commit to keep, editor.sculpt.exit to discard the bench, or 'editor.exit force' to leave anyway]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: $"[{ExitCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has {m_workbench.UncommittedEdits(slot: slot)} uncommitted sculpt edit(s) — editor.sculpt.commit to keep, editor.sculpt.exit to discard the bench, or 'editor.exit force' to leave anyway]");
         }
 
         return (m_session.Exit(slot: slot) switch {
             EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} — chase camera restored, avatar drives again]"),
-            _ => new CommandResult(Output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]") { IsError = true },
+            _ => CommandResult.Error(output: $"[editor.exit: seat {PlayerRoster.DisplayNumber(slot: slot)} was not editing]"),
         });
     }
-
     private CommandResult StatusHandler(CommandContext context, WireArgs args) {
         var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: StatusCommand);
 
@@ -221,7 +215,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             // flip and for the play group's held-chord page turns.
             var resting = m_seatBindings.PageView(slot: slot);
 
-            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={resting.Group} page={resting.PageId} '{resting.Label ?? resting.PageId}']");
+            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={resting.Group} page={resting.PageId} '{(resting.Label ?? resting.PageId)}']");
         }
 
         var view = m_seatBindings.PageView(slot: slot);
@@ -242,37 +236,104 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection} cand={m_targeting.CandidateCount(slot: slot)} (r {m_targeting.CandidateRadius:0}u, cap {m_targeting.CandidateCap}){dragState}]"
+            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{(view.Label ?? view.PageId)}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection} cand={m_targeting.CandidateCount(slot: slot)} (r {m_targeting.CandidateRadius:0}u, cap {m_targeting.CandidateCap}){dragState}]"
         ));
     }
+    // The camera fold: a literal fly|orbit token -> explicit selection (typed only — a token always came through
+    // WireArgs, never a bound dispatch, which carries none). With no token, the discriminator is
+    // CommandContext.Source (non-null ONLY for a bound dispatch — see CommandDefinition.WithWireArgs's valueKind
+    // doctrine comment; Value.Kind is NOT a safe discriminator once this verb declares Axis1D, because the text
+    // path's own impulse value would then also read as Axis1D):
+    //   bound, axis > 0  -> fly (the camera page's South row, Axis(1f))
+    //   bound, axis < 0  -> orbit (the camera page's West row, Axis(-1f))
+    //   bound, axis == 0 -> toggle (the base page's South row, Axis(0f) — the plain chord act)
+    //   typed, no token  -> echoes the current mode (read-only) — a genuinely NEW reachable case: the old bare Verb
+    //                       always errored on a typed no-arg call, so this is a strict improvement, not a fold to
+    //                       preserve, and matches the pervasive lever convention (no-arg reads back).
+    private CommandResult CameraHandler(CommandContext context, WireArgs args) {
+        var hasToken = (args.Count >= 1);
 
-    private CommandResult ModeHandler(CommandContext context, WireArgs args, EditorCameraMode mode, string verb) {
-        var (slot, error) = ResolveSlot(context: context, args: args, at: 0, verb: verb);
+        if (hasToken && !args.Is(index: 0, value: "fly") && !args.Is(index: 0, value: "orbit")) {
+            return CommandResult.Error(output: $"[{CameraToggleCommand}: expected fly, orbit, or nothing (toggle)]");
+        }
+
+        var (slot, error) = ResolveSlot(context: context, args: args, at: (hasToken ? 1 : 0), verb: CameraToggleCommand);
 
         if (error is { } resolveError) {
             return resolveError;
         }
 
-        if (NotEditingError(slot: slot, verb: verb) is { } notEditing) {
-            return notEditing;
+        var isBound = (context.Source is not null);
+        EditorCameraMode? explicitMode = null;
+
+        if (hasToken) {
+            explicitMode = (args.Is(index: 0, value: "fly") ? EditorCameraMode.Fly : EditorCameraMode.Orbit);
+        } else if (isBound) {
+            var axis = context.Value.AsAxis1D;
+
+            explicitMode = ((axis > 0f) ? EditorCameraMode.Fly : ((axis < 0f) ? EditorCameraMode.Orbit : null));
         }
 
-        m_session.SetMode(slot: slot, mode: mode);
+        if (explicitMode is { } mode) {
+            if (m_session.NotEditingError(slot: slot, verb: CameraToggleCommand) is { } notEditingExplicit) {
+                return notEditingExplicit;
+            }
 
-        return new CommandResult(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: mode)}]");
+            m_session.SetMode(slot: slot, mode: mode);
+
+            return new CommandResult(Output: $"[{CameraToggleCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: mode)}]");
+        }
+
+        if (!isBound) {
+            // A genuinely typed no-arg line: read back, never mutate.
+            if (m_session.NotEditingError(slot: slot, verb: CameraToggleCommand) is { } notEditingRead) {
+                return notEditingRead;
+            }
+
+            return new CommandResult(Output: $"[{CameraToggleCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: m_session.Mode(slot: slot))}]");
+        }
+
+        // The bound plain toggle (axis == 0, the base page's South chord). Silent None when not editing preserves
+        // the chord's old dead-path behavior (the page never activates outside editor mode, so this is unreachable
+        // through real input).
+        if (!m_session.IsEditing(slot: slot)) {
+            return CommandResult.None;
+        }
+
+        var toggled = ((m_session.Mode(slot: slot) == EditorCameraMode.Fly) ? EditorCameraMode.Orbit : EditorCameraMode.Fly);
+
+        m_session.SetMode(slot: slot, mode: toggled);
+
+        return new CommandResult(Output: $"[{CameraToggleCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: toggled)}]");
     }
-
     private CommandResult SpeedHandler(CommandContext context, WireArgs args) {
+        // The step fold: a literal faster|slower token, or (with no token) a bound constant Axis1D value from the
+        // D-pad Up/Down step chord — see TryDirection. Anything else falls through to the numeric <unitsPerSecond> form.
+        if (TryDirection(context: context, args: args, at: 0, positive: "faster", negative: "slower", direction: out var direction)) {
+            var (stepSlot, stepError) = ResolveSlot(context: context, args: args, at: ((args.Count >= 1) ? 1 : 0), verb: "editor.cam.speed");
+
+            if (stepError is { } resolveStepError) {
+                return resolveStepError;
+            }
+
+            if (m_session.NotEditingError(slot: stepSlot, verb: "editor.cam.speed") is { } notEditingStep) {
+                return notEditingStep;
+            }
+
+            var stepped = m_session.StepSpeed(slot: stepSlot, up: (direction > 0));
+
+            return new CommandResult(Output: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"[editor.cam.speed: seat {PlayerRoster.DisplayNumber(slot: stepSlot)} {stepped:0.##} u/s]"
+            ));
+        }
+
         if (args.Count is (< 1 or > 2)) {
-            return new CommandResult(Output: "[editor.cam.speed: expected <unitsPerSecond> plus an optional seat 1..4]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[editor.cam.speed: expected <unitsPerSecond|faster|slower> plus an optional seat 1..4]");
         }
 
         if (!TryFloat(args: args, at: 0, value: out var speed)) {
-            return new CommandResult(Output: "[editor.cam.speed: could not parse <unitsPerSecond> as a finite number]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[editor.cam.speed: could not parse <unitsPerSecond> as a finite number]");
         }
 
         var (slot, error) = ResolveSlot(context: context, args: args, at: 1, verb: "editor.cam.speed");
@@ -281,7 +342,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             return resolveError;
         }
 
-        if (NotEditingError(slot: slot, verb: "editor.cam.speed") is { } notEditing) {
+        if (m_session.NotEditingError(slot: slot, verb: "editor.cam.speed") is { } notEditing) {
             return notEditing;
         }
 
@@ -292,13 +353,10 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             handler: $"[editor.cam.speed: seat {PlayerRoster.DisplayNumber(slot: slot)} {applied:0.##} u/s]"
         ));
     }
-
     private CommandResult PoseHandler(CommandContext context, WireArgs args) {
         // Shapes: 3 = <x y z>; 4 = +seat; 5 = +<yaw pitch>; 6 = +<yaw pitch> +seat.
         if (args.Count is (< 3 or > 6)) {
-            return new CommandResult(Output: "[editor.cam.pose: expected <x> <y> <z> [<yawDeg> <pitchDeg>] [seat]]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[editor.cam.pose: expected <x> <y> <z> [<yawDeg> <pitchDeg>] [seat]]");
         }
 
         var hasAngles = (args.Count >= 5);
@@ -307,18 +365,14 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         if (!TryFloat(args: args, at: 0, value: out var x) ||
             !TryFloat(args: args, at: 1, value: out var y) ||
             !TryFloat(args: args, at: 2, value: out var z)) {
-            return new CommandResult(Output: "[editor.cam.pose: could not parse <x> <y> <z> as finite numbers]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[editor.cam.pose: could not parse <x> <y> <z> as finite numbers]");
         }
 
         var yawDegrees = 0f;
         var pitchDegrees = 0f;
 
         if (hasAngles && (!TryFloat(args: args, at: 3, value: out yawDegrees) || !TryFloat(args: args, at: 4, value: out pitchDegrees))) {
-            return new CommandResult(Output: "[editor.cam.pose: could not parse <yawDeg> <pitchDeg> as finite numbers]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[editor.cam.pose: could not parse <yawDeg> <pitchDeg> as finite numbers]");
         }
 
         var (slot, error) = ResolveSlot(context: context, args: args, at: seatAt, verb: "editor.cam.pose");
@@ -327,7 +381,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             return resolveError;
         }
 
-        if (NotEditingError(slot: slot, verb: "editor.cam.pose") is { } notEditing) {
+        if (m_session.NotEditingError(slot: slot, verb: "editor.cam.pose") is { } notEditing) {
             return notEditing;
         }
 
@@ -345,89 +399,93 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             handler: $"[editor.cam.pose: seat {PlayerRoster.DisplayNumber(slot: slot)} eye=({x:0.00}, {y:0.00}, {z:0.00}) yaw={yawDegrees:0}° pitch={pitchDegrees:0}°]"
         ));
     }
-
     private CommandResult MoveRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]") { IsError = true };
+            return CommandResult.Error(output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]");
         }
 
         m_session.RouteMove(slot: context.Slot, move: context.Value.AsAxis2D);
 
         return CommandResult.None;
     }
-
     private CommandResult LookRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]") { IsError = true };
+            return CommandResult.Error(output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]");
         }
 
         m_session.RouteLook(slot: context.Slot, look: context.Value.AsAxis2D);
 
         return CommandResult.None;
     }
-
     private CommandResult VerticalHandler(CommandContext context, bool ascend, string name) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]") { IsError = true };
+            return CommandResult.Error(output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]");
         }
 
         m_session.SetVertical(slot: context.Slot, ascend: ascend, held: (context.Phase is CommandPhase.Started or CommandPhase.Active));
 
         return CommandResult.None;
     }
-
-    private CommandResult ToggleHandler(CommandContext context) {
-        if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.camera: the bound camera toggle — type editor.fly [seat] or editor.orbit [seat] instead]") { IsError = true };
-        }
-
-        var slot = context.Slot;
-
-        if (!m_session.IsEditing(slot: slot)) {
-            return CommandResult.None;
-        }
-
-        var mode = ((m_session.Mode(slot: slot) == EditorCameraMode.Fly) ? EditorCameraMode.Orbit : EditorCameraMode.Fly);
-
-        m_session.SetMode(slot: slot, mode: mode);
-
-        // Every discrete chord act narrates — the assist-layer doctrine's console line.
-        return new CommandResult(Output: $"[editor.camera: seat {PlayerRoster.DisplayNumber(slot: slot)} camera {ModeWord(mode: mode)}]");
-    }
-
-    private CommandResult StepHandler(CommandContext context, bool up, string name) {
-        if (context.Parse is not null) {
-            return new CommandResult(Output: $"[{name}: the bound speed step — type editor.cam.speed <unitsPerSecond> [seat] instead]") { IsError = true };
-        }
-
-        var slot = context.Slot;
-
-        if (!m_session.IsEditing(slot: slot)) {
-            return CommandResult.None;
-        }
-
-        return new CommandResult(Output: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[{name}: seat {PlayerRoster.DisplayNumber(slot: slot)} {m_session.StepSpeed(slot: slot, up: up):0.##} u/s]"
-        ));
-    }
-
-    // The friendly guard the camera verbs share: they act only on an editing seat (the mode owns the camera).
-    private CommandResult? NotEditingError(int slot, string verb) {
-        if (m_session.IsEditing(slot: slot)) {
-            return null;
-        }
-
-        return new CommandResult(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} is not editing — editor.enter first]") {
-            IsError = true,
-        };
-    }
-
     private static string ModeWord(EditorCameraMode mode) => ((mode == EditorCameraMode.Orbit) ? "orbit" : "fly");
+
+    /// <summary>Resolves a two-way step/selection from either a literal token at <paramref name="at"/> (case-insensitive
+    /// match against <paramref name="positive"/>/<paramref name="negative"/>) or, when no token is present, the sign of
+    /// a BOUND dispatch's constant value: a step-twin binding row folds onto an argument-bearing verb by carrying
+    /// <c>CommandValue.Axis(+1)</c>/<c>Axis(-1)</c> in place of an argument (the mechanism behind every
+    /// <c>.next</c>/<c>.prev</c>/<c>.up</c>/<c>.down</c>/<c>.grow</c>/<c>.shrink</c> twin killed in this wave — see
+    /// <c>editor.select</c>, <c>editor.sculpt.select/scale/material/frame/smooth</c>). Every such verb declares
+    /// <c>valueKind: CommandValueKind.Axis1D</c> at registration (see <see cref="CommandDefinition.WithWireArgs"/>'s
+    /// doctrine comment) so <see cref="BindingVocabularyCheck"/> admits the row — which means
+    /// <see cref="CommandContext.Value"/>'s KIND can no longer discriminate bound from typed (the text path's own
+    /// impulse value now reads Axis1D too). The discriminator is <see cref="CommandContext.Source"/> instead — the
+    /// provider-neutral physical source id, non-null ONLY for a real bound dispatch, documented null for every text
+    /// path. Internal — every sibling sculpt module shares this fold.</summary>
+    /// <param name="context">The invocation context (its <see cref="CommandContext.Value"/> carries the bound constant
+    /// when <see cref="CommandContext.Source"/> is non-null).</param>
+    /// <param name="args">The verb args.</param>
+    /// <param name="at">The token index a literal direction word would occupy.</param>
+    /// <param name="positive">The literal token (e.g. <c>"next"</c>, <c>"faster"</c>, <c>"grow"</c>) meaning +1.</param>
+    /// <param name="negative">The literal token (e.g. <c>"prev"</c>, <c>"slower"</c>, <c>"shrink"</c>) meaning -1.</param>
+    /// <param name="direction">+1 or -1 when resolved; 0 otherwise.</param>
+    /// <returns><see langword="true"/> when a direction was resolved (token match or a bound dispatch).</returns>
+    internal static bool TryDirection(CommandContext context, in WireArgs args, int at, string positive, string negative, out int direction) {
+        if (args.Count > at) {
+            if (args.Is(index: at, value: positive)) {
+                direction = 1;
+
+                return true;
+            }
+
+            if (args.Is(index: at, value: negative)) {
+                direction = -1;
+
+                return true;
+            }
+
+            direction = 0;
+
+            return false;
+        }
+
+        if (context.Source is not null) {
+            direction = ((context.Value.AsAxis1D >= 0f) ? 1 : -1);
+
+            return true;
+        }
+
+        direction = 0;
+
+        return false;
+    }
 
     // The shared FINITE parse boundary: NaN/infinity never enters camera, snap, or preview state — a
     // non-finite center would poison the SDF rebuild and a NaN pitch slides past ordinary range guards.
     internal static bool TryFloat(in WireArgs args, int at, out float value) {
         return args.TryFloat(index: at, value: out value);
     }
+
+    // The same boundary for a token already in hand — the drag/move/place/snap and speaker paths hold a span rather
+    // than an argument index, and must not reach a weaker parse for it.
+    internal static bool TryFloat(ReadOnlySpan<char> token, out float value) =>
+        (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
 }

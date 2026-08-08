@@ -2,6 +2,11 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "Concentus": {
+        "type": "Transitive",
+        "resolved": "2.2.2",
+        "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ=="
+      },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -29,33 +34,11 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
         }
       },
-      "puck.authoring": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Assets": "[1.0.0, )",
-          "Puck.SdfVm": "[1.0.0, )"
-        }
-      },
-      "puck.cameras": {
-        "type": "Project"
-      },
-      "puck.capture": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
+          "Puck.Maths": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
-        }
-      },
-      "puck.compositing": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.hosting": {
@@ -78,16 +61,22 @@
       "puck.maths": {
         "type": "Project"
       },
+      "puck.recording": {
+        "type": "Project",
+        "dependencies": {
+          "Concentus": "[2.*, )",
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
+        }
+      },
       "puck.sdfvm": {
         "type": "Project",
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Assets": "[1.0.0, )",
-          "Puck.Cameras": "[1.0.0, )",
-          "Puck.Capture": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Maths": "[1.0.0, )",
+          "Puck.Recording": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )",
           "Puck.Text": "[1.0.0, )"
         }
@@ -104,7 +93,8 @@
       "puck.text": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
         }
       }
     }

@@ -1,5 +1,7 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Protocol;
 
@@ -18,6 +20,9 @@ namespace Puck.World.Client;
 internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly PlayerRoster m_roster;
     private readonly IServerLink m_link;
+    // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
+    // services — a headless or test host — simply drops accepted levers rather than failing to construct.
+    private WorldSessionLeverSink? m_levers;
     // The double-buffered per-entity tick poses (the interpolation endpoints), the tick's palette/archetype image, and
     // the per-entity correction easers. Sized to the table ceiling; inactive slots are simply unseen.
     private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
@@ -45,11 +50,16 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
+    private WorldChannelTable m_channels;
+    private WorldTargetRegisterTable m_targets;
     // The shared live composition-override store — the frame source's composer reads it; DeliverComposition writes it.
     private readonly WorldCompositionState m_composition;
 
-    /// <summary>The entity-view capacity — the server table's hard ceiling.</summary>
-    public const int EntityCapacity = 128;
+    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldPopulationLimits.CapacityCeiling"/>
+    /// (the F3 reconciliation, 2026-08-06) so the validator's admitted population.capacity and this client's fixed
+    /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
+    /// into a latent out-of-bounds throw here.</summary>
+    public const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
 
     /// <summary>Initializes a new instance of the <see cref="WorldClient"/> class over the seat table it submits for
     /// and the link it submits on.</summary>
@@ -68,7 +78,10 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         m_roster = roster;
         m_link = link;
         m_definition = definition;
+        m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_targets = WorldTargetRegisterTable.Compile(registers: definition.TargetRegisters, channelCount: m_channels.ChannelCount);
         m_composition = composition;
+        m_levers = null;
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -92,10 +105,25 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
 
-    /// <summary>The combined program-rebuild watch counter: the client's seat-metadata revision (colors, pending
-    /// state), the server's declared-set revision from the latest snapshot, and the definition-delivery revision. All
-    /// three are monotonic, so the sum only stalls when none has changed.</summary>
-    public int Revision => (m_roster.Revision + m_serverRevision + m_definitionRevision);
+    /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
+    /// <see cref="WorldSceneEmitter"/> folds into its own when it lays out its revision vector.</summary>
+    public const int RevisionComponentCount = 3;
+
+    /// <summary>Writes this client's program-rebuild watch counters SIDE BY SIDE, never added together: the seat-metadata
+    /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, and the
+    /// definition-delivery revision.
+    /// <para>
+    /// THE SERVER TERM IS NOT MONOTONIC — it is ASSIGNED from <c>snapshot.Revision</c>, so it can move DOWN. A sum of
+    /// these three would therefore stall on a real change whenever the server revision fell by exactly as much as
+    /// another term rose, holding a stale program with nothing to report it. Keeping them apart lets the composition
+    /// host's componentwise compare see each one move on its own (see <see cref="ISdfSceneEmitter.WriteRevision"/>).
+    /// </para></summary>
+    /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
+    public void WriteRevision(Span<int> destination) {
+        destination[0] = m_roster.Revision;
+        destination[1] = m_serverRevision;
+        destination[2] = m_definitionRevision;
+    }
 
     /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
     /// census (drives the fleet-tier auto quality levers).</summary>
@@ -109,6 +137,24 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// (PRESENTATION-ONLY).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public byte LookIndex(int index) => m_look[index];
+
+    /// <summary>The LOOK ROW an entity wears: the delivered look table indexed by <see cref="LookIndex"/>, or the
+    /// implicit single catalog look when the world authors no <c>looks</c> section, and for an index the delivered
+    /// table cannot cover. The scene emitter and the part resolver read appearance through this ONE resolve, so a
+    /// stamped part and the body it hangs off can never disagree about which row they are wearing.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The entity's look row.</returns>
+    public WorldLook Look(int index) {
+        var rows = Definition.Looks;
+
+        if (rows.Count == 0) {
+            return WorldLook.Implicit;
+        }
+
+        var lookIndex = LookIndex(index: index);
+
+        return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
+    }
 
     /// <summary>The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer — the frame source
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
@@ -141,6 +187,46 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="index">The 0-based entity index.</param>
     public Quaternion Orientation(int index) => m_renderOrientation[index];
 
+    /// <summary>Resolves the nearest snapshot subject inside a source body's clamped designation cone. This is a
+    /// proposal only; the server re-resolves the returned subject and owns the register write.</summary>
+    public bool TryFindDesignationSubject(int sourceBody, string registerName, out GrantSubject subject) {
+        subject = default;
+
+        if (!IsActive(index: sourceBody) || !m_targets.TryGetIndex(name: registerName, index: out var registerIndex)) {
+            return false;
+        }
+
+        var register = m_definition.TargetRegisters[registerIndex];
+        var halfAngle = register.MaximumHalfAngleDegrees;
+        var range = FixedQ4816.FromDouble(value: register.MaximumRange);
+        var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngle * (Math.PI / 180.0))));
+        var origin = FixedVector3.FromVector3(value: m_currentPosition[sourceBody]);
+        var forward = FixedVector3.FromVector3(value: Vector3.Transform(value: -Vector3.UnitZ, rotation: m_currentOrientation[sourceBody]));
+        var nearest = FixedQ4816.MaxValue;
+        var found = -1;
+
+        for (var index = 0; (index < EntityCapacity); index++) {
+            if ((index == sourceBody) || !m_active[index]) {
+                continue;
+            }
+
+            var candidate = FixedVector3.FromVector3(value: m_currentPosition[index]);
+
+            if (BodyTargetConeSense.Contains(origin: in origin, forward: in forward, candidate: in candidate, range: range, minimumDot: minimumDot, distanceSquared: out var squared)
+                && (squared < nearest)) {
+                nearest = squared;
+                found = index;
+            }
+        }
+
+        if (found < 0) {
+            return false;
+        }
+
+        subject = GrantSubject.Body(index: found);
+        return true;
+    }
+
     /// <summary>The entity's render body color: a joined seat composes client-side (profile color with the
     /// pending-gray desaturation folded in); every other entity carries the snapshot's color.</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -153,22 +239,169 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>Submits each joined, active seat's device intent (and live-held lane image) for this tick — the
     /// client's per-tick outbound half, run immediately before the server step. A pending seat submits nothing (its
     /// inputs drive the profile picker, not locomotion), and a seat submits only under
-    /// <see cref="IntentSource.Live"/> — off-Live the devices are inert and the server-side source fills the gaps.</summary>
+    /// <see cref="IntentSource.Live"/> — off-Live the devices are inert and the server-side source fills the gaps.
+    /// The submission's acting identity is <see cref="PlayerRoster.PrincipalOf"/> — the slot's own
+    /// <see cref="WorldPrincipal.Seat"/> ordinarily, or whatever identity a <see cref="PlayerRoster.TryClaimSlot"/> call
+    /// overrode it to (e.g. a replay device's) — so a claimed slot's submission is checked under ITS OWN principal, never
+    /// silently promoted to the seat's. The submission's TARGET is <see cref="PlayerRoster.DriveTarget"/> — the slot
+    /// itself for an ordinary UNCLAIMED seat, or a claimed slot's principal's own granted body (or
+    /// <see cref="PlayerRoster.NoBody"/> when the claimant has never named one) — so a claimed slot's roster index
+    /// NEVER decides which body moves, not even as a fallback: the server's Drive check on
+    /// <see cref="IntentSubmission.Principal"/> against <see cref="IntentSubmission.EntityIndex"/> is what actually
+    /// decides whether the submission moves anything, and it never sees the slot at all for a claim that resolved no
+    /// body.
+    /// <para>Every live slot's target is resolved FIRST, in one pass, before anything is sent. An unclaimed seat whose
+    /// held intent is empty and held channels are all zero is background plumbing: when a DIFFERENT,
+    /// CLAIMED slot's grant-resolved target names that exact body this tick, the empty submission yields and only the
+    /// claimed submission is sent. An input-producing unclaimed seat is a co-driver, not background plumbing, so both
+    /// submissions go out. The server's existing per-body contention reporter then makes that different-principal
+    /// collision loud and attributed, exactly as it does when two claimed slots resolve to one body; no winner is
+    /// selected here.</para></summary>
     /// <param name="tick">The tick the submissions are for.</param>
     public void SubmitSeatIntents(ulong tick) {
+        Span<bool> live = stackalloc bool[PlayerRoster.MaxSlots];
+        Span<int> targets = stackalloc int[PlayerRoster.MaxSlots];
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { Source: IntentSource.Live } seat)) {
+            if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
+                continue;
+            }
+
+            live[slot] = true;
+            targets[slot] = m_roster.DriveTarget(slot: slot);
+        }
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (!live[slot]) {
+                continue;
+            }
+
+            var seat = m_roster.Seat(slot: slot)!;
+            var intent = ComposeMoveFrame(bodyIndex: targets[slot], intent: seat.HeldIntent());
+            var heldChannels = seat.HeldChannels;
+
+            if (!m_roster.IsClaimed(slot: slot)
+                && (intent == default)
+                && (heldChannels == default)
+                && ClaimedElsewhereTargets(live: live, targets: targets, body: targets[slot], exceptSlot: slot)) {
                 continue;
             }
 
             m_link.SubmitIntent(submission: new IntentSubmission(
                 Tick: tick,
-                EntityIndex: slot,
-                Intent: seat.HeldIntent(),
-                Principal: WorldPrincipal.Seat(slot: slot),
-                HeldLanes: seat.HeldLanes
+                EntityIndex: targets[slot],
+                Intent: intent,
+                Principal: m_roster.PrincipalOf(slot: slot),
+                HeldChannels: heldChannels
             ));
         }
+    }
+
+    /// <summary>The camera-relative move composition — THE determinism seam <c>WorldMotionModel</c>'s
+    /// <c>MoveFrame</c> remarks (both arms) promise: when the world's seat kit (<see cref="WorldDefinition.DefaultSeatKit"/>) opts into
+    /// <see cref="MotionMoveFrame.World"/>, rotates the raw analog <c>MoveForward</c>/<c>MoveStrafe</c> pair by the
+    /// seat's CURRENTLY RENDERED camera yaw before it ever reaches the wire — the sim itself only ever reads an
+    /// already-world-frame vector, never a camera pose. The camera yaw used is <paramref name="bodyIndex"/>'s own
+    /// last-resolved render facing: the default seat rig (<c>WorldViewDefaults.SeatRig</c>) has no independent
+    /// player-driven orbit, so "the camera's yaw" and "the body's own yaw" are the same one-tick-behind quantity a
+    /// chase camera always reads (this tick's press can only be reflected in NEXT tick's facing/camera, exactly like
+    /// any chase cam lagging its subject by one frame). A no-op for every kit that stays on the default
+    /// <see cref="MotionMoveFrame.Heading"/> frame (tank controls) — every world that never opts in submits the raw
+    /// pair unchanged, byte-identical to before this composition existed.</summary>
+    /// <param name="bodyIndex">The 0-based entity index this submission will drive.</param>
+    /// <param name="intent">The seat's raw held intent.</param>
+    /// <returns><paramref name="intent"/> with <c>MoveForward</c>/<c>MoveStrafe</c> rotated into world axes, or
+    /// <paramref name="intent"/> unchanged when the seat kit is not camera-relative, the body is inactive, or the
+    /// commanded vector is already zero (rotating zero is zero — skipped purely to avoid the trig).</returns>
+    private PlayerIntent ComposeMoveFrame(int bodyIndex, PlayerIntent intent) {
+        var roles = m_channels.RoleOrdinals;
+        var rawForwardValue = roles.Read(intent: in intent, role: ChannelRole.MoveForward);
+        var rawStrafeValue = roles.Read(intent: in intent, role: ChannelRole.MoveStrafe);
+
+        if (((rawForwardValue == FixedQ4816.Zero) && (rawStrafeValue == FixedQ4816.Zero))
+            || !IsActive(index: bodyIndex)
+            || (ResolveSeatKit() is not { } kit)
+            || (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)) {
+            return intent;
+        }
+
+        // facing = (-sin yaw, -cos yaw) — the SAME convention WorldBody/WorldPopulation derive a yaw from a
+        // direction with (see WorldPopulation.StageAttend's identical Atan2(-dx, -dz) and WorldBody's own
+        // FacingSnap). Deriving sin/cos straight from the rendered facing vector (rather than round-tripping through
+        // Atan2 and back) is exact and cheaper.
+        var facing = Vector3.Transform(value: -Vector3.UnitZ, rotation: Orientation(index: bodyIndex));
+        var length = MathF.Sqrt(x: ((facing.X * facing.X) + (facing.Z * facing.Z)));
+
+        if (length < 1e-6f) {
+            return intent;
+        }
+
+        var sin = (-facing.X / length);
+        var cos = (-facing.Z / length);
+        var rawForward = (float)(double)rawForwardValue;
+        var rawStrafe = (float)(double)rawStrafeValue;
+
+        // The swim arm's second composition: the aim's ELEVATION splits the commanded forward into a planar part and
+        // a vertical (MoveUp) contribution, so aim-directed diving reaches the sim as ordinary role channels — the
+        // pitch never does. Under the default chase rig the rendered facing carries no elevation (a swim body's
+        // attitude is pure yaw), so this composes to identity until a pitched aim source exists; the seam is here so
+        // that day is a rig change, not a client rewrite.
+        if (kit.Motion is WorldMotionModel.Swim) {
+            var elevation = facing.Y;
+
+            if (MathF.Abs(x: elevation) >= 1e-6f) {
+                var rawUp = (float)(double)roles.Read(intent: in intent, role: ChannelRole.MoveUp);
+                var composedUp = (rawUp + (rawForward * elevation));
+
+                rawForward *= length;
+                intent = roles.Write(intent: intent, role: ChannelRole.MoveUp, value: FixedQ4816.Clamp(value: FixedQ4816.FromDouble(value: composedUp), minimum: -FixedQ4816.One, maximum: FixedQ4816.One));
+            }
+        }
+
+        // The inverse of WorldBody's world-frame read (planarTarget = (MoveStrafe, -MoveForward) in world X/Z):
+        // rotate (rawForward, rawStrafe) — the camera-relative pair the seat's own devices staged — by the camera
+        // yaw into that same world-frame pair.
+        var moveForward = ((rawForward * cos) + (rawStrafe * sin));
+        var moveStrafe = ((rawStrafe * cos) - (rawForward * sin));
+        var negativeOne = -FixedQ4816.One;
+
+        intent = roles.Write(intent: intent, role: ChannelRole.MoveForward, value: FixedQ4816.Clamp(value: FixedQ4816.FromDouble(value: moveForward), minimum: negativeOne, maximum: FixedQ4816.One));
+
+        return roles.Write(intent: intent, role: ChannelRole.MoveStrafe, value: FixedQ4816.Clamp(value: FixedQ4816.FromDouble(value: moveStrafe), minimum: negativeOne, maximum: FixedQ4816.One));
+    }
+
+    // Resolves the world's designated seat kit row (every local seat shares this one kit) — a small linear scan over
+    // the document's own (small) kit list, cheap enough to repeat per live seat per tick rather than caching a
+    // pointer that would need its own revision-tracked invalidation.
+    private WorldKit? ResolveSeatKit() {
+        var kits = m_definition.Kits;
+
+        for (var index = 0; (index < kits.Count); index++) {
+            if (string.Equals(a: kits[index].Name, b: m_definition.DefaultSeatKit, comparisonType: StringComparison.Ordinal)) {
+                return kits[index];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether another live, claimed slot resolves to <paramref name="body"/> this tick. Used only after
+    /// <see cref="SubmitSeatIntents"/> has established that the unclaimed seat's own submission carries no input, so
+    /// only background plumbing yields to the deliberate claim.</summary>
+    /// <param name="live">Which roster slots are live for this tick.</param>
+    /// <param name="targets">Each live slot's resolved drive target.</param>
+    /// <param name="body">The unclaimed seat's target body.</param>
+    /// <param name="exceptSlot">The unclaimed seat to exclude from the search.</param>
+    /// <returns><see langword="true"/> when another live, claimed slot targets the same body; otherwise
+    /// <see langword="false"/>.</returns>
+    private bool ClaimedElsewhereTargets(ReadOnlySpan<bool> live, ReadOnlySpan<int> targets, int body, int exceptSlot) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if ((slot != exceptSlot) && live[slot] && (targets[slot] == body) && m_roster.IsClaimed(slot: slot)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>
@@ -199,29 +432,29 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
                         break;
                     case EntityContinuityKind.Correction: {
-                        // Authority snapped: ease the render error (last drawn tick pose minus authority) to zero over
-                        // the window. Over-threshold corrections snap instead: the easer basis is the previous
-                        // snapshot, which may lag same-tick multi-pose batches past the server's own snap-escape check.
-                        var positionError = (m_currentPosition[index] - entry.Position);
+                            // Authority snapped: ease the render error (last drawn tick pose minus authority) to zero over
+                            // the window. Over-threshold corrections snap instead: the easer basis is the previous
+                            // snapshot, which may lag same-tick multi-pose batches past the server's own snap-escape check.
+                            var positionError = (m_currentPosition[index] - entry.Position);
 
-                        if (positionError.Length() > EntityContinuity.MaxSmoothError) {
-                            m_easers[index].Reset();
-                        } else {
-                            m_easers[index].Begin(
-                                positionError: positionError,
-                                orientationError: Quaternion.Multiply(
-                                    value1: m_currentOrientation[index],
-                                    value2: Quaternion.Conjugate(value: entry.Orientation)
-                                ),
-                                seconds: entry.Continuity.Seconds
-                            );
+                            if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
+                                m_easers[index].Reset();
+                            } else {
+                                m_easers[index].Begin(
+                                    positionError: positionError,
+                                    orientationError: Quaternion.Multiply(
+                                        value1: m_currentOrientation[index],
+                                        value2: Quaternion.Conjugate(value: entry.Orientation)
+                                    ),
+                                    seconds: entry.Continuity.Seconds
+                                );
+                            }
+
+                            m_previousPosition[index] = entry.Position;
+                            m_previousOrientation[index] = entry.Orientation;
+
+                            break;
                         }
-
-                        m_previousPosition[index] = entry.Position;
-                        m_previousOrientation[index] = entry.Orientation;
-
-                        break;
-                    }
                     default:
                         m_previousPosition[index] = m_currentPosition[index];
                         m_previousOrientation[index] = m_currentOrientation[index];
@@ -255,6 +488,8 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         }
 
         m_activePeerCount = peers;
+        // ASSIGNED, never incremented — this mirrors the server's own declared-set revision, so it can move DOWN as
+        // well as up. That is why WriteRevision reports it as its own component instead of adding it to anything.
         m_serverRevision = snapshot.Revision;
         m_tick = snapshot.Tick;
     }
@@ -268,9 +503,11 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     public void DeliverDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // Store the live definition and bump the delivery revision (folded into Revision), so the frame source rebuilds
+        // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
+        m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_targets = WorldTargetRegisterTable.Compile(registers: definition.TargetRegisters, channelCount: m_channels.ChannelCount);
         m_definitionRevision++;
     }
 
@@ -289,6 +526,22 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
                 break;
         }
+    }
+
+    /// <summary>Attaches the accepted-lever applier. Composition-root wiring, done after construction because the
+    /// presentation services it writes are themselves built around the client.</summary>
+    /// <param name="levers">The applier accepted levers dispatch through.</param>
+    public void AttachSessionLevers(WorldSessionLeverSink levers) {
+        ArgumentNullException.ThrowIfNull(argument: levers);
+
+        m_levers = levers;
+    }
+
+    /// <inheritdoc/>
+    public void DeliverSessionLever(WorldSessionLever lever) {
+        // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
+        // so this only dispatches the write onto the presentation service the lever names.
+        m_levers?.Apply(lever: lever);
     }
 
     /// <summary>Resolves this frame's render pose for every active entity: position <c>Lerp(previous, current,

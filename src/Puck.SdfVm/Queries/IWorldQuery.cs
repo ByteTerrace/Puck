@@ -21,11 +21,18 @@ public enum WorldQueryConfidence {
 /// state without a float round-trip.
 /// </summary>
 /// <param name="Point">The world-space hit point.</param>
-/// <param name="Normal">The surface normal at the hit point (not necessarily unit length for a <see cref="WorldQueryConfidence.Bounded"/> answer — see the provider's own remarks).</param>
+/// <param name="Normal">The surface normal at the hit point — per-provider, not a shared contract. A
+/// <see cref="WorldQueryConfidence.Bounded"/> answer (<see cref="BakedWorldQuery"/>) hardcodes constant world
+/// <c>+Y</c> — a heightfield's only honest answer, since the baked artifact carries no per-hit surface orientation.
+/// A <see cref="WorldQueryConfidence.Exact"/> answer (<see cref="SdfFieldEvaluator"/>'s march) is always
+/// <see cref="FixedVector3.Zero"/>, deliberately NOT computed: no consumer reads it today (<c>WorldSolidField.ResolveCore</c>
+/// consumes only <c>RayHit.Distance</c>), so spending a gradient tap on every march hit was pure waste. A future
+/// consumer that needs it should call <see cref="IFieldEvaluator.TryFieldGradient(FixedPosition, out FixedVector3)"/>
+/// at <see cref="Point"/> itself.</param>
 /// <param name="Distance">The distance from the query origin to <see cref="Point"/>, along the cast direction.</param>
 /// <param name="Material">The hit surface's material id, or -1 when the provider doesn't track materials (the baked provider today).</param>
 /// <param name="Confidence">How exact the hit is — see <see cref="WorldQueryConfidence"/>.</param>
-public readonly record struct RayHit(WorldCoord3 Point, FixedVector3 Normal, FixedQ4816 Distance, int Material, WorldQueryConfidence Confidence);
+public readonly record struct RayHit(FixedPosition Point, FixedVector3 Normal, FixedQ4816 Distance, int Material, WorldQueryConfidence Confidence);
 
 /// <summary>
 /// Describes the query layers available from an <see cref="IWorldQuery"/> provider. A baked artifact may omit a
@@ -39,7 +46,7 @@ public readonly record struct QueryCapabilities(bool HasHeightfield, bool HasBlo
 
 /// <summary>
 /// Provides synchronous, deterministic gameplay queries against an SDF world. Inputs and results use
-/// <see cref="FixedQ4816"/>, <see cref="FixedVector3"/>, and <see cref="WorldCoord3"/> so they can participate in
+/// <see cref="FixedQ4816"/>, <see cref="FixedVector3"/>, and <see cref="FixedPosition"/> so they can participate in
 /// simulation without a floating-point round trip. Direction arguments need not be normalized.
 /// <para>
 /// <see cref="BakedWorldQuery"/> serves quantized <see cref="WorldQueryArtifact"/> data and returns
@@ -59,7 +66,7 @@ public interface IWorldQuery {
     /// <param name="maxDist">The maximum distance to search.</param>
     /// <param name="hit">The nearest hit, when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the ray hit something within <paramref name="maxDist"/>.</returns>
-    bool Raycast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
+    bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
 
     /// <summary>Sweeps a sphere of <paramref name="radius"/> from <paramref name="origin"/> along <paramref name="dir"/>
     /// up to <paramref name="maxDist"/>, returning the nearest hit (the swept sphere's first point of contact).</summary>
@@ -69,14 +76,14 @@ public interface IWorldQuery {
     /// <param name="maxDist">The maximum sweep distance.</param>
     /// <param name="hit">The nearest hit, when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the swept sphere hit something within <paramref name="maxDist"/>.</returns>
-    bool SphereCast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit);
+    bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit);
 
     /// <summary>Whether a sphere of <paramref name="radius"/> centered at <paramref name="center"/> overlaps blocked
     /// geometry — a placement/spawn/selection check, not a cast.</summary>
     /// <param name="center">The sphere's center.</param>
     /// <param name="radius">The sphere's radius.</param>
     /// <returns><see langword="true"/> when the sphere overlaps something blocked.</returns>
-    bool Overlap(WorldCoord3 center, FixedQ4816 radius);
+    bool Overlap(FixedPosition center, FixedQ4816 radius);
 
     /// <summary>Finds the ground height directly beneath (or above) <paramref name="position"/>, searching from
     /// <paramref name="probeUp"/> above to <paramref name="probeDown"/> below its Y.</summary>
@@ -85,11 +92,11 @@ public interface IWorldQuery {
     /// <param name="probeDown">How far below <paramref name="position"/>.Y to search.</param>
     /// <param name="groundY">The ground height, when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when ground was found within the probe range.</returns>
-    bool TryGroundHeight(WorldCoord3 position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY);
+    bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY);
 
     /// <summary>Whether a straight line from <paramref name="from"/> to <paramref name="to"/> is unobstructed.</summary>
     /// <param name="from">The line's start point.</param>
     /// <param name="to">The line's end point.</param>
     /// <returns><see langword="true"/> when nothing blocked lies between the two points.</returns>
-    bool LineOfSight(WorldCoord3 from, WorldCoord3 to);
+    bool LineOfSight(FixedPosition from, FixedPosition to);
 }

@@ -44,8 +44,8 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
                 }
 
                 // Hardware first (the brief's ladder), then software only if no hardware MFT initializes.
-                var encoder = TryCreateForCategory(codec: codec, subtype: subtype, hardware: true, width: width, height: height, frameRate: frameRate, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, attempts: attempts)
-                    ?? TryCreateForCategory(codec: codec, subtype: subtype, hardware: false, width: width, height: height, frameRate: frameRate, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, attempts: attempts);
+                var encoder = (TryCreateForCategory(codec: codec, subtype: subtype, hardware: true, width: width, height: height, frameRate: frameRate, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, attempts: attempts)
+                    ?? TryCreateForCategory(codec: codec, subtype: subtype, hardware: false, width: width, height: height, frameRate: frameRate, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, attempts: attempts));
 
                 if (encoder is not null) {
                     reason = "";
@@ -65,7 +65,7 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
     }
 
     private static MediaFoundationVideoEncoder? TryCreateForCategory(EncoderCodec codec, Guid subtype, bool hardware, int width, int height, int frameRate, int bitrateKilobitsPerSecond, List<string> attempts) {
-        var flags = (MftEnumFlagSortAndFilter | (hardware ? (MftEnumFlagHardware | MftEnumFlagAsyncMft) : MftEnumFlagSyncMft));
+        var flags = MftEnumFlagSortAndFilter | (hardware ? MftEnumFlagHardware | MftEnumFlagAsyncMft : MftEnumFlagSyncMft);
         var outputInfo = new MftRegisterTypeInfo {
             guidMajorType = MFMediaType_Video,
             guidSubtype = subtype,
@@ -114,7 +114,6 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
 
         return null;
     }
-
     private static bool TryActivateEncoder(IMFActivate activate, EncoderCodec codec, string mftName, int width, int height, int frameRate, int bitrateKilobitsPerSecond, List<string> attempts, out MediaFoundationVideoEncoder? encoder) {
         encoder = null;
 
@@ -140,7 +139,6 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
             return false;
         }
     }
-
     private static string ReadFriendlyName(IMFActivate activate) {
         var nameKey = MFT_FRIENDLY_NAME_Attribute;
 
@@ -148,28 +146,27 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
             ? name
             : "unnamed encoder MFT");
     }
-
     private static bool TryMapCodec(string token, out EncoderCodec codec, out Guid subtype) {
         switch (token?.Trim().ToLowerInvariant()) {
             case "av1": {
-                codec = EncoderCodec.Av1;
-                subtype = MFVideoFormat_AV1;
+                    codec = EncoderCodec.Av1;
+                    subtype = MFVideoFormat_AV1;
 
-                return true;
-            }
+                    return true;
+                }
             case "h264":
             case "avc": {
-                codec = EncoderCodec.H264;
-                subtype = MFVideoFormat_H264;
+                    codec = EncoderCodec.H264;
+                    subtype = MFVideoFormat_H264;
 
-                return true;
-            }
+                    return true;
+                }
             default: {
-                codec = EncoderCodec.H264;
-                subtype = default;
+                    codec = EncoderCodec.H264;
+                    subtype = default;
 
-                return false;
-            }
+                    return false;
+                }
         }
     }
 }

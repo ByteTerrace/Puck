@@ -1,0 +1,26 @@
+# Case I: per-tick-expiry contribution. channelwalk's `forward` act contributes fixed::ONE for the first
+# FORWARD_ACTIVE_TICKS (240, ~1s) ticks a Drive handle is held, then STOPS — per-tick declarative, so the very
+# next tick already reads back to zero on its own; nothing "releases" it. A gradual decay or a value that never
+# returns to exactly 0 would mean the contribution PERSISTED, which is the fail this case exists to catch.
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+#
+# Leading harmless Immediate read-back FIRST — a leading world.wait silently swallows every line behind it.
+replay.status
+world.wait 5
+world.grant addon:channelwalk drive body:0 budget:60 channels:forward
+# The seat's ceiling grant below still succeeds but is a no-op post owner ruling 2026-08-02 (headless P6b) — a
+# document-mounted addon is trusted-by-authorship, added outside the pool, gated by its OWN declared Reach only;
+# it never touches — and needs no — a seat-authored ceiling. Kept so this script matches its historical shape.
+world.grant seat1 drive body:0 channels:forward ceiling:1.0
+# ticks_since_drive is in-window (<240) here: expect forward folded=1(65536), trusted=[addon:channelwalk] (NOT
+# untrusted — the addon's term is TRUSTED post-recut; see the note above).
+world.wait 60
+player.channels 1
+# ticks_since_drive is now well past 240 (window closed exactly once, never repeating): expect forward folded=0.
+world.wait 300
+player.channels 1
+# Long past close — proves the stop is PERMANENT, not a decay that might drift back up.
+world.wait 2000
+player.channels 1
+world.addons

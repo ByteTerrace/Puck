@@ -1,0 +1,131 @@
+[
+  {
+    "Id": "core.monotonic-partitioner-full-domain-sweep",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketIdDangerous"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MonotonicPartitioner.GetBucketIdDangerous(ushort, int)'s table-driven route — the checkpoint bitmask fast path and the tail-stream decode slow path — for every one of the 65536 values at every one of the 1024 bucket counts",
+        "Against": "a table-free reference chain-walk (transcribed in MonotonicPartitionerClaims, never calling into Checkpoints, TailOwnerDeltaStream, CumulativeTailCountByBlock or DivModByBucketCount) that re-derives bucket ownership directly from the jump-consistent-hash recurrence as the bucket count is raised one at a time; the reference always moves a migrating value into the newest bucket, so it is monotone by construction, and full agreement over the whole domain therefore transfers both determinism and monotonicity onto the table-driven path rather than merely comparing two thin wrappers around the same tables",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "counting the bucket populations produced by the routing already agreed upon above, every bucket at every bucket count N from 1 to 1024 owns between ⌊65536/N⌋ and ⌈65536/N⌉ values — a measured uniformity floor and ceiling over the routing counted, not a second independent computation of population",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.monotonic-partitioner-metrics-vs-reference-walk",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetMetrics"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "BucketCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "JumpCount"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "MigrationDistance"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Rank"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitionerMetrics",
+        "Name": "Velocity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MonotonicPartitioner.GetMetrics(ushort, int) for every one of the 65536 values, at bucket count 1 (the fast checkpoint path), 100 (the slow tail-stream path) and 1024 (the maximum)",
+        "Against": "an independently derived reference chain-walk over the same jump-consistent-hash recurrence — rank via the plainly written permute-then-swap formula, jump count and migration distance via a plain-division walk, and velocity via the same 1/distance expression the member's own documentation states — that recomputes every division rather than reading MonotonicPartitioner's cached DivModByBucketCount table, so a defect in that cache cannot vouch for itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.monotonic-partitioner-guid-protocol-pin",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketId"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketIdDangerous"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetMetrics"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the Guid overloads of GetBucketId, GetBucketIdDangerous and GetMetrics, over 64 synthetic Guids at bucket counts 1, 64, 353 and 1024",
+        "Against": "an independently computed trailing-entropy hash — a little-endian read of the Guid's bytes 12..15 into a uint, bias-free widened into [1, 65534] via ((65534UL * entropy) >> 32) + 1 — routed through the same ushort entry points; this claim cannot call the subject's private GetGuidHash, so agreement pins the exact wire mapping the member's own remarks and the README call a client/server protocol contract, rather than merely showing the Guid overload agrees with itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.monotonic-partitioner-bucket-count-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetBucketId"
+      },
+      {
+        "Type": "Puck.Maths.MonotonicPartitioner",
+        "Name": "GetMetrics"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "GetBucketId(ushort, int), GetBucketId(Guid, int) and GetMetrics(ushort, int) refuse a bucket count of 0 and of MaxBucketCount + 1 by throwing ArgumentOutOfRangeException naming paramName \"bucketCount\", rather than routing to a meaningless index or clamping silently",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -75,8 +75,8 @@ public sealed class SdfProgram {
     /// keeps sagging below the accumulator until the candidate is 1.70711 radii away, unlike every other soft blend,
     /// which saturates at one radius.</summary>
     private const float ChamferUnionHaloScale = 1.7071068f;
-    /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an intersection-family blend
-    /// (<see cref="HasUnmaskableCompose"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
+    /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
+    /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
     /// is always evaluated.
     /// <para>Deliberately a LARGE FINITE value rather than <see cref="float.PositiveInfinity"/>: DXC compiles the
@@ -117,8 +117,10 @@ public sealed class SdfProgram {
     /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (see
     /// <see cref="SdfInstanceGrid"/>). Default (and production) is <see langword="true"/>: the beam prepass walks the
     /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a DISABLED grid so
-    /// the beam falls back to the flat per-instance loop over the SAME instances — the reference path the
-    /// <c>world-grid-cull</c> Post gate compares against (grid == flat).</param>
+    /// the beam falls back to the flat per-instance loop over the SAME instances — the reference path grid==flat is
+    /// judged against. The <c>world-grid-cull</c> gate that made that comparison left the build on 2026-08-02;
+    /// nothing checks the equality automatically now.</param>
+    /// <exception cref="ArgumentException">An instruction opcode is not declared by <see cref="SdfOp"/>.</exception>
     public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
@@ -127,6 +129,8 @@ public sealed class SdfProgram {
         m_instructions = [.. instructions];
         m_screenSurfaces = [.. (screenSurfaces ?? [])];
         m_buildInstanceGrid = buildInstanceGrid;
+
+        ValidateIsa();
 
         if (m_instances.Length > SdfProgramBuilder.MaxInstances) {
             throw new ArgumentException(message: $"A program may declare at most {SdfProgramBuilder.MaxInstances} instances; got {m_instances.Length}.", paramName: nameof(instances));
@@ -171,7 +175,7 @@ public sealed class SdfProgram {
         // length is known here (it depends on the instance layout), so it sizes the word stream up front. A probe
         // program flows through this same path, so the frozen capacity envelope grows to cover the grid automatically.
         m_instanceBinning = ClassifyInstances();
-        RequiresFrameInstanceGridRebuild = buildInstanceGrid && HasFrameBinnableDynamicInstance();
+        RequiresFrameInstanceGridRebuild = (buildInstanceGrid && HasFrameBinnableDynamicInstance());
         var gridBlock = SdfInstanceGrid.Build(instances: m_instanceBinning, maxInstances: SdfProgramBuilder.MaxInstances, enabled: buildInstanceGrid);
 
         var dataOffsetVectors = (1 + instructionCount);
@@ -182,7 +186,7 @@ public sealed class SdfProgram {
         var worldSegmentOffsetVectors = ((instanceOffsetVectors + 1) + (2 * m_instances.Length));
         var gridOffsetVectors = ((worldSegmentOffsetVectors + 1) + worldSegmentCount);
         var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
-        var totalVectors = (rigidPlanOffsetVectors + segments.Count + (3 * rigidPlan.Leaves.Count));
+        var totalVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -326,6 +330,18 @@ public sealed class SdfProgram {
     /// <summary>Gets the packed 32-bit words uploaded to the GPU.</summary>
     public ReadOnlySpan<uint> Words => m_words;
 
+    internal void ValidateIsa() {
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            var opcode = m_instructions[index].Op;
+
+            if (!Enum.IsDefined(value: opcode)) {
+                var raw = (uint)opcode;
+
+                throw new ArgumentException(message: $"SDF ISA v{SdfIsa.Version} refuses undeclared opcode {raw} (0x{raw:X8}) at instruction {index}.", paramName: "instructions");
+            }
+        }
+    }
+
     // Rebuilds the cull grid against THIS frame's dynamic instance positions. The public instruction program remains
     // immutable; SdfWorldEngine uploads this compact side table into a ring-local buffer after the matching dynamic
     // transforms, so a moving instance no longer has to ride the O(dynamic-count) always-tested list. Static centers
@@ -387,7 +403,6 @@ public sealed class SdfProgram {
 
         return false;
     }
-
     private static int CalculateRequiredDynamicTransformCapacity(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange> instances) {
         var required = 0;
 
@@ -632,11 +647,13 @@ public sealed class SdfProgram {
                     }
                 case SdfOp.Translate: {
                         var offset = new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z);
+
                         position += Vector3.Transform(value: offset, rotation: rotation);
                         break;
                     }
                 case SdfOp.Rotate: {
                         var authored = new Quaternion(w: instruction.Data0.W, x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z);
+
                         rotation = Quaternion.Concatenate(value1: authored, value2: rotation);
                         break;
                     }
@@ -858,7 +875,7 @@ public sealed class SdfProgram {
             var record = segments[index];
 
             if (rigidSegments[index].LeafCount > 0) {
-                record = record with { Mode = (record.Mode | SegmentRigidPlanFlag) };
+                record = record with { Mode = record.Mode | SegmentRigidPlanFlag };
             }
 
             WriteBound(entryBase: (((segmentOffsetVectors + 1) + (2 * index)) * WordsPerVector), record: record);
@@ -885,7 +902,7 @@ public sealed class SdfProgram {
             var entryBase = ((leafTableOffsetVectors + (3 * index)) * WordsPerVector);
 
             WriteVector4(words: m_words, baseIndex: entryBase, x: leaf.Position.X, y: leaf.Position.Y, z: leaf.Position.Z, w: 0f);
-            m_words[(entryBase + 3)] = ((uint)leaf.ShapeInstruction | (leaf.Rotation.IsIdentity ? RigidLeafIdentityRotationFlag : 0u));
+            m_words[(entryBase + 3)] = (uint)leaf.ShapeInstruction | (leaf.Rotation.IsIdentity ? RigidLeafIdentityRotationFlag : 0u);
             WriteVector4(words: m_words, baseIndex: (entryBase + WordsPerVector), x: leaf.Rotation.X, y: leaf.Rotation.Y, z: leaf.Rotation.Z, w: leaf.Rotation.W);
             WriteVector4(words: m_words, baseIndex: (entryBase + (2 * WordsPerVector)), x: leaf.BoundCenter.X, y: leaf.BoundCenter.Y, z: leaf.BoundCenter.Z, w: leaf.BoundRadius);
         }
@@ -919,18 +936,19 @@ public sealed class SdfProgram {
     // or the ParkedBoundRadius sentinel) and whether the FROZEN grid can bin it (active + static + maskable → a fixed,
     // finite world-space bound). Computed ONCE so PackInstances and SdfInstanceGrid pack from the SAME radius — a
     // divergence would desync the beam's grid cull from the bound it tests. Also runs the parked-unmaskable validation:
-    // an op that reads the running accumulator (an intersection-family blend or an Onion/Dilate/Displace field op) cannot
-    // be parked, because a parked slot asserts "contributes nothing", which such an op violates even where its geometry
-    // is absent. See MaxSmoothBlendRadius / MaxScopedFieldReach / HasUnmaskableCompose for the margin/gate derivations.
+    // an unbounded Plane or an op that reads the running accumulator (an intersection-family blend or an
+    // Onion/Dilate/Displace field op) cannot be parked, because a parked slot asserts "contributes nothing", which
+    // such an instruction violates outside every finite bound. See MaxSmoothBlendRadius / MaxScopedFieldReach /
+    // HasUnmaskableInfluence for the margin/gate derivations.
     private SdfInstanceGridInput[] ClassifyInstances() {
         var result = new SdfInstanceGridInput[m_instances.Length];
 
         for (var index = 0; (index < m_instances.Length); index++) {
             var instance = m_instances[index];
-            var unmaskable = HasUnmaskableCompose(first: instance.First, end: instance.End);
+            var unmaskable = HasUnmaskableInfluence(first: instance.First, end: instance.End);
 
             if (unmaskable && !instance.Active) {
-                throw new ArgumentException(message: $"Instance {index} is PARKED but carries an op that reads the running accumulator (an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace field op). A parked slot must contribute nothing to the field, but such an op changes the field even where the instance's own geometry is absent. Emit the instance active, or use a union/subtraction-family blend with no field op.", paramName: "instances");
+                throw new ArgumentException(message: $"Instance {index} is PARKED but carries unbounded influence (a Plane, an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace field op). A parked slot must contribute nothing to the field, but this instruction changes it outside every finite instance bound. Emit the instance active, or use a bounded shape with a union/subtraction-family blend and no field op.", paramName: "instances");
             }
 
             float radius;
@@ -1073,7 +1091,7 @@ public sealed class SdfProgram {
     /// <summary>The coupling HALO an instance's soft blends need on top of their geometry bound: past it, evaluating the
     /// member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see PackInstances). 0 for an
     /// instance that uses only hard blends, so its bound is unchanged and byte-identical. The INTERSECTION family is
-    /// deliberately absent: those instances are unmaskable, so no halo is computed for them (HasUnmaskableCompose).
+    /// deliberately absent: those instances are unmaskable, so no halo is computed for them (HasUnmaskableInfluence).
     /// <para>The margin is NOT simply the blend radius for every family. Neutrality for a far candidate b >= a is:</para>
     /// <para>SmoothUnion / SmoothSubtraction — <c>b >= a + k</c> saturates <c>blendSmoothUnion</c>'s far endpoint, which
     /// is bit-exact by construction. A chain of N smooth unions of radius k approaches sag k monotonically from below and
@@ -1088,7 +1106,7 @@ public sealed class SdfProgram {
     /// <para>Xor deliberately has zero halo, like the other hard blends:
     /// <c>max(min(a, b), -max(a, b))</c> reduces to <c>min(a, b)</c> — the plain union — everywhere OUTSIDE the
     /// candidate (b &gt; 0; the negated arm only wins when a + b &lt; 0, deeper inside than a first-hit march ever
-    /// samples), so a far candidate returns the accumulator exactly. Do not add Xor here or to HasUnmaskableCompose.
+    /// samples), so a far candidate returns the accumulator exactly. Do not add Xor here or to HasUnmaskableInfluence.
     /// SIZING: an Xor member competes on the running min wherever it is nearest, so its authored cull bound needs the
     /// UNION-style generous influence margin, never the subtraction-style tight bound.</para></summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
@@ -1129,7 +1147,8 @@ public sealed class SdfProgram {
     /// <see cref="SdfOp.Dilate"/>/<see cref="SdfOp.Displace"/> between a balanced <see cref="SdfOp.PushField"/>/
     /// <see cref="SdfOp.PopField"/>) add on top of its authored geometry bound — the cull-margin twin of
     /// <see cref="MaxSmoothBlendRadius"/> for the scoped-accumulator payoff. A scoped field op is MASKABLE
-    /// (<see cref="HasUnmaskableCompose"/> only trips on an UNSCOPED field op or an intersection-family POP compose), so
+    /// (<see cref="HasUnmaskableInfluence"/> only trips on an unbounded shape, an UNSCOPED field op, or an
+    /// intersection-family POP compose), so
     /// it packs a FINITE bound instead of the 1e30 sentinel that would otherwise cover everything — but the op moves the
     /// scope's zero-set OUTWARD past the packed radius, so that growth must be folded into the bound or the beam masks
     /// out the tiles the grown shell reaches and the surface holes at the tile seams. Each op's outward reach is exact:
@@ -1190,8 +1209,10 @@ public sealed class SdfProgram {
 
         return margin;
     }
-    /// <summary>Whether an instance's instruction slice contains an op that READS the running accumulator, which makes the
-    /// instance UNMASKABLE. Two families qualify.
+    /// <summary>Whether an instance's instruction slice has an influence no finite sphere can mask. Three families qualify.
+    /// <para>THE PLANE. Its zero set and negative half-space are unbounded, irrespective of its blend or field scope.
+    /// Any finite instance sphere would clip authored geometry even though the segment-level bound correctly declines
+    /// to bound the shape.</para>
     /// <para>THE INTERSECTION BLENDS. Every other blend family, evaluated against a candidate far beyond the accumulator,
     /// returns the accumulator: <c>min(a, b) = a</c>, <c>max(a, -b) = a</c>, <c>blendSmoothUnion</c> is far-exact by
     /// construction, and the chamfer union/subtraction bevel planes fall away. So dropping a masked-out instance is exactly
@@ -1219,12 +1240,16 @@ public sealed class SdfProgram {
     /// <c>world-instanced</c>'s two unmaskable-compose guard scenes.</para></summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
-    /// <returns><see langword="true"/> when the slice carries an op that reads the running accumulator.</returns>
-    private bool HasUnmaskableCompose(int first, int end) {
+    /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>
+    private bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
+
+            if ((instruction.Op == SdfOp.ShapeBlend) && ((SdfShapeType)instruction.Shape == SdfShapeType.Plane)) {
+                return true;
+            }
 
             // A PushField reseeds the accumulator, so an accumulator-reading op INSIDE the scope (scopeDepth > 0) reads
             // only the scope's own field — it does NOT make the instance unmaskable. That is the scoped-accumulator

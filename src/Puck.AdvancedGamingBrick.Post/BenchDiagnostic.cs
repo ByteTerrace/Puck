@@ -14,8 +14,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal static class BenchDiagnostic {
     /// <summary>The measured-frame floor per machine; low fleet sizes get more frames (see <see cref="FramesFor"/>)
-    /// so the small-N cells are not noise-dominated. 200 is the repo's aggregate-throughput measurement floor
-    /// (docs/reviews §4) — well above the ±4&#160;ms native-channel noise the fleet plan distrusts.</summary>
+    /// so the small-N cells are not noise-dominated. 200 is the repo's aggregate-throughput measurement floor —
+    /// chosen well above the ±4&#160;ms native-channel timing noise a smaller frame count would leave unaveraged.</summary>
     private const int DefaultFramesPerMachine = 200;
     private const int LatencyReps = 64;
     /// <summary>Frames a machine runs before its state is considered representative for snapshot/restore/fork
@@ -31,10 +31,10 @@ internal static class BenchDiagnostic {
     /// <c>--bench-fleet</c>, <c>--artifacts</c>).</param>
     /// <returns>0 on a clean run; 1 when a determinism guard failed.</returns>
     public static int Run(string[] args) {
-        var romPath = ArgValue(args: args, name: "--bench-rom");
-        var frameFloor = (int.TryParse(s: ArgValue(args: args, name: "--bench-frames"), result: out var parsedFrames) ? parsedFrames : DefaultFramesPerMachine);
-        var fleetSizes = ParseFleetSizes(value: ArgValue(args: args, name: "--bench-fleet"));
-        var artifactsDirectory = (ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gba-post"));
+        var romPath = CommandLineArguments.Value(args: args, name: "--bench-rom");
+        var frameFloor = (int.TryParse(s: CommandLineArguments.Value(args: args, name: "--bench-frames"), result: out var parsedFrames) ? parsedFrames : DefaultFramesPerMachine);
+        var fleetSizes = ParseFleetSizes(value: CommandLineArguments.Value(args: args, name: "--bench-fleet"));
+        var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gba-post"));
         var bios = Diagnostics.BiosImage;
         byte[] rom;
         string romName;
@@ -290,14 +290,5 @@ internal static class BenchDiagnostic {
         }
 
         return Array.ConvertAll(array: value.Split(separator: ','), converter: static size => int.Parse(s: size));
-    }
-    private static string? ArgValue(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
     }
 }

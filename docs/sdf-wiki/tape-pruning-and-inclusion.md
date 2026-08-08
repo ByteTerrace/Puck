@@ -35,4 +35,3 @@ images bit-for-bit where the contract promises exactness.
 
 Before implementing a pruner, measure instructions evaluated per hit, segment
 count per instance, mask density, metadata bandwidth, and specialization cost.
-Track any renewed work in [the SDF backlog](../sdf-backlog.md).

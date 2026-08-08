@@ -1,0 +1,21 @@
+[package]
+name = "puck-addon-hudbuilder"
+version = "0.1.0"
+edition = "2021"
+description = "BATTERY guest for the addon mutation seam (Phase-3 plan L6): asks for a Mutate handle over section:hud, then exercises it. FIVE build-time variants (Cargo features, the channelwalk-established option): `main` builds a HUD panel and element through two chained SubmitMutation acts, gated on reading back Applied, then goes quiet. `spam`/`badkind`/`badjson`/`hugepayload` each deliberately trigger ONE dispatch-door refusal (QuotaExhausted/AttenuatedToEmpty/MalformedPayload/PayloadTooLarge respectively), read the OBSERVED verdict back off their own Answer cell, and REPORT it by submitting a second, well-formed act that writes the observed verdict's name into a dedicated report panel — so a console script can assert what the GUEST itself saw, not merely what the host decided."
+publish = false
+
+# cdylib, not rlib: this crate IS the built .wasm module, mirroring every other addon crate here.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }
+
+[features]
+default = ["main"]
+main = []
+spam = []
+badkind = []
+badjson = []
+hugepayload = []

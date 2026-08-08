@@ -140,7 +140,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
     // Atomically allocates a player slot and registers a new connection for it through the manager.
     private XInputGamepadConnection OpenSlot(uint slot) {
         return ((XInputGamepadConnection)m_registry!.Register(connectionFactory: playerIndex => new XInputGamepadConnection(
-            deviceId: InputDeviceId.FromKey(key: $"xinput:{slot}"),
+            deviceId: InputDeviceId.FromConnectionKey(key: $"xinput:{slot}"),
             haptics: m_gameInputHaptics,
             playerIndex: playerIndex,
             slot: slot

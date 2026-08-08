@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -147,8 +147,8 @@ internal sealed class WorldWorkbench {
         model.SetName(name: rowId);
 
         // The envelope pre-check (matching the ghost-spawn check): the candidate composes the delivered definition, any
-        // live drag ghosts, this bench's preview, AND every OTHER already-open bench's preview (largechange-06 — the
-        // rendered program in WorldFrameSource composes ALL active benches, so admission must charge all of them, not
+        // live drag ghosts, this bench's preview, AND every OTHER already-open bench's preview (the
+        // rendered program in WorldSceneEmitter composes ALL active benches, so admission must charge all of them, not
         // only the one opening; two benches each fitting alone can exceed the frozen floor together). The measure
         // charges every stamp at worst case, so passing here keeps ANY later model state (≤ the per-stamp cap) inside
         // the probed floors.
@@ -207,6 +207,10 @@ internal sealed class WorldWorkbench {
     /// submitted it (the echo tap calls this): the pending-commit flag clears so the bench stops awaiting an accept,
     /// while the committed revision stays put — the discarded work is honestly still uncommitted. Anything else is
     /// ignored.</summary>
+    /// <remarks>Client-side UI-state correlation only, same shape as <see cref="WorldEditorDrag.NoteRejected"/>: the
+    /// <see cref="PrincipalKind.Seat"/> filter is load-bearing because <see cref="WorldPrincipal.Index"/> is only a
+    /// slot for Seat/Peer kinds (an Addon principal's Index is always 0 and would alias slot 0's bench). A claimed
+    /// slot's rejected commit is simply not correlated here.</remarks>
     /// <param name="mutation">The rejected mutation.</param>
     public void NoteCommitRejected(WorldMutation mutation) {
         if (mutation is not WorldMutation.UpsertCreation { Principal.Kind: PrincipalKind.Seat } upsert) {
@@ -391,7 +395,6 @@ internal sealed class WorldWorkbench {
 
         return document;
     }
-
     private static WorldPlacement PreviewPlacement(int slot, Vector3 origin) => new(
         Id: PreviewId(slot: slot),
         CreationId: PreviewId(slot: slot),
@@ -399,11 +402,9 @@ internal sealed class WorldWorkbench {
         YawDegrees: 0f,
         Scale: 1f
     );
-
     private static string PreviewId(int slot) => $"{PreviewIdPrefix}{PlayerRoster.DisplayNumber(slot: slot)}";
     // A synthetic content tag, never a canonical hash: the preview never crosses a validator, and per-Build palette
     // registration keys nothing on it — it exists so debug dumps show WHICH revision rendered.
     private static string PreviewHash(int revision) => $"{PreviewIdPrefix}rev-{revision}";
-
     private int SlotOrFirst(int slot) => (((uint)slot < (uint)m_benches.Length) ? slot : 0);
 }

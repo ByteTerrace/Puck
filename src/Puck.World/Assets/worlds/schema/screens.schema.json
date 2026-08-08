@@ -1,0 +1,257 @@
+{
+  "description": "The diegetic screens standing in the plaza \u2014 pure data the frame source emits as screen slabs and the binder feeds; a screen the world never authors, only declares.",
+  "type": "array",
+  "items": {
+    "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the SAMPLED surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "index": {
+        "description": "The engine screen-surface index (0..MaxScreenSurfaces\u22121) this slab declares \u2014 the key the source/light providers bind under.",
+        "type": "integer"
+      },
+      "origin": {
+        "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal."
+      },
+      "right": {
+        "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space)."
+      },
+      "up": {
+        "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space)."
+      },
+      "halfWidth": {
+        "description": "The face half-width (the slab\u0027s local X half-extent).",
+        "type": "number"
+      },
+      "halfHeight": {
+        "description": "The face half-height (the slab\u0027s local Y half-extent).",
+        "type": "number"
+      },
+      "halfDepth": {
+        "description": "The slab\u0027s local Z half-extent (its thickness behind the face).",
+        "type": "number"
+      },
+      "round": {
+        "description": "The corner-rounding radius.",
+        "type": "number"
+      },
+      "source": {
+        "description": "The signal the lit face carries.",
+        "type": "object",
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "$ref": "./common.schema.json#/$defs/None"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/TestPattern"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Machine"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Camera"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/View"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Capture"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Console"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Qr"
+          }
+        ]
+      },
+      "route": {
+        "description": "The engage-route policy.",
+        "type": "object",
+        "properties": {
+          "engageable": {
+            "description": "Whether a player may engage this screen.",
+            "type": "boolean"
+          },
+          "engageRadius": {
+            "description": "The world-unit radius a player must be inside to engage (meaningful only when Engageable). Validated finite and non-negative.",
+            "type": "number"
+          },
+          "autoInsert": {
+            "description": "When set, engaging the screen first boots the selected magazine entry (the \u0022walk over, press the button, the screen lights\u0022 gesture), so the interaction is one act rather than an insert then an engage.",
+            "type": "boolean"
+          },
+          "engageChannel": {
+            "description": "The world-event channel whose arrival on a body engages this screen, or null (the default) for a route that does not answer gestures. THE NAME IS THE AUTHOR\u0027S: nothing in the engine special-cases a spelling. Omitted from the wire when null.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cycleChannel": {
+            "description": "Same, for advancing the magazine selector. Omitted from the wire when null.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "channels": {
+            "description": "The declared channel names this route\u0027s mask reaches \u2014 a masked-out channel keeps flowing to the routed body\u0027s OWN pose (relevant under the capture:false MIRROR policy) but never reaches this route\u0027s target. null (the default) reaches every declared channel. Omitted from the wire when null.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "translation": {
+            "description": "The authored channel\u2192pad-element rows this route\u0027s target reads, replacing the engine\u0027s default when present. null uses the engine mapping. Omitted from the wire when null.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One authored channel\u2192pad-element mapping row \u2014 a Translation entry.",
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "description": "The declared channel name this row reads.",
+                  "type": "string"
+                },
+                "element": {
+                  "description": "The neutral pad element the channel\u0027s value drives.",
+                  "enum": [
+                    "LeftStickX",
+                    "LeftStickY",
+                    "RightStickX",
+                    "RightStickY",
+                    "LeftTrigger",
+                    "RightTrigger",
+                    "South",
+                    "East",
+                    "West",
+                    "North",
+                    "DpadUp",
+                    "DpadDown",
+                    "DpadLeft",
+                    "DpadRight",
+                    "LeftShoulder",
+                    "RightShoulder",
+                    "Start",
+                    "Back"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "solid": {
+        "description": "The screen slab\u0027s solidity facet (a box collider derived from the slab\u0027s oriented frame \u002B Margin by Server.WorldColliderSet), or null for a decorative screen. Omitted from the wire when null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "margin": {
+            "description": "The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "margin"
+        ],
+        "additionalProperties": false,
+        "default": null
+      },
+      "magazine": {
+        "description": "The per-screen source magazine (the cycle primitive), or null for a screen with no magazine \u2014 nothing to cycle. Omitted from the wire when null \u2014 the whole-row UpsertScreen carries it for free, so no new mutation kind is needed.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "entries": {
+            "description": "The ordered source list (at least one entry).",
+            "type": "array",
+            "items": {
+              "description": "The signal carried by a WorldScreen\u0027s lit face. A source declares which provider feeds a slot; the engine resolves and samples it. The $type string is the JSON discriminator; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "$ref": "./common.schema.json#/$defs/None"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/TestPattern"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Machine"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Camera"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/View"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Capture"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Console"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Qr"
+                }
+              ]
+            }
+          },
+          "selected": {
+            "description": "The 0-based entry the selector STARTS on (what screen.select advances from), not what the screen boots showing \u2014 a screen always wakes on its declared Source (the one-live-console ceiling depends on this). Live selection drifts from this and is folded back by world.save (see Puck.World.WorldSessionCapture).",
+            "type": "integer",
+            "default": 0
+          },
+          "wrap": {
+            "description": "Whether advancing past the last entry returns to the first (the arcade cabinet\u0027s wrapping cycle); when false the selector clamps at both ends.",
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "additionalProperties": false,
+        "default": null
+      }
+    },
+    "required": [
+      "index",
+      "origin",
+      "right",
+      "up",
+      "halfWidth",
+      "halfHeight",
+      "halfDepth",
+      "round",
+      "source",
+      "route"
+    ],
+    "additionalProperties": false
+  }
+}

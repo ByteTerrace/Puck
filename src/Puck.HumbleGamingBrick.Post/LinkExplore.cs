@@ -1,4 +1,4 @@
-using Puck.Capture;
+using Puck.Recording.Capture;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -32,7 +32,7 @@ internal static class LinkExplore {
         var positionals = Positionals(args: args, afterIndex: index);
         var frames = IntArg(args: args, name: "--frames", fallback: 900);
         var dumpEvery = IntArg(args: args, name: "--dump-every", fallback: 60);
-        var outDir = (StringArg(args: args, name: "--out") ?? ".");
+        var outDir = (CommandLineArguments.Value(args: args, name: "--out") ?? ".");
         var modelA = ModelArg(args: args, name: "--modelA", fallback: ConsoleModel.Cgb);
         var modelB = ModelArg(args: args, name: "--modelB", fallback: ConsoleModel.Agb);
 
@@ -141,22 +141,13 @@ internal static class LinkExplore {
 
         return positionals;
     }
-    private static string? StringArg(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
-    }
     private static int IntArg(string[] args, string name, int fallback) {
-        var value = StringArg(args: args, name: name);
+        var value = CommandLineArguments.Value(args: args, name: name);
 
         return (((value is not null) && int.TryParse(s: value, result: out var parsed)) ? parsed : fallback);
     }
     private static ConsoleModel ModelArg(string[] args, string name, ConsoleModel fallback) {
-        var value = StringArg(args: args, name: name);
+        var value = CommandLineArguments.Value(args: args, name: name);
 
         return value?.ToLowerInvariant() switch {
             "dmg" => ConsoleModel.Dmg,

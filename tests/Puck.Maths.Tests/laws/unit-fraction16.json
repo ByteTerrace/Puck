@@ -1,0 +1,671 @@
+[
+  {
+    "Id": "unit-fraction16.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_Multiply \u2014 its own uint truncate-and-correct at the 2\u207B\u00B9\u2076 grid, ties to even",
+        "Against": "Oracles.UnitFractionProduct \u2192 Oracles.RoundDyadic at shift 16 over BigInteger, no Puck.Maths call. ENVELOPE: the shared operand fold Subjects.UnitFraction16Raw is the low sixteen bits of the draw \u2014 TOTAL and unbiased, unlike the closed interval\u0027s saturating fold \u2014 but it sends the committed edge set onto only six distinct raws {0, 1, 256, 32768, 65280, 65535}, so the edge square is a corner battery and the breadth comes from the edge-biased random stream and the stratified frontier. The tie IS reached inside that corner: 32768 \u00D7 65535 rounds a half up off an odd truncation and 32768 \u00D7 1 rounds one down off an even one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the product cannot leave the half-open interval: the largest pair rounds to 2\u00B9\u2076 \u2212 2, so the type is closed under multiplication with no saturation anywhere \u2014 the fact the closed interval spends its thirty-third bit to obtain and this type gets for free",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.div-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_Division \u2014 the truncate-and-correct on the sixteen-bit-shifted dividend, saturating at MaxValue",
+        "Against": "Oracles.UnitFractionQuotient \u2014 the exact ratio (x\u00B72\u00B9\u2076)/y divided in BigInteger, one ties-to-even rounding, then a clamp at 2\u00B9\u2076 \u2212 1; the oracle divides in arbitrary width and shares no code and no rounding substrate with the subject. ENVELOPE: the tie 2\u00B7(x\u00B72\u00B9\u2076 mod y) == y is unreachable at EVERY legal operand pair \u2014 the dividend carries sixteen factors of two and every divisor below 2\u00B9\u2076 carries at most fifteen \u2014 so the correction\u0027s equal-to-half branch is dead on both sides and agreement pins the truncation, the round-up and the saturation only",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ordered operand fold Subjects.UnitFraction16Ratio divides the SMALLER sampled raw by the LARGER, so the sweep lives in the sub-one regime where the rounding actually fires; the saturating corner is still reached on the edge square\u0027s diagonal, where equal raws divide to exactly one, and it is pinned outright by the quotient ladder in unit-fraction16.construction-and-refusals",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.exact-ops-and-order",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_OnesComplement"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_BitwiseAnd"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_BitwiseOr"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_ExclusiveOr"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "AddSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "SubtractSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Epsilon"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_LessThanOrEqual"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16\u0027s wrapping ring \u2014 op_Addition, op_Subtraction and op_UnaryNegation",
+        "Against": "the exact BigInteger value reduced modulo 2\u00B9\u2076 by Subjects.WrapToFraction, inline in Subjects.UnitFraction16ExactOpsAndOrder \u2014 EXACT on both sides, so condition (B) drops out and the statement is purely the wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_OnesComplement and the bitwise lattice op_BitwiseAnd, op_BitwiseOr, op_ExclusiveOr",
+        "Against": "(2\u00B9\u2076 \u2212 1 \u2212 a) and BigInteger\u0027s own bitwise operators over the same raws, inline \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_Modulus",
+        "Against": "BigInteger remainder over the same raws, inline \u2014 exact both sides, and the raw remainder IS the fixed-point remainder because (x/2\u00B9\u2076) mod (y/2\u00B9\u2076) == (x mod y)/2\u00B9\u2076",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.AddSaturating and UnitFraction16.SubtractSaturating",
+        "Against": "BigInteger.Min(exactA \u002B exactB, 2\u00B9\u2076 \u2212 1) and BigInteger.Max(exactA \u2212 exactB, 0), inline \u2014 exact both sides; the ceiling is MaxValue, one unit BELOW the closed interval\u0027s, because this type cannot name one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.Max, UnitFraction16.Min and UnitFraction16.Clamp against a third sampled raw",
+        "Against": "BigInteger.Max/Min and their composition over the same raws, inline \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.CompareTo(UnitFraction16) and the four relational operators",
+        "Against": "the sign of BigInteger.Compare over the same raws, inline. ENVELOPE: the sixteen-bit CompareTo returns the DIFFERENCE rather than a sign, so the law compares Math.Sign of it \u2014 the magnitude it returns is not part of the statement",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the primary constructor and FromRawBits are one fact \u2014 both preserve the raw and produce equal values at every swept raw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the constants have the structure they claim: Zero, MinValue, AdditiveIdentity and default coincide and are neutral for both sums; a value is its own additive inverse and its own exclusive-or annihilator; both complements are involutions; Epsilon adds exactly one raw; MinValue is neutral for Max and MaxValue for Min; and the saturating pair stops exactly at MaxValue and at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the De Morgan pair holds between the bitwise complement and the two order selections: complement(max) == min(complements) and complement(min) == max(complements), pinned at the carrier so a material built on it inherits the fact \u2014 the same statement closed-unit.bounded-ops-exact makes for the interval\u0027s ARITHMETIC complement, here for the bitwise one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.shifts-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_LeftShift"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_RightShift"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_UnsignedRightShift"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TotalBitCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_LeftShift and op_RightShift over a sampled amount and the committed ladder {0, 1, 15, 16, 17, 31, 32, \u22121}",
+        "Against": "(raw \u00B7 2^(s \u0026 31)) mod 2\u00B9\u2076 and raw \u003E\u003E (s \u0026 31) in BigInteger, inline in Subjects.UnitFraction16ShiftsMatchOracle. The mask is re-derived from the LANGUAGE rule \u2014 the operand promotes to a thirty-two-bit word, so a C# shift count acts modulo thirty-two \u2014 and not from the kernel, which never spells it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "op_UnsignedRightShift equals op_RightShift at every swept raw and amount, which is what the unsigned storage makes it and what the member documents",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the amounts at and beyond the mask are part of the statement, not an accident: an amount of thirty-two is the IDENTITY and a negative amount shifts by its masked residue, which is the modulo-thirty-two promotion rule all three shift members now document \u2014 mask 31, not 15",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FractionBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TotalBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Epsilon"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "AddSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Modulus"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared grid is one fact: FractionBitCount == TotalBitCount == 16, MaxValue.Value == 2\u00B9\u2076 \u2212 1, Epsilon.Value == 1, and Zero, MinValue, AdditiveIdentity and default(UnitFraction16) all coincide at raw zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the half-open contract itself: MaxValue \u002B Epsilon WRAPS to zero while AddSaturating stops at MaxValue \u2014 the type has no one, which is exactly what separates it from UnitInterval32",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the thirteen-raw construction ladder \u2014 zero and its neighbourhood, the byte seam, the exact half either side, and the top either side \u2014 is preserved bit-for-bit by both construction routes, the primary constructor and FromRawBits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.ToString \u2014 the digit-at-a-time renderer that never routes through double",
+        "Against": "Oracles.ExactDyadicDecimal, which derives the digits from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger \u2014 a deliberately different derivation, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ToString(format, formatProvider) ignores both, as it documents: a \u0027G17\u0027 format and a comma-decimal-separator provider still render the exact invariant expansion",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the boxed comparison contract: a null comparand sorts first, self compares zero, and a foreign type throws ArgumentException naming the \u0027obj\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.FromDouble over the seventeen-row double ladder \u2014 both saturations onto MaxValue (never onto one, which is unrepresentable), NaN, both infinities, negative zero, the exactly-representable interior points, three half-ULP ties, the tie at the top that rounds up and then saturates, and the one inexact input",
+        "Against": "Subjects.UnitFraction16DoubleLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the IEEE-754 binary64 layout and the 2\u207B\u00B9\u2076 grid, sharing no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_Division at the eight-row quotient ladder \u2014 the exact power-of-two ratio, two ratios that round, the equal-operand case whose true quotient is exactly one, and the ratios above one",
+        "Against": "Subjects.UnitFraction16QuotientLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived as round-to-nearest-ties-to-even of (dividend\u00B72\u00B9\u2076)/divisor then clamped, computed in BigInteger away from the subject; it is the SATURATION statement the sampled law\u0027s ordered fold deliberately leaves thin",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three documented refusals throw rather than answer: Clamp with an inverted range throws ArgumentException \u2014 naming no parameter, because the diagnosis is the platform Math.Clamp\u0027s own \u2014 and both op_Division and op_Modulus throw DivideByZeroException at a zero divisor. The operand folds map all three away, so without this ladder nothing in the suite or the tools would reach them",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.text-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TotalBitCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.ToString and UnitFraction16.TryFormat at every swept raw",
+        "Against": "Oracles.ExactDyadicDecimal \u2014 the digits derived from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger, a deliberately different derivation from the digit-at-a-time renderer; exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat\u0027s refusal is total and clean: EVERY destination shorter than the full rendering returns false and reports zero characters written, including the empty one and the one-character one where the leading digit has already been placed, while a destination one character longer reports exactly the rendering\u0027s length",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all four parse entry points \u2014 Parse(string), Parse(span), TryParse(string), TryParse(span) \u2014 reading the ORACLE\u0027S rendering of the swept raw",
+        "Against": "the swept raw itself: the text comes from Oracles.ExactDyadicDecimal and the expectation is the operand the sweep drew, so no subject-produced text enters the statement",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.TryParse of two derived texts per swept raw \u2014 the rendering truncated after a sample-selected number of fraction digits, and the rendering with one more digit appended",
+        "Against": "Oracles.TryUnitFractionText \u2014 the whole digit string read as ONE exact rational N/10\u1D48 and rounded ties-to-even onto the 2\u207B\u00B9\u2076 grid, refusing out of range; the subject truncates at seventeen decimal places, divides by the reduced denominator 2\u00B75\u00B9\u2077 and carries a discarded-digit flag, so the two routes agree on nothing but the answer. Both the accept/refuse DECISION and the raw are compared, and the appended form reaches the out-of-range refusal near the top of the interval",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.parse-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.Parse and TryParse over the seventeen-row accepted ladder \u2014 the zero forms, the omitted and redundant digits either side of the point, surrounding whitespace, the exactly-representable points, the three half-ULP ties, the tie carrying a nonzero digit far beyond the seventeen decimal places the parser keeps, and the value that rounds up onto MaxValue",
+        "Against": "Subjects.UnitFraction16ParseLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived as round-to-nearest-ties-to-even of value\u00B72\u00B9\u2076 from the exact decimals, computed in BigInteger away from the subject; the fifteenth row is a long-decimal vector carried as a REGRESSION PIN, and this is its laddered statement",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same seventeen rows, and the thirteen refused ones, read a second time",
+        "Against": "Oracles.TryUnitFractionText, which decides acceptance and the raw from the whole digit string as one exact rational \u2014 so the constant table above is pinned by a computation as well as by hand, and the refusals are refused for a re-derived reason rather than by fiat",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal contract: every refused spelling leaves the default value behind on both TryParse routes and makes both Parse routes throw FormatException. The ladder includes the two SIGN spellings and the exponent spelling, which the type\u0027s style flags refuse outright \u2014 so the whole negative branch of the shared parsing helper, including its maximumNegativeMagnitudeRaw parameter, is unreachable for this type",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "out-of-range text is REFUSED, never clamped: \u00270.99998474121093751\u0027 exceeds MaxValue by one unit of the seventeenth decimal place and is refused even though rounding would carry it back onto MaxValue, while \u00270.99998474121093749\u0027 is accepted and rounds up onto it. The parser tests the exact value before rounding, which makes the post-rounding overflow check unreachable \u2014 ENVELOPE",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the null-string contract: TryParse(null) returns false leaving the default, and Parse(null) throws ArgumentNullException naming the \u0027s\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the provider is honoured on both routes: under a NumberFormatInfo whose decimal separator is a comma, \u00270,5\u0027 parses to the exact half and \u00270.5\u0027 stops naming a number at all, while a null provider is the invariant culture. The format provider is built in the claim rather than taken from a culture id, so no ICU data enters the law",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "unit-fraction16.double-projection-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Explicit"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16\u0027s explicit double conversion, read as its IEEE-754 bit pattern at every swept raw",
+        "Against": "Oracles.ExactBinary64Bits \u2014 the encoding assembled from the FORMAT in BigInteger (sign zero, exponent field 1023 \u002B bitLength \u2212 1 \u2212 16, and the numerator\u0027s bits below its leading one left-aligned into fifty-two places), with no floating-point arithmetic on the oracle side and none in the law. The projection is EXACT \u2014 a power-of-two rescale of at most sixteen significant bits \u2014 which is why this member is pinned rather than waived as presentation-only, unlike FixedQ4816\u0027s",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the double seam round-trips in this direction at every raw: FromDouble of the projection returns the value it came from, which separates FromDouble\u0027s saturation at the top of the interval from an error inside it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

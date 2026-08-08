@@ -37,16 +37,19 @@ internal sealed class WorldRecordingCommandModule(
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "capture.start",
             description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms the render tap, and echoes the negotiated codec and any declines.",
             handler: (_, args) => Start(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "capture.stop",
             description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "capture.status",
             description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
             handler: (_, args) => Status(args: args)
@@ -55,11 +58,11 @@ internal sealed class WorldRecordingCommandModule(
 
     private CommandResult Start(WireArgs args) {
         if (args.Count > 1) {
-            return Error(text: "[capture.start: expected at most one argument (an output path)]");
+            return CommandResult.Error(output: "[capture.start: expected at most one argument (an output path)]");
         }
 
         if (m_tap.WantsFrames) {
-            return Error(text: $"[capture.start: already recording -> {m_tap.Current?.OutputPath}]");
+            return CommandResult.Error(output: $"[capture.start: already recording -> {m_tap.Current?.OutputPath}]");
         }
 
         var document = m_source.Document;
@@ -85,7 +88,7 @@ internal sealed class WorldRecordingCommandModule(
         );
 
         if (!created || (session is null)) {
-            return Error(text: $"[capture.start: declined — {reason}]");
+            return CommandResult.Error(output: $"[capture.start: declined — {reason}]");
         }
 
         m_tap.Arm(session: session);
@@ -95,16 +98,15 @@ internal sealed class WorldRecordingCommandModule(
 
         return new CommandResult(Output: $"[capture.start: recording -> {session.OutputPath} | codec {session.CodecLanded} | audio tracks {status.AudioTrackCount} | {notes}]");
     }
-
     private CommandResult Stop(WireArgs args) {
         if (args.Count > 0) {
-            return Error(text: "[capture.stop: expected no arguments]");
+            return CommandResult.Error(output: "[capture.stop: expected no arguments]");
         }
 
         var session = m_tap.Disarm();
 
         if (session is null) {
-            return Error(text: "[capture.stop: not recording]");
+            return CommandResult.Error(output: "[capture.stop: not recording]");
         }
 
         // Snapshot the counters before finalizing (Stop disposes the muxer's stream, which the byte count reads); the
@@ -117,13 +119,12 @@ internal sealed class WorldRecordingCommandModule(
 
         return new CommandResult(Output: $"[capture.stop: wrote {session.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio drops {status.AudioSamplesDropped} | bytes {bytes}]");
     }
-
     private CommandResult Status(WireArgs args) {
         if (args.Count > 0) {
-            return Error(text: "[capture.status: expected no arguments]");
+            return CommandResult.Error(output: "[capture.status: expected no arguments]");
         }
 
-        var origin = (m_source.SourcePath ?? "baked default");
+        var origin = m_source.SourcePath;
 
         if (m_tap.Current is not { } session) {
             return new CommandResult(Output: $"[capture.status: idle | document {origin} | readback synchronous GPU readback per captured frame while recording]");
@@ -131,10 +132,9 @@ internal sealed class WorldRecordingCommandModule(
 
         var status = session.Snapshot();
 
-        return new CommandResult(Output: $"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | " +
-            $"audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous per captured frame]");
+        return new CommandResult(Output: ($"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | " +
+            $"audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous per captured frame]"));
     }
-
     private static long TryFileLength(string path) {
         try {
             return new FileInfo(fileName: path).Length;
@@ -143,5 +143,4 @@ internal sealed class WorldRecordingCommandModule(
         }
     }
 
-    private static CommandResult Error(string text) => new(Output: text) { IsError = true };
 }

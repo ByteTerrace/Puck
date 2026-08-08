@@ -1,15 +1,13 @@
 using System.Numerics;
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.SdfVm;
 
 namespace Puck.World.Client;
 
 /// <summary>
-/// Emits the world's STATIC placements into the program under construction — each placement one (or several,
-/// repeat-auto-split) static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced
-/// creation's shape list with the FULL placement transform baked into EVERY shape's own segment (Translate → yaw
-/// Rotate → the optional mirror fold → the optional repeat → the uniform placement Scale, then the shape's local
-/// T·R·S and the canonical primitive). Animated placements (framed creations)
+/// Emits the world's STATIC placements into the program under construction — each materialized pattern or reflected
+/// copy is a static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced creation's shape
+/// list with the full placement transform baked into every shape's own segment. Animated placements (framed creations)
 /// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool.
 /// </summary>
 /// <remarks>Text runs count against the per-stamp shape budget (<see cref="CreationDocument.StampShapeCount"/>) but do
@@ -30,53 +28,36 @@ internal static class WorldPlacementStamper {
     public static bool IsAnimated(WorldCreation creation) => (creation.Document.Frames is { Count: > 0 });
 
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
-    /// it) and not when it INHABITS (a live body renders its creation through a body-rooted stamp instead).</summary>
+    /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
+    /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform
+    /// is inert). This ONE fork is what keeps an attached row from drawing twice — the static pass skips it here and its
+    /// instances stop charging <see cref="StaticStampInstances"/>, because the constant-size pool already reserves
+    /// them.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The placement's resolved creation.</param>
-    public static bool IsStaticStamp(WorldPlacement placement, WorldCreation creation) => (!IsAnimated(creation: creation) && (placement.Inhabit is null));
+    public static bool IsStaticStamp(WorldPlacement placement, WorldCreation creation) =>
+        (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null));
 
-    /// <summary>The emitted SEGMENT count of one placement (its repeat auto-split total; 1 unrepeated) — the unit the
-    /// capacity reservation charges in, so a segmented row can never out-instance its charge.</summary>
+    /// <summary>The emitted instance count of one placement, including pattern and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
-    /// <param name="maxRepeatPerSegment">The largest per-axis repeat count one emitted segment carries (BOOT-CONSUMED
-    /// — the frame source's captured <see cref="WorldAuthoringDefaults.MaxRepeatPerSegment"/>, identical across the
-    /// construction probe, every live rebuild, and the apply-time measure).</param>
-    public static int SegmentCount(WorldPlacement placement, int maxRepeatPerSegment) {
-        if ((placement.Repeat is not { } repeat) || (repeat.TotalCount <= 1)) {
-            return 1;
-        }
-
-        return (SegmentTotal(count: repeat.CountX, maxRepeatPerSegment: maxRepeatPerSegment) * SegmentTotal(count: repeat.CountZ, maxRepeatPerSegment: maxRepeatPerSegment));
+    public static int InstanceCount(WorldPlacement placement) {
+        return CreationStampLattice.InstanceCount(pattern: WorldPlacementStamp.PatternFor(placement: placement), mirror: WorldPlacementStamp.MirrorFor(placement: placement));
     }
 
-    /// <summary>The total STATIC stamp segments of a placement set (animated rows ride the constant replay pool and
+    /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The placement rows.</param>
-    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
-    public static int StaticStampSegments(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, int maxRepeatPerSegment) {
-        var segments = 0;
+    public static int StaticStampInstances(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements) {
+        var instances = 0;
 
         foreach (var placement in placements) {
-            if ((FindCreation(creations: creations, id: placement.CreationId) is { } creation) && IsStaticStamp(placement: placement, creation: creation)) {
-                segments += SegmentCount(placement: placement, maxRepeatPerSegment: maxRepeatPerSegment);
+            if ((WorldDefinitionRows.FindCreation(creations: creations, id: placement.CreationId) is { } creation) && IsStaticStamp(placement: placement, creation: creation)) {
+                instances = checked((instances + InstanceCount(placement: placement)));
             }
         }
 
-        return segments;
-    }
-
-    /// <summary>Resolves a creation row by id, or <see langword="null"/>.</summary>
-    /// <param name="creations">The world's creation rows.</param>
-    /// <param name="id">The row id.</param>
-    public static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {
-        foreach (var creation in creations) {
-            if (string.Equals(a: creation.Id, b: id, comparisonType: StringComparison.Ordinal)) {
-                return creation;
-            }
-        }
-
-        return null;
+        return instances;
     }
 
     /// <summary>Emits every STATIC placement (animated rows skip — the animator owns them). Palettes register once per
@@ -86,12 +67,11 @@ internal static class WorldPlacementStamper {
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The (possibly drag-composed) placement rows.</param>
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
-    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, int maxRepeatPerSegment, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
+    public static void EmitStatic(SdfProgramBuilder builder, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in placements) {
-            if (FindCreation(creations: creations, id: placement.CreationId) is not { } creation || !IsStaticStamp(placement: placement, creation: creation)) {
+            if ((WorldDefinitionRows.FindCreation(creations: creations, id: placement.CreationId) is not { } creation) || !IsStaticStamp(placement: placement, creation: creation)) {
                 continue;
             }
 
@@ -100,18 +80,17 @@ internal static class WorldPlacementStamper {
                 ? ResolvePalette(builder: builder, creation: creation, paletteById: paletteById)
                 : RegisterPalette(builder: builder, document: creation.Document, tint: tint));
 
-            EmitPlacement(builder: builder, creation: creation.Document, paletteIds: paletteIds, placement: placement, maxRepeatPerSegment: maxRepeatPerSegment);
+            EmitPlacement(builder: builder, creation: creation.Document, paletteIds: paletteIds, placement: placement);
         }
     }
 
     /// <summary>Emits the construction probe's placement reservation: <paramref name="reservedCount"/> worst-case
     /// stamps — each a distinct full 16-slot palette plus <see cref="WorldPlacementPolicy.MaxShapesPerStamp"/> shapes
-    /// carrying the densest legal per-shape chain (the full placement prefix with mirror fold + repeat) — so any real
+    /// carrying the densest legal per-shape chain — so any real
     /// static emission within the placement policy fits the once-sized buffers by construction. Never rendered.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="reservedCount">The reserved stamp count (boot placements + the authoring headroom).</param>
-    /// <param name="maxRepeatPerSegment">See <see cref="SegmentCount(WorldPlacement, int)"/>.</param>
-    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int maxRepeatPerSegment) {
+    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount) {
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
             // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).
@@ -130,8 +109,6 @@ internal static class WorldPlacementStamper {
                     chain: builder.ResetPoint()
                         .Translate(offset: center)
                         .Rotate(rotation: Quaternion.Identity)
-                        .SymmetryX()
-                        .RepeatLimited(spacing: new Vector3(x: 1f, y: 0f, z: 1f), limit: new Vector3(x: maxRepeatPerSegment, y: 0f, z: maxRepeatPerSegment))
                         .Scale(scale: Vector3.One)
                         .Translate(offset: Vector3.Zero)
                         .Rotate(rotation: Quaternion.Identity)
@@ -185,86 +162,46 @@ internal static class WorldPlacementStamper {
 
         return ids;
     }
-
-    // One placement's static instances: the single-copy fast path, or the repeat auto-split (no segment bound covers
-    // more than maxRepeatPerSegment copies per axis — the segment-cap contract).
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, int maxRepeatPerSegment) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement) {
         var reach = CreationGeometry.Reach(document: creation);
         var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
 
-        if ((placement.Repeat is not { } repeat) || (repeat.TotalCount <= 1)) {
-            _ = builder.BeginInstance(boundCenter: placement.Position, boundRadius: ((reach * placement.Scale) + PlacementBoundMargin));
-            EmitPlacedShapes(builder: builder, creation: creation, paletteIds: paletteIds, placement: placement, placementOrigin: placement.Position, placementRotation: rotation, repeatSpacing: null, repeatLimit: null);
-            _ = builder.EndInstance();
-
-            return;
-        }
-
-        var segmentsX = SegmentTotal(count: repeat.CountX, maxRepeatPerSegment: maxRepeatPerSegment);
-        var segmentsZ = SegmentTotal(count: repeat.CountZ, maxRepeatPerSegment: maxRepeatPerSegment);
-
-        for (var segmentX = 0; (segmentX < segmentsX); segmentX++) {
-            var countX = SegmentCount(total: repeat.CountX, segment: segmentX, maxRepeatPerSegment: maxRepeatPerSegment);
-
-            for (var segmentZ = 0; (segmentZ < segmentsZ); segmentZ++) {
-                var countZ = SegmentCount(total: repeat.CountZ, segment: segmentZ, maxRepeatPerSegment: maxRepeatPerSegment);
-
-                if ((countX <= 0) || (countZ <= 0)) {
-                    continue;
-                }
-
-                var offsetX = (SegmentStart(segment: segmentX, maxRepeatPerSegment: maxRepeatPerSegment) * repeat.SpacingX);
-                var offsetZ = (SegmentStart(segment: segmentZ, maxRepeatPerSegment: maxRepeatPerSegment) * repeat.SpacingZ);
-                var segmentOrigin = (placement.Position + Vector3.Transform(value: new Vector3(x: offsetX, y: 0f, z: offsetZ), rotation: rotation));
-                var span = new Vector3(x: (((countX - 1) * repeat.SpacingX) * 0.5f), y: 0f, z: (((countZ - 1) * repeat.SpacingZ) * 0.5f));
-                var segmentCenter = (segmentOrigin + Vector3.Transform(value: span, rotation: rotation));
-                var boundRadius = (((reach + span.Length()) * placement.Scale) + PlacementBoundMargin);
-
-                _ = builder.BeginInstance(boundCenter: segmentCenter, boundRadius: boundRadius);
+        CreationStampLattice.ForEachInstance(
+            origin: placement.Position,
+            rotation: rotation,
+            pattern: WorldPlacementStamp.PatternFor(placement: placement),
+            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
+            visitor: instance => {
+                _ = builder.BeginInstance(boundCenter: instance.Origin, boundRadius: ((reach * placement.Scale) + PlacementBoundMargin));
                 EmitPlacedShapes(
                     builder: builder,
                     creation: creation,
                     paletteIds: paletteIds,
                     placement: placement,
-                    placementOrigin: segmentOrigin,
+                    placementOrigin: instance.Origin,
                     placementRotation: rotation,
-                    repeatSpacing: new Vector3(x: repeat.SpacingX, y: 0f, z: repeat.SpacingZ),
-                    repeatLimit: new Vector3(x: (countX - 1), y: 0f, z: (countZ - 1))
+                    reflectionNormal: instance.ReflectionNormal
                 );
                 _ = builder.EndInstance();
             }
-        }
+        );
     }
 
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
-    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? repeatSpacing, Vector3? repeatLimit) {
-        foreach (var shape in (creation.Shapes ?? [])) {
-            var material = paletteIds[Math.Clamp(value: (shape.Material ?? 0), max: (paletteIds.Length - 1), min: 0)];
-            var chain = builder.ResetPoint().Translate(offset: placementOrigin).Rotate(rotation: placementRotation);
-
-            if (string.Equals(a: placement.Mirror, b: "z", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                chain = chain.SymmetryZ();
-            } else if (string.Equals(a: placement.Mirror, b: "x", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                chain = chain.SymmetryX();
-            }
-
-            if ((repeatSpacing is { } spacing) && (repeatLimit is { } limit)) {
-                chain = chain.RepeatLimited(spacing: spacing, limit: limit);
-            }
-
-            chain = chain
-                .Scale(scale: new Vector3(value: placement.Scale))
-                .Translate(offset: shape.Position)
-                .Rotate(rotation: shape.Rotation)
-                .Scale(scale: shape.Scale);
-            _ = CreationGeometry.AppendPrimitive(chain: chain, type: shape.Type, material: material, blend: (shape.Blend ?? SdfBlendOp.Union), smooth: (shape.Smooth ?? 0f));
-        }
+    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal) {
+        CreationStampEmitter.Emit(
+            builder: builder,
+            document: creation,
+            transform: new CreationStampTransform(
+                Origin: placementOrigin,
+                Rotation: placementRotation,
+                Scale: placement.Scale,
+                ReflectionNormal: reflectionNormal
+            ),
+            materialFor: shape => paletteIds[Math.Clamp(value: (shape.Material ?? 0), max: (paletteIds.Length - 1), min: 0)]
+        );
     }
 
-    private static int SegmentTotal(int count, int maxRepeatPerSegment) => Math.Max(val1: 1, val2: (((count + maxRepeatPerSegment) - 1) / maxRepeatPerSegment));
-    private static int SegmentStart(int segment, int maxRepeatPerSegment) => (segment * maxRepeatPerSegment);
-    private static int SegmentCount(int total, int segment, int maxRepeatPerSegment) =>
-        (Math.Min(val1: total, val2: SegmentStart(segment: (segment + 1), maxRepeatPerSegment: maxRepeatPerSegment)) - Math.Min(val1: total, val2: SegmentStart(segment: segment, maxRepeatPerSegment: maxRepeatPerSegment)));
 }

@@ -1,5 +1,3 @@
-using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
 
@@ -19,7 +17,7 @@ namespace Puck.HumbleGamingBrick;
 /// serial link, peripherals, or audio output — a machine that steps, shows a frame, and answers a work-RAM peek.
 /// </para>
 /// </summary>
-public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScreenMachine, IAudioMachine, IFeedbackMachine, ITimeTravelMachine, IReconfigurableMachine {
+public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconfigurableMachine {
     /// <summary>The machine's native framebuffer width (160).</summary>
     public const int ScreenWidth = Framebuffer.ScreenWidth;
     /// <summary>The machine's native framebuffer height (144).</summary>
@@ -31,11 +29,9 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
     // device swap). The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
     private ConsoleModel m_model;
     private readonly bool m_dmgSpeed;
-    private readonly QueuedMachineWorker m_worker;
-    private string? m_savePath;
 
     /// <summary>Initializes a new machine host. When <paramref name="cartridgeRom"/> is non-null the machine assembles
-    /// at once; a null ROM leaves the host UNASSIGNED (a dark framebuffer) until <see cref="LoadContent"/> runs.</summary>
+    /// at once; a null ROM leaves the host UNASSIGNED (a dark framebuffer) until <see cref="QueuedMachineHost.LoadContent"/> runs.</summary>
     /// <param name="model">The hardware model to emulate (<see cref="ConsoleModel.Dmg"/>/<see cref="ConsoleModel.Cgb"/>/
     /// <see cref="ConsoleModel.Agb"/>).</param>
     /// <param name="cartridgeRom">The cartridge ROM image, or <see langword="null"/> to start empty.</param>
@@ -47,108 +43,30 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
     /// <param name="audioSampleRate">The audio output rate in frames per emulated second the neutral
     /// <see cref="IAudioMachine"/> surface reports, or 0 (the default) when no consumer wants audio from this host —
     /// a silent host performs zero presentation-side audio synthesis.</param>
-    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0) {
+    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0)
+        : base(
+            width: ScreenWidth,
+            height: ScreenHeight,
+            maximumPendingSteps: DefaultMaximumPendingSteps,
+            workerName: "Puck GamingBrick",
+            audioSampleRate: audioSampleRate,
+            savePath: savePath
+        ) {
         m_model = model;
         m_dmgSpeed = dmgSpeed;
-        m_savePath = savePath;
-        m_worker = new QueuedMachineWorker(width: ScreenWidth, height: ScreenHeight, maximumPendingSteps: DefaultMaximumPendingSteps, workerName: "Puck GamingBrick", audioSampleRate: audioSampleRate);
 
         if (cartridgeRom is not null) {
-            Assemble(cartridgeRom: cartridgeRom);
+            LoadContent(data: cartridgeRom, savePath: savePath);
         }
     }
 
     /// <inheritdoc/>
-    public bool IsAssigned => m_worker.IsAssigned;
-
-    /// <inheritdoc/>
-    public nint NativeImageViewHandle => m_worker.NativeImageViewHandle;
-
-    /// <inheritdoc/>
-    public Vector3 EmittedLight => m_worker.EmittedLight;
-
-    /// <inheritdoc/>
-    public long CompletedSteps => m_worker.CompletedSteps;
-
-    /// <inheritdoc/>
-    public long PendingSteps => m_worker.PendingSteps;
-
-    /// <inheritdoc/>
-    public int MaximumPendingSteps => m_worker.MaximumPendingSteps;
-
-    /// <inheritdoc/>
-    public long BackpressureEvents => m_worker.BackpressureEvents;
-
-    /// <inheritdoc/>
-    public string? QueueFault => m_worker.QueueFault;
-
-    /// <inheritdoc/>
-    public void LoadContent(byte[] data, string? savePath = null) {
-        ArgumentNullException.ThrowIfNull(argument: data);
-
-        m_savePath = savePath;
-        Assemble(cartridgeRom: data);
-    }
-
-    /// <inheritdoc/>
-    public void Eject() =>
-        m_worker.Eject();
-
-    /// <inheritdoc/>
-    public bool Step(ulong deltaTicks, in MachinePadState input) =>
-        m_worker.Step(deltaTicks: deltaTicks, input: in input);
-
-    /// <inheritdoc/>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePadState input) =>
-        m_worker.Submit(deltaTicks: deltaTicks, input: in input);
-
-    /// <inheritdoc/>
-    public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) =>
-        m_worker.PublishFrame(deviceContext: deviceContext, gpu: gpu);
-
-    /// <inheritdoc/>
-    public void NotifyDeviceLost() =>
-        m_worker.NotifyDeviceLost();
-
-    /// <inheritdoc/>
     public byte PeekByte(int address) =>
-        m_worker.PeekByte(address: address);
+        Worker.PeekByte(address: address);
 
     /// <inheritdoc/>
     public void PokeByte(int address, byte value) =>
-        m_worker.PokeByte(address: address, value: value);
-
-    /// <inheritdoc/>
-    public int SampleRate =>
-        m_worker.AudioSampleRate;
-
-    /// <inheritdoc/>
-    public int ReadSamples(Span<short> destination) =>
-        m_worker.ReadAudioSamples(destination: destination);
-
-    /// <inheritdoc/>
-    public float MotorLevel =>
-        m_worker.MotorLevel;
-
-    /// <inheritdoc/>
-    public void SetRewindEnabled(bool enabled) =>
-        m_worker.SetRewindEnabled(enabled: enabled);
-
-    /// <inheritdoc/>
-    public int RewindBy(int frames) =>
-        m_worker.RewindBy(frames: frames);
-
-    /// <inheritdoc/>
-    public void SetRunahead(int frames) =>
-        m_worker.SetRunahead(frames: frames);
-
-    /// <inheritdoc/>
-    public void SetFastForward(int factor) =>
-        m_worker.SetFastForward(factor: factor);
-
-    /// <inheritdoc/>
-    public TimeTravelStatus TimeTravelStatus =>
-        m_worker.TimeTravelStatus;
+        Worker.PokeByte(address: address, value: value);
 
     /// <inheritdoc/>
     public string Options =>
@@ -169,7 +87,7 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
             return false;
         }
 
-        var (ok, workerReason) = m_worker.Reconfigure(options: options);
+        var (ok, workerReason) = Worker.Reconfigure(options: options);
 
         if (ok) {
             m_model = model;
@@ -181,16 +99,6 @@ public sealed class MachineHost : IScreenMachine, IMachineMemoryPeek, IQueuedScr
     }
 
     /// <inheritdoc/>
-    public void FlushSave(bool force = false) =>
-        m_worker.FlushSave(force: force);
-
-    /// <inheritdoc/>
-    public void Dispose() =>
-        m_worker.Dispose();
-
-    // Build the core (which loads any battery save) and attach it to the worker; the worker stops and disposes any prior
-    // core first. Every access — stepping AND the memory peek/poke — goes through the worker, which owns the core on its
-    // single execution thread; the host retains no cross-thread reference into it.
-    private void Assemble(byte[] cartridgeRom) =>
-        m_worker.Load(core: new HumbleGamingBrickCore(model: m_model, cartridgeRom: cartridgeRom, savePath: m_savePath, dmgSpeed: m_dmgSpeed));
+    protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
+        new HumbleGamingBrickCore(model: m_model, cartridgeRom: data, savePath: savePath, dmgSpeed: m_dmgSpeed);
 }

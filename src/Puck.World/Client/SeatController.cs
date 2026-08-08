@@ -1,119 +1,168 @@
-using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
 /// <summary>
-/// One local seat's device-intent producer: the held movement axes, the analog stick samples, the live-held action
-/// lanes, and the client-side possession latch — everything a seat's physical devices stage between ticks.
+/// One local seat's device-intent producer: the held channel contributions and the analog stick samples —
+/// everything a seat's physical devices stage between ticks.
 /// <see cref="HeldIntent"/> folds the producers into the per-tick <see cref="PlayerIntent"/> the client submits to the
-/// authoritative server; <see cref="HeldLanes"/> is the always-overlay device-lane image riding the same submission.
-/// The seat's authoritative body lives server-side — this type never integrates a pose.
+/// authoritative server; <see cref="HeldChannels"/> is the always-overlay device-channel image riding the same
+/// submission (composition ordinals only — movement roles ride <see cref="HeldIntent"/> directly). The seat's
+/// authoritative body lives server-side — this type never integrates a pose.
 /// </summary>
 /// <remarks>Single-threaded: every mutator runs during the command pump's apply window and the per-tick submission
 /// reads immediately after, both on the launcher's window-pump thread, so no lock guards this state.</remarks>
 internal sealed class SeatController {
-    /// <summary>The held-axis key for forward motion (W / Up).</summary>
-    public const string AxisForward = "forward";
-    /// <summary>The held-axis key for backward motion (S / Down).</summary>
-    public const string AxisBack = "back";
-    /// <summary>The held-axis key for strafing left (Q).</summary>
-    public const string AxisStrafeLeft = "strafe-left";
-    /// <summary>The held-axis key for strafing right (E).</summary>
-    public const string AxisStrafeRight = "strafe-right";
-    /// <summary>The held-axis key for turning left (A / Left).</summary>
-    public const string AxisTurnLeft = "turn-left";
-    /// <summary>The held-axis key for turning right (D / Right).</summary>
-    public const string AxisTurnRight = "turn-right";
-
     private static readonly FixedQ4816 s_negativeOne = -FixedQ4816.One;
-    // The live held axes (see the Axis* keys). A HashSet so Hold is idempotent under key auto-repeat, and Release is a
-    // no-op for an axis already up.
-    private readonly HashSet<string> m_held = new(comparer: StringComparer.Ordinal);
+
+    // The device-image fold primitive per channel ordinal: base zero, contributions are (control value × scale), no
+    // pool, accumulate in RAW Int64 and clamp EXACTLY ONCE at the end. A saturating clamp per contribution is
+    // commutative but NOT associative — order-dependent near the ceiling, which is what the old per-add Clamp here
+    // did. Producing the device image IS the fold primitive under a degenerate configuration, never a second merge
+    // rule beside it — which is why holding W and S while a stick reports +0.3 still yields +0.3, where a sign-group
+    // or max-of-group rule would have to be invented (and would get that case wrong) to reproduce it.
+    // Keyed by the CONTRIBUTING CONTROL's identity (the binding source, e.g. "keyboard.w"), never by
+    // (ordinal, scale): two controls sharing one ordinal at the SAME scale (W and a redundant Up-arrow row) must hold
+    // INDEPENDENTLY — releasing one must never silently drop the other's contribution, which a bare (ordinal, scale)
+    // set could not tell apart. Opposing scales on one ordinal (W=+1, S=-1) still cancel, by summing.
+    private readonly Dictionary<string, (int Ordinal, FixedQ4816 Scale)> m_heldControls = [];
     // The analog producer's latest sample, routed from this tick's snapshot. InputRouter re-dispatches a carried analog
     // value every tick; ClearAnalog wipes this local staging state after the tick so only snapshot input can refill it.
     private FixedQ4816 m_analogMoveX;
     private FixedQ4816 m_analogMoveY;
     private FixedQ4816 m_analogLookX;
     private FixedQ4816 m_analogLookY;
-    // The live-held action lanes (a button down until its release edge) — submitted each tick as the device lane
-    // image, so a held jump rides a tape-driven runner (the server admits it under Live only).
-    private ActionLanes m_lanesHeld;
     // The client copy of the seat's intent source: device edges and the held-intent submission run only under Live,
     // mirroring the server body's merge rule.
     private IntentSource m_source = IntentSource.Live;
+    // The world's declared channel shapes — HeldChannels' only source for a composition ordinal's fold range
+    // (bipolar/unipolar/binary). Defaults to the empty table (every composition ordinal falls back to the widest,
+    // non-lossy bipolar range) so a seat built before the table is threaded in never silently drops a negative
+    // contribution the way a hardcoded [0, One] used to.
+    private WorldChannelTable m_channels = WorldChannelTable.Empty;
 
     /// <summary>The profile this seat selects — the client-side identity (color and look-invert). The server body holds
     /// its own reference for speeds, assigned over the session wire.</summary>
-    public WorldProfile? Profile { get; set; }
+    public WorldIdentity? Profile { get; set; }
+
+    /// <summary>The world's declared channel table — resolves each composition ordinal's shape for
+    /// <see cref="HeldChannels"/>'s end clamp. Set once by the roster from the same table the server compiled
+    /// (<c>WorldServer.Population.Channels</c>); <see langword="null"/> is normalized to
+    /// <see cref="WorldChannelTable.Empty"/>.</summary>
+    public WorldChannelTable Channels {
+        get => m_channels;
+        set => m_channels = (value ?? WorldChannelTable.Empty);
+    }
 
     /// <summary>The seat's client-side intent-source copy (matches the server body's; both are written by
     /// <c>player.control</c>).</summary>
     public IntentSource Source => m_source;
 
-    /// <summary>This tick's live-held device-lane image, submitted alongside <see cref="HeldIntent"/>.</summary>
-    public ActionLanes HeldLanes => m_lanesHeld;
+    /// <summary>This tick's live-held device-channel image, submitted alongside <see cref="HeldIntent"/> — derived
+    /// from the SAME held-control set <see cref="HeldIntent"/> reads, restricted to non-role ordinals; movement roles
+    /// ride <see cref="HeldIntent"/> directly, never this image. Every held control's contribution to
+    /// one ordinal sums in raw <see cref="FixedQ4816"/> storage, then runs through
+    /// <see cref="FixedContributionFold.Evaluate"/> once against that ordinal's declared shape
+    /// range (bipolar <c>[-One, One]</c>; unipolar or binary <c>[0, One]</c> — a binary channel's PRE-quantization
+    /// pool-clamp domain per its own remarks, since bit-quantization is the server's job, never the client's).</summary>
+    public PlayerIntent HeldChannels {
+        get {
+            if (m_heldControls.Count == 0) {
+                return default;
+            }
 
-    /// <summary>This frame's movement-stick sample (left stick), for the <c>player.sticks</c> observability verb.
-    /// Zero once <see cref="ClearAnalog"/> has run for the frame — a live read only sees a non-zero value while a
-    /// routed dispatch has set it earlier in the same command pump (i.e. the stick is actively deflected).</summary>
-    public Vector2 AnalogMove => new(x: (float)(double)m_analogMoveX, y: (float)(double)m_analogMoveY);
-    /// <summary>This frame's look-stick sample (right stick); see <see cref="AnalogMove"/> for the freshness caveat.</summary>
-    public Vector2 AnalogLook => new(x: (float)(double)m_analogLookX, y: (float)(double)m_analogLookY);
+            Span<long> raw = stackalloc long[ChannelLimits.MaxChannels];
 
-    /// <summary>Asserts a movement axis as held (one of the <c>Axis*</c> keys). Idempotent — a key held down and
-    /// auto-repeating re-asserts the same axis with no effect.</summary>
-    /// <param name="axis">The axis key to hold; an unrecognized key is stored but never read by the intent merge.</param>
-    public void Hold(string axis) {
-        _ = m_held.Add(item: axis);
-    }
-    /// <summary>Releases a movement axis previously held by <see cref="Hold"/>. A no-op if the axis is not held.</summary>
-    /// <param name="axis">The axis key to release.</param>
-    public void Release(string axis) {
-        _ = m_held.Remove(item: axis);
-    }
-    /// <summary>Presses an action lane on its live edge — the keyboard/pad path, no timer: the lane reads held from now
-    /// until the matching <see cref="ReleaseLaneEdge"/>, which is what gives variable jump height from a live control.
-    /// Idempotent — a held button auto-repeating re-asserts the same bit, so the jump's rising edge (detected server-side
-    /// against the previous sub-step) fires once per press, not once per repeat.</summary>
-    /// <param name="lane">The lane to hold live.</param>
-    public void PressLaneEdge(ActionLanes lane) {
-        // The device path (player.jump/player.south). Ignored unless the seat's source is Live, so a human's pad/keyboard
-        // jump cannot reach the avatar mid-takeover; the wire twin (player.press) is unaffected and overlays regardless.
-        if (m_source != IntentSource.Live) {
-            return;
+            foreach (var (ordinal, scale) in m_heldControls.Values) {
+                if (m_channels.IsRole(ordinal: ordinal)) {
+                    continue;
+                }
+
+                raw[ordinal] += scale.Value;
+            }
+
+            var channels = default(ChannelValues);
+
+            for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+                if (m_channels.IsRole(ordinal: ordinal)) {
+                    continue;
+                }
+                if (raw[ordinal] == 0L) {
+                    continue;
+                }
+
+                var shape = (m_channels.IsDeclared(ordinal: ordinal) ? m_channels.Shape(ordinal: ordinal) : ChannelShape.Bipolar);
+
+                var (minimum, maximum, _) = WorldChannelTable.CompileFoldShape(shape: shape, threshold: m_channels.Threshold(ordinal: ordinal));
+
+                // A seat's held device image is the no-pool specialization: zero baseline, the completed raw device
+                // sum in the pool-delta slot, no outside-pool term, and deliberately no binary threshold. Binary is
+                // continuous [0, One] here; authoritative composition performs the terminal bit quantization.
+                channels[ordinal] = FixedContributionFold.Evaluate(
+                    baseline: FixedQ4816.Zero,
+                    poolDeltaRaw: raw[ordinal],
+                    outsidePoolDeltaRaw: 0L,
+                    poolRadius: null,
+                    minimum: minimum,
+                    maximum: maximum,
+                    threshold: null,
+                    poolClamped: out _
+                );
+            }
+
+            return new PlayerIntent(Channels: channels);
         }
-
-        m_lanesHeld |= lane;
     }
-    /// <summary>Releases a live-held action lane (the button's up edge). A no-op for a lane not live-held; leaves any
-    /// timed press (<c>player.press</c>) on the same lane running server-side.</summary>
-    /// <param name="lane">The lane to release.</param>
-    public void ReleaseLaneEdge(ActionLanes lane) {
-        // Same source mask as PressLaneEdge — a device release edge is inert off-Live (the matching press was masked
-        // too).
-        if (m_source != IntentSource.Live) {
-            return;
-        }
 
-        m_lanesHeld &= ~lane;
+    /// <summary>This frame's movement-stick sample (left stick), already quantized at the router seam — no simulation
+    /// consumer reads a float form. Zero once <see cref="ClearAnalog"/> has run for the frame — a live read only sees
+    /// a non-zero value while a routed dispatch has set it earlier in the same command pump (i.e. the stick is
+    /// actively deflected). The <c>player.sticks</c> observability verb is the one site that converts this back to a
+    /// float for display.</summary>
+    public FixedVector2 AnalogMove => new(X: m_analogMoveX, Y: m_analogMoveY);
+    /// <summary>This frame's look-stick sample (right stick); see <see cref="AnalogMove"/> for the freshness caveat
+    /// and the float-echo site.</summary>
+    public FixedVector2 AnalogLook => new(X: m_analogLookX, Y: m_analogLookY);
+
+    /// <summary>Asserts a channel contribution as held, keyed by the CONTROL holding it — never by (ordinal, scale)
+    /// alone, so a second physical control sharing this ordinal (even at the identical scale) holds independently of
+    /// the first, and so an analog control's magnitude can update in place every re-dispatch tick without leaking a
+    /// stale (ordinal, scale) pair under a different key. Idempotent per control — a key held down and auto-repeating
+    /// (or an unchanged analog re-dispatch) re-asserts the same entry with no effect.</summary>
+    /// <param name="controlId">The contributing control's identity — the binding source (e.g. <c>"keyboard.w"</c>);
+    /// <see langword="null"/> or empty is normalized to a shared fallback key for a caller with no physical source
+    /// (an injected/synthesized hold).</param>
+    /// <param name="ordinal">The channel ordinal this control contributes to.</param>
+    /// <param name="scale">This control's current scale/sample (e.g. <c>+One</c> for W, <c>-One</c> for S on the same "forward" ordinal).</param>
+    public void HoldChannel(string? controlId, int ordinal, FixedQ4816 scale) {
+        m_heldControls[(controlId ?? string.Empty)] = (ordinal, scale);
     }
-    /// <summary>Feeds this frame's movement (left) stick sample, already deadzoned/normalized to <c>[-1, 1]</c> by the
-    /// platform layer (+Y forward, +X strafe right). Set by the roster's per-device router while a dispatch is live; a
-    /// centered stick emits no dispatch, so the value is wiped by <see cref="ClearAnalog"/> each frame (consume-then-clear,
-    /// so a disconnected pad never leaves a stale deflection behind).</summary>
-    /// <param name="move">The movement stick sample.</param>
-    public void SetAnalogMove(Vector2 move) {
-        m_analogMoveX = FixedQ4816.FromDouble(value: move.X);
-        m_analogMoveY = FixedQ4816.FromDouble(value: move.Y);
+    /// <summary>Releases the channel contribution held under <paramref name="controlId"/>. A no-op if that control
+    /// holds nothing — in particular, releasing one control never touches a DIFFERENT control's entry, even one on
+    /// the same ordinal at the same scale (see <see cref="HoldChannel"/>).</summary>
+    /// <param name="controlId">The releasing control's identity, matching the one <see cref="HoldChannel"/> was called with.</param>
+    public void ReleaseChannel(string? controlId) {
+        _ = m_heldControls.Remove(key: (controlId ?? string.Empty));
+    }
+    /// <summary>Feeds this frame's movement (left) stick sample, already quantized to fixed point at the router seam
+    /// (see <see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis"/>) and deadzoned/normalized to <c>[-1, 1]</c>
+    /// by the platform layer (+Y forward, +X strafe right). Set by the roster's per-device router while a dispatch is
+    /// live; a centered stick emits no dispatch, so the value is wiped by <see cref="ClearAnalog"/> each frame
+    /// (consume-then-clear, so a disconnected pad never leaves a stale deflection behind). No float conversion
+    /// happens here — the value arrives already quantized, once, and is stored verbatim.</summary>
+    /// <param name="move">The already-quantized movement stick sample.</param>
+    public void SetAnalogMove(FixedVector2 move) {
+        m_analogMoveX = move.X;
+        m_analogMoveY = move.Y;
     }
     /// <summary>Feeds this frame's look (right) stick sample (+X turns right — folded into the intent's Turn with the
-    /// same sign the turn-right key uses). Same consume-then-clear contract as <see cref="SetAnalogMove"/>.</summary>
-    /// <param name="look">The look stick sample.</param>
-    public void SetAnalogLook(Vector2 look) {
-        m_analogLookX = FixedQ4816.FromDouble(value: look.X);
-        m_analogLookY = FixedQ4816.FromDouble(value: look.Y);
+    /// same sign the turn-right key uses). Same consume-then-clear contract and already-quantized-at-the-door
+    /// contract as <see cref="SetAnalogMove"/>.</summary>
+    /// <param name="look">The already-quantized look stick sample.</param>
+    public void SetAnalogLook(FixedVector2 look) {
+        m_analogLookX = look.X;
+        m_analogLookY = look.Y;
     }
     /// <summary>Wipes both analog samples to zero. Called once per frame AFTER the tick's submission has consumed them:
     /// a centered stick dispatches nothing, so its last value must not persist into the next frame.</summary>
@@ -135,39 +184,75 @@ internal sealed class SeatController {
         m_source = source;
         ReleaseAllHeld();
     }
-    /// <summary>Releases every held movement axis and live-held action lane. Called when a possession/engagement latch
-    /// transitions, when the keyboard leaves this seat (a still-down key's release edge routes to the keyboard's new
-    /// slot, so the source would walk forever), and by <c>player.stop</c>'s seat half.</summary>
+    /// <summary>Releases every held movement contribution and live-held composition channel. Called when a
+    /// possession/engagement latch transitions, when the keyboard leaves this seat (a still-down key's release edge
+    /// routes to the keyboard's new slot, so the source would walk forever), and by <c>player.stop</c>'s seat half.</summary>
     public void ReleaseAllHeld() {
-        m_held.Clear();
-        // The action buttons are held input too: a still-down Space would otherwise stick the jump lane held.
-        m_lanesHeld = ActionLanes.None;
+        // A single Clear covers both movement and composition holds — a still-down Space would otherwise stick the
+        // jump channel held, exactly the hazard clearing only the movement set would reintroduce.
+        m_heldControls.Clear();
     }
-    /// <summary>Folds the live producers — the held-key set and the analog sticks — into the tick's submitted intent:
-    /// peers summed then clamped, so opposing inputs cancel and a key plus a full stick never exceeds full deflection.
-    /// Stick up (+Y) is forward; look-stick right (+X) turns right, i.e. the negative Turn direction (matching the
-    /// turn-right key).</summary>
+    /// <summary>Folds the live producers — the held-control set and the analog sticks — into the tick's submitted
+    /// intent: peers summed then clamped, so opposing inputs cancel and a key plus a full stick never exceeds full
+    /// deflection. Stick up (+Y) is forward; look-stick right (+X) turns right, i.e. the negative Turn direction
+    /// (matching the turn-right key). All six role channels fold identically (MoveUp/Pitch/Roll alongside the
+    /// original three) — a <see cref="Puck.World.Server.WorldBody"/> running a grounded body motion program
+    /// simply never reads the extra three, exactly like an unbound composition channel; a document declaring them
+    /// (required for a free-attitude body motion program, see <c>WorldDefinitionValidator</c>) is the only way they drive
+    /// anything, so wiring them through here never changes Grounded behavior.</summary>
     public PlayerIntent HeldIntent() {
         // The look-stick's turn contribution, its X sign flipped when the seated profile asks to invert look-X.
         var lookX = ((Profile?.InvertLookX == true) ? -m_analogLookX : m_analogLookX);
 
-        // No keys held (the common case — an idle seat): skip the six HashSet.Contains probes and fold the analog
-        // sample straight through.
-        if (m_held.Count == 0) {
-            return new PlayerIntent(
-                MoveForward: FixedQ4816.Clamp(value: m_analogMoveY, minimum: s_negativeOne, maximum: FixedQ4816.One),
-                MoveStrafe: FixedQ4816.Clamp(value: m_analogMoveX, minimum: s_negativeOne, maximum: FixedQ4816.One),
-                Turn: FixedQ4816.Clamp(value: -lookX, minimum: s_negativeOne, maximum: FixedQ4816.One)
+        // No controls held (the common case — an idle seat): skip the held-set walk and fold the analog sample
+        // straight through.
+        if (m_heldControls.Count == 0) {
+            return m_channels.RoleOrdinals.Intent(
+                moveForward: FixedQ4816.Clamp(value: m_analogMoveY, minimum: s_negativeOne, maximum: FixedQ4816.One),
+                moveStrafe: FixedQ4816.Clamp(value: m_analogMoveX, minimum: s_negativeOne, maximum: FixedQ4816.One),
+                turn: FixedQ4816.Clamp(value: -lookX, minimum: s_negativeOne, maximum: FixedQ4816.One)
             );
         }
 
-        return new PlayerIntent(
-            MoveForward: FixedQ4816.Clamp(value: ((Axis(key: AxisForward) - Axis(key: AxisBack)) + m_analogMoveY), minimum: s_negativeOne, maximum: FixedQ4816.One),
-            MoveStrafe: FixedQ4816.Clamp(value: ((Axis(key: AxisStrafeRight) - Axis(key: AxisStrafeLeft)) + m_analogMoveX), minimum: s_negativeOne, maximum: FixedQ4816.One),
-            Turn: FixedQ4816.Clamp(value: ((Axis(key: AxisTurnLeft) - Axis(key: AxisTurnRight)) - lookX), minimum: s_negativeOne, maximum: FixedQ4816.One)
+        // The role-channel fold primitive, mirroring HeldChannels' vector accumulate above: seed raw with the three
+        // analog samples, sum every held role contribution into raw[ordinal] (RAW Int64, no per-add clamp — see
+        // HeldChannels' remarks on why a saturating clamp per contribution is order-dependent), then clamp each role
+        // EXACTLY ONCE below. Replaces a six-way ordinal if/else chain with the same indexed-accumulate shape.
+        // [-One, One] is safe on every role ordinal below (here and in the no-held-controls fold above) because every
+        // role channel IS bipolar by validator rule (WorldDefinitionValidator.ValidateChannels refuses any other
+        // declared shape on a role channel).
+        Span<long> raw = stackalloc long[ChannelLimits.MaxChannels];
+        var roles = m_channels.RoleOrdinals;
+
+        if (roles.MoveForward >= 0) {
+            raw[roles.MoveForward] = m_analogMoveY.Value;
+        }
+        if (roles.MoveStrafe >= 0) {
+            raw[roles.MoveStrafe] = m_analogMoveX.Value;
+        }
+        if (roles.Turn >= 0) {
+            raw[roles.Turn] = (-lookX).Value;
+        }
+
+        foreach (var (ordinal, scale) in m_heldControls.Values) {
+            if (!m_channels.IsRole(ordinal: ordinal)) {
+                continue;
+            }
+
+            raw[ordinal] += scale.Value;
+        }
+
+        return roles.Intent(
+            moveForward: ClampedRaw(raw: raw, ordinal: roles.MoveForward),
+            moveStrafe: ClampedRaw(raw: raw, ordinal: roles.MoveStrafe),
+            turn: ClampedRaw(raw: raw, ordinal: roles.Turn),
+            moveUp: ClampedRaw(raw: raw, ordinal: roles.MoveUp),
+            pitch: ClampedRaw(raw: raw, ordinal: roles.Pitch),
+            roll: ClampedRaw(raw: raw, ordinal: roles.Roll)
         );
     }
-    private FixedQ4816 Axis(string key) {
-        return (m_held.Contains(item: key) ? FixedQ4816.One : FixedQ4816.Zero);
-    }
+
+    private static FixedQ4816 ClampedRaw(ReadOnlySpan<long> raw, int ordinal) => ((ordinal >= 0)
+        ? FixedQ4816.Clamp(value: FixedQ4816.FromRawBits(value: raw[ordinal]), minimum: s_negativeOne, maximum: FixedQ4816.One)
+        : FixedQ4816.Zero);
 }

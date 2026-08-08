@@ -62,7 +62,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         var executable = (ID3D12CommandList*)commandList;
 
-        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(1, &executable);
+        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
         ((IGpuDeviceContext)deviceContext).WaitIdle();
 
         _ = ((IUnknown*)commandList)->Release();
@@ -93,7 +93,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var executable = (ID3D12CommandList*)commandList;
         var queue = (ID3D12CommandQueue*)deviceContext.CommandQueueHandle;
 
-        queue->ExecuteCommandLists(1, &executable);
+        queue->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
 
         // DEFER releasing the allocator/list until MapPixels — the GPU is still consuming them (there is NO WaitIdle
         // here); releasing them now would be a use-after-free. A completion Signal makes IsReadComplete pollable.
@@ -101,7 +101,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_deferredCommandList = commandList;
         m_pendingFenceValue = ++m_fenceValue;
 
-        queue->Signal((ID3D12Fence*)m_fence, m_pendingFenceValue);
+        queue->Signal(Value: m_pendingFenceValue, pFence: (ID3D12Fence*)m_fence);
 
         m_readInFlight = true;
     }
@@ -188,13 +188,13 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &buf
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            pDesc: in bufferDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &buf,
+            riidResource: in resourceIid
         );
 
         m_readbackBuffer = (nint)buf;
@@ -242,7 +242,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             pResource = sourceResource,
         };
 
-        cmdList->ResourceBarrier(1, &toCopySource);
+        cmdList->ResourceBarrier(NumBarriers: 1, pBarriers: &toCopySource);
 
         var destLocation = new D3D12_TEXTURE_COPY_LOCATION {
             Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
@@ -266,7 +266,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         srcLocation.Anonymous.SubresourceIndex = 0;
 
-        cmdList->CopyTextureRegion(in destLocation, 0, 0, 0, in srcLocation, (D3D12_BOX?)null);
+        cmdList->CopyTextureRegion(DstX: 0, DstY: 0, DstZ: 0, pDst: in destLocation, pSrc: in srcLocation, pSrcBox: (D3D12_BOX?)null);
 
         var toShaderResource = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -279,7 +279,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             pResource = sourceResource,
         };
 
-        cmdList->ResourceBarrier(1, &toShaderResource);
+        cmdList->ResourceBarrier(NumBarriers: 1, pBarriers: &toShaderResource);
         cmdList->Close();
     }
 
@@ -291,7 +291,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         void* mapped;
 
-        ((ID3D12Resource*)m_readbackBuffer)->Map(0, (D3D12_RANGE*)null, &mapped);
+        ((ID3D12Resource*)m_readbackBuffer)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
 
         try {
             var source = new ReadOnlySpan<byte>(pointer: mapped, length: checked((int)m_readbackSize));
@@ -305,7 +305,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         } finally {
             var writtenRange = new D3D12_RANGE { Begin = 0, End = 0, };
 
-            ((ID3D12Resource*)m_readbackBuffer)->Unmap(0, &writtenRange);
+            ((ID3D12Resource*)m_readbackBuffer)->Unmap(Subresource: 0, pWrittenRange: &writtenRange);
         }
 
         return m_outputBuffer!;
@@ -426,7 +426,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->OpenSharedHandle(
-            NTHandle: new Windows.Win32.Foundation.HANDLE((void*)sharedHandle),
+            NTHandle: new Windows.Win32.Foundation.HANDLE(value: (void*)sharedHandle),
             riid: &resourceIid,
             ppvObj: &resource
         );

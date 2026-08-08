@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+    </PropertyGroup>
     <ItemGroup>
         <!-- Exact pin — fuel counting is Cranelift-codegen-dependent (basic-block granularity,
              upstream #4109); a silent bump can shift the fuel-exhaustion tick and break stored
@@ -6,8 +10,13 @@
         <PackageReference Include="Wasmtime" Version="[44.0.0]" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Deliberately NO Puck.Commands or Puck.Input reference: this is the neutral channel/WASM core of
+             docs/capability-channels-plan.md's assembly split. The ABI decodes the guest's declared
+             channel-name table (AddonChannelNameTableReader) and resolves each declared name through the
+             injected IAddonChannelResolver; there is no phase discriminant any more, and an unresolved name
+             is report-and-inert, never a mount fault. The vocabulary and authority layers live in
+             Puck.Scripting.Simulation and Puck.World respectively. -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

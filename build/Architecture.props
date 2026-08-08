@@ -1,0 +1,201 @@
+<Project>
+
+    <!--
+        THE ARCHITECTURE LEDGER — the policy the gate enforces, and the only place it is written.
+
+        This is an MSBuild file rather than JSON for a measured reason: the gate runs as a
+        RoslynCodeTaskFactory inline task, and that host cannot resolve System.Text.Json (verified — the
+        compile fails with CS0234 on System.Text.Json) while it resolves System.Xml.Linq fine. Expressing the
+        policy as MSBuild items means the ledger needs NO parser at all on the gate's side: MSBuild evaluates
+        it and hands the task typed items. It also buys what JSON cannot hold — the reasoning below lives in
+        comments beside the rule it justifies instead of in invented "why" string fields.
+
+        `puck architecture` reads this same file as XML. One ledger, two consumers, nothing to drift.
+
+        WHAT THIS FILE DOES NOT CONTAIN: which layer each project is in. That is declared per-project as
+        <PuckLayer>/<PuckKind> in the csproj itself, and the gate reads those declarations. A central table
+        of project-to-layer would be a second source for a fact the csproj already states, which is a place
+        for the two to disagree and nothing else.
+    -->
+
+    <!--
+        SCOPE — a stated predicate, not an incidental path filter.
+
+        A QUARANTINED TREE IS OUTSIDE THE GATE, because quarantine means ungated. This has to be said out
+        loud: the repository root's Directory.Build.props reaches experimental/Puck.Demo (nothing stops
+        MSBuild's upward walk there), so without this the gate would run on a project deliberately removed
+        from the graph and fail it against a ledger that cannot describe it. Puck.BareMetal is already immune
+        for a different and better reason — it carries its own Directory.Build.props/.targets firewall pair
+        that stops both discovery walks — and that immunity is a property of ITS build, never of this list.
+
+        A filter that happens to exclude the right directories reads identically to one that excludes the
+        wrong ones, which is why the reason sits beside the path.
+    -->
+    <PropertyGroup>
+        <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)experimental$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
+        <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == ''">true</PuckArchitectureGateEnabled>
+    </PropertyGroup>
+
+    <!--
+        THE LAYERS, top row first. Rank is the row index: a dependency must point at an EQUAL or GREATER
+        rank, so a same-row edge is permitted and an upward one is not. This ItemGroup is the source for the
+        project map's layering block rather than a restatement of it: `puck architecture map` generates that
+        block from these rows and each project's own declaration.
+    -->
+    <ItemGroup>
+        <PuckArchitectureLayer Include="Composition roots" Rank="0" />
+        <PuckArchitectureLayer Include="Validation" Rank="1" />
+        <PuckArchitectureLayer Include="Engine services" Rank="2" />
+        <PuckArchitectureLayer Include="Presentation" Rank="3" />
+        <PuckArchitectureLayer Include="Backends" Rank="4" />
+        <PuckArchitectureLayer Include="Shared substrate" Rank="5" />
+        <PuckArchitectureLayer Include="Leaf contracts and data" Rank="6" />
+    </ItemGroup>
+
+    <!--
+        THE KIND AXIS — what a project IS, orthogonal to which row it sits on.
+
+        A RANKED kind declares <PuckLayer> and obeys the rank rule at it. A TERMINAL kind must NOT declare
+        one: it sits above every layer by construction, so a second declaration would only be somewhere for
+        the two to disagree. Terminal kinds remain bound by every content rule below — a tool has no more
+        business naming a GPU backend than an engine service does.
+
+        A terminal kind is never a dependency OF A RANKED PROJECT. Terminal-to-terminal is fine, and that
+        qualifier was earned rather than reasoned: stated flatly as "nothing may reference a terminal kind"
+        the rule sounds exactly right, and the first run of the armed gate caught Puck.Analyzers.Tests
+        referencing Puck.Analyzers as an ordinary assembly — a test suite that instantiates the analyzer and
+        drives it over compilations it builds itself. The rule's purpose is that ENGINE CODE never depends on
+        tooling; a test depending on the thing it tests is not that.
+
+        Analyzer is worth its own row for a mechanical reason rather than a taxonomic one: an analyzer
+        reaches every project through OutputItemType="Analyzer" with ReferenceOutputAssembly="false", so it
+        never appears in a resolved reference set at all. The gate excludes it by construction, not by name —
+        verified: Puck.Analyzers is absent from every project's @(ReferencePathWithRefAssemblies).
+    -->
+    <ItemGroup>
+        <PuckArchitectureKind Include="Production" Ranked="true" />
+        <PuckArchitectureKind Include="Validation" Ranked="true" />
+        <PuckArchitectureKind Include="Test" Ranked="false" />
+        <PuckArchitectureKind Include="Tool" Ranked="false" />
+        <PuckArchitectureKind Include="Analyzer" Ranked="false" />
+        <PuckArchitectureKind Include="FileApp" Ranked="false" />
+    </ItemGroup>
+
+    <!--
+        THE BACKEND QUARANTINE, narrow form — and the narrowness is the whole of its value.
+
+        A project may hold a Backends-row assembly in its resolved closure only if
+          (a) its layer is Presentation or Composition roots; or
+          (b) its kind is TERMINAL and it does not name a backend directly — a terminal consumer inherits
+              the closure of whatever it composes and never introduces one. That inheritance is safe by
+              COMPOSITION rather than by trust: every ranked project in the closure has passed this same
+              gate in its own build, so a backend arriving through one arrived legally; or
+          (c) it is named below.
+
+        The wider form that suggests itself — "nothing may hold a Backends assembly unless it sits at or
+        above that row" — permits any Engine-services project to take a direct backend dependency: legal by
+        level, legal by closure, contradicting both the map's backend-neutrality rule and the entire reason
+        the .Presentation wrapper row exists. That predicate would have flagged nothing, forever. Clause (b)
+        is confined to terminal kinds for the same reason: extending closure-inheritance to ranked projects
+        would reopen the hole through the .Presentation row, letting an engine service reach a backend by
+        referencing a presentation wrapper.
+
+        MEASURED, 2026-08-01, post-unit-2: exactly ONE exception across the settled graph. The absent finding
+        is the load-bearing half — no Engine-services project reached a backend at all — so the quarantine was
+        already real before it was armed, which is the best possible state to arm one
+        in. Empty-because-the-rule-was-too-wide and empty-because-the-graph-is-clean are indistinguishable in
+        a report and opposite in meaning; one honest exception is worth more than a clean sheet produced by
+        not asking.
+    -->
+    <ItemGroup>
+        <PuckArchitectureBackendException
+            Include="Puck.Post"
+            Reason="It must name BOTH backends to prove the same contract on each. That is the reason the quarantine exists rather than a breach of it — and it is a statement about Puck.Post's REFERENCES, unrelated to and outliving any temporary posture about whether Puck.Post currently builds."
+        />
+    </ItemGroup>
+
+    <!--
+        LANE PROFILES — exact-equality closures for the assembly split.
+
+        The listed closure must EQUAL the project's resolved Puck closure, not merely contain it, so REMOVING
+        an edge is as visible as adding one and the split's edit stays a reviewable diff.
+
+        This is the only tier doing security work. Every forbidden edge in the split is SAME-ROW, so the rank
+        rule cannot see one of them: Puck.Scripting, Puck.Commands and Puck.Input all sit on Shared
+        substrate, and an edge between them is downward-legal and architecturally fatal. Never manufacture a
+        rank difference so the cheap check can do the expensive check's job — the rows describe what may
+        depend on what, and bending them to smuggle in a security boundary corrupts both rules at once.
+
+        Generated against the SETTLED graph after unit 2 landed (f0a54cda), never from a snapshot taken
+        mid-flight.
+    -->
+    <ItemGroup>
+        <!-- The neutral channel/WASM core. Its whole purpose is the ABSENCE of Puck.Commands and
+             Puck.Input; exact equality is what makes that absence enforced rather than merely current. -->
+        <PuckArchitectureProfile Include="Puck.Scripting" Closure="Puck.Assets;Puck.Maths" />
+        <!-- The Simulation adapter — the one project permitted to hold the command vocabulary alongside the
+             core. Puck.Abstractions arrives transitively through Puck.Input. -->
+        <PuckArchitectureProfile Include="Puck.Scripting.Simulation" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Input;Puck.Maths;Puck.Scripting" />
+        <!-- The headless P1 split (docs/project-map.md's Puck.World.Data row). The exact-equality closure is wider
+             than Puck.World.Data's own four direct references because Puck.Forge already needed
+             Puck.HumbleGamingBrick and Puck.SdfVm before this split existed, and Puck.SdfVm in turn already needed
+             Puck.Hosting/Puck.Recording/Puck.Shaders/Puck.Text — none of that is new here. What this profile
+             actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.Overlays,
+             no Puck.Input, no Puck.World.Server. A member that would need one of those (the engine-default binding
+             document, the live command/channel vocabulary check) crosses through BindingVocabularyHook instead — an
+             injection seam the composition root wires with a module initializer — rather than a direct reference.
+             Puck.Scripting left this closure with the lane-axis deletion (owner ruling, 2026-08-02, the L5
+             landing): WorldAddonRow no longer carries AddonLane, so nothing in this project names a Puck.Scripting
+             type any more — Puck.World.Server (below) is the one row that still needs it, for the addon host
+             itself. -->
+        <PuckArchitectureProfile Include="Puck.World.Data" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Recording;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Text" />
+        <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
+             Puck.World.Data's profile carries (Server references Data), plus Puck.Scripting.Simulation's own
+             closure (Puck.Input, Puck.Scripting.Simulation itself) and Puck.Storage (the owned-world cloud sync
+             substrate WorldOwnedWorldSync reads through). Same absence this profile actually enforces: no Backends
+             row, no Presentation row, no Puck.Overlays. -->
+        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Input;Puck.Maths;Puck.Recording;Puck.Scripting;Puck.Scripting.Simulation;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Storage;Puck.Text;Puck.World.Data" />
+    </ItemGroup>
+
+    <!--
+        The split's THIRD project — the presentation driver denied both Puck.Commands and Puck.Input — does
+        not exist yet; it arrives with the four-surface retrofit. A profile for a project that does not exist
+        cannot be verified and would be prose wearing a schema, so it is named here and becomes a
+        PuckArchitectureProfile the moment the project lands.
+    -->
+
+    <!--
+        INTERNALS-VISIBLE-TO, declared-vs-actual.
+
+        The gate's declarations here are checked against each assembly's ACTUAL friend set read from the
+        compiled PE, because scanning declarations trusts the thing being checked. Reading the PE is also the
+        only form that sees both shapes this repository has used — [assembly: InternalsVisibleTo] in
+        Properties/AssemblyInfo.cs, and <InternalsVisibleTo> csproj items — and a scan of either form alone
+        returns a confident, wrong answer, measured by getting it wrong. Only the attribute form survives
+        today; the PE read is kept because the csproj form costs one line to reintroduce.
+
+        THE POLICY THIS TABLE ENFORCES: internals-visible-to is not endorsed here, and a TEST project is the
+        only comfortable exception. Anywhere else, a member reached across a grant should be public instead —
+        publicity is reviewable, a grant is a standing privilege nobody re-reads. So the shortness of this
+        list is the point of it, and every row that is not a test project owes the reason it is not public.
+
+        Puck.World HAD two friends — the file-based audio proofs — and they were the most privileged
+        consumers in the tree, holding internals access to a composition root. They were also exactly what an
+        analyzer-hosted gate could not have seen, since analyzer injection is off for $(IsFileBasedProgram),
+        and a gate whose coverage silently excludes its most privileged consumers is worse than no gate. That
+        argument is why the gate hooks where it does and is kept for it. Both grants are GONE as of the
+        2026-08-02 quarantine: the scripts left the build, so the privilege was dead config that this ledger
+        would have kept blessing. If those proofs are ever re-homed in a real project, the grant is re-issued
+        to THAT assembly and named here — never restored to a file name.
+
+        Gone with them: every grant naming Puck.Post (Puck.Maths, Puck.Platform and Puck.Scripting each held
+        one), privilege pointing at an assembly the build no longer produces. Puck.Platform and
+        Puck.Scripting held nothing else once Puck.Cli's grant became publicity on
+        Puck.Scripting.WasmStdlibSources, so both AssemblyInfo.cs files are deleted rather than emptied and
+        neither project appears below at all.
+    -->
+    <ItemGroup>
+        <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
+    </ItemGroup>
+
+</Project>

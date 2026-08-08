@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
     <!--
         The native ARM7TDMI AdvancedGamingBrick core, including its IScreenMachineEngine adapter (Hosting/):
         AdvancedGamingBrickEngine (IScreenMachineEngine, id "advanced-gaming-brick") builds an AdvancedMachineHost that
@@ -18,6 +22,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Snapshots\Puck.Snapshots.csproj" />
     </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-using Puck.Capture;
+using Puck.Recording.Capture;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -27,7 +27,7 @@ internal static class ScriptedTradeExplore {
         // artifacts location the demo can point per-cabinet saves at. No ROM is needed because the save is a pure
         // function of the crafted trainers.
         if (Array.IndexOf(array: args, value: "--trade-export") >= 0) {
-            ExportSaves(outDir: (StringArg(args: args, name: "--out") ?? Path.Combine(path1: "artifacts", path2: "gb-post", path3: "trade-saves")));
+            ExportSaves(outDir: (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: "artifacts", path2: "gb-post", path3: "trade-saves")));
 
             return true;
         }
@@ -125,7 +125,7 @@ internal static class ScriptedTradeExplore {
                 return true;
             }
 
-            ProbePc(rom: File.ReadAllBytes(path: pcRom), hold: (StringArg(args: args, name: "--hold") ?? "Down"));
+            ProbePc(rom: File.ReadAllBytes(path: pcRom), hold: (CommandLineArguments.Value(args: args, name: "--hold") ?? "Down"));
 
             return true;
         }
@@ -144,7 +144,7 @@ internal static class ScriptedTradeExplore {
             RunTrade(
                 rom: File.ReadAllBytes(path: tradeRom),
                 dumpEvery: IntArg(args: args, name: "--dump-every", fallback: 60),
-                outDir: (StringArg(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-run"))
+                outDir: (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-run"))
             );
 
             return true;
@@ -167,22 +167,22 @@ internal static class ScriptedTradeExplore {
         var rom = File.ReadAllBytes(path: romPath);
         var frames = IntArg(args: args, name: "--frames", fallback: 1200);
         var dumpEvery = IntArg(args: args, name: "--dump-every", fallback: 120);
-        var outDir = (StringArg(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-explore"));
+        var outDir = (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-explore"));
         var linked = (Array.IndexOf(array: args, value: "--linked") >= 0);
 
-        s_spawnOverride = StringArg(args: args, name: "--spawn");
+        s_spawnOverride = CommandLineArguments.Value(args: args, name: "--spawn");
 
-        var bootRomPath = StringArg(args: args, name: "--bootrom");
+        var bootRomPath = CommandLineArguments.Value(args: args, name: "--bootrom");
 
         s_bootRom = (((bootRomPath is not null) && File.Exists(path: bootRomPath)) ? File.ReadAllBytes(path: bootRomPath) : null);
-        s_model = (StringArg(args: args, name: "--model")?.ToLowerInvariant()) switch {
+        s_model = (CommandLineArguments.Value(args: args, name: "--model")?.ToLowerInvariant()) switch {
             "dmg" => ConsoleModel.Dmg,
             "agb" => ConsoleModel.Agb,
             _ => ConsoleModel.Cgb,
         };
 
-        var scriptA = LoadScript(path: StringArg(args: args, name: "--scriptA"));
-        var scriptB = LoadScript(path: StringArg(args: args, name: "--scriptB"));
+        var scriptA = LoadScript(path: CommandLineArguments.Value(args: args, name: "--scriptA"));
+        var scriptB = LoadScript(path: CommandLineArguments.Value(args: args, name: "--scriptB"));
 
         Directory.CreateDirectory(path: outDir);
 
@@ -701,17 +701,8 @@ internal static class ScriptedTradeExplore {
         """;
     private static LinkInputScript LoadScript(string? path) =>
         (((path is not null) && File.Exists(path: path)) ? LinkInputScript.Load(path: path) : new LinkInputScript());
-    private static string? StringArg(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
-    }
     private static int IntArg(string[] args, string name, int fallback) {
-        var value = StringArg(args: args, name: name);
+        var value = CommandLineArguments.Value(args: args, name: name);
 
         return (((value is not null) && int.TryParse(s: value, result: out var parsed)) ? parsed : fallback);
     }

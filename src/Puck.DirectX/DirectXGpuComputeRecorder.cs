@@ -73,8 +73,8 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
         var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineHandle).Target!;
 
-        commandList->SetComputeRootSignature((ID3D12RootSignature*)layout.RootSignatureHandle);
-        commandList->SetPipelineState((ID3D12PipelineState*)layout.PsoHandle);
+        commandList->SetComputeRootSignature(pRootSignature: (ID3D12RootSignature*)layout.RootSignatureHandle);
+        commandList->SetPipelineState(pPipelineState: (ID3D12PipelineState*)layout.PsoHandle);
     }
 
     /// <inheritdoc/>
@@ -90,7 +90,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var heap = (ID3D12DescriptorHeap*)set.HeapHandle;
 
-        commandList->SetDescriptorHeaps(1, &heap);
+        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &heap);
 
         if (0 <= layout.DescriptorTableParamIndex) {
             commandList->SetComputeRootDescriptorTable(
@@ -190,7 +190,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             };
 
             textureGroup.Anonymous.pTextureBarriers = &textureBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(1, &textureGroup);
+            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &textureGroup);
 
             return;
         }
@@ -198,7 +198,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
         // Legacy fallback: the neutral oldLayout is Undefined on the first frame, so the true prior state comes from
         // tracking — the texture was created in UNORDERED_ACCESS, which is the seed for an untracked resource.
-        var before = m_imageStates.GetOrAdd(imageHandle, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        var before = m_imageStates.GetOrAdd(key: imageHandle, value: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         var after = ToResourceState(layout: newLayout);
 
         if (before == after) {
@@ -216,7 +216,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             pResource = (ID3D12Resource*)imageHandle,
         };
 
-        commandList->ResourceBarrier(1, &barrier);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
         m_imageStates[imageHandle] = after;
     }
 
@@ -246,7 +246,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             };
 
             globalGroup.Anonymous.pGlobalBarriers = &globalBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(1, &globalGroup);
+            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &globalGroup);
 
             return;
         }
@@ -262,7 +262,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             pResource = (ID3D12Resource*)null,
         };
 
-        commandList->ResourceBarrier(1, &barrier);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
     }
 
     /// <inheritdoc/>
@@ -299,7 +299,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             };
 
             bufferGroup.Anonymous.pBufferBarriers = &bufferBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(1, &bufferGroup);
+            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &bufferGroup);
 
             return;
         }
@@ -325,7 +325,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             pResource = (ID3D12Resource*)bufferHandle,
         };
 
-        commandList->ResourceBarrier(1, &transition);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &transition);
     }
     // Access mask -> the legacy buffer resource state (used only when Enhanced Barriers are unavailable).
     private static D3D12_RESOURCE_STATES ToBufferResourceState(GpuComputeAccess accessMask) {

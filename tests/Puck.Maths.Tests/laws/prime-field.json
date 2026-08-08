@@ -1,0 +1,1051 @@
+[
+  {
+    "Id": "prime-field.create-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "MaximumModulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MaximumModulus is exactly 2^62, and Create REFUSES it and every value above it with an ArgumentOutOfRangeException naming the \u0027modulus\u0027 parameter \u2014 at the ceiling itself, one above it, and both carrier extremes. The bound is a REPRESENTATION invariant rather than a policy: it is what keeps Add and Subtract a single conditional fold, because two representatives then sum below 2^63 and never overflow the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "every rung of the committed fifteen-rung modulus ladder, BEFORE Create is ever handed it",
+        "Against": "Oracles.ExactPrimality \u2014 trial division by the primes below 8192 and then twenty BigInteger strong-probable-prime rounds. No ladder constant is taken on its word, which is the same distrust binary-field.product-and-reduction-vs-oracle shows its own five moduli; a mistyped rung fails HERE, by name, rather than silently weakening every other case that runs the ladder. Both sides EXACT, so the substrate condition does not arise. ENVELOPE, and it is not the same statement at both ends of the ladder: the six rungs at or below 8191\u00B2 = 67092481 are decided by TRIAL DIVISION, which shares no idea with anything in Puck.Maths, while the nine above it are decided by the twenty BigInteger rounds \u2014 whose base set opens with two, the base PrimeField64\u0027s own twelve-base IsPrime and its Baillie composition both run. Those nine rungs therefore share the CRITERION with the type they gate and differ in arithmetic, in base set and in loop structure only",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Create ACCEPTS every ladder rung the oracle proved prime, and the field it returns reports that modulus back, answers One as 1 and Zero as 0, equals a second field built over the same modulus \u2014 the record\u0027s whole value being its modulus \u2014 and PRINTS as exactly that one datum: ToString emits the modulus alone, the guarded identities kept out of the rendering by a hand-written PrintMembers because they are constants of the type rather than carried state",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an EVEN modulus is REFUSED with an ArgumentException naming \u0027modulus\u0027 at zero, two, four, six, 65536 and the largest even value below the ceiling. TWO is the historical corner and the reason the ladder carries it: the guard read \u00602 == (modulus \u0026 1)\u0060, a comparison a one-bit mask can never satisfy, so Create(2) was reachable and TrySqrt\u0027s non-residue walk never returned there",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Create\u0027s composite refusal over an odd-composite ladder \u2014 1, 9, 15, 25, 561, and FOUR OF the psi_k strong pseudoprimes: the ones that force bases four, six, eight and eleven",
+        "Against": "Oracles.ExactPrimality, which independently classifies every one of them composite BEFORE the refusal is demanded. The psi rows are the discriminating ones: a modulus admitted on a short witness set would be a COMPOSITE modulus in a type whose whole contract is that the quotient ring is a field. ENVELOPE, twofold. EIGHT distinct psi values fit below the 2^62 ceiling rather than four; the other four force bases one, two, three and five and are exercised against IsPrime by prime-field.is-prime-vs-sieve-and-witness-ladder, not against Create\u0027s gate here. And the oracle is shared-nothing only over the low rows: 1, 9, 15, 25 and 561 are settled by TRIAL DIVISION, while all four psi rows sit above 8191\u00B2 = 67092481 and are settled by twenty BigInteger rounds whose base set opens with the base-two round PrimeField64\u0027s own witness ladder runs \u2014 so those rows share the criterion and differ in arithmetic, base set and loop only",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a DEFAULT-INITIALIZED PrimeField64 is reachable \u2014 the record struct\u0027s private constructor does not stop \u0060default(PrimeField64)\u0060, and neither does an unassigned array element, which this case reaches through as well \u2014 and it REFUSES its whole semantic surface with InvalidOperationException: One, Zero, Add, Subtract, Negate, Multiply, Inverse, LegendreCharacter, Pow, both Reduce overloads, TrySqrt, and BatchInverse at length zero and length three. Each row is named in the failure text, so a member that quietly answers is reported as itself. The EMPTY batch is the row with teeth: the descriptor is read before the span is, so the zero-length early return cannot let an uninitialized field through unremarked. Modulus is deliberately OUTSIDE the policy and still reads zero, which is what keeps a default value printable and comparable \u2014 the array row asserts that equality still holds against \u0060default\u0060, and PRINTABILITY is asserted on ToString itself: a hand-written PrintMembers prints the modulus alone, so a default value formats as \u0060PrimeField64 { Modulus = 0 }\u0060 instead of throwing from the guarded identities the compiler-synthesized member walk would have read. This statement REPLACES the earlier pin, under which Add, Subtract and Negate returned unreduced integer arithmetic with no diagnostic while Multiply, Reduce and Pow happened to raise DivideByZeroException from the zero modulus; that split was the defect rather than the contract, and the type now follows the house pattern FixedRateAccumulator sets",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.arithmetic-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Subtract"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Reduce"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Add, Subtract, Negate and Multiply at every rung of the six-modulus ladder, on both swept operands folded into [0, p)",
+        "Against": "one exact BigInteger residue expression per operation, inline in Subjects.PrimeFieldArithmeticExact \u2014 (a \u002B b) % p, ((a \u2212 b) % p \u002B p) % p, ((\u2212a) % p \u002B p) % p and (a\u00B7b) % p. BOTH SIDES ARE EXACT, so condition (B) \u2014 the shared rounding substrate \u2014 drops out entirely: there is no rounding here to be shared, and agreement is bit-for-bit or nothing. The derivation routes differ where the kernels branch: the subject folds Add with ONE conditional subtraction that leans on p \u003C 2^62, writes Subtract as a borrow-avoiding two-arm compare, and widens Multiply to UInt128 for a single hardware remainder, where the oracle forms each value in arbitrary width and takes one remainder with no case analysis at all",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "both Reduce overloads, pinned BEFORE anything leans on them \u2014 the unsigned fold on the reinterpreted sixty-four-bit draw, and the signed fold on the raw itself",
+        "Against": "value % p and ((value % p) \u002B p) % p in BigInteger, inline in the same claim. The signed overload\u0027s whole content is that a negative value folds UP by the modulus, and long.MinValue is in the swept edge set, where the C# remainder\u0027s sign rule is the one thing that could go wrong",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every answer is REDUCED: Add, Subtract, Negate and Multiply all land strictly below the modulus at every ladder rung, which is the representation invariant the whole type rests on and the invariant a wrong fold breaks first",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the identities and the two inverses close: Zero is a two-sided additive identity, One a two-sided multiplicative one, Negate(a) is a\u0027s additive inverse, and subtracting b undoes adding it \u2014 statements that need no reference at all and that a modulus-fold defect cannot satisfy accidentally",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: at the p = 3 rung the fold has three images, so that rung pins the guards and the degenerate branches rather than the wide arithmetic. The wide arithmetic is pinned at the 2^62 \u2212 57 rung, where the fold is essentially uniform over the whole field and Multiply\u0027s UInt128 intermediate is at its widest; the ladder is declared so that both ends are swept on every operand",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.pow-vs-modpow",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Pow"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Pow at five ladder rungs and five exponents per operand \u2014 the swept full-width exponent, zero, one, p \u2212 2 and (p \u2212 1)/2 \u2014 which is this family\u0027s HOT PATH: Inverse, LegendreCharacter, TrySqrt\u0027s descent and all four primality entry points reach their arithmetic through this one chain",
+        "Against": "BigInteger.ModPow, inline in Subjects.PrimeFieldPowMatchesModularPower. Both sides EXACT, so condition (B) drops out. The routes differ in REPRESENTATION, not merely in code: the subject converts into ScaledResidueRing64 once, runs square-and-multiply with a per-bit conditional multiply, and converts back once, so every intermediate is a Montgomery image; the oracle stays in plain residues from first to last. A representation leak \u2014 the second of this family\u0027s named failure modes \u2014 is exactly what disagreement here catches",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the exponent\u0027s two poles are exact rather than approximated: the zeroth power is One for EVERY base including zero, which is the documented convention, and the first power moves nothing",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Fermat\u0027s little theorem closes the chain at every rung: a^(p\u22121) is One for every non-zero a and zero for a = 0, a statement whose truth depends on the modulus really being prime and so on Create\u0027s own gate, which prime-field.create-and-refusals pins against the oracle",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: Pow\u0027s operation count depends on the exponent and the routine is deliberately NOT constant-time in it, so nothing here is a timing statement. What the five-exponent ladder buys is schedule breadth \u2014 a zero-bit exponent, a one-bit exponent, and two exponents whose expansions are dense across the whole width \u2014 not a claim about the shape of the chain",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.inverse-and-batch",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "BatchInverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Inverse and BatchInverse over a length ladder of 0, 1, 2, 3, 511, 512, 513 and 1024 elements \u2014 the ladder that straddles BatchInverse\u0027s 512-element stackalloc/ArrayPool boundary in BOTH directions",
+        "Against": "BigInteger.ModPow at exponent p \u2212 2, computed per element and inline in Subjects.PrimeFieldInverseAndBatch. Both sides EXACT, so condition (B) drops out. The routes differ where it matters: the subject\u0027s batch accumulates a running product, inverts ONCE, and peels each element back off that single inverse in a backward pass, so an element\u0027s answer depends on every OTHER element in the region \u2014 a coupling the per-element oracle has no way to reproduce and a transposed prefix index would break immediately. ENVELOPE, because the two arms are NOT the same statement: for the SCALAR Inverse the reference shares the derivation. PrimeField64.Inverse is Pow(value, Modulus \u2212 2) (PrimeField64.cs:382-386) and the reference is BigInteger.ModPow at that same exponent \u2014 Fermat against Fermat, differing in REPRESENTATION (Montgomery form against plain residues) and not in theorem, on an exponent prime-field.pow-vs-modpow already sweeps. What the scalar arm adds over that case is the delegation and the zero guard; the independent content of THIS case is the batch\u0027s running-product coupling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the scalar and the batch agree element for element at every ladder length, and every returned value multiplies with its input to One \u2014 so the batch is pinned twice over, against the oracle and against its own scalar sibling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "zero has no inverse anywhere: Inverse REFUSES it with a DivideByZeroException, and BatchInverse refuses a region containing one at the first, a middle and the last index, because the shared running product is then zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a REFUSED batch leaves the region bit-for-bit untouched. That is not decoration: the forward pass writes only its own scratch and the throw lands before the backward pass writes anything, so the failure is atomic \u2014 and the pooled scratch is returned in a finally on that path too",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an EMPTY region is a no-op rather than a refusal, which is the early return the method opens with and the one length at which no scratch is taken at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the 1024-element rung runs at the 2^62 \u2212 57 modulus only, and the short ladder at the remaining rungs. What that buys is the POOLED path exercised once at the widest arithmetic the type admits rather than four times over; the stack path is exercised at every rung. deep.prime-field-inverse-and-batch runs the long ladder at every rung instead. The rented array is longer than the request, and nothing here reads past the requested count",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the POOLED scratch is CLEARED before it re-enters the shared pool: after a 1024-element batch, an immediate same-thread rent of the same bucket \u2014 the request ArrayPool.Shared serves from its thread-local slot, so an uncleared return would hand the very same array straight back \u2014 no longer carries the batch\u0027s first three hand-derived running products a0, a0\u00B7a1, a0\u00B7a1\u00B7a2. The kernel is the shared BatchInverseKernel, so the one clear covers QuadraticExtensionField64.BatchInverse and every future ring the kernel serves",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.legendre-vs-reciprocity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "LegendreCharacter"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.LegendreCharacter at five ladder rungs on the folded swept operand \u2014 Euler\u0027s exponentiation criterion, one Montgomery chain per call",
+        "Against": "Oracles.JacobiSymbolReciprocity \u2014 the binary quadratic-reciprocity descent in BigInteger, which at a PRIME modulus is the Legendre symbol. A genuinely different derivation route rather than a re-spelling: the subject raises to (p \u2212 1)/2 and reads the answer off a power, the oracle never exponentiates at all. Both sides EXACT, so condition (B) drops out. The oracle calls NO Puck.Maths member \u2014 in particular it is not NumberTheoryFunctions.JacobiSymbol, which is a SUBJECT of core.jacobi-symbol-cross-carrier, nor UnsignedNumberFunctions.JacobiSymbol, which IsStrongLucasProbablePrime itself calls",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same character, a second time",
+        "Against": "BigInteger.ModPow at exponent (p \u2212 1)/2, inline in the same claim body \u2014 the THIRD route, and the one that anchors the reciprocity descent itself rather than merely the subject. Two references that share nothing with each other and nothing with the subject must both agree, so a defect in the new oracle cannot pass as agreement",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the character is MULTIPLICATIVE on the swept pair \u2014 the character of a product is the product of the characters, zeros included \u2014 and a square always reports \u002B1. Neither statement can be satisfied by a reciprocity descent that lost its sign or by an exponentiation that lost its bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the character is exactly zero at zero and never at any other reduced element, which is the one branch LegendreCharacter takes before it exponentiates at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the law folds every operand into [0, p) before it asks. LegendreCharacter does NOT enforce its reduced-operand precondition, and an unreduced argument reaches Encode, which folds it \u2014 so an unreduced multiple of p would be reported as a non-square rather than as zero. That regime is outside this statement by construction. It cannot leak through the extension factory: extension-field.construction-and-refusals proves Create rejects the modulus and other unreduced generators BEFORE consulting the character, which is the validating boundary responsible for enforcing LegendreCharacter\u0027s hot-path precondition",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.sqrt-descent-and-refusal",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "TrySqrt"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "LegendreCharacter"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TrySqrt\u0027s ACCEPT/REJECT decision at five ladder rungs \u2014 a decision it makes for itself, before any root exists, by raising the operand to (p \u2212 1)/2 inside the ring",
+        "Against": "Oracles.JacobiSymbolReciprocity: the operand is a square exactly when the reciprocity symbol is not \u22121. Both sides EXACT, so condition (B) drops out, and the routes could not be further apart \u2014 one exponentiates in Montgomery form, the other descends by reciprocity in BigInteger and never forms a power",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the root is checked by SQUARING IT BACK rather than against a reference root, which is the only honest statement available: a square has two roots and the method promises neither one in particular. Both roots are exercised \u2014 the returned r and its sibling Negate(r) = p \u2212 r \u2014 and both must square back to the operand; the two coincide only at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a REFUSED TrySqrt returns false AND leaves zero in the out parameter, at every rung, so the failed call carries no stale value out",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "zero roots to zero and returns true, the one operand that short-circuits ahead of the character decision entirely",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the character TrySqrt decides for itself agrees with LegendreCharacter on the SAME operand stream \u2014 the two cases share the domain key prime-field-root, so this is a statement about identical operands rather than about two sweeps that happen to overlap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ladder straddles BOTH of TrySqrt\u0027s arms, and the claim ASSERTS that rather than assuming it: rungs congruent to 3 modulo 4 take the direct power value^((p \u002B 1)/4), rungs congruent to 1 modulo 4 take the nonresidue-assisted descent, and the body counts both and fails if the ladder ever stops carrying one. The 3\u00B72^30 \u002B 1 rung is the deep descent \u2014 a 2-adic valuation of 30 in p \u2212 1, so the correction loop runs many rounds \u2014 and the 17 rung is its degenerate opposite, where the odd part of p \u2212 1 is ONE",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the descent\u0027s walk to the smallest non-residue is an UNBOUNDED search with no step budget and a ulong counter that could in principle wrap. Its termination rests on a theorem (non-residues are half the non-zero residues), not on a validation, so a defect that made the ring\u0027s minus-one unreachable would HANG rather than redden this law. A hang is not a red test. An unbounded search whose predicate is a subject owes two clauses with DISTINCT messages \u2014 a deterministic step budget, which names a broken predicate, and a wrap guard, which names an exhausted range. The subject has neither, and no law can supply one from outside \u2014 so the failure mode is named here because nothing in this suite can catch it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.is-prime-vs-sieve-and-witness-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime at EVERY value through 20,000 \u2014 even, odd, zero and one included",
+        "Against": "Oracles.PrimeSieve, an ordinary sieve of Eratosthenes. This is the family\u0027s strongest anchor and the reason it comes first: the sieve carries no notion of a witness, a base, an exponent or a Montgomery form, so it shares with the subject not merely no code but no IDEA. Both sides EXACT, so condition (B) drops out. It is exhaustive over its band rather than sampled, so nothing in that band is a matter of luck",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the twelve-base witness set, pinned base by base",
+        "Against": "Subjects.PrimeFieldWitnessPseudoprimes \u2014 eight (value, leading-base-count) rows drawn from the published psi_k table",
+        "Shared": "",
+        "Citation": "psi_k is the LEAST composite that is a strong probable prime to the first k prime bases. The chain matters, because it is the LEAST-ness that this leg\u0027s counting rests on and it is not all one author\u0027s: Jaeschke (1993) determined psi_1 through psi_8 exactly and gave psi_9, psi_10 and psi_11 \u2264 3825123056546413051 as a BOUND, which later work proved least; Sorenson and Webster (2015) settled psi_12 = 318665857834031151167461 and psi_13. Each row\u0027s base count is DERIVED from that table rather than captured from any implementation: a value strictly below psi_(k\u002B1) survives at most k leading bases, and psi_7 == psi_8 and psi_9 == psi_10 == psi_11 are why two rows read 8 and 11 rather than the indices the values are tabulated under. Every count is then MEASURED in the law by Oracles.ModularStrongProbablePrime, so a mistranscribed row fails rather than passing quietly",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "each pseudoprime row makes ONE FURTHER BASE load-bearing: truncating the twelve-base set to the row\u0027s count would accept that value as prime. That matters beyond this member: truncating the set from twelve bases to ELEVEN once went entirely undetected, passing every check then in place, including a 164,000-value replay above 10^12. Read that as history of what a large sampled sweep failed to catch \u2014 the replay itself is gone and does not stand behind this law \u2014 which is why the rows below carry their counts explicitly rather than trusting scale. ENVELOPE, re-spelled because the earlier wording over-claimed: the rows do NOT cover every truncation from one through eleven. They carry the counts 1, 2, 3, 4, 5, 6, 8 and 11, and the published table contains no value whose leading-base count is exactly seven, nine or ten \u2014 a consequence of psi_7 == psi_8 and psi_9 == psi_10 == psi_11, which is a statement about the LEAST such composites and not a theorem about every value below 2^64. So bases eight, ten and eleven are pinned only JOINTLY with the neighbours they are truncated alongside, and this law does not reach them individually",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrime over a twenty-five-value carrier ladder \u2014 both sides of 2^31, 2^32, 2^61, 2^62 and 2^63, the largest prime below 2^32, the three values at the top of the carrier, and the smallest values where the guards outnumber the arithmetic",
+        "Against": "Oracles.ExactPrimality. ENVELOPE, stated rather than implied: through 8191\u00B2 = 67092481 \u2014 just under 2^26 \u2014 that oracle decides by TRIAL DIVISION alone and shares no idea with the subject; above that band it runs twenty BigInteger strong-probable-prime rounds and so shares the CRITERION, differing in arithmetic (plain residues versus one shared ScaledResidueRing64), in base set (twenty is a strict superset of twelve) and in loop structure. That upper leg therefore pins the subject\u0027s arithmetic, its witness loop, its Montgomery encoding and its witness set \u2014 and does not independently re-derive the completeness theorem, which is a third-party computation on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.is-prime-vs-witness-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime over the swept candidate stream \u2014 both drawn raws read as ulong and each additionally forced odd, so the sweep meets the arithmetic and not only the even short-circuit \u2014 across the WHOLE carrier, which is where the sieve band cannot reach",
+        "Against": "Oracles.ExactPrimality. Both sides EXACT, so condition (B) drops out. ENVELOPE, the same one prime-field.is-prime-vs-sieve-and-witness-ladder\u0027s ladder leg states and stated again because this law lives almost entirely above it: through 8191\u00B2 the oracle is trial division and shares no idea with the subject; above it the oracle runs twenty BigInteger rounds against the subject\u0027s twelve Montgomery ones, so the criterion is shared and the arithmetic, the base set and the loop are not",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the edge battery is what makes this sweep bite rather than merely run: read as ulong, the committed edge set carries 0, 1, 2^64 \u2212 1, 2^63, 2^63 \u00B1 1, 2^31 \u00B1 1, 2^47 \u00B1 1 and the two\u0027s-complement images of every negative raw, so the carrier\u0027s corners \u2014 where the odd-part split, the trailing-zero count and the ring\u0027s radix reduction are all at their extremes \u2014 are swept on every run rather than sampled",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR-ADJACENT, and named so no reader over-reads it: this law SAMPLES where prime-field.montgomery-chains-exhaustive sweeps EVERY value from zero through 10^6 against a sieve of Eratosthenes and the whole contiguous 100,000-value band at 9\u00B710^11 against a segmented one. That law is the gate of record for SCALE, at the Exhaustive tier; this law is the gate of record for the statement, at Default",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.strong-round-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsStrongProbablePrime over the swept candidate stream at six witness bases per candidate \u2014 the swept full-width base, zero, one, two, value \u2212 1 and value itself \u2014 on both the drawn value and its forced-odd image",
+        "Against": "Oracles.ModularStrongProbablePrime, one strong round evaluated entirely in BigInteger. Both sides EXACT, so condition (B) drops out. The routes differ in REPRESENTATION rather than in criterion, and that is the point: the subject never leaves Montgomery form, comparing its power against the ring\u0027s own encoded One and NegativeOne, where the oracle compares plain residues against 1 and value \u2212 1. A representation leak is what disagreement catches; the criterion itself is shared and this leg does not claim otherwise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the contract\u0027s own zero-base clause, which is the one clause a reader would not guess: a base that reduces to zero carries no evidence and PASSES. Both witness = 0 and witness = value are exercised at every ODD candidate above two, and the oracle carries the same clause, so the two AGREE about it rather than one of them merely implementing it. ENVELOPE, and it is where this clause actually lives: the clause sits BELOW the guards in subject and oracle alike, so an even candidate is rejected before its base is ever reduced and the zero base does not pass there \u2014 which the guard row below states directly rather than leaving as an apparent exception",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the direction a probable-prime test decides OUTRIGHT: every prime passes every base. The candidate\u0027s primality is settled independently by Oracles.ExactPrimality and, where it is prime, all six rounds are required to accept \u2014 so a false REJECT is caught here, which is the failure a differential against a probable-prime sibling can never see",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the guards below the arithmetic: values under two are rejected, two is accepted, and every even value above two is rejected, at every base",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a passed round proves nothing about primality and this law never says it does. What it pins is that the round is the round it CLAIMS to be. The composition\u0027s own thesis \u2014 that this round\u0027s pseudoprimes and the Lucas test\u0027s are disjoint populations \u2014 is pinned in prime-field.pseudoprime-populations, not here. This law and its two neighbours share the domain key prime-field-primality, so all three speak about one candidate stream",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.lucas-vs-companion-matrix",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "JacobiSymbol"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsStrongLucasProbablePrime over the swept candidate stream, forced odd, across the WHOLE carrier",
+        "Against": "Oracles.StrongLucasSelfridge \u2014 the same test computed from 2\u00D72 COMPANION-MATRIX powers in BigInteger. Both sides EXACT, so condition (B) drops out. Three deliberate divergences make this independent rather than a re-spelling: the subject walks the U/V doubling identities most-significant-bit first with HALVINGS on every index-incrementing step, entirely inside ScaledResidueRing64, while the oracle multiplies matrices in plain residues, halves nothing anywhere, and carries no V recurrence at all \u2014 it derives V_d from two consecutive U terms. A wrong index-incrementing pair, a dropped Q^k squaring, or a halving that leaves the carrier shows here and nowhere else. It is also O(log n), so this leg reaches the whole carrier where an index-by-index recurrence oracle would stop in the tens of thousands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the Selfridge Method A parameter search \u2014 the discriminant the whole test is defined by",
+        "Against": "the same search inside Oracles.StrongLucasSelfridge, walking SIGNED BigInteger candidates with the sign carried explicitly (the subject reads it off \u0060magnitude \u0026 3\u0060) and taking its symbol from Oracles.JacobiSymbolReciprocity, this suite\u0027s own reciprocity descent. This CLOSES the OWED that stands over any Lucas oracle taking its symbol from NumberTheoryFunctions.JacobiSymbol, the BigInteger sibling of the very function the subject\u0027s search calls: a wrong symbol would pick the same discriminant on both sides. Here it cannot: the two symbols are separate implementations with no shared line. This leg is also what licenses the UnsignedNumberFunctions.JacobiSymbol citation on this case: the subject\u0027s search reads that member\u0027s SIGN at every swept candidate, and inverting the returned sign reddens this law together with prime-field.baillie-composition and prime-field.pseudoprime-populations. What the citation claims is the sign and nothing wider \u2014 the cross-carrier agreement and the composite-modulus regime are core.jacobi-symbol-cross-carrier, where the composite regime stands against the symbol\u0027s factor-and-Euler DEFINITION rather than against the library\u0027s own sibling descent, and the class this law cannot reach is the ENVELOPE below",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the direction the test decides outright: EVERY PRIME PASSES. The candidate\u0027s primality is settled independently by Oracles.ExactPrimality, and where it is prime the test is required to accept \u2014 a false reject that no differential against another probable-prime test could see",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "perfect squares are rejected, at the adversarial shape: the square of a large value, where no small factor screens it out and the parameter search would otherwise run to the value\u0027s least prime factor. The oracle decides squareness by BISECTION on the root \u2014 exact, float-free, thirty-two halvings \u2014 deliberately NOT by the subject\u0027s own ulong.SquareRoot, whose first estimate comes from hardware floating point and is the single floating-point touch the whole wing admits to. A gate must not read the estimate it gates",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the Selfridge search is UNBOUNDED \u2014 no step budget, and its ulong magnitude counter can wrap. Its termination rests on a theorem rather than on a validation, so a defect that suppressed the \u22121 outcome would hang or wrap rather than redden this law; wrapped, the sign is read off \u0060magnitude \u0026 3\u0060, which is meaningless for an even magnitude. An unbounded search whose predicate is a subject owes two clauses with DISTINCT messages \u2014 a deterministic step budget, which names a broken predicate, and a wrap guard, which names an exhausted range \u2014 and the wrap half is not hypothetical: FirstPrimeAtOrAbove(2^64 \u2212 40) returned 3, having stepped past the carrier and wrapped, a wrong ANSWER that no step budget can catch. The subject has neither clause, and no law can supply one from outside. Stated here because nothing in this suite can catch it. It is also the exact boundary of this case\u0027s UnsignedNumberFunctions.JacobiSymbol citation, and the campaign probed both sides of it: inverting the symbol\u0027s returned sign REDDENS this law, while perturbing the two-indicator shift so the \u22121 outcome is never produced HANGS the run instead",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the perfect-square pre-check is a COST bound and not a termination guarantee \u2014 candidates step by two and so sweep every odd number, one of which shares a factor with the value, and the vanishing-symbol exit fires there anyway \u2014 so this law\u0027s square rows pin the ANSWER at squares and say nothing about why the search halts. Delete the guard and n = 25 still returns after one candidate and n = 9 after six; what it buys is COST, since without it a square spends Jacobi evaluations proportional to its least prime factor. Every check that appears to gate the guard passes identically with it removed, these square rows included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.baillie-composition",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsBaillieProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsBaillieProbablePrime over the swept candidate stream, forced odd",
+        "Against": "Oracles.ExactPrimality \u2014 the exact decision, outside Puck.Maths entirely. ENVELOPE, the same one the two IsPrime laws state and stated again because this stream lives almost entirely above it: through 8191\u00B2 = 67092481 that oracle decides by TRIAL DIVISION alone and shares no idea with the subject, but above that band it runs twenty BigInteger strong-probable-prime rounds whose base set OPENS WITH TWO \u2014 the very round that is one of the two halves of IsBaillieProbablePrime. So above the trial-division band subject and oracle share that CRITERION, differing in arithmetic (one shared ScaledResidueRing64 against plain residues), in base set and in loop structure; the swept stream draws full-width raws, so essentially every candidate lands there. What this leg pins independently is the Lucas half and the composition, not the base-two round in isolation \u2014 prime-field.strong-round-vs-oracle owns that. Below 2^64 the composition is not merely unrefuted but VERIFIED counterexample-free: Feitsma and Galway independently enumerated the complete set of base-two Fermat pseudoprimes below 2^64 (the strong ones being a derived subset) and no member is simultaneously a strong Lucas pseudoprime for Selfridge Method A, which is exactly what this implementation runs. ulong IS that region, so nothing here is extrapolated and the equality is asserted flatly. The failure message says outright that a disagreement below 2^64 is either a defect or the first known counterexample \u2014 which is the honest reading, not a hedge",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the CARRIAGE, read back rather than assumed: IsBaillieProbablePrime is exactly IsStrongProbablePrime(value, 2) AND IsStrongLucasProbablePrime(value), both halves evaluated separately and the conjunction compared. That is one line of source, and a line that could carry a disjunction or transposed operands \u2014 neither of which the differential against a primality oracle would show. It is asserted on a FIXED ladder as well as on the swept stream, and the ladder is where it actually bites: on any sampled stream the two halves AGREE at every candidate \u2014 every prime passes both, every composite fails both, which is exactly the Baillie-PSW guarantee \u2014 so the conjunction is decidable only at the published pseudoprime populations, where the round accepts alone at 2047 and the Lucas half accepts alone at 5459. The claim body COUNTS both directions and fails if the ladder ever stops carrying one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, measured rather than assumed, and it corrects what a reader would expect: the WITNESS BASE in that line is NOT pinned by this law or by anything else in the suite. Swapping the base two for the base three moves no answer at any odd value below 10^7, and a value below 2^64 that moved one would have to be a composite passing both the base-three round and the strong Lucas test \u2014 a Baillie-PSW counterexample in its own right, of exactly the class Feitsma and Galway\u0027s enumeration rules out for base two. A DEGENERATE base is a different matter and IS caught: bases 0, 1 and value itself all collapse the round to a constant true, and the ladder\u0027s Lucas-pseudoprime rows reject that at 5459",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "IsBaillieProbablePrime over the same stream",
+        "Against": "PrimeField64.IsPrime, the twelve-base decision \u2014 a second shipped route to the same answers, and a comparison that would become a TAUTOLOGY if IsPrime were ever re-pointed at this composition \u2014 reading green while testing nothing, because both sides would then be the same decision",
+        "Shared": "",
+        "Citation": "both sides are PrimeField64, so this leg is not independent evidence about the field\u0027s arithmetic; what makes it worth declaring is that the two decisions rest on different theorems. IsPrime is itself anchored classically in prime-field.is-prime-vs-sieve-and-witness-ladder against a sieve of Eratosthenes over 0..20,000 and against Oracles.ExactPrimality on the carrier ladder. If IsPrime is re-pointed, THIS leg goes vacuous and must be deleted \u2014 the classical leg above does not, because its reference is outside Puck.Maths",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this law SAMPLES where prime-field.baillie-psw-exhaustive is exhaustive at EVERY one of the 4,294,967,296 values a uint holds \u2014 against a segmented sieve of Eratosthenes, not against another Puck.Maths decision \u2014 and where it replays 160,000 sampled and 60,000 contiguous values to ulong.MaxValue against Oracles.ExactPrimality. That law is the gate of record for SCALE, at the Exhaustive tier; the statements are here, at Default. Neither replaces the other",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.pseudoprime-populations",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsBaillieProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the two pseudoprime POPULATIONS below 10^4, ENUMERATED by the subjects themselves rather than looked up \u2014 every odd composite in the band is offered to the base-two round and to the strong Lucas test",
+        "Against": "Oracles.PrimeSieve, an ordinary sieve of Eratosthenes, which decides which candidates are composite in the first place and so fixes the band the enumeration runs over. It carries no notion of a witness, a base or a Lucas parameter, so it shares with the subjects not merely no code but no idea. Both sides EXACT, so condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the two enumerated populations, compared list against list",
+        "Against": "Subjects.PrimeFieldBaseTwoPseudoprimes \u2014 2047, 3277, 4033, 4681, 8321 \u2014 and Subjects.PrimeFieldLucasPseudoprimes \u2014 5459, 5777",
+        "Shared": "",
+        "Citation": "OEIS A001262, the strong pseudoprimes to base 2, and OEIS A217255, the strong Lucas pseudoprimes for the Selfridge Method A parameters (Baillie and Wagstaff, 1980) \u2014 which is the parameter choice the subject runs, and without which the second list names nothing. Both rows are the below-10^4 prefixes of published sequences, so this is a property of the TESTS rather than a pin captured off the implementation. What the enumeration adds over a lookup is the other direction: it catches a test that GAINED a pseudoprime as well as one that lost a rejection, and the published list is what says which population is the right one",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the seven Carmichael numbers, rejected by the composition and by IsPrime",
+        "Against": "Subjects.PrimeFieldCarmichaelNumbers \u2014 561, 1105, 1729, 2465, 2821, 6601, 8911",
+        "Shared": "",
+        "Citation": "the published Carmichael numbers \u2014 absolute pseudoprimes, composite yet Fermat probable prime to every coprime base \u2014 which is the weakness both halves of the composition are built to survive. Named honestly: all seven die at the base-two STRONG round, so as a probe of the Lucas half this row cannot fail; it gates the composition\u0027s Fermat-weakness claim and nothing else",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the composition\u0027s whole THESIS, checked instead of asserted: the two enumerated populations are DISJOINT. That is the only reason a conjunction of two probable-prime tests is worth more than either half",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sole-rejecter controls, which make both halves demonstrably load-bearing rather than decorative: the base-two round ACCEPTS every strong Lucas pseudoprime, so the Lucas half is what rejects it; the Lucas test ACCEPTS every base-two strong pseudoprime, so the round is what rejects it; and the composition rejects both populations. This is probable-ness pinned as a FACT \u2014 these tests are REQUIRED to accept composites, and the law says so rather than apologising for it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsPrime rejects every value in both populations and every Carmichael number, which is what separates the exact decision from the two probable ones on exactly the values where they differ",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the smallest values, where the guards outnumber the arithmetic: 0, 1 and the small composites are rejected by both tests and by the composition; every prime below 100 is accepted by all three",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.montgomery-chains-exhaustive",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "BatchInverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "LegendreCharacter"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Pow"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "TrySqrt"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime at EVERY value from zero through 10^6, composite as well as prime",
+        "Against": "Oracles.PrimeSieve — a plain sieve of Eratosthenes: crossed-out multiples and surviving flags, sharing with the subject not merely no code but no IDEA. Both sides EXACT, so condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime over the CONTIGUOUS 100,000-value band starting at 900,000,000,001 — an order of magnitude past where 32-bit primality reaches, and dense rather than sampled, because a verdict wrong for one residue class cannot hide in a contiguous sweep the way it can in a random one",
+        "Against": "a SEGMENTED sieve of Eratosthenes written in PrimalityScaleClaims.cs, crossing out the multiples of every prime below 10^6 across the window. It is exact only while the window stays under the square of the smallest prime the list OMITS, and that bound is read off the generated list at run time rather than restated as a literal beside it, so a widened window fails the guard instead of silently degrading the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Pow, in Montgomery form, over thirty-two prime moduli spanning three to the 2^62 ceiling — the smallest odd primes, the widening multiply's 2^32 seam, and the ceiling from both sides — at twelve residues by eleven exponents each, the exponents including zero, one, both Fermat/Euler exponents and both carrier edges, plus 20,000 randomized full-width exponents so the chain length varies",
+        "Against": "BigInteger.ModPow. Both sides EXACT. The subject performs no hardware division and never leaves Montgomery form; the reference is plain arbitrary-width residues. Verifying Montgomery against Montgomery would prove nothing, which is why the substrate is probed only through the public surfaces it powers",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Multiply, which deliberately stayed on the divide rather than joining the chain, and PrimeField64.Inverse and PrimeField64.BatchInverse, which ride it",
+        "Against": "the exact product (a·b) mod m in BigInteger for the one-shot multiply — its own oracle, not the chain's, because it is not on the chain — and BigInteger.ModPow at exponent modulus−2 for both inverses. BatchInverse turns thirty-seven elements over through one Inverse and is compared element by element, so a misplaced prefix product shows as a position rather than as a bulk mismatch",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.LegendreCharacter and the accept/reject decision of PrimeField64.TrySqrt, at every swept residue of every modulus on the ladder",
+        "Against": "Oracles.JacobiSymbolReciprocity — the binary quadratic-reciprocity descent in BigInteger, which never exponentiates at all, against Euler's criterion, which is nothing but exponentiation. Two derivations with no shared step. The reference is outside Puck.Maths entirely rather than the shipped fixed-width JacobiSymbol, which is what makes the leg classical rather than in-tree-independent",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime across eight sampled bands straddling the widening seam, the 2^62 field ceiling and the top of the carrier, plus a dense 4,000-value run at the very top where every reduction rides the wrapping-quotient path, and the carrier's largest prime located by the subject under an explicit 800-step budget",
+        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192, then TWENTY strong-probable-prime rounds evaluated entirely in BigInteger against a base set that is a strict SUPERSET of the subject's twelve Montgomery ones. ENVELOPE: above the trial-division band the criterion is shared and the arithmetic, the base set and the loop are not",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime on the four tabulated psi_k values — 3215031751, 3474749660383, 341550071728321 and 3825123056546413051 — each of which is a strong probable prime to every one of the first k prime bases, so truncating the twelve-base witness set to k accepts it and NOTHING else in this suite notices",
+        "Against": "the tabulated psi_k table, each row carrying the measured number of leading bases the value actually survives rather than the index it is catalogued under: 341550071728321 is tabulated as psi_7 and survives eight, 3825123056546413051 is tabulated as psi_9 and survives eleven",
+        "Shared": "",
+        "Citation": "the psi_k values are Sorenson and Webster's published least strong pseudoprimes to the first k prime bases, transcribed from the literature and derived nowhere in this repository; the surviving-base counts beside them were measured here against Oracles.ModularStrongProbablePrime",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the square-root contract, self-standing: every residue's SQUARE roots and the root squares back, a residue roots exactly when its character is not −1, and where it does the returned root squares to it. Beside them, 5,000 semiprimes constructed from two 32-bit primes are rejected — composite by construction, so no oracle is needed, and one-sided by nature: the probe can catch a false accept and can never catch a false reject",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE. This law is the gate of record for SCALE: prime-field.is-prime-vs-witness-oracle and prime-field.pow-vs-modpow remain the gates of record for the statements at Default, and this law is where the exhaustive 0..10^6 sweep and the contiguous 100,000-value band at 9·10^11 actually run. Measured cost on six cores: about one second, so the Exhaustive tier here buys scale rather than time. What it does NOT reach: the moduli are prime, so nothing here says anything about Create being handed a composite; and the 5,000 semiprimes top out near 4.4·10^18, below 2^62, so they do not exercise the widest reduction — the carrier-top run above owns that",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-field.baillie-psw-exhaustive",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsBaillieProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsBaillieProbablePrime at EVERY one of the 4,294,967,296 values a uint holds, and PrimeField64.IsStrongLucasProbablePrime required to accept every prime among them",
+        "Against": "a SEGMENTED sieve of Eratosthenes written in PrimalityScaleClaims.cs, run block by block over the whole 32-bit range. Both halves of the composition are PROBABLE-prime tests with infinitely many pseudoprimes each, so the composition earns its trust from evidence; this leg is that evidence, and it makes the statement below 2^32 a COMPUTED fact rather than a cited one — no known counterexample becomes none exists. The reference shares with the subject not merely no code but no idea, and is not a second Puck.Maths kernel. The work is embarrassingly parallel and the VERDICT is not — each block records only its own least disagreement and the blocks are read in ascending order — so a rerun reports the same value. Measured: about five minutes on six cores",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsStrongLucasProbablePrime at every value below 200,000 and at 20,000 full-width odd values",
+        "Against": "Oracles.StrongLucasSelfridge — the same test computed from 2×2 COMPANION-MATRIX powers in BigInteger. Three deliberate divergences: the subject walks the U/V doubling identities most-significant-bit first with halvings on every index-incrementing step, entirely inside a Montgomery ring, while the oracle multiplies matrices in plain residues, halves nothing, and carries no V recurrence at all. Its Selfridge search also takes its symbol from Oracles.JacobiSymbolReciprocity rather than from any shipped Jacobi, which is what closes the OWED standing over a Lucas oracle\u0027s own symbol source",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsStrongProbablePrime over eight witness bases — including the degenerate zero and one and both carrier edges — at every value below 20,000, plus 2,000 full-width value/witness pairs, and the documented degenerate vectors including 341, the base-two FERMAT pseudoprime that is not a STRONG one",
+        "Against": "Oracles.ModularStrongProbablePrime — one strong round in plain BigInteger residues, where the subject makes its whole acceptance test against a Montgomery ring's encoded constants and never leaves that form. The first half needs an oracle of its own, or a witness-round fault and a Lucas fault could CANCEL inside the conjunction and neither differential would see it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsBaillieProbablePrime at 160,000 sampled values across eight bands and at 60,000 CONTIGUOUS values in three dense runs — at the carrier top, at the 2^62 field ceiling and at the widening seam — up to ulong.MaxValue, with the Lucas half required to accept every prime found",
+        "Against": "Oracles.ExactPrimality, the exact decision outside Puck.Maths entirely. Below 2^64 the composition is not merely unrefuted but VERIFIED counterexample-free: Feitsma and Galway independently enumerated the complete set of base-two Fermat pseudoprimes below 2^64 and no member is simultaneously a strong Lucas pseudoprime for Selfridge Method A, which is exactly what this implementation runs, so nothing here is extrapolated. The failure message says outright that a disagreement below 2^64 is either a defect or the first known counterexample. The reference is outside the library entirely rather than a second decision in the same class, such as PrimeField64.IsPrime",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the two pseudoprime populations below 10^5, ENUMERATED by the subject rather than trusted: every odd composite below 100,000 is put to the base-two round and to the Lucas half, and the two resulting lists are compared entry for entry with the published tables",
+        "Against": "the sixteen base-two strong pseudoprimes and the twelve strong Lucas pseudoprimes tabulated in PrimalityScaleClaims.cs, and the seven Carmichael numbers beside them",
+        "Shared": "",
+        "Citation": "OEIS A001262, the strong pseudoprimes to base two, and OEIS A217255, the strong Lucas pseudoprimes for the Selfridge Method A parameters (Baillie and Wagstaff, 1980) — the parameter choice the subject runs, and without which the second list names nothing; plus the published Carmichael numbers, absolute pseudoprimes to every coprime base. All three tables are transcribed from the literature and derived nowhere in this repository",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the composition's THESIS, checked instead of asserted: the two enumerated populations are DISJOINT. Beside it the sole-rejecter controls, which are what make both halves demonstrably load-bearing rather than decorative — the base-two round accepts every value on the Lucas list and the Lucas half accepts every value on the base-two list, so each half is the only thing rejecting the other half's pseudoprimes. On any sampled stream the two halves agree at every candidate, which is exactly the Baillie-PSW guarantee, so the conjunction is decidable ONLY at these populations",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the degenerate shapes: 2,999 small perfect squares and eight squares of large primes are rejected, where no small factor screens the value out and the Selfridge search would otherwise run to its least prime factor; the d = 1 and s = 1 ladders at every width from 2^2 to 2^64, where one end puts the whole test in the squaring loop and the other never enters it; and every Fibonacci and Lucas term the carrier holds with its two neighbours on each side — the world the D = 5 parameter generates, which is the Lucas test's own worst case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE. This law is the gate of record for SCALE; prime-field.baillie-composition, prime-field.strong-round-vs-oracle and prime-field.lucas-vs-companion-matrix remain the gates of record for the statements at Default. Measured cost: about five minutes on six cores, dominated by the 2^32 sweep, which is why the whole law sits at Exhaustive. What it does NOT reach: the WITNESS BASE inside the composition is still unpinned — swapping the base two for the base three moves no answer below 10^7, and a value below 2^64 that moved one would itself be a Baillie-PSW counterexample of the class Feitsma and Galway rule out. The ladder at s = 64 is also unreached, because ulong.MaxValue fails the base-two round and the composition short-circuits before the Lucas half",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

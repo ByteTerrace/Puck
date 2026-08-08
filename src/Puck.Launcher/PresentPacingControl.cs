@@ -21,7 +21,7 @@ public sealed class PresentPacingControl {
 
         ArgumentOutOfRangeException.ThrowIfNegative(targetHertz);
 
-        if (!double.IsFinite(targetHertz)) {
+        if (!double.IsFinite(d: targetHertz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(initialTargetHertz), actualValue: initialTargetHertz, message: "The target present rate must be finite.");
         }
 
@@ -39,7 +39,7 @@ public sealed class PresentPacingControl {
     public void SetTargetHertz(double targetHertz) {
         ArgumentOutOfRangeException.ThrowIfNegative(targetHertz);
 
-        if (!double.IsFinite(targetHertz)) {
+        if (!double.IsFinite(d: targetHertz)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(targetHertz), actualValue: targetHertz, message: "The target present rate must be finite.");
         }
 

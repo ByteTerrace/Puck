@@ -169,7 +169,7 @@ governing rules:
   only a fast copy of it.
 
 - **Bricks are session-transient GPU state, never durable data.** They are never
-  written to run documents, creations, replays, or content-addressed storage. The
+  written to world documents, creations, replays, or content-addressed storage. The
   carve *list* is the durable data; the brick is derived. Reload the scene and the
   bricks re-bake from scratch.
 
@@ -197,9 +197,11 @@ to be.
   `SdfProgramBuilder.SampledRegion` in [`src/Puck.SdfVm`](../../src/Puck.SdfVm/).
 - The `SampledRegion` shape, its lane layout, cull bound, and conservative
   fallback: the `SampledRegion` sync-pair row in
-  [`.agents/skills/sdf-world/SKILL.md`](../../.agents/skills/sdf-world/SKILL.md)
+  [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md)
   and the enum doc in [`src/Puck.SdfVm/SdfShapeType.cs`](../../src/Puck.SdfVm/SdfShapeType.cs).
 - The clustered-vs-spread penalty and the clustered `views` ceiling the brick
-  targets: [`docs/sdf-bench-notes.md`](../sdf-bench-notes.md) (the carve ladders).
+  targets: the carve ladders that measured both were deleted on 2026-08-02 and
+  are recorded nowhere else. The motivation for the brick survives in this
+  chapter; the numbers that sized it do not.
 - The baked-volume family rejection and its single reconsider-trigger:
   [`docs/sdf-wiki/negative-results-and-rejections.md`](../sdf-wiki/negative-results-and-rejections.md).

@@ -405,6 +405,7 @@
           "Microsoft.Extensions.DependencyInjection": "[10.*, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )",
           "Puck.Snapshots": "[1.0.0, )"
         }
       },
@@ -414,33 +415,11 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
         }
       },
-      "puck.authoring": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Assets": "[1.0.0, )",
-          "Puck.SdfVm": "[1.0.0, )"
-        }
-      },
-      "puck.cameras": {
-        "type": "Project"
-      },
-      "puck.capture": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
+          "Puck.Maths": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
-        }
-      },
-      "puck.compositing": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.directx": {
@@ -453,7 +432,6 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Compositing": "[1.0.0, )",
           "Puck.DirectX": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )"
         }
@@ -461,8 +439,9 @@
       "puck.forge": {
         "type": "Project",
         "dependencies": {
-          "Puck.Authoring": "[1.0.0, )",
-          "Puck.HumbleGamingBrick": "[1.0.0, )"
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.HumbleGamingBrick": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )"
         }
       },
       "puck.hosting": {
@@ -506,11 +485,10 @@
         "type": "Project",
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Capture": "[1.0.0, )",
           "Puck.Commands": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )",
+          "Puck.Recording": "[1.0.0, )",
           "Puck.Text": "[1.0.0, )"
         }
       },
@@ -528,24 +506,24 @@
         "type": "Project",
         "dependencies": {
           "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
-      "puck.scene": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Cameras": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
-          "Puck.SdfVm": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
         }
       },
       "puck.scripting": {
         "type": "Project",
         "dependencies": {
           "Puck.Assets": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )",
           "Puck.Maths": "[1.0.0, )",
           "Wasmtime": "[44.0.0, 44.0.0]"
+        }
+      },
+      "puck.scripting.simulation": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Commands": "[1.0.0, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Scripting": "[1.0.0, )"
         }
       },
       "puck.sdfvm": {
@@ -553,11 +531,9 @@
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Assets": "[1.0.0, )",
-          "Puck.Cameras": "[1.0.0, )",
-          "Puck.Capture": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Maths": "[1.0.0, )",
+          "Puck.Recording": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )",
           "Puck.Text": "[1.0.0, )"
         }
@@ -582,7 +558,8 @@
       "puck.text": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
         }
       },
       "puck.vulkan": {
@@ -597,10 +574,27 @@
         "dependencies": {
           "Microsoft.Extensions.Hosting": "[10.*, )",
           "Puck.Assets": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )",
           "Puck.Vulkan": "[1.0.0, )"
+        }
+      },
+      "puck.world.data": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )",
+          "Puck.Forge": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )"
+        }
+      },
+      "puck.world.server": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Hosting": "[1.0.0, )",
+          "Puck.Scripting.Simulation": "[1.0.0, )",
+          "Puck.Storage": "[1.0.0, )",
+          "Puck.World.Data": "[1.0.0, )"
         }
       }
     }

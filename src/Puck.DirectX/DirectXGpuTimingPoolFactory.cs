@@ -27,9 +27,9 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
         var queryHeapIid = ID3D12QueryHeap.IID_Guid;
 
         device->CreateQueryHeap(
-            in queryHeapDesc,
-            in queryHeapIid,
-            &queryHeap
+            pDesc: in queryHeapDesc,
+            ppvHeap: &queryHeap,
+            riid: in queryHeapIid
         );
 
         // A READBACK-heap buffer the resolved ticks are copied into (one ulong per query), cloning the
@@ -50,13 +50,13 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &readbackBuffer
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            pDesc: in bufferDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &readbackBuffer,
+            riidResource: in resourceIid
         );
 
         return new DirectXGpuTimingPool(
@@ -72,7 +72,7 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
 
         var queue = (ID3D12CommandQueue*)((IDirectXDeviceContext)deviceContext).CommandQueueHandle;
 
-        queue->GetTimestampFrequency(out var frequency);
+        queue->GetTimestampFrequency(pFrequency: out var frequency);
 
         // Direct3D 12 timestamps are full 64-bit; the period is the inverse of the queue tick frequency.
         return new GpuTimestampCapabilities(

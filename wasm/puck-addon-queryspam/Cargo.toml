@@ -1,0 +1,15 @@
+[package]
+name = "puck-addon-queryspam"
+version = "0.1.0"
+edition = "2021"
+description = "BATTERY-ONLY guest — never shipped, no world pins it. Floods query_pose to make the query-dispatch-budget refusal (AddonVerdict::QuotaExhausted) demonstrable, since the shipped default addon's one-query-per-tick behavior can never exceed a small declared input budget."
+publish = false
+
+# cdylib, not rlib: this crate IS the built .wasm module. It is a thin consumer of puck-stdlib — see
+# src/lib.rs for why the frozen puck_* ABI exports live here rather than in the library (mirrors
+# puck-addon-default/Cargo.toml's reasoning exactly).
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }

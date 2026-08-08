@@ -38,7 +38,8 @@ internal static unsafe class Win32D3D11 {
 
         try {
             var multithreadIid = ID3D10Multithread.IID_Guid;
-            ThrowIfFailed(hr: ((IUnknown*)createdDevice)->QueryInterface(in multithreadIid, out var multithread), operation: "QueryInterface(ID3D10Multithread)");
+
+            ThrowIfFailed(hr: ((IUnknown*)createdDevice)->QueryInterface(ppvObject: out var multithread, riid: in multithreadIid), operation: "QueryInterface(ID3D10Multithread)");
             _ = ((ID3D10Multithread*)multithread)->SetMultithreadProtected(bMTProtect: true);
             _ = ((IUnknown*)multithread)->Release();
         } catch {
@@ -50,7 +51,6 @@ internal static unsafe class Win32D3D11 {
         context = createdContext;
         device = createdDevice;
     }
-
     public static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
             throw new COMException(message: $"{operation} failed", errorCode: hr.Value);

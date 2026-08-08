@@ -1,0 +1,29 @@
+# Case H (RED half of the boundary pair): ceiling pinned ONE RAW UNIT BELOW the world's pinned `trigger`
+# threshold (0.75 = raw 49152; this script grants ceiling raw 49151 = 0.7499847412109375). At baseline h=0 (no
+# seat press — nothing else drives `trigger`), the pool-composed value is min(contributed, ceiling); channelwalk
+# presses `trigger` to its own full ONE during its press window, so composed should land at exactly 49151 raw,
+# strictly below the 49152 threshold — NO rising edge; folded/quantized stays 0 the whole window.
+#
+# See scripts/h-at-threshold.txt for the paired GREEN case (ceiling exactly at the threshold, which DOES cross).
+# See the crate README for why this is a pool-ceiling boundary rather than a raw per-tick act value: a
+# Binary-shaped channel admits only {0, ONE} from ANY writer (host-enforced DecodeError otherwise), so a literal
+# "threshold-1 raw contributed value" cannot be constructed at all — the boundary is walked on the ceiling axis.
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+replay.status
+world.wait 5
+world.grant addon:channelwalk drive body:0 budget:60 channels:trigger
+world.grant seat1 drive body:0 channels:trigger ceiling:0.7499847412109375
+# ticks_since_drive ~60: forward/trigger both still below their windows (trigger presses at [360, 600)).
+world.wait 60
+player.channels 1
+# ticks_since_drive ~510: solidly inside trigger's press window. Expect: trigger held=1(65536, the addon's
+# own raw act), composed=1(65536), clamped=no — the ceiling does NOT bite. Identical to h-at-threshold's
+# reading despite the ceiling sitting on the other side of the threshold; that identity is the observation,
+# not a failure. See README "Finding 2".
+world.wait 450
+player.channels 1
+# ticks_since_drive ~810: past the press window close. Expect: trigger held=0, composed=0, folded=0 (released).
+world.wait 300
+player.channels 1
+world.grants seat1

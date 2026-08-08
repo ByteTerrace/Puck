@@ -74,7 +74,7 @@ public static class SdfCoverageAtlas {
             glyphs: coverage.Glyphs,
             height: coverage.Height,
             imageData: EncodeSignedDistance(imageData: imageData, distanceRange: distanceRange),
-            imagePath: (coverage.ImagePath + "#sdf"),
+            imagePath: $"{coverage.ImagePath}#sdf",
             kerningPairs: coverage.KerningPairs,
             kind: FontAtlasKind.Sdf,
             metrics: coverage.Metrics,

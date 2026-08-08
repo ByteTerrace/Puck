@@ -1,14 +1,16 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.SdfVm.Views;
 
 /// <summary>One view occupying one region — a single row of a <see cref="ViewLayout"/>. Pure data: WHICH registered
 /// view (see <see cref="ViewStack.Register"/>) sits WHERE, normalized to the frame.</summary>
 /// <param name="View">The view's id.</param>
 /// <param name="Region">Its normalized screen region.</param>
-public readonly record struct ViewBinding(ViewId View, Puck.Compositing.NormalizedRect Region);
+public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
 
-/// <summary>A full frame's slot assignment at one moment — the view-stack analogue of
-/// <c>Puck.Demo.Overworld.ScreenLayoutDirector</c>'s per-slot rect array, generalized to name ANY registered view (not
-/// only a room/pane camera). <see cref="ViewTransition"/> eases between two of these.</summary>
+/// <summary>A full frame's slot assignment at one moment — the view-stack analogue of a layout director's per-slot
+/// rect array, generalized to name ANY registered view (not only a room/pane camera).
+/// <see cref="ViewTransition"/> eases between two of these.</summary>
 /// <param name="Bindings">The layout's bindings, in slot order (index N of one layout corresponds to index N of the
 /// other layout a <see cref="ViewTransition"/> eases between/toward — see its remarks for what happens when the two
 /// counts differ).</param>
@@ -92,9 +94,9 @@ public sealed class ViewTransition {
         return new ViewLayout(Bindings: m_scratch);
     }
 
-    private static Puck.Compositing.NormalizedRect CenterOf(Puck.Compositing.NormalizedRect rect) =>
+    private static NormalizedRect CenterOf(NormalizedRect rect) =>
         new(X: (rect.X + (0.5f * rect.Width)), Y: (rect.Y + (0.5f * rect.Height)), Width: 0f, Height: 0f);
-    private static Puck.Compositing.NormalizedRect Lerp(Puck.Compositing.NormalizedRect a, Puck.Compositing.NormalizedRect b, float t) =>
+    private static NormalizedRect Lerp(NormalizedRect a, NormalizedRect b, float t) =>
         new(
             Height: (a.Height + ((b.Height - a.Height) * t)),
             Width: (a.Width + ((b.Width - a.Width) * t)),

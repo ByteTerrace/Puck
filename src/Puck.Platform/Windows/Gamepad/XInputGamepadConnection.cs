@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Commands;
+using Puck.Input;
 using Puck.Input.Devices;
 using Puck.Input.Output;
 
@@ -250,31 +251,17 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             Buttons: buttons,
             Gyro: Vector3.Zero,
             LeftStick: NormalizeStick(rawX: pad.ThumbLeftX, rawY: pad.ThumbLeftY, deadzone: LeftThumbDeadzone),
-            LeftTrigger: NormalizeTrigger(raw: pad.LeftTrigger),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(raw: pad.LeftTrigger, threshold: TriggerThreshold, range: byte.MaxValue),
             Orientation: Quaternion.Identity,
             RightStick: NormalizeStick(rawX: pad.ThumbRightX, rawY: pad.ThumbRightY, deadzone: RightThumbDeadzone),
-            RightTrigger: NormalizeTrigger(raw: pad.RightTrigger)
+            RightTrigger: GamepadNormalization.NormalizeTrigger(raw: pad.RightTrigger, threshold: TriggerThreshold, range: byte.MaxValue)
         );
     }
     private static Vector2 NormalizeStick(short rawX, short rawY, short deadzone) {
         var stick = new Vector2(x: (rawX / 32767f), y: (rawY / 32767f));
-        var magnitude = stick.Length();
         var normalizedDeadzone = (deadzone / 32767f);
 
-        if (magnitude <= normalizedDeadzone) {
-            return Vector2.Zero;
-        }
-
-        var scaled = ((MathF.Min(x: magnitude, y: 1f) - normalizedDeadzone) / (1f - normalizedDeadzone));
-
-        return ((stick / magnitude) * scaled);
-    }
-    private static float NormalizeTrigger(byte raw) {
-        if (raw <= TriggerThreshold) {
-            return 0f;
-        }
-
-        return ((raw - TriggerThreshold) / (255f - TriggerThreshold));
+        return GamepadNormalization.ApplyRadialDeadzone(stick: stick, deadzone: normalizedDeadzone);
     }
 
     public void Dispose() {

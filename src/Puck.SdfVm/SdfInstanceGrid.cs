@@ -94,9 +94,9 @@ internal static class SdfInstanceGrid {
     /// always-list entries, rounded to a uint4 boundary.</summary>
     internal static int WordCapacity(int maxInstances) {
         var count = Math.Max(val1: 0, val2: maxInstances);
-        var rawLength = (HeaderWords + 1 + ((CellCapacityFactor + 2) * count));
+        var rawLength = ((HeaderWords + 1) + ((CellCapacityFactor + 2) * count));
 
-        return ((rawLength + 3) & ~3);
+        return (rawLength + 3) & ~3;
     }
 
     /// <summary>Allocation-free scratch for rebuilding the packed grid when a live program has active maskable dynamic
@@ -235,10 +235,10 @@ internal static class SdfInstanceGrid {
             }
 
             var cellStartWord = HeaderWords;
-            var entryWord = (cellStartWord + cellCount + 1);
+            var entryWord = ((cellStartWord + cellCount) + 1);
             var alwaysWord = (entryWord + running);
             var rawLength = (alwaysWord + alwaysCount);
-            var paddedLength = ((rawLength + 3) & ~3);
+            var paddedLength = (rawLength + 3) & ~3;
             var words = m_words.AsSpan(start: 0, length: paddedLength);
 
             words.Clear();

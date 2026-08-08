@@ -1,4 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
     <!--
         The SM83-family GamingBrick core, including its IScreenMachineEngine adapter (Hosting/): GamingBrickEngine
         (IScreenMachineEngine, id "gaming-brick") builds a MachineHost (IScreenMachine + IMachineMemoryPeek) that hosts

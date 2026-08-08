@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -38,15 +39,12 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     // the cycles run, so a rewind that restored the wrong tick-to-cycle phase (a different cycle budget) folds to a
     // different value.
     private static long ObserveState(MachineHost host) {
-        const ulong offsetBasis = 0xCBF29CE484222325ul;
-        const ulong prime = 0x100000001B3ul;
-
-        var hash = offsetBasis;
+        var hash = Fnv1aHash.Create();
 
         for (var address = 0xFF00; (address <= 0xFFFF); ++address) {
-            hash = ((hash ^ host.PeekByte(address: address)) * prime);
+            hash.Add(value: host.PeekByte(address: address));
         }
 
-        return unchecked((long)hash);
+        return unchecked((long)hash.Value);
     }
 }

@@ -1,2 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+    </PropertyGroup>
 </Project>

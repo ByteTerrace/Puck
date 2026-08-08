@@ -163,11 +163,11 @@ internal sealed class WorldOverlayFeed {
             var slot = index;
 
             m_hudCaches[index] = new HudCache {
+                ContextLine = string.Empty,
+                DragLine = string.Empty,
                 Key = (-1, -1, -1, -1, -1, false, 0f),
                 SelectionLine = string.Empty,
-                ContextLine = string.Empty,
                 SessionLine = string.Empty,
-                DragLine = string.Empty,
             };
             m_hintLines[index] = [];
             m_slots[index] = new OverlayBindingSlot[BindingBarSeatComposer.SlotSources.Length];
@@ -340,7 +340,7 @@ internal sealed class WorldOverlayFeed {
             cache.SessionLine = ComposeSessionLine(slot: slot);
             cache.DragLine = string.Create(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"ring {sculpt.HistoryCount}/{Puck.Authoring.SculptModel.HistoryCapacity} local | uncommitted {m_workbench.UncommittedEdits(slot: slot)} | world.undo = journal"
+                handler: $"ring {sculpt.HistoryCount}/{Puck.Forge.Authoring.SculptModel.HistoryCapacity} local | uncommitted {m_workbench.UncommittedEdits(slot: slot)} | world.undo = journal"
             );
 
             return;
@@ -369,7 +369,7 @@ internal sealed class WorldOverlayFeed {
     }
 
     // The sculpting seat's target line: the model's live edit target (shape / chain goal / brush).
-    private static string ComposeSculptTargetLine(Puck.Authoring.SculptModel model) {
+    private static string ComposeSculptTargetLine(Puck.Forge.Authoring.SculptModel model) {
         if (model.TargetIsGoal) {
             var chain = model.TargetGoalChain!;
 
@@ -399,7 +399,7 @@ internal sealed class WorldOverlayFeed {
             EditorActClass.DocumentDefault => "defaults (next boot)",
             _ => null,
         };
-        var drift = ((m_driftHint.Length > 0) && !string.Equals(a: m_driftHint, b: "none", comparisonType: StringComparison.Ordinal) ? m_driftHint : null);
+        var drift = (((m_driftHint.Length > 0) && !string.Equals(a: m_driftHint, b: "none", comparisonType: StringComparison.Ordinal)) ? m_driftHint : null);
         var exclusive = ((m_exclusiveLabels[slot].Length > 0) ? m_exclusiveLabels[slot] : null);
 
         if ((act is null) && (drift is null) && (exclusive is null)) {
@@ -413,11 +413,11 @@ internal sealed class WorldOverlayFeed {
         }
 
         if (drift is not null) {
-            _ = builder.Append(value: (builder.Length > 0) ? " | " : string.Empty).Append(value: "drift ").Append(value: drift);
+            _ = builder.Append(value: ((builder.Length > 0) ? " | " : string.Empty)).Append(value: "drift ").Append(value: drift);
         }
 
         if (exclusive is not null) {
-            _ = builder.Append(value: (builder.Length > 0) ? " | " : string.Empty).Append(value: "excl ").Append(value: exclusive);
+            _ = builder.Append(value: ((builder.Length > 0) ? " | " : string.Empty)).Append(value: "excl ").Append(value: exclusive);
         }
 
         return builder.ToString();
@@ -444,7 +444,7 @@ internal sealed class WorldOverlayFeed {
                 members[memberIndex] = (ModifierLabelFor(view: view, id: id) ?? id.ToUpperInvariant());
             }
 
-            lines[index] = $"{string.Join(separator: '+', values: members)} {chord.Label ?? chord.Command}";
+            lines[index] = $"{string.Join(separator: '+', values: members)} {(chord.Label ?? chord.Command)}";
         }
 
         m_hintLines[slot] = lines;
@@ -452,7 +452,6 @@ internal sealed class WorldOverlayFeed {
 
         return lines;
     }
-
     private static string? ModifierLabelFor(BindingPageView view, string id) {
         foreach (var modifier in view.Modifiers) {
             if (string.Equals(a: modifier.Id, b: id, comparisonType: StringComparison.Ordinal)) {

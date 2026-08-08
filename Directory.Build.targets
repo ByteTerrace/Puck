@@ -12,4 +12,8 @@
          with no per-consumer csproj edit. This import lands after each project's body, so @(ProjectReference) is
          already populated when the ItemGroup condition is evaluated. -->
     <Import Project="$(MSBuildThisFileDirectory)src\Puck.Platform\WindowsCaptureProjection.targets" />
+
+    <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
+         transitively-arriving edge is checked the same as a declared one. -->
+    <Import Project="$(MSBuildThisFileDirectory)build\Puck.Architecture.targets" />
 </Project>

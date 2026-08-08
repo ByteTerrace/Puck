@@ -120,7 +120,7 @@ know or care which provider answered.
 ## What "determinism" actually means here
 
 Puck's determinism creed is a single sentence: **display is a pure function
-of data plus tick plus inputs.** Given the same run document, the same
+of data plus tick plus inputs.** Given the same world document, the same
 sequence of per-tick input snapshots, and the same tick count, the engine
 produces the same simulation state — every time, on either GPU backend,
 regardless of wall-clock timing.
@@ -176,9 +176,22 @@ public interface IFieldEvaluator {
 surface, negative inside geometry. `TryFieldGradient` is that field's
 gradient — the unit-length direction of steepest distance *increase*,
 i.e., straight away from the nearest surface. `SdfFieldEvaluator` estimates
-it with a four-tap tetrahedron central difference over `TryDistance`
-(cheaper than the naive six-tap version, at a documented, measured error
-bound against the analytic answer).
+it with a six-tap central difference over `TryDistance` — one ± pair per
+world axis. It replaced the original four-tap tetrahedron probe, which is
+equivalent only where the field is locally linear: at an edge or blend seam
+the tetrahedron aliases curvature into a spurious tangential component (its
+fingerprint is a normal with two exactly-equal components), and the contact
+solver consuming that normal converted commanded planar momentum into a
+deterministic tangential drift along walls. Central differences are exact
+about a mirror-symmetric probe point only when every transform between the
+probe and the shape is exactly affine in fixed point — a reset and a
+translate, nothing that rotates or scales the point first — so a mid-face
+normal on that kind of geometry carries no off-axis component. A rotation in
+the chain makes the two probe taps round independently (a quantized
+quaternion is not bit-exact), leaving a residual tangential component of
+about a thousandth of the normalized gradient — some 400 times smaller than
+the tetrahedron's edge aliasing, small enough to be imperceptible during
+play, and exactly zero on geometry that is not rotated.
 
 The gradient is the entire primitive. The engine stops there on purpose —
 nothing on this interface, or in its implementation, knows what a "planet"
@@ -207,11 +220,13 @@ all if a different consumer read it differently.
 
 ## Related resources
 
-- [.agents/skills/sdf-world/SKILL.md](../../.agents/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
   — the `SdfFieldEvaluator` sync-pair entry (excluded-ops reconciliation,
   measured tolerances) and the "Composition, anchors, views, and queries"
   section's query provider summary.
-- [AGENTS.md](../../AGENTS.md) — the determinism and verification contract.
+- [CLAUDE.md](../../CLAUDE.md) — the determinism contract (core rule 4). Note
+  that it no longer pairs with a verification contract for the engine: the
+  battery that gated one is quarantined with `Puck.Post`.
 - Source: `src/Puck.SdfVm/Queries/IWorldQuery.cs`,
   `src/Puck.SdfVm/Queries/IFieldEvaluator.cs`,
   `src/Puck.SdfVm/Queries/SdfFieldEvaluator.cs`,

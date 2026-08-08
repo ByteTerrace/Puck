@@ -38,6 +38,16 @@ struct CompositeParams {
     uint childMask;      // bit v set => viewport v is backed by a CHILD node's surface, not an SDF camera
     uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
     uint instanceMaskWordCount; // the LIVE uploaded program's derived per-tile mask width (SdfProgram.InstanceMaskWordCount), pushed per frame
+    // The area-light shadow estimator's SAMPLE INDEX: which point of the digital net each pixel draws this frame. It
+    // MUST come from the deterministic tick clock, never from a wall-clock accumulation — the sequence is seekable
+    // precisely so a replay at tick N draws the identical directions. Stage 1 only. KEEP IN SYNC with
+    // SdfFrame.SampleIndex.
+    uint sampleIndex;
+    // The temporal accumulator's control word. Bit 0 disables accumulation (the A/B "off" side); bit 1 forces a RESET,
+    // which the host raises for the first frames of a freshly constructed engine so the accumulator never folds in an
+    // undefined source-texture alpha. KEEP IN SYNC with SdfFrame.DisableShadowAccumulation and SdfWorldEngine's push
+    // packing.
+    uint shadowAccumulation;
 };
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
 
@@ -487,16 +497,56 @@ static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
 static const float DitherQuantum = (1.0 / 255.0);
 // debug.view.evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
-// lit pixel is bounded by MaxSteps (160, primary march) + ShadowSteps (48, soft shadow) + 3 (calcAO) + 4 (the 4-tap
+// lit pixel is bounded by MaxSteps (160, primary march) + ShadowSamplesPerPixel * ShadowSteps (2 * 32 = 64, the
+// area-light shadow estimator) + 3 (calcAO) + 4 (the 4-tap
 // normal fallback, worse than the 1-eval analytic default) + 1 (the coverage-AA probe) ~= 216, so 256 leaves margin
 // before saturating solid red — chosen so a typical unshadowed ambient-only hit (~30-40 evals: a short march plus
 // the analytic normal and AO) reads green/yellow rather than washing out at the floor.
 static const float EvalHeatmapCeiling = 256.0;
-// Soft-shadow march toward the sun: the step budget, the penumbra sharpness, the reach, the surface-offset bias that
-// keeps the march from immediately self-hitting the origin surface, and the per-step advance clamp.
-static const int ShadowSteps = 48;
-static const int FastShadowSteps = 16;
-static const float ShadowSharpness = 9.0;
+// Area-light shadow march toward the sun: the per-sample step budget, the reach, the surface-offset bias that keeps
+// the march from immediately self-hitting the origin surface, and the per-step advance clamp. Each sample is a BINARY
+// visibility trace (occluded or not), so the budget buys reach rather than penumbra fidelity — the penumbra now comes
+// from the sample DISTRIBUTION over the sun disc, not from a per-step ratio. 48 -> 32 and 16 -> 12 because a binary
+// test terminates at the first hit and takes the exactly-sound escape exit on the light side, where the old parabola
+// had to keep marching to refine a running minimum.
+static const int ShadowSteps = 32;
+static const int FastShadowSteps = 12;
+// The sun's ANGULAR RADIUS in radians — the half-aperture of the cone the estimator samples. tan(0.11) = 0.11045
+// reproduces the retired parabola's 1/ShadowSharpness = 1/9 = 0.1111 penumbra half-slope to within 0.7%, so the
+// change reads as "the same shadows, sampled correctly" rather than as a jolt in penumbra width. The host bakes
+// tan() into the sampler table (SdfShadowSamplerTables), so this literal is documentation on the GPU side: nothing
+// in the shader computes from it.
+static const float SunAngularRadius = 0.11;
+// Sun-disc samples per pixel per frame. Each costs a full binary shadow trace, so this multiplies the shadow march's
+// worst-case field evaluations directly; 2 is the shipped point on the curve.
+static const uint ShadowSamplesPerPixel = 2u;
+// Bits of each net coordinate the disc table consumes (SphericalCapSampleTable.TableIndexBitCount): 4096 azimuth
+// cells and 4096 radius cells. The digital-net gate proves the (0,m,2)-net property survives this quantization, which
+// is the property the estimator actually relies on — the full 32-bit coordinate is never needed.
+static const uint ShadowNetIndexBits = 12u;
+// TEMPORAL ACCUMULATION. Two sun-disc samples a frame is a THREE-LEVEL estimate (0, 1/2, 1) — on its own that reads as
+// salt-and-pepper stipple across the penumbra, so the estimator is only half the feature. The accumulator is an integer
+// exponential moving average over the value the SAME PIXEL carried last frame:
+//   V = (V * (2^k - 1) + Vs + 2^(k-1)) >> k
+// with k = ShadowAccumulationShift. Its effective sample count is (2^(k+1) - 1) * ShadowSamplesPerPixel = 30, whose
+// binomial standard error at the worst case V = 1/2 is 9% of the SUN term alone; round-to-nearest at eight bits then
+// pins a converged pixel to within half a quantum, so the settled penumbra is smooth rather than merely averaged.
+//
+// WHERE THE HISTORY LIVES: the per-view SOURCE TEXTURE'S ALPHA CHANNEL. Stage 1 already owns that surface, already
+// retains it across frames (the cadence gate's skip path re-composites from exactly this retained image), and Stage 2
+// reads only .rgb — so the alpha lane is free storage that needs no buffer, no binding, no descriptor and no clear
+// kernel. It is also the only Stage-1-writable resource whose cross-frame persistence this engine already depends on.
+//
+// FIXED POINT, NOT FLOAT: the blend is the one piece of state that survives a frame boundary, so it must be exactly
+// reproducible rather than merely accurate. Integers make the recurrence associativity-free and the round-to-nearest
+// explicit, which is what lets a replay gate assert an identical converged image across two runs.
+//
+// NO REPROJECTION, BY CHOICE: the history is read at the pixel's own lattice site, so a camera move mixes a few frames
+// of a neighbouring surface into the estimate. The estimate is a low-frequency visibility ratio and the blend decays
+// to under a quantum in ~5 frames, so that reads as a slight softening under motion rather than as a ghost — and it
+// costs neither the previous frame's camera basis nor a per-pixel motion vector.
+static const uint ShadowAccumulationShift = 3u;    // alpha = 1 / 2^shift
+static const uint ShadowAccumulationOne = 255u;    // full visibility in the eight-bit store the history rides in
 // Half the RT path's 24-unit reach: this compute march has no TLAS to fast-forward to the occluder, so every unit of
 // reach is marched per lit pixel. Contact/self shadows (the visual win) are near; 12 covers every realistic case while
 // halving the worst-case empty-space step count on dense scenes.
@@ -512,32 +562,30 @@ static const float ShadowStepMax = 0.6;   // the NEAR-field ceiling; far-field i
 // tiny angular penumbra tolerates the coarser sampling.
 static const float ShadowStepFarSlope = 0.15;
 // Fleet-scale presentation path: sphere tracing still never advances past the conservative field/boundary clearance,
-// but samples the soft penumbra less densely. A closest-approach refinement (fits a parabola between consecutive
-// samples) recovers the closest approach across the wider interval; a result below half an 8-bit output quantum is
-// already invisible after lighting and can terminate.
+// but strides harder through open space and gives up sooner. Under a BINARY visibility test the coarser stride is a
+// soundness question only in one direction — it can step THROUGH a thin occluder and report light where there is
+// none — which is the same trade the near-field ShadowStepMin floor already makes.
 static const float FastShadowStepMax = 1.8;
 static const float FastShadowStepFarSlope = 0.45;
-static const float FastShadowDarknessCutoff = (0.5 / 255.0);
 static const float FastShadowMaxDistance = 6.0;
-// The soft-shadow PENUMBRA half-aperture, the shadow-cull gather's cone chord (see sdfShadowGather). The DIRECT penumbra
-// reach is 1/ShadowSharpness: an occluder softens the shadow while its along-ray clearance d keeps sample =
-// ShadowSharpness*d/traveled below 1 (d < traveled/ShadowSharpness), i.e. out to perpendicular distance boundRadius +
-// traveled/ShadowSharpness — a cone of half-slope 1/ShadowSharpness (chord 0, a bare ray, MISSES this ring, the
-// world-grid-cull self-shadow diff a chord-0 gather dropped). But the march's closest-approach REFINEMENT
-// couples each sample to the PREVIOUS sample's clearance (previousTrue = the true nearest-surface distance), so a
-// second occluder that is merely the nearest surface one step BEFORE a shadowing sample perturbs that sample's parabola
-// — the influence-corridor class that killed tape pruning. That coupling occluder sits within a few × the shadowing
-// occluder's distance, so the sound gather cone is WIDER than the direct penumbra: 3/ShadowSharpness is calibrated to
-// reproduce the flat soft shadow BIT-IDENTICALLY (measured — 1/k left 840 penumbra-edge px, 2/k 125, 3/k a clean 0 with
-// margin, on the overlapping-penumbra world-shadow-cull scene). A wider cone is always safe (a superset), only less
-// selective; this is the least-wide value that clears the gate with margin.
-static const float ShadowPenumbraChord = (3.0 / ShadowSharpness);
+// The shadow-cull gather's cone chord (see sdfShadowGather): the half-slope of the cone whose occluders the gather
+// must contain for the shadow march to be sound. It is now a bound on the SAMPLED CONE — the estimator's rays leave
+// the surface inside a cone of half-slope tan(SunAngularRadius) = 0.1104, so every occluder any sample can reach sits
+// strictly inside a 0.3333 chord, with 3x margin. The retired closest-approach parabola needed the extra width for a
+// different reason (it coupled each sample to the PREVIOUS sample's clearance, so a merely-nearby occluder perturbed
+// a shadowing sample's estimate); the binary test has no such coupling, so the sound cone is now simply the sampled
+// aperture. THE VALUE IS DELIBERATELY UNCHANGED at 3/9. Narrowing it to the sampled aperture is a real perf win and
+// an obviously safe one on paper, but 3/9 is an EMPIRICALLY CALIBRATED number (measured on the overlapping-penumbra
+// world-shadow-cull scene: 1/9 left 840 penumbra-edge diff px, 2/9 left 125, 3/9 a clean 0 with margin) and
+// re-calibrating it is its own change with its own gate run. A wider cone is always safe (a superset), only less
+// selective — so world-shadow-cull's bit-identity contract survives this change untouched.
+static const float ShadowPenumbraChord = (3.0 / 9.0);
 // The gradient probe's finite-difference offset. Small enough that the tetrahedron's O(eps) curvature error is
 // sub-LSB, large enough to stay clear of the field's own float noise.
 static const float NormalProbeEpsilon = 0.0006;
 
 // Per-pixel field-evaluation TALLY for debug.view.evals (perf-plan Phase 0 instrumentation). A plain per-thread
-// scalar counter — mirrors sdfMaterialBlendWeight's per-thread-static pattern (sdf-vm.hlsli) — because softShadow/
+// scalar counter — mirrors sdfMaterialBlendWeight's per-thread-static pattern (sdf-vm.hlsli) — because areaShadowVisibility/
 // calcAO/the normal probes below cannot otherwise report their internal map()-family call counts back to
 // renderView's epilogue without threading a return channel through every call site. Kept HERE (never in
 // mapCore/sdf-vm.hlsli): every producing call site already lives in sdf-world.hlsli, so counting stays entirely at
@@ -747,7 +795,7 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
 // The march evaluates the TILE-MASKED field (mapMasked at `instanceMaskBase` — the mask the instance-cull pass wrote
 // for THIS tile, dispatched immediately before the beam): each sample walks only the instances overlapping the tile's
 // cone, so the march's per-step cost is O(instances near this tile), not O(all instances) — the measured O(n) beam
-// wall (docs/sdf-bench-notes.md) was exactly this per-sample enumeration (~1.6B segment-bound checks at 4096
+// wall was exactly this per-sample enumeration (~1.6B segment-bound checks at 4096
 // instances), never the per-tile binning. BIT-EXACT by the same contract Stage 1's masked march rides: a masked-out
 // instance's bound excludes every point of the tile's cone (the sphere-vs-cone test is a necessary condition for the
 // bound to touch it), and the bound-sizing contract (SdfProgram.PackInstances — union influence margins, smooth
@@ -775,7 +823,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     for (int i = 0; (i < ConeMarchSteps); i++) {
         // FOLD-SAFE: the clearance proof rides min(value, sdfMapStepBound). A folded field's raw value can
         // overestimate near a fold boundary, and a cone proof built on it classifies tiles straight through shell
-        // geometry (the Droste tile-shatter — docs/sdf-backlog.md Live defects). min with the published boundary gap
+        // geometry (the Droste tile-shatter). min with the published boundary gap
         // is an honest unbounding sphere of the TRUE field, so entry, TileEmpty, and the gap proofs stay sound; a
         // fold-free program publishes SDF_STEP_BOUND_NONE and this min is the identity.
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
@@ -966,8 +1014,8 @@ static const int DebugViewModeSlice = 7;
 // src/Puck.SdfVm/DebugViewModes.cs.
 static const int DebugViewModeMask = 8;
 static const int DebugViewModeOvershoot = 9;
-// Mode 10 (eval-count heatmap, perf-plan Phase 0 instrumentation: docs/reviews/2026-07-16-sdf-renderer-sota-perf-
-// plan.md). UNLIKE every other debug mode, this one needs the REAL final-shading epilogue to run (normal, soft
+// Mode 10 (eval-count heatmap — tallies primary-march evaluation cost per pixel by eye). UNLIKE every other debug
+// mode, this one needs the REAL final-shading epilogue to run (normal, soft
 // shadow, AO, coverage-AA) so the tallied count reflects actual per-frame cost — see useFinalShading below, which
 // folds this mode in alongside the final-image modes instead of skipping straight to a cheap switch-only case.
 static const int DebugViewModeEvals = 10;
@@ -1032,12 +1080,13 @@ bool worldFarBoundDisabled() {
     return false;
 #endif
 }
-// The F2 SHADOW LIGHT-SIDE EXIT A/B lever (perf plan Phase 5.1). Rides SdfFarFieldParams.y: 0 (the DEFAULT, an unset
-// frame) keeps softShadow's no-further-darkening early exit ACTIVE (the shipped behavior); 1 disables it so the shadow
-// march runs its full step budget/reach exactly as pre-F2 (the paired-run "off" side). Same SDF_SCREEN_SOURCES decode
-// discipline as worldFarBoundDisabled. KEEP IN SYNC with SdfFrame.DisableShadowFarExit and
-// SdfWorldEngine.PackScreenLights.
-bool worldShadowFarExitDisabled() {
+// The SHADOW LIGHT-SIDE ESCAPE-EXIT A/B lever. Rides SdfFarFieldParams.y: 0 (the DEFAULT, an unset frame) keeps
+// areaShadowVisibility's escape exit ACTIVE (the shipped behavior); 1 disables it so each shadow ray runs its full
+// step budget/reach (the paired-run "off" side). Same SDF_SCREEN_SOURCES decode discipline as worldFarBoundDisabled.
+// Under the BINARY visibility test the exit is EXACTLY SOUND — 1-Lipschitz clearance proves no occluder remains — so
+// this lever is now BIT-IDENTICAL rather than march-path: flipping it must not change a single pixel. KEEP IN SYNC
+// with SdfFrame.DisableShadowEscapeExit and SdfWorldEngine.PackScreenLights.
+bool worldShadowEscapeExitDisabled() {
 #ifdef SDF_SCREEN_SOURCES
     return (sdfScreenLights[SdfFarFieldParams].y > 0.5);
 #else
@@ -1089,7 +1138,7 @@ bool worldUseFastAmbientOcclusion() {
 #ifdef SDF_SCREEN_SOURCES
 // The soft-shadow GRID-CULL A/B lever (the sdf.shadowcull verb). Rides SdfGridObjParams.w: 0 (the DEFAULT, an unset
 // frame uploads 0) = ON — the grid-gathered shadow-ray march; 1 = OFF — the flat all-instances march (the ground-truth
-// reference the Post gate matches, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
+// reference the departed cull gate matched, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
 // and SdfWorldEngine.PackScreenLights.
 bool worldShadowCullEnabled() {
     return (sdfScreenLights[SdfGridObjParams].w < 0.5);
@@ -1097,7 +1146,7 @@ bool worldShadowCullEnabled() {
 
 // Build the shadow-ray candidate mask into sdfShadowMaskWords for a soft-shadow march from `origin` toward `direction`
 // out to `reach` (ShadowMaxDistance). Returns true when the mask is COMPLETE (the program fits SDF_SHADOW_MASK_WORDS and
-// packs an enabled grid) — softShadow then marches it under sdfShadowMaskActive; false => the caller marches the flat
+// packs an enabled grid) — areaShadowVisibility then marches it under sdfShadowMaskActive; false => the caller marches the flat
 // all-instances field. SUPERSET-PRESERVING: it sets a bit for every instance whose bound falls within the shadow ray's
 // PENUMBRA CONE (chord ShadowPenumbraChord = 1/ShadowSharpness — see that constant: an occluder softens the shadow out
 // to perpendicular distance boundRadius + traveled/ShadowSharpness, so the exact ray is NOT enough), so mapMasked over
@@ -1258,16 +1307,16 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
 #endif
 
 // De-scale a Lipschitz-CLAMPED field sample back to WORLD units — the ONE primitive genuinely shared by the three
-// shading-epilogue field walks (softShadow, calcAO, coverage-AA). mapMasked/map return the field pre-multiplied by the
+// shading-epilogue field walks (areaShadowVisibility, calcAO, coverage-AA). mapMasked/map return the field pre-multiplied by the
 // per-program stepScale (the <= 1-Lipschitz clamp); a consumer that COMPARES a sample against a world-space
 // quantity must divide that clamp back out FIRST, or its result tracks the program's stepScale bake instead of geometry
 // — the ~30%-darkening chamfer bug (stepScale = 1/sqrt(2)) a prior fix already closed. The three consumers each divide
 // it back for a DELIBERATELY DIFFERENT world-space comparison — this is the divide-back FOOT-GUN the docs warn re-fixers
 // about, so factor only the divide, never the surrounding intent:
-//   - softShadow  — the penumbra parabola's closest-approach miss distance (clearanceTrue); the RAW clamped sample is
-//                   kept for the step advance AND the `traveled` denominator (an under-step is conservative), so ONLY
-//                   the parabola's numerator/miss is de-scaled. The closest-approach parabola itself is softShadow-
-//                   EXCLUSIVE (calcAO is a fixed rung ladder, coverage a terminal ratio).
+//   - areaShadowVisibility — the light-side escape exit's clearance, compared against the world-space DIFFERENCE
+//                   (reach - traveled). The RAW clamped sample is kept for the step advance (an under-step is
+//                   conservative) AND for the occlusion test, which scales the THRESHOLD up instead. The returned
+//                   visibility is a dimensionless RATIO and is never de-scaled — that was fault 1.
 //   - calcAO      — the rung distance d in the (h - d) open-space deficit (a world-space rung minus a field sample).
 //   - coverage-AA — the open-space RISE (aheadField - terminalRadius), a world-space DIFFERENCE. It deliberately does
 //                   NOT de-scale the coverage RATIO, which stays in the SAME clamped units as the footprint termination
@@ -1278,115 +1327,196 @@ float sdfDeScaleField(float clampedSample, float stepScale) {
     return (clampedSample / stepScale);
 }
 
-// A soft shadow toward the (directional) sun: a penumbra march of the field from the surface point up toward
-// the light, tracking the closest-approach ratio (ShadowSharpness · clearance / traveled) so grazing occluders cast a
-// soft penumbra. Uses the pixel's TILE instance mask — cheap (the same cull the primary march already narrowed) and it
-// captures self- and contact-shadows; distant inter-object occlusion (an occluder outside this tile) is the RT path's
-// TLAS-accelerated domain (sdf-world-rt-debug's lightShadow). The sun is above, so the infinite ground plane never
-// self-occludes an upward ray.
+#ifdef SDF_SHADOW_SAMPLER
+// The host-baked shadow sampler table (SdfShadowSamplerTables / Puck.Maths.SphericalCapSampleTable): 64 direction
+// numbers for the two-dimensional digital net, then 4096 azimuth (cos, sin) pairs, then 4096 (axial, radial) pairs.
+// Immutable after upload and rebuilt only when the sun's angular radius changes, so it is a construction-time
+// resource, never a per-frame one. Vulkan binding 48; register(t43) — the views SRV run is program t0 .. frame
+// instance grid t42, and Direct3D 12 assigns registers POSITIONALLY from the engine's viewsBindings array, so this
+// declaration and that array's order are one contract. KEEP IN SYNC with SdfWorldEngine.SamplerTableBindingIndex.
+[[vk::binding(48, 0)]] StructuredBuffer<uint> sdfSamplerTable : register(t43);
+// The temporal accumulator's history, PING-PONGED: entry i of half p lives at (p * imageExtent.x * imageExtent.y) + i.
+// One entry per NATIVE output pixel, addressed through worldShadowHistoryIndex — deliberately NOT per render pixel, so
+// a render-scale change moves which entries are touched without moving what any entry MEANS.
+#include "sdf-sampler.hlsli"
+
+// The TEMPORAL-ACCUMULATION A/B lever (and the estimator's kill switch): bit 0 of the accumulation push word. Set =>
+// each frame's raw ShadowSamplesPerPixel estimate is shaded directly, with no history read and no history write — the
+// paired-run "off" side, and what a gate pins when it needs a frame to be a pure function of its own inputs.
+bool worldShadowAccumulationEnabled() {
+    return (0u == (params.shadowAccumulation & 1u));
+}
+
+// The accumulator's RESET: the host raises it for the first frames of a freshly constructed engine, before the source
+// textures have carried a written alpha lane, so the recurrence never folds in an undefined value. Every later frame
+// leaves it clear and the history simply continues.
+bool worldShadowAccumulationReset() {
+    return (0u != (params.shadowAccumulation & 2u));
+}
+
+// The per-thread history lane, carried between the Stage 1 entry point (which owns the source texture) and renderView
+// (which owns the shading). Mirrors sdfEvalCount's per-thread-static pattern: the kernel seeds sdfShadowHistoryIn from
+// the pixel's retained alpha before shading and stores sdfShadowHistoryOut back into it after.
+static float sdfShadowHistoryIn = 0.0;
+static float sdfShadowHistoryOut = 0.0;
+
+// STOCHASTIC AREA-LIGHT SHADOW toward the sun. The sun is a DISC of angular radius SunAngularRadius, not a point, so
+// visibility at a surface point is the fraction of that disc the geometry leaves unoccluded. This estimates it by
+// tracing ShadowSamplesPerPixel independent BINARY rays into the disc and returning the unoccluded fraction — the
+// penumbra now comes from the sample DISTRIBUTION, not from a per-step closest-approach ratio.
 //
-// mapMasked returns the Lipschitz-CLAMPED distance (d_true · stepScale). Stepping with it is fine — an under-step is
-// conservative — but the penumbra ratio and the occlusion test COMPARE it against world-space quantities, so they must
-// divide the clamp back out. Without that, a program carrying any chamfer blend (stepScale = 1/√2) darkened every soft
-// shadow in the scene by ~30% for no geometric reason; a Displace/DomainWarp/eccentric-Ellipsoid program darkens more.
-// stepScale == 1.0 for an isometric program and x*1.0f == x to the bit, so those scenes stay byte-identical.
+// THE SAMPLER IS THE POINT (see sdf-sampler.hlsli). Directions come from a
+// two-dimensional digital net over GF(2), digitally shifted per pixel and index-shuffled by a nested dyadic
+// permutation. That gives four properties a float hash cannot:
+//   (a) PURE INTEGER — the sample selection is exclusive-or and odd multiplies, bit-identical across DXC targets by
+//       construction, with no float contraction for the two backends to disagree about;
+//   (b) PROVABLY STRATIFIED — a (0,2)-sequence puts exactly one point in every dyadic box, a theorem with a finite
+//       witness rather than an eyeball test; the gate that checked it exhaustively through order 14 is gone;
+//   (c) STATELESS — sample N is a pure function of N, so there is no generator state to snapshot and the no-random-
+//       state-in-simulation doctrine is sidestepped entirely rather than worked around;
+//   (d) SEEKABLE — indexing by the deterministic tick counter makes any frame resumable and replay-exact.
+// The disc map itself is a pure table lookup (host-baked, rounded once), so nothing on this path calls sqrt, rsqrt,
+// normalize, or trigonometry — none of which Vulkan requires to be correctly rounded.
+//
+// It uses the pixel's TILE instance mask exactly as the retired parabola march did — cheap (the same cull the primary
+// march already narrowed) and it captures self- and contact-shadows; distant inter-object occlusion (an occluder
+// outside this tile) is the RT path's TLAS-accelerated domain (sdf-world-rt-debug's lightShadow). The sun is above,
+// so the infinite ground plane never self-occludes an upward ray.
+//
+// FAULT 1 — THE RETURN VALUE IS A RATIO AND MUST NEVER BE DE-SCALED. mapMasked returns the Lipschitz-CLAMPED distance
+// (d_true * stepScale), and the historical fault was dividing an ABSOLUTE metric by stepScale where the metric did not
+// live in world units. This function returns hits/samples, a dimensionless fraction of solid angle: dividing it by
+// stepScale is meaningless and would darken every shadow in a chamfered program for no geometric reason. The ONLY
+// de-scaled quantity in the whole function is the escape exit's clearance, which is compared against a world-space
+// DIFFERENCE (reach - traveled) — the permitted case, and the same rule calcAO and the coverage metric follow.
+//
 // `stepScale` is the per-program Lipschitz clamp, HOISTED by renderView (one sdfStepScale() read shared across the lit
-// path) and passed in — the sample it divides back out of the penumbra ratio is world-space (see below).
-float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach) {
-    float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
-    float traveled = ShadowBias;
-    float result = 1.0;
-    float previousTrue = 1.0e20; // the previous sample's clearance, seeded large so the first step's closest-approach y is ~0.
+// path) and passed in.
+float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale, float reach, uint sampleIndex, uint2 pixel, uint viewIndex) {
     bool fastMarch = worldUseFastSoftShadowMarch();
-    bool farExit = !worldShadowFarExitDisabled(); // F2 no-further-darkening early exit (default ON; A/B lever = off)
+    bool escapeExit = !worldShadowEscapeExitDisabled(); // light-side early exit (default ON; A/B lever = off)
     reach = (fastMarch ? min(reach, FastShadowMaxDistance) : reach);
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
     float stepCeiling = (fastMarch ? FastShadowStepMax : ShadowStepMax);
     float farSlope = (fastMarch ? FastShadowStepFarSlope : ShadowStepFarSlope);
+    // The per-pixel decorrelation. The key packs the lattice site and mixes it with the view index; the packing is
+    // injective within sixteen bits and the mix is a bijection, so no two sites in one view share a key — and
+    // therefore no two share a digital shift. Both derivations are named bijections with closed-form inverses that
+    // Post re-derives, never tuned hashes.
+    uint pixelKey = sdfSamplerKey(pixel, viewIndex);
+    uint2 scramble = sdfSamplerScramble(pixelKey);
+    uint hits = 0u;
 
     [loop]
-    for (int step = 0; (step < stepBudget); step++) {
-        float clearance = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
+    for (uint sampleSlot = 0u; (sampleSlot < ShadowSamplesPerPixel); sampleSlot++) {
+        // The shuffle makes neighbouring pixels walk the SAME net in different orders, so the per-pixel error
+        // decorrelates spatially while every pixel still draws a genuine net. It must be the nested dyadic
+        // permutation and not a plain mix: a general bijection scatters this pixel's first 2^m draws across the whole
+        // index space and the drawn point set is not a net at all.
+        uint netIndex = sdfShuffleIndex(((sampleIndex * ShadowSamplesPerPixel) + sampleSlot), pixelKey);
+        float3 lightDirection = sdfSunDiscDirection(sdfDigitalNetSample2D(netIndex, scramble));
+        float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
+        float traveled = ShadowBias;
+        bool occluded = false;
 
-        sdfEvalCount += 1.0; // one march sample, regular or fast — both variants share this call site
+        [loop]
+        for (int step = 0; (step < stepBudget); step++) {
+            float clearance = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
 
-        if (clearance < (SurfaceEpsilon * stepScale)) {
-            return 0.0; // fully occluded
+            sdfEvalCount += 1.0; // one march sample, regular or fast — both variants share this call site
+
+            // KEPT VERBATIM from the retired march, in CLAMPED units on BOTH sides: the threshold is scaled up rather
+            // than the sample scaled down, so an isometric program (stepScale == 1) compares exactly as before.
+            if (clearance < (SurfaceEpsilon * stepScale)) {
+                occluded = true;
+
+                break;
+            }
+
+            // LIGHT-SIDE ESCAPE EXIT. The field is 1-Lipschitz along the ray, so the TRUE (de-scaled) clearance here
+            // bounds the whole remaining march from below: no point within (reach - traveled) of this sample can be a
+            // surface. For a BINARY test that is EXACTLY SOUND — the remaining march provably cannot find an occluder,
+            // so skipping it changes nothing. (The retired parabola's version of this exit was only MARCH-PATH sound:
+            // its running minimum could still be lowered by an undershoot the exit skipped. Replacing an estimator
+            // that has a continuum of outputs with one that has two upgrades the classification.) This is the ONLY
+            // sdfDeScaleField call in the shadow path, and it is comparing against a world-space DIFFERENCE.
+            if (escapeExit && (sdfDeScaleField(clearance, stepScale) > (reach - traveled))) {
+                break;
+            }
+
+            // KEPT VERBATIM. The floor keeps a near-tangent march from stalling (at the cost of stepping through
+            // occluders thinner than it), the ceiling keeps the march from striding past a grazing silhouette, and it
+            // is DISTANCE-PROPORTIONAL past ~4 units so a far unoccluded ray clears open space in fewer steps.
+            // FOLD-SAFE: the advance honors the published boundary gap (min) so a shadow ray cannot stride across a
+            // fold boundary the raw value lies about.
+            traveled += clamp(min(clearance, sdfMapStepBound), ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
+
+            if (traveled > reach) {
+                break;
+            }
         }
 
-        // Closest-approach refinement over the classic k*h/t penumbra term: treat the previous and current SDF samples
-        // as a local parabola and recover the PERPENDICULAR miss distance `d` at the estimated closest point BETWEEN
-        // samples (y = h^2/(2*ph), d = sqrt(h^2 - y^2)), which avoids step-frequency banding —
-        // same per-step cost bar two ops and a sqrt, no extra map() evals. LOAD-BEARING pin: y and d are WORLD-space,
-        // so the Lipschitz clamp is divided back out of the sample FIRST (clearanceTrue = clearance / stepScale) — the
-        // denominator keeps the RAW `traveled` exactly as the classic form did, so in the far limit (y->0,
-        // d->clearanceTrue) this reduces to k*clearance/(traveled*stepScale), and an isometric program
-        // (stepScale == 1) stays byte-identical. Mixing a scaled clearance into y/d darkens chamfered surfaces.
-        float clearanceTrue = sdfDeScaleField(clearance, stepScale);
-        float y = ((clearanceTrue * clearanceTrue) / (2.0 * previousTrue));
-        // Closest-point-behind guard: when the parabola places the estimated closest point AT OR BEYOND the
-        // current sample (y >= clearanceTrue — a tight graze followed by an opening field, or the degenerate first
-        // sample where previousTrue is seeded huge), d = sqrt(clearanceTrue^2 - y^2) collapses to 0 and result LATCHES
-        // to full occlusion (the black-speck band). Fall back to the classic k*clearanceTrue/traveled term for that
-        // sample instead of the parabola. In the far limit (y -> 0) the parabola already reduces to this term to the
-        // bit, so existing (isometric) shadows are unchanged — only the latch case flips.
-        float sample;
-
-        if (y >= clearanceTrue) {
-            sample = ((ShadowSharpness * clearanceTrue) / max(traveled, 1.0e-4));
-        }
-        else {
-            float d = sqrt(max(((clearanceTrue * clearanceTrue) - (y * y)), 0.0));
-            sample = ((ShadowSharpness * d) / max((traveled - y), 1.0e-4));
-        }
-
-        result = min(result, sample);
-
-        if (fastMarch && (result <= FastShadowDarknessCutoff)) {
-            return 0.0;
-        }
-
-        // F2 NO-FURTHER-DARKENING EARLY EXIT (perf plan Phase 5.1). `result` is a running MIN, so continuing can only
-        // DARKEN; exit as soon as the remaining march provably cannot lower it. The field is 1-Lipschitz along the ray,
-        // so for every future t' in (traveled, reach] the TRUE (de-scaled) clearance c' >= clearanceTrue - (t' - traveled)
-        // >= clearanceTrue - (reach - traveled) =: cMin. The classic penumbra term k*c'/t' (k = ShadowSharpness) is
-        // decreasing in t' along that floor, so its infimum over the remaining march is k*cMin/reach at t' = reach.
-        //   EXIT INEQUALITY:  ShadowSharpness*(clearanceTrue - (reach - traveled)) >= result*reach
-        //   <=>  clearanceTrue >= (reach - traveled) + result*reach/ShadowSharpness   (design §1b form)
-        // When it holds, cMin >= result*reach/k > 0, so (a) full occlusion (clearance -> 0) is impossible for the rest of
-        // the march and (b) the classic term never drops below `result`. This is SOUND vs the classic penumbra term AND
-        // vs the true continuous penumbra (physical remaining shadow >= k*cMin/reach >= result), so the exit never
-        // brightens a pixel above its correct soft-shadow value.
-        //   PARABOLA CAVEAT (why this is MARCH-PATH, not bit-identical): the Aaltonen closest-approach refinement above
-        // reports k*d/(t'-y), d = sqrt(c'^2 - y^2), y = c'^2/(2*prev). Holding c' fixed, that sample's infimum over the
-        // parabola regime (y < c') is 0 — reached as y -> c', i.e. prev -> c'/2, the near-radial-escape knife-edge just
-        // inside the y>=c fallback guard (per-step growth ratio c'/prev -> 2, the 1-Lipschitz cap). So NO finite clearance
-        // margin makes the parabola's worst case >= result: the strong (bit-identical) form does NOT close. Where the
-        // shipped march would take that undershoot past this exit, skipping it makes the pixel brighter than the full
-        // march but NOT brighter than truth (the undershoot is itself a shipped estimator artifact below the true
-        // penumbra k*cMin/reach). Classified MARCH-PATH (solidity + parity families gate it).
-        if (farExit && ((ShadowSharpness * (clearanceTrue - (reach - traveled))) >= (result * reach))) {
-            return result;
-        }
-
-        previousTrue = clearanceTrue;
-        // The step clamp: the floor keeps a near-tangent march from stalling (at the cost of stepping through
-        // occluders thinner than it), the ceiling keeps the penumbra from over-marching past a grazing silhouette. The
-        // ceiling is now DISTANCE-PROPORTIONAL (max(ShadowStepMax, traveled*ShadowStepFarSlope)): unchanged in the near
-        // field where the fixed ShadowStepMax dominates, relaxing only once the ray is far enough that its penumbra
-        // angular size shrinks — so a far unoccluded ray clears open space in fewer steps.
-        // FOLD-SAFE: the advance also honors the published boundary gap (min) so a shadow ray cannot stride across a
-        // fold boundary the raw value lies about; the penumbra SAMPLE above stays on the raw value (an occasional
-        // boundary overestimate lightens a penumbra ratio slightly — occlusion soundness comes from the stepping).
-        traveled += clamp(min(clearance, sdfMapStepBound), ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
-
-        if (traveled > reach) {
-            break;
-        }
+        hits += (occluded ? 0u : 1u);
     }
 
-    return result;
+    return ((float)hits / (float)ShadowSamplesPerPixel);
 }
+
+// TEMPORAL ACCUMULATION of the estimator. Folds this frame's raw estimate into the value the SAME WORLD POINT carried
+// last frame, found by projecting the point through the previous frame's camera basis. Returns the blended visibility
+// and leaves the new state in the history buffer's write half.
+//
+// WHY THIS IS SOUND ACROSS A RENDER-SCALE CHANGE. The lookup never assumes the two frames share a lattice: it derives
+// the previous frame's render extent from the PREVIOUS frame's own viewport row and maps the projected pixel back onto
+// the shared native slot grid. WorldViewComposer's mid-transition render-scale dip therefore costs nothing — which
+// matters, because a transition is precisely when a reset would be most visible.
+//
+// REJECTION IS ENUMERATED AND EXHAUSTIVE — behind the camera, off-screen, a degenerate previous camera, the entry
+// never written, an epoch mismatch (the host's explicit invalidation), or a camera-to-surface distance that disagrees
+// by more than ShadowAccumulationDepthTolerance (a disocclusion). Any of them starts a fresh history at this frame's
+// raw estimate, which is exactly the pre-accumulation behaviour for that pixel.
+//
+// DETERMINISM. Everything that crosses a frame boundary is an integer. The only floats involved are the projection
+// itself and the distance comparison, both of which are recomputed from scratch every frame rather than carried, so
+// the recurrence has no float accumulation to drift. The read and write halves are disjoint, so no invocation can
+// observe another invocation's write and the result is independent of thread scheduling.
+float worldAccumulateShadowVisibility(float sampled) {
+    // Eight-bit round-to-nearest of hits/samples. With ShadowSamplesPerPixel a power of two this is exact for the
+    // endpoints, but the rounding is written out anyway so the quantization is a stated rule rather than a property of
+    // the current constant.
+    uint sampledFixed = min((uint)((sampled * (float)ShadowAccumulationOne) + 0.5), ShadowAccumulationOne);
+
+    if (!worldShadowAccumulationEnabled()) {
+        sdfShadowHistoryOut = ((float)sampledFixed * (1.0 / (float)ShadowAccumulationOne));
+
+        return sampled;
+    }
+
+    uint historyFixed = min((uint)((sdfShadowHistoryIn * (float)ShadowAccumulationOne) + 0.5), ShadowAccumulationOne);
+    uint blended = sampledFixed;
+
+    if (!worldShadowAccumulationReset()) {
+        // V = (V * (2^k - 1) + Vs + 2^(k-1)) >> k. The bias is added before the shift, so the recurrence is symmetric
+        // about zero: a converged pixel cannot creep in either direction, and the fixed point makes it exact.
+        blended = (((historyFixed * ((1u << ShadowAccumulationShift) - 1u)) + sampledFixed) + (1u << (ShadowAccumulationShift - 1u))) >> ShadowAccumulationShift;
+        blended = min(blended, ShadowAccumulationOne);
+    }
+
+    sdfShadowHistoryOut = ((float)blended * (1.0 / (float)ShadowAccumulationOne));
+
+    return sdfShadowHistoryOut;
+}
+#else
+// Stage 1 is the only kernel that shades, so every other consumer of this header compiles the estimator away rather
+// than binding a sampler table it would never read. Fully lit is the correct neutral for those kernels.
+float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale, float reach, uint sampleIndex, uint2 pixel, uint viewIndex) {
+    return 1.0;
+}
+// Likewise the accumulator: no estimator to accumulate, and no source texture to carry a history lane.
+float worldAccumulateShadowVisibility(float sampled) {
+    return sampled;
+}
+#endif
 // Normal-ladder ambient occlusion (calcAO): from the hit, step a short ladder of fixed rungs OUTWARD along
 // the surface normal; at each rung compare the distance expected to travel (h) against what the field actually reports
 // (d) — where nearby geometry crowds the normal the field under-reports and the deficit (h - d) accumulates as
@@ -1395,16 +1525,16 @@ float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirectio
 // the same spatial decay, and the gain re-tuned 3.0 -> 5.07 so the fully-occluded floor matches the 5-tap value to
 // ~0.01 (verified analytically over constant-factor and constant-gap occluder models) — a same-look AO at 60% of the
 // taps, and because calcAO is [unroll]ed the two dropped taps also relieve the views kernel's register pressure. Paid
-// ONLY on lit hits and tile-masked exactly like softShadow (a masked-out instance is as absent from a nearby tap as it
+// ONLY on lit hits and tile-masked exactly like areaShadowVisibility (a masked-out instance is as absent from a nearby tap as it
 // is from the hit itself). Purely local — no cones, no hemisphere, no history — but reads convincingly as contact
 // shadowing in creases and under overhangs.
 //
 // Applied to the AMBIENT/sky fill ONLY, never the sun: soft shadows govern direct light, and multiplying occlusion into
 // direct light double-darkens it (occlusion and shadow would both attenuate the same light twice). The (h - d)
 // subtract mixes a WORLD-space rung h with a mapMasked distance pre-scaled by the Lipschitz clamp, so d is divided
-// back to world units FIRST (d / stepScale) — the same divide-back softShadow applies; without it occlusion strength
+// back to world units FIRST (d / stepScale) — the same divide-back the shadow escape exit applies; without it occlusion strength
 // tracks each program's stepScale bake, not geometry.
-// `stepScale` is renderView's hoisted Lipschitz clamp (see softShadow): the (h - d) rung subtract mixes a world-space
+// `stepScale` is renderView's hoisted Lipschitz clamp (see areaShadowVisibility): the (h - d) rung subtract mixes a world-space
 // rung with a mapMasked distance, so d is divided back to world units by it first.
 float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
     float occlusion = 0.0;
@@ -1568,7 +1698,7 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     return traveled;
 }
 
-float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint) {
+float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint, uint2 pixel, uint viewIndex) {
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
@@ -1588,14 +1718,14 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // Tier-0 coverage AA: the CLAMPED field at the accepted hit (the terminal-step residual), captured by both march
     // paths at their hit-accept. The coverage metric derived from it in the epilogue must live in the SAME units as
     // the footprint-adaptive termination test (clamped radius vs hitThreshold) — do NOT divide by stepScale here.
-    // The divide-back that is correct for softShadow/calcAO (world-space geometric comparisons) is WRONG for this
+    // The divide-back that is correct for areaShadowVisibility/calcAO (world-space geometric comparisons) is WRONG for this
     // metric: de-scaling inflates the ratio by 1/stepScale and saturates solid hits, erasing the coverage signal.
     float terminalRadius = 0.0;
     // The footprint-adaptive hit threshold captured at the SAME accept step as terminalRadius (both march paths). The
     // epilogue's coverage = terminalRadius / hitThreshold, and `traveled` is frozen at the hit after the loop breaks, so
     // this equals a recompute of max(SurfaceEpsilon, pixelFootprint * traveled) there — capture once instead.
     float terminalHitThreshold = SurfaceEpsilon;
-    // The per-program Lipschitz clamp, read ONCE and shared by softShadow, calcAO, and the coverage-AA epilogue (each
+    // The per-program Lipschitz clamp, read ONCE and shared by areaShadowVisibility, calcAO, and the coverage-AA epilogue (each
     // divides it back out of a WORLD-space comparison — a penumbra ratio, an AO rung, the open-space rise; NOT the
     // coverage ratio itself, which lives in the same clamped units as the termination test). Hoisting the single
     // sdfStepScale() read here drops three redundant reads of the same segment-directory header lane.
@@ -1794,7 +1924,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             sunScale = environment.y;
 #endif
 
-            // Soft-shadow the SUN contribution (the ambient term still fills shadowed regions, so shadows read soft,
+            // Area-light shadow the SUN contribution (the ambient term still fills shadowed regions, so shadows read soft,
             // not black). Skip the march where the surface already faces away from the sun (sunDiffuse == 0) OR when the
             // engine-bench sdf.soft-shadows lever disables it (the sun then goes unshadowed — visually loud, intended).
             // The procedural screen branch below consumes sunDiffuse too, so this march is NOT dead there.
@@ -1824,12 +1954,19 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // position.w > 0.5) must drop out of every one of them identically. camera/AO/coverage marches keep the
                 // flag false, so they are untouched.
                 sdfShadowParticipationActive = true;
-                sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, shadowFallbackMask, stepScale, shadowReach);
+                float visibility = areaShadowVisibility(surfacePoint, normal, shadowFallbackMask, stepScale, shadowReach, params.sampleIndex, pixel, viewIndex);
                 sdfShadowParticipationActive = false;
                 sdfShadowMaskActive = false;
 #else
-                sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, instanceMaskBase, stepScale, shadowReach);
+                float visibility = areaShadowVisibility(surfacePoint, normal, instanceMaskBase, stepScale, shadowReach, params.sampleIndex, pixel, viewIndex);
 #endif
+
+                // TEMPORALLY ACCUMULATE, then apply. The raw two-sample estimate is a three-level quantity and must
+                // never reach the frame on its own — the accumulator is what turns a correct-but-stippled estimator
+                // into a smooth penumbra. It runs INSIDE this branch so a pixel the sun already misses neither reads
+                // nor writes history: its visibility is unobservable, and writing it would seed a stale entry a later
+                // frame could reproject onto.
+                sunDiffuse *= worldAccumulateShadowVisibility(visibility);
             }
 
             if (material >= SDF_SCREEN_MATERIAL) {
@@ -1839,7 +1976,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // SDF_SCREEN_MATERIAL + 1 + screenIndex and must never index the material table.
                 color = (screenContent(surfacePoint, time) * (ScreenCardBase + (ScreenCardSunTint * sunDiffuse)));
             } else {
-                // 3-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by softShadow above).
+                // 3-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by areaShadowVisibility above).
                 // Computed in the material branch so the emissive screen-card path never pays its five taps. The
                 // engine-bench sdf.ao lever forces occlusion to 1 (skipping the ladder's map() evals — creases brighten).
                 float ambientOcclusion = (worldAoDisabled()
@@ -1932,7 +2069,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             //       (opened <= 0 — the floor gates to 0 regardless of its terminal gap, the fault-2 leak); only a true
             //       silhouette, where the ray exits past the edge into open space, rises. The rise is a world-space
             //       geometric comparison, so de-scaling the DIFFERENCE by stepScale here is correct (same rule as
-            //       softShadow/calcAO) — fault 1 was de-scaling the absolute metric, not a difference.
+            //       areaShadowVisibility/calcAO) — fault 1 was de-scaling the absolute metric, not a difference.
             // Sky-blend ONLY (Tier 0); blending against farther GEOMETRY is the gated Tier-1 continuation, out of
             // scope here. Ordered dither runs AFTER this (the 8-bit store in sdf-world-views.comp), so the coverage
             // ramp quantizes last and is never dithered-then-smeared along the edge.
@@ -1955,7 +2092,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 sdfEvalCount += 1.0; // the open-space probe, only when the silhouette gate above admits it
 
                 // The open-space rise is a world-space geometric difference, so divide the Lipschitz clamp back out
-                // (same rule as softShadow/calcAO — fault 1 was de-scaling the ABSOLUTE coverage metric, not a difference).
+                // (same rule as areaShadowVisibility/calcAO — fault 1 was de-scaling the ABSOLUTE coverage metric, not a difference).
                 opened = smoothstep(0.0, (0.5 * probeSpan), sdfDeScaleField((aheadField - terminalRadius), stepScale));
             }
 

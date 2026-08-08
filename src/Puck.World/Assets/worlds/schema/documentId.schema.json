@@ -1,0 +1,7 @@
+{
+  "description": "Gets the stable document id used when this world submits to another document.",
+  "type": [
+    "string",
+    "null"
+  ]
+}

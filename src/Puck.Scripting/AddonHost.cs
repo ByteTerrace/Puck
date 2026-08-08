@@ -8,9 +8,18 @@ namespace Puck.Scripting;
 
 /// <summary>
 /// Composes a <see cref="ScriptingEngine"/> and <see cref="WasmModuleLoader"/> and owns the addon instance
-/// set keyed by name — the object a consumer pumps each tick and the <c>addon</c> console verbs drive. A bad
-/// addon (missing file, bad bytes, bad export) loads faulted and never crashes the run. Takes ownership of the
-/// engine and disposes it (with every instance's store) on <see cref="Dispose"/>.
+/// set keyed by name — the object a consumer pumps each tick. A bad addon (missing file, bad bytes, bad
+/// export, or content that no longer matches a declared <c>moduleHash</c> pin) loads faulted and never
+/// crashes the run. Takes ownership of the engine and disposes it (with every instance's store) on
+/// <see cref="Dispose"/>.
+/// <para><b>Loading is not admitting.</b> <see cref="Add"/>, <see cref="Reload"/>, and
+/// <see cref="SetEnabled"/> all produce instances in the UNADMITTED phase of the two-phase mount (see
+/// <see cref="AddonInstance"/>): the consumer runs its own mount gates and calls
+/// <see cref="AddonInstance.Admit"/> before the first tick. A live-reload surface therefore owes the whole
+/// admit sequence, not just this call — <c>Puck.World</c>'s <c>WorldAddonRuntime.Reload</c>/<c>SetEnabled</c> are that
+/// surface, re-running the disclosure + <see cref="AddonInstance.Admit"/> sequence immediately after calling into this
+/// type — and a consumer's tick loop must still skip an enabled-but-unadmitted instance rather than tick it, as a
+/// defensive floor for any caller that reaches this type directly instead.</para>
 /// </summary>
 public sealed class AddonHost : IDisposable {
     private readonly Dictionary<string, AddonInstance> m_byName = new(comparer: StringComparer.Ordinal);
@@ -18,16 +27,22 @@ public sealed class AddonHost : IDisposable {
     private readonly ScriptingEngine m_engine;
     private readonly List<AddonInstance> m_instances = [];
     private readonly WasmModuleLoader m_loader;
+    private readonly IAddonChannelResolver m_channelResolver;
     private bool m_disposed;
 
     /// <summary>Initializes a host over an engine and loader.</summary>
     /// <param name="engine">The engine every addon store is created against; the host takes ownership.</param>
     /// <param name="loader">The module loader addons are compiled through.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="engine"/> or <paramref name="loader"/> is <see langword="null"/>.</exception>
-    public AddonHost(ScriptingEngine engine, WasmModuleLoader loader) {
+    /// <param name="channelResolver">The host channel table every addon's declared channel names are resolved
+    /// against at instantiation — supplied by the consumer because the table is lane knowledge this core
+    /// deliberately does not reference (see <see cref="IAddonChannelResolver"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="engine"/>, <paramref name="loader"/>, or <paramref name="channelResolver"/> is <see langword="null"/>.</exception>
+    public AddonHost(ScriptingEngine engine, WasmModuleLoader loader, IAddonChannelResolver channelResolver) {
         ArgumentNullException.ThrowIfNull(argument: engine);
         ArgumentNullException.ThrowIfNull(argument: loader);
+        ArgumentNullException.ThrowIfNull(argument: channelResolver);
 
+        m_channelResolver = channelResolver;
         m_engine = engine;
         m_loader = loader;
     }
@@ -53,7 +68,7 @@ public sealed class AddonHost : IDisposable {
         m_instances.Add(item: instance);
     }
 
-    /// <summary>Renders one line per addon: petname, content hash, slot, fuel budget, and state.</summary>
+    /// <summary>Renders one line per addon: petname, content hash, fuel budget, and state.</summary>
     /// <returns>A newline-joined description, or <c>"no addons"</c> when none are loaded.</returns>
     public string Describe() {
         if (m_instances.Count == 0) {
@@ -144,18 +159,6 @@ public sealed class AddonHost : IDisposable {
         return true;
     }
 
-    /// <summary>Returns the addon that exclusively owns <paramref name="slot"/>, if any.</summary>
-    /// <param name="slot">The roster slot to resolve.</param>
-    /// <returns>The owning addon, or <see langword="null"/> if the slot is unowned.</returns>
-    public AddonInstance? SlotOwner(int slot) {
-        foreach (var instance in m_instances) {
-            if (instance.Slot == slot) {
-                return instance;
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>Looks up an addon by name.</summary>
     /// <param name="name">The addon name.</param>
@@ -192,9 +195,8 @@ public sealed class AddonHost : IDisposable {
 
     private static string DescribeInstance(AddonInstance addon) {
         var petname = ContentPetname.From(hashHex: $"{addon.Hash.Value:x16}");
-        var slot = ((addon.Slot is int value) ? $"{value}" : "-");
 
-        return $"{petname}  {addon.Hash}  slot {slot}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
+        return $"{petname}  {addon.Hash}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
     }
     private static string StateLabel(AddonInstance addon) {
         return addon.State switch {
@@ -207,7 +209,19 @@ public sealed class AddonHost : IDisposable {
         try {
             var info = m_loader.Load(path: descriptor.ModulePath);
 
+            // Enforced exactly as Reload enforces it: a declared moduleHash pin is a boot-time integrity check,
+            // not decoration. A mismatch must produce a sticky, attributed load fault naming both hashes — the
+            // addon must never instantiate on unpinned content.
+            if ((descriptor.ModuleHash is { } pin) && !string.Equals(a: info.ContentHash.ToString(), b: pin, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                return new AddonInstance(
+                    descriptor: in descriptor,
+                    fault: new AddonFault(Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}", Kind: AddonFaultKind.HashMismatch),
+                    hash: info.ContentHash
+                );
+            }
+
             return new AddonInstance(
+                channelResolver: m_channelResolver,
                 descriptor: in descriptor,
                 engine: m_engine,
                 moduleInfo: info

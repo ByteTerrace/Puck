@@ -11,7 +11,7 @@ namespace Puck.Text;
 /// <param name="BindingMode">How the bound variable folds onto <see cref="BaseValue"/>.</param>
 public readonly record struct TextEffectParameter(
     float BaseValue,
-    uint VariableHash = 0,
+    ulong VariableHash = 0,
     TextEffectParameterBindingMode BindingMode = TextEffectParameterBindingMode.Multiplicative
 ) {
     /// <summary>Resolves the parameter against the current content-time channels.</summary>

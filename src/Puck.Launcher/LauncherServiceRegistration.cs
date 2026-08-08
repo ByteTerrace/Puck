@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Pacing;
@@ -19,7 +20,9 @@ public static class LauncherServiceRegistration {
     /// <param name="services">The service collection.</param>
     /// <param name="bindings">The physical-input bindings folded into snapshots.</param>
     /// <returns>The same service collection.</returns>
-    public static IServiceCollection AddFixedStepSimulation<TSimulation>(this IServiceCollection services, IInputBindings bindings)
+    public static IServiceCollection AddFixedStepSimulation<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSimulation
+    >(this IServiceCollection services, IInputBindings bindings)
         where TSimulation : class, IFixedStepSimulation {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(services);
@@ -31,11 +34,15 @@ public static class LauncherServiceRegistration {
             var slotResolver = sp.GetService<IInputSlotResolver>();
             var bindings = sp.GetRequiredService<IInputBindings>();
             var clock = sp.GetRequiredService<IInputClock>();
+            // REQUIRED, not optional: the mixer stamps every captured entry with the lane's acting identity, and there
+            // is no defensible fallback — synthesizing a seat from the slot number would attribute a claimant's action
+            // to the seat it displaced. A root that drives a simulation declares who its slots are.
+            var principalResolver = sp.GetRequiredService<ICommandPrincipalResolver>();
             var registry = sp.GetRequiredService<CommandRegistry>();
 
             return ((slotResolver is null)
-                ? new InputRouter(bindings: bindings, clock: clock, registry: registry)
-                : new InputRouter(bindings: bindings, clock: clock, registry: registry, slotResolver: slotResolver));
+                ? new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry)
+                : new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, slotResolver: slotResolver));
         });
 
         return services;
@@ -46,10 +53,36 @@ public static class LauncherServiceRegistration {
     /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
     /// <c>INativeWindowFactory</c> the composition root supplies. The composition root supplies a backend (e.g.
     /// <c>AddVulkanPresenter</c>, which also provides the default root <see cref="IHostContext"/>), the native windowing
-    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, a <see cref="BindingCommandSource"/> (the
-    /// key bindings the pump reads), and any engine-specific <see cref="ICommandModule"/>s.</summary>
+    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, the <see cref="IInputBindings"/> the
+    /// router folds physical input through, and any engine-specific <see cref="ICommandModule"/>s.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {
+        AddLauncherTerminalShared(services: services);
+        services.AddHostedService<LauncherWindowHostedService>();
+        AddStandardInputReader(services: services);
+
+        return services;
+    }
+
+    /// <summary>The headless twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
+    /// <see cref="HeadlessTickHostedService"/> paces the fixed step instead of <see cref="LauncherWindowHostedService"/>
+    /// — no graphics backend, no platform windowing, no <see cref="IRenderNode"/> ever resolved. A composition root
+    /// calls this INSTEAD OF <see cref="AddLauncherTerminal"/> (never both) when its boot shape has no presentation
+    /// composed.</summary>
+    /// <param name="services">The service collection.</param>
+    public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services) {
+        AddLauncherTerminalShared(services: services);
+        services.AddHostedService<HeadlessTickHostedService>();
+        AddStandardInputReader(services: services);
+
+        return services;
+    }
+
+    // The registrations both boot shapes share: the terminal baton, the command pump (registry/stdin/shell), and the
+    // capability aggregation — everything AddLauncherTerminal registered before it added its own hosted service. Pure
+    // state/plumbing: nothing here opens a window, a GPU device, or a swapchain, so it is safe to register
+    // unconditionally in both AddLauncherTerminal and AddLauncherHeadlessTerminal.
+    private static void AddLauncherTerminalShared(IServiceCollection services) {
         // The terminal's held capabilities, both backed by the one TerminalControl: the baton (terminal
         // ownership/lifecycle) and input focus (the right to receive input). The backend's root host context
         // publishes them as HELD on the root context, so the root engine holds them via HoldsCapability and
@@ -84,7 +117,8 @@ public static class LauncherServiceRegistration {
         // Contribute the terminal's held capabilities (the baton + input focus) to the root host context, and
         // register the aggregator that assembles that context from every module's contributions — the device
         // capability from whichever graphics backend is composed in, plus these — so neither side references
-        // the other. Registered with TryAdd so a composition root may publish its own root context instead.
+        // the other. Registered with TryAdd so a composition root may publish its own root context instead. A
+        // headless boot never contributes a device capability, so IHostContext ends up carrying only these two.
         services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
             CapabilityType: typeof(IInputFocus),
             Instance: sp.GetRequiredService<IInputFocus>(),
@@ -142,26 +176,28 @@ public static class LauncherServiceRegistration {
                 registry: provider.GetRequiredService<CommandRegistry>()
             );
         });
+        // The shell pumps TEXT only. Physical input has one capture point (the InputRouter's per-tick mixer), which is
+        // where a signal becomes deterministic state carrying a stamped principal; there is no second, frame-driven
+        // dispatch path for a producer to register into.
         services.TryAddSingleton(implementationFactory: static sp => new CommandShell(
-            // Any source registered as ICommandSource (e.g. the gamepad source) is pulled each frame alongside
-            // the keyboard and text sources; the keyboard/text sources are registered by concrete type, so they
-            // are not double-added here.
-            additionalSources: sp.GetServices<ICommandSource>(),
-            bindingSource: sp.GetRequiredService<BindingCommandSource>(),
-            registry: sp.GetRequiredService<CommandRegistry>(),
             textSource: sp.GetRequiredService<TextCommandSource>()
         ));
 
-        // The terminal's own command surface (just `quit`, which drives the baton) and the two hosted
-        // services: the window/run loop and the stdin reader.
+        // The terminal's own command surface (just `quit`, which drives the baton). The fixed-step/tick hosted
+        // service AND the stdin reader are added by the CALLER (AddLauncherTerminal / AddLauncherHeadlessTerminal),
+        // in that relative order — the generic host starts IHostedServices in REGISTRATION order, and the fixed-step
+        // pump starting before the stdin reader (not after) is the ORIGINAL AddLauncherTerminal's own order; adding
+        // the reader here (ahead of the caller's own hosted service) would flip it.
         services.AddSingleton<ICommandModule, TerminalCommandModule>();
-        services.AddHostedService<LauncherWindowHostedService>();
+    }
+
+    // The stdin reader — registered by both AddLauncherTerminal and AddLauncherHeadlessTerminal, AFTER their own
+    // fixed-step/tick hosted service, so host startup order matches AddLauncherTerminal's original shape exactly.
+    private static void AddStandardInputReader(IServiceCollection services) {
         services.AddHostedService(implementationFactory: static sp => new StandardInputReaderService(
             source: sp.GetRequiredService<TextCommandSource>(),
             threadName: "Puck.Launcher Stdin Reader"
         ));
-
-        return services;
     }
 
     /// <summary>Registers the generic backend switch: it fronts every contributed <see cref="SurfacePresenterDescriptor"/>

@@ -5,6 +5,8 @@
 #ifndef SDF_VM_HLSLI
 #define SDF_VM_HLSLI
 
+#include "sdf-isa.hlsli"
+
 // Program word stream (each element one uint4 = 16 bytes). A read-only StructuredBuffer. On Vulkan it is the
 // storage buffer at set 0, binding 1 (what the backend's descriptor layout expects); on DirectX it is an SRV at
 // t0 (DirectXGpuPipelineFactory's storage-buffer SRV slot — the program is never written, the buffer is on an
@@ -78,7 +80,7 @@
 // (an omitted instance's bound excludes every on-axis shadow sample, so its compose returns the accumulator to the
 // bit). Capped at SDF_SHADOW_MASK_WORDS words = the most instances the local mask can address; a larger program gathers
 // nothing and the caller marches the flat field instead. sdfShadowMaskActive gates sdfInstanceMaskWord onto this static
-// array for the duration of ONE softShadow call and is false everywhere else, so every OTHER map()/mapMasked consumer
+// array for the duration of ONE areaShadowVisibility call and is false everywhere else, so every OTHER map()/mapMasked consumer
 // (the primary march, normals, AO, coverage) is unchanged. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
 // shades, so only it pays the static array's per-invocation footprint (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
@@ -89,7 +91,7 @@ static bool sdfShadowMaskActive = false;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
 // Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). sdf-world.hlsli
-// flips it true for exactly the lifetime of ONE softShadow call, so sdfNextVisibleInstanceRange SKIPS any dynamic
+// flips it true for exactly the lifetime of ONE areaShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
 // False everywhere else (including the beam/instance-cull kernels, which define SDF_DYNAMIC_TRANSFORMS but never set it),
 // so the camera/AO/coverage enumerations are unchanged and a default-casts frame is byte-identical.
@@ -114,7 +116,7 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
     uint word = 0xFFFFFFFFu;
 
 #ifdef SDF_SCREEN_SOURCES
-    // The active shadow-ray mask OVERRIDES the device per-tile mask for one culled softShadow march (false everywhere
+    // The active shadow-ray mask OVERRIDES the device per-tile mask for one culled areaShadowVisibility march (false everywhere
     // else). A word past the cap reads 0, but the gather only ran because the program fit the cap, so a real instance
     // word is never past it. The `else` avoids a wasted device-buffer read while the shadow mask is live.
     if (sdfShadowMaskActive) {
@@ -445,7 +447,16 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // fold it — it emits a runtime OpExtInst Normalize — so spelling the folded value here keeps the single most
 // load-bearing shading vector (sunDiffuse, the shadow ray, sdfMaterialShade's half-vector) the SAME BITS on both
 // backends instead of "one compile-time constant, one driver rsqrt". Every kernel that lights a surface uses it.
+// The sun is a FRAME, not a single vector: the area-light shadow estimator samples a disc around the direction, so it
+// needs two tangents as well. All three are pinned as hex-exact float32 literals for the same reason the direction is
+// — a runtime cross/normalize here would be one compile-time constant on DXIL and a driver rsqrt on SPIR-V, and the
+// sampled directions would differ between backends before the march even starts. Computed host-side once from the
+// float32 direction against the +Z axis (tangent = normalize(Z x sun), bitangent = normalize(sun x tangent)) and
+// pasted; the residual non-orthonormality is ~2e-8, far below the disc's 0.11 rad aperture. Both DXC backends must
+// read these identical bits.
 static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201);
+static const float3 SdfSunTangent = float3(asfloat(0xBF56EE12u), asfloat(0x3F0B1284u), asfloat(0x00000000u));
+static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8C72F2u), asfloat(0x3F71F330u));
 
 // --- primitives ---
 #define SDF_SHAPE_BOX          0u
@@ -524,11 +535,19 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // and so which screen source slot (0..7) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
 #define SDF_SCREEN_MATERIAL 65535
+#define SDF_ISA_ERROR_MATERIAL (-1) // sdfMaterialLoad decodes this as emissive diagnostic magenta.
 
 struct SdfHit {
     float distance;
     int material;
 };
+
+SdfHit sdfIsaErrorHit() {
+    SdfHit result;
+    result.distance = 0.0;
+    result.material = SDF_ISA_ERROR_MATERIAL;
+    return result;
+}
 
 float3 rotatePointByInverseQuaternion(float3 p, float4 q) {
     float3 u = -q.xyz;
@@ -1860,6 +1879,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint worldSegmentOffset = sdfProgramLayout.worldSegmentOffset;
     bool hasInstances = sdfProgramLayout.hasInstances;
 
+    if (instanceCount > SDF_MAX_INSTANCES) {
+        return sdfIsaErrorHit();
+    }
+
     // The merge cursors (instanced programs only): the next always-evaluated WORLD segment, and the visible-instance
     // enumeration (current mask word + remaining bits, the in-progress instance's [instanceSegment, instanceSegmentEnd)
     // range). SDF_SEGMENT_NONE = exhausted on either side. The mask cursor starts "before word 0" (0xFFFFFFFFu, 0u),
@@ -2514,6 +2537,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #endif
+                default: {
+                    return sdfIsaErrorHit();
+                }
             }
 
             // The SHARED BLEND TAIL (SHAPE + POP_FIELD). The material winner uses the SAME strict compares a shape does —
@@ -2539,7 +2565,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     //
     // CAVEAT for consumers: the returned distance is scaled. Take a STEP with it freely, but a consumer that COMPARES it
     // against a world-space quantity (a penumbra ratio, a footprint threshold) must divide the clamp back out — see
-    // sdfStepScale() and softShadow in sdf-world.hlsli.
+    // sdfStepScale() and areaShadowVisibility in sdf-world.hlsli.
     result.distance *= stepScale;
     // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
     // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
@@ -2631,6 +2657,11 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     uint instanceCount = sdfProgramLayout.instanceCount;
     uint worldSegmentOffset = sdfProgramLayout.worldSegmentOffset;
     bool hasInstances = sdfProgramLayout.hasInstances;
+
+    if (instanceCount > SDF_MAX_INSTANCES) {
+        gradient = float3(0.0, 0.0, 1.0);
+        return sdfIsaErrorHit();
+    }
 
     uint linearCursor = 0u;
     uint worldCursor = 0u;
@@ -3171,6 +3202,10 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
 #endif
+                default: {
+                    gradient = float3(0.0, 0.0, 1.0);
+                    return sdfIsaErrorHit();
+                }
             }
 
             if (composePending) {
@@ -3249,10 +3284,19 @@ struct SdfMaterialData {
 // The ONE material decode point (KEEP IN SYNC with the 2-uint4 layout above and SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
     uint4 header = sdfWords[0];
+    SdfMaterialData data;
+
+    if ((material < 0) || ((uint)material >= header.y)) {
+        data.albedo = float3(1.0, 0.0, 1.0);
+        data.emissive = 4.0;
+        data.specular = 0.0;
+        data.shininess = 1.0;
+        return data;
+    }
+
     uint materialBase = (header.w + (2u * (uint)material));
     float4 m0 = asfloat(sdfWords[materialBase]);
     float4 m1 = asfloat(sdfWords[materialBase + 1u]);
-    SdfMaterialData data;
 
     data.albedo = m0.rgb;
     data.emissive = m0.a;

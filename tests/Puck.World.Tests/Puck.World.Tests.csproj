@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The document/protocol/server surface this project exercises is read directly (public members only —
+             see CLAUDE.md's InternalsVisibleTo ruling), never through reflection, so AOT/trim analysis holds. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
+        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Puck.World (the composition root — client, presentation, the eight shipped worlds' RUNTIME asset
+             pipeline) is deliberately NOT referenced: it is the greenfield game, out of scope per
+             tests/Puck.World.Tests/README.md. This project's base document is COMPILER-MAINTAINED
+             (Fixtures.BuildDocument constructs a WorldDefinition directly in code) rather than read from any
+             shipped world file — no src/Puck.World/Assets path is read here at all. -->
+        <ProjectReference Include="..\..\src\Puck.World.Data\Puck.World.Data.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />
+    </ItemGroup>
+</Project>

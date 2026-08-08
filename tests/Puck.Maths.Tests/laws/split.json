@@ -1,0 +1,586 @@
+[
+  {
+    "Id": "split.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Multiply, both lanes, through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.QuadraticMultiply at (P, Q) = (0, \u002B1) over BigInteger, rounded once at shift 32",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.twin-quad",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedSplit.op_Multiply",
+        "Against": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at the (0, \u002B1) relation, integer lane",
+        "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) \u2014 the IDENTICAL internal member on both sides \u2014 plus the identical FusedArithmetic.RawMagnitude \u003C 2\u00B3\u00B9 gate",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin, on the same operand quad, in the same law",
+        "Against": "Oracles.QuadraticMultiply at (0, \u002B1) \u2014 the Q48 form accumulated exactly in BigInteger and rounded once per component at shift 32 (worklist A1). The third leg runs inside the twin rather than beside it, so the QuadraticAlgebra side no longer rests on the transitive argument that split.mul-vs-oracle sweeps a bit-identical stream",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.norm-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Norm"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.Norm, both lanes, through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.QuadraticNorm at (0, \u002B1) \u2014 U\u00B2\u00B72\u00B9\u2076 \u002B P\u00B7U\u00B7V \u2212 Q\u00B7V\u00B2 accumulated exactly in BigInteger and rounded once at shift 32",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.norm-twin-quad",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedSplit.Norm",
+        "Against": "QuadraticAlgebra\u003CFixedQ4816\u003E.Norm at the (0, \u002B1) relation, integer lane (NormFusedInteger) \u2014 a SUBJECT, which is why this case runs Laws.ScalarTwin rather than an oracle-shaped combinator",
+        "Shared": "FixedQ4816.RoundProductSum(long) and (Int128), the identical internal member, plus the identical FusedArithmetic.RawMagnitude \u003C 2\u00B3\u00B9 gate",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin, on the same operand pair, in the same law",
+        "Against": "Oracles.QuadraticNorm at (0, \u002B1) \u2014 U\u00B2\u00B72\u00B9\u2076 \u002B P\u00B7U\u00B7V \u2212 Q\u00B7V\u00B2 accumulated exactly in BigInteger and rounded once at shift 32 (worklist A2). Its ENVELOPE, measured rather than assumed: this operand stream reaches no exact tie of the shared FixedQ4816.RoundProductSum. Mutating that tie clause to round every half up leaves this case green while 21 others fail, two of them \u2014 split.twin-quad and split.mul-vs-oracle \u2014 on this same Split domain key and therefore on bit-identical operands. The tie direction is pinned at these operands by those two, not by this leg",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits, at Laws.cs\u0027s same-process scope",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.conjugate-involution",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Conjugate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedSplit.Conjugate is an involution over the full raw range, the two\u0027s-complement minimum included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.norm-multiplicative",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "N(a\u00B7b) == N(a) \u00B7 N(b) for FixedSplit on the exact bounded sublattice, with FixedQ4816.op_Multiply combining the norms \u2014 the domain is chosen so every product is exact and the identity holds bit-for-bit; a product of two norms can still leave the carrier, and both sides wrap alike. UNCERTAIN (sweep): all three operations are subjects, so an agreement reading is arguable",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.additive-group-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "U"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "V"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Addition, both components",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger sum, inline in Subjects.SplitAdditiveGroupExact \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Subtraction, both components",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger difference, inline in the same body \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the positional constructor and the two component readers round-trip at every swept raw, so a swapped positional order fails here rather than hiding inside a symmetric product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "AdditiveIdentity is default(FixedSplit), is a two-sided identity for op_Addition, and a \u2212 a is exactly it, at every swept raw including both two\u0027s-complement extremes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "negation agrees with subtraction from the additive identity at every swept raw, the asymmetric minimum included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MultiplicativeIdentity is (One, Zero) and is a two-sided identity for op_Multiply at every swept raw, exactly \u2014 both product sums become u\u00B72\u00B9\u2076 and v\u00B72\u00B9\u2076, so the single rounding has no remainder",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.div-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Division \u2014 three FusedArithmetic.AddProducts sums and two DivideProductSum restoring divisions over a SIGNED denominator",
+        "Against": "Oracles.SplitQuotient \u2192 Oracles.RoundDyadicRatio: the exact BigInteger numerators (uc\u2212vd, vc\u2212ud) over the exact INDEFINITE form c\u00B2 \u2212 d\u00B2, one ties-to-even rounding at shift 16, wrapped. The sign of the quotient is the sign of the rational, which is precisely the statement the signed DivideProductSum overload makes and the definite complex case never reaches. ENVELOPE: there is no narrow fast path here \u2014 unlike op_Multiply, Norm and Transform, every operand takes the full-width branch, so this case carries no gate at all, which is a performance asymmetry rather than a correctness one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor substitution is identical on both sides: Subjects.SplitDivisor maps the whole LIGHT CONE |u| == |v| \u2014 every zero divisor of the ring, not merely the zero element \u2014 onto the multiplicative identity, so every sampled quad reaches a defined comparison; the substituted set is pinned by split.unit-and-division",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.unit-and-division",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "IsUnit"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Transform"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "U"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "V"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.IsUnit \u2014 the two raw comparisons (U != V) \u0026\u0026 (U != \u2212V)",
+        "Against": "the exact BigInteger predicate u\u00B2 \u2260 v\u00B2, inline in Subjects.SplitUnitAndDivision \u2014 exact on both sides. The two spellings agree even at the asymmetric minimum, where the subject\u0027s unchecked negation is a fixed point and both readings say \u0027not a unit\u0027",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "IsUnit is exactly the invertibility predicate: op_Division by a non-unit throws DivideByZeroException and op_Division by a unit returns, at every swept element \u2014 including non-zero elements ON the light cone, which is the fact that separates this indefinite algebra from FixedComplex",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the hand-derived zero-divisor witness (One \u002B j)(One \u2212 j) is the additive identity exactly, and neither factor is zero \u2014 the ring\u0027s own doc statement, pinned",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "dividing any swept element by MultiplicativeIdentity returns it bit-for-bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the squeeze semantics are pinned at the two points where the arithmetic is exact: MultiplicativeIdentity transforms every swept vector to itself bit-for-bit, and the exact squeeze (2, 0) doubles both components with the wrap made explicit. split.transform-vs-oracle carries the value statement; this leg carries the MEANING",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.transform-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Transform"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.Transform, both lanes and both gates, through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.QuadraticMultiply at (P, Q) = (0, \u002B1) \u2014 the same Q48 form the split product\u0027s own law uses, one rounding per component at shift 32. The squeeze IS the split product applied to a vector; what this case adds is that the ARGUMENT ORDER is the documented one, so a transposed (u\u00B7x \u002B v\u00B7y) versus (u\u00B7y \u002B v\u00B7x) fails here",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "split.rapidity-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "FromRapidity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "IsUnit"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "U"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "V"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.FromRapidity over the twelve-row rapidity ladder \u2014 zero, ln 2, quarter/half/unit/one-and-a-half/double/triple/quadruple rapidity, and three negative mirrors",
+        "Against": "Subjects.SplitRapidityLadder, a constant expectation table of raws with a per-row tolerance",
+        "Shared": "",
+        "Citation": "hand-derived from the real hyperbolic cosine and sine of the value each RAPIDITY RAW denotes. The per-row tolerance is derived, not fitted: an argument error of at most 0.462\u00B7|\u03C6| \u002B 0.5 raws (the Log2E quantization plus the product\u0027s rounding) is a relative error of ln2/2\u00B9\u2076 per raw in the exponential, plus Exp2\u0027s own bound at these magnitudes \u2014 half a ULP from its closing narrowing and a relative term that is negligible this far below 2\u00B2\u2070, 0.51 ULP per term \u2014 rounded up to a power of two; the halving is folded into the exponent (2^(s\u22121) \u002B 2^(\u2212s\u22121)), so no halving rounding exists and the sum is exact. Sharing no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromRapidity(Zero) == MultiplicativeIdentity BIT-FOR-BIT: Exp2(\u22121) is exactly one half on both pre-halved calls \u2014 Exp2 is documented exact at whole exponents \u2014 so one half \u002B one half is One and one half \u2212 one half is Zero with no rounding anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ln 2 row is the ladder\u0027s anchor and needs no analysis to read: cosh(ln 2) is exactly 5/4 and sinh(ln 2) exactly 3/4, both representable on the Q16 grid, and Exp2 is documented exact at whole exponents",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sign contract: V is zero or carries the sign of the rapidity, and U is positive, at every ladder row \u2014 so a swapped cosh/sinh wiring fails on sign alone before any tolerance is consulted",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the Norm of each ladder row",
+        "Against": "the constant One together with the row\u0027s own derived norm tolerance",
+        "Shared": "",
+        "Citation": "cosh\u00B2 \u2212 sinh\u00B2 = 1 identically over the reals; the tolerance is 2\u00B7|U|\u00B7(the row\u0027s tolerance)/2\u00B9\u2076 rounded up, because quantizing cosh and sinh alone already moves the norm \u2014 which is why it is derived per row rather than shared",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.FromRapidity over the six-row saturation ladder \u2014 the recovered representable band at rapidity 33, exact \u00B1MaxValue saturation at 34 and its mirror, the first raw an un-widened wrapping scale once sign-flipped (6393185575658021189), and both carrier extremes; the norm identity is deliberately not consulted past the point where the backward exponential rounds to zero",
+        "Against": "Subjects.SplitRapiditySaturationLadder, a constant expectation table of raws with a per-row tolerance",
+        "Shared": "",
+        "Citation": "hand-derived at 200-bit precision for the rapidity-33 row (cosh and sinh round to the same raw, 7033440822424897606) with the T3 tolerance derivation at \u03C6 = 33 rounded up to 2\u2075\u00B9; the saturation rows are exact because past a scaled exponent of 48 the pre-halved terms are pinned to MaxValue and Zero with no rounding left. RULED: an un-widened wrapping scale answered a negative sine \u2014 or an all-zero pair \u2014 for every rapidity past raw 6393185575658021188, and halving after the sum capped the pair at 2\u2074\u2076, half the saturated value, while discarding the representable band up to rapidity ~33.27",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the scaled exponent is formed at Int128 width \u2014 where raw \u00D7 RawLog2E cannot wrap \u2014 and clamped to \u00B148 before narrowing, beyond the point where both pre-halved terms are constant, so the clamp changes no answer and no rapidity can flip the product\u0027s sign; the sum is exact because a term can only approach MaxValue once the other has rounded to Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the light-cone boundary the member's doc quotes: raw 726821 is still a unit off the cone, raw 726822 is the first exact U == V collision — the backward exponential 2^(−s−1) rounds to Zero once s exceeds 16, φ > 16·ln 2 ≈ 11.0904 — the negative mirror lands on the opposite diagonal, division by the collided pair is refused, and the collided pair times its own conjugate is the zero element",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedSplit.FromRapidity\u0027s exponential",
+        "Against": "FixedQ4816.Exp2 at the argument \u03C6\u00B7Log2E",
+        "Shared": "the whole exponential kernel; FromRapidity adds only the wide clamped argument scaling, the reflection, and the −1 exponent offsets that fold the halving in",
+        "Citation": "scalar.exp2-vs-series, which pins Exp2 against Oracles.EncloseExp2 \u2014 a ladder of 2^(2\u207B\u2071) factors built by repeated integer square roots, with no table and no polynomial",
+        "Absolute": ""
+      }
+    ]
+  }
+]

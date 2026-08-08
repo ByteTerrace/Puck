@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.World.Protocol;
@@ -19,6 +20,12 @@ internal enum EditorModeOutcome {
     AlreadyThere,
     NotJoined,
     Pending,
+
+    /// <summary>The seat's compiled profile declares no editor binding group, so the mode CANNOT be entered — its
+    /// verbs would have no page to resolve against. Reported rather than half-applied: the group flip is a
+    /// precondition of the mode, not a decoration on it, and a seat left "in editor mode" holding play-group bindings
+    /// is a silently wrong mode rather than a degraded one.</summary>
+    NoBindingGroup,
 }
 
 /// <summary>
@@ -35,18 +42,18 @@ internal enum EditorModeOutcome {
 /// apply window, <see cref="LatchTick"/> runs in the simulation's finish phase, and <see cref="ResolveRig"/> runs
 /// during frame produce — all on the launcher's window-pump thread, so no lock guards this state. Stick samples are
 /// two-phase latched (staged by each tick's routed dispatch, promoted by <see cref="LatchTick"/>) so per-frame camera
-/// integration between 32 Hz ticks reads a stable deflection instead of a consume-then-clear zero.</remarks>
+/// integration between 240 Hz ticks reads a stable deflection instead of a consume-then-clear zero.</remarks>
 internal sealed class WorldEditorSession {
     private const float DefaultFlySpeed = 8f;
-    private const float MinFlySpeed = 0.5f;
-    private const float MaxFlySpeed = 64f;
-    private const float SpeedStepFactor = 1.5f;
-    private const float LookRateRadiansPerSecond = 2.6f;
-    private const float MaxPitchRadians = 1.45f;
     private const float DefaultOrbitDistance = 6f;
-    private const float MinOrbitDistance = 1.5f;
+    private const float LookRateRadiansPerSecond = 2.6f;
+    private const float MaxFlySpeed = 64f;
     private const float MaxOrbitDistance = 60f;
+    private const float MaxPitchRadians = 1.45f;
+    private const float MinFlySpeed = 0.5f;
+    private const float MinOrbitDistance = 1.5f;
     private const float OrbitZoomRatePerSecond = 1.6f;
+    private const float SpeedStepFactor = 1.5f;
     // The sculpt zoom chord's step factor (D-pad Up/Down on the bench page; the numeric twin is editor.sculpt.zoom).
     private const float OrbitZoomStepFactor = 1.25f;
     // The orbit pivot sits at the avatar's chest height, matching the chase rig's target lift.
@@ -121,6 +128,15 @@ internal sealed class WorldEditorSession {
     /// <param name="slot">The 0-based seat slot.</param>
     public bool IsEditing(int slot) => (((uint)slot < (uint)m_seats.Length) && m_seats[slot].Active);
 
+    /// <summary>Returns the shared command refusal when a seat is not in editor mode.</summary>
+    public CommandResult? NotEditingError(int slot, string verb) {
+        if (IsEditing(slot: slot)) {
+            return null;
+        }
+
+        return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} is not editing — editor.enter first]");
+    }
+
     /// <summary>The seat's editor camera mode (meaningful while editing).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public EditorCameraMode Mode(int slot) => m_seats[SlotOrFirst(slot: slot)].Mode;
@@ -183,10 +199,22 @@ internal sealed class WorldEditorSession {
         seat.PriorSource = (controller?.Source ?? IntentSource.Live);
         // The diversion is the existing player.control contract, applied on both halves in one act so the mask lands
         // with no tick gap: the avatar idles honestly (a live tape or player.press still drives it — script outranks
-        // idle), and the transition drops held keys/lanes so nothing leaks into or out of the mode.
-        m_link.SubmitCommand(command: new WorldCommand.SetControl(Principal: WorldPrincipal.Console, EntityIndex: slot, Source: IntentSource.Idle));
+        // idle), and the transition drops held keys/lanes so nothing leaks into or out of the mode. Submitted under
+        // the slot's ACTUAL acting identity (see PlayerRoster.PrincipalOf) — never a hardcoded Console — so reaching
+        // Enter through a bound gesture on a slot an addon holds no grant over hits the SAME Drive/body:slot check any
+        // other authority command does and is dropped, instead of laundering through Console's seeded Drive/all. An
+        // ordinary, unclaimed seat reports its own WorldPrincipal.Seat here, which already carries that grant, so
+        // local play is unchanged.
+        // THE GROUP FLIP IS A PRECONDITION, so it is attempted BEFORE anything else mutates. A profile that declares
+        // no editor group (an overlay renamed or dropped it) makes the mode unenterable: its verbs would resolve
+        // against the play page, so the seat would sit "in editor mode" driving an avatar. The return value used to be
+        // discarded here, which is exactly how that became silent.
+        if (!m_bindings.SetActiveGroup(slot: slot, group: WorldEditorBindings.GroupId)) {
+            return EditorModeOutcome.NoBindingGroup;
+        }
+
+        m_link.SubmitCommand(command: new WorldCommand.SetControl(Principal: m_roster.PrincipalOf(slot: slot), EntityIndex: slot, Source: IntentSource.Idle));
         controller?.SetIntentSource(source: IntentSource.Idle);
-        _ = m_bindings.SetActiveGroup(slot: slot, group: WorldEditorBindings.GroupId);
         seat.Active = true;
         seat.SeedPending = true;
         seat.Mode = EditorCameraMode.Fly;
@@ -216,7 +244,8 @@ internal sealed class WorldEditorSession {
         }
 
         Deactivate(slot: slot, seat: seat);
-        m_link.SubmitCommand(command: new WorldCommand.SetControl(Principal: WorldPrincipal.Console, EntityIndex: slot, Source: seat.PriorSource));
+        // Same identity fix as Enter: the acting principal, not a hardcoded Console.
+        m_link.SubmitCommand(command: new WorldCommand.SetControl(Principal: m_roster.PrincipalOf(slot: slot), EntityIndex: slot, Source: seat.PriorSource));
         m_roster.Seat(slot: slot)?.SetIntentSource(source: seat.PriorSource);
 
         return EditorModeOutcome.Applied;
@@ -373,7 +402,9 @@ internal sealed class WorldEditorSession {
         var seat = m_seats[slot];
 
         if (seat.SeedPending) {
-            var (chaseEye, chaseTarget, _) = chase.Resolve(anchor: in anchor, time: time);
+            var clock = new SdfCameraClock(PresentationSeconds: time, AuthoritativeTick: 0UL);
+
+            var (chaseEye, chaseTarget, _) = chase.Resolve(anchor: in anchor, clock: in clock);
 
             seat.Eye = chaseEye;
             SetLookToward(seat: seat, target: chaseTarget);
@@ -426,9 +457,9 @@ internal sealed class WorldEditorSession {
         var look = seat.ActiveLook;
 
         // Stick +X looks right = yaw decreases in the 0-looks-down-+Z convention; stick +Y looks up.
-        seat.Yaw -= (Response(value: look.X) * LookRateRadiansPerSecond * deltaSeconds);
+        seat.Yaw -= ((Response(value: look.X) * LookRateRadiansPerSecond) * deltaSeconds);
         seat.Pitch = Math.Clamp(
-            value: (seat.Pitch + (Response(value: look.Y) * LookRateRadiansPerSecond * deltaSeconds)),
+            value: (seat.Pitch + ((Response(value: look.Y) * LookRateRadiansPerSecond) * deltaSeconds)),
             min: -MaxPitchRadians,
             max: MaxPitchRadians
         );
@@ -439,7 +470,7 @@ internal sealed class WorldEditorSession {
         var right = Vector3.Normalize(value: Vector3.Cross(vector1: forward, vector2: Vector3.UnitY));
         var move = seat.ActiveMove;
         var vertical = ((seat.AscendHeld ? 1f : 0f) - (seat.DescendHeld ? 1f : 0f));
-        var velocity = ((forward * Response(value: move.Y)) + (right * Response(value: move.X)) + (Vector3.UnitY * vertical));
+        var velocity = (((forward * Response(value: move.Y)) + (right * Response(value: move.X))) + (Vector3.UnitY * vertical));
 
         seat.Eye += (velocity * (seat.Speed * deltaSeconds));
         seat.Rig.Eye = seat.Eye;
@@ -451,14 +482,14 @@ internal sealed class WorldEditorSession {
     private static void AdvanceOrbit(Seat seat, Vector3 pivot, float deltaSeconds) {
         var move = seat.ActiveMove;
 
-        seat.OrbitYaw -= (Response(value: move.X) * LookRateRadiansPerSecond * deltaSeconds);
+        seat.OrbitYaw -= ((Response(value: move.X) * LookRateRadiansPerSecond) * deltaSeconds);
         seat.OrbitPitch = Math.Clamp(
-            value: (seat.OrbitPitch + (Response(value: move.Y) * LookRateRadiansPerSecond * deltaSeconds)),
+            value: (seat.OrbitPitch + ((Response(value: move.Y) * LookRateRadiansPerSecond) * deltaSeconds)),
             min: -MaxPitchRadians,
             max: MaxPitchRadians
         );
         seat.OrbitDistance = Math.Clamp(
-            value: (seat.OrbitDistance * MathF.Exp(x: (-Response(value: seat.ActiveLook.Y) * OrbitZoomRatePerSecond * deltaSeconds))),
+            value: (seat.OrbitDistance * MathF.Exp(x: ((-Response(value: seat.ActiveLook.Y) * OrbitZoomRatePerSecond) * deltaSeconds))),
             min: MinOrbitDistance,
             max: MaxOrbitDistance
         );
@@ -477,9 +508,9 @@ internal sealed class WorldEditorSession {
         var pivot = (m_workbench.Pivot(slot: slot) ?? seat.Eye);
         var look = seat.ActiveLook;
 
-        seat.OrbitYaw -= (Response(value: look.X) * LookRateRadiansPerSecond * deltaSeconds);
+        seat.OrbitYaw -= ((Response(value: look.X) * LookRateRadiansPerSecond) * deltaSeconds);
         seat.OrbitPitch = Math.Clamp(
-            value: (seat.OrbitPitch + (Response(value: look.Y) * LookRateRadiansPerSecond * deltaSeconds)),
+            value: (seat.OrbitPitch + ((Response(value: look.Y) * LookRateRadiansPerSecond) * deltaSeconds)),
             min: -MaxPitchRadians,
             max: MaxPitchRadians
         );
@@ -616,6 +647,5 @@ internal sealed class WorldEditorSession {
         seat.AscendHeld = false;
         seat.DescendHeld = false;
     }
-
     private int SlotOrFirst(int slot) => (((uint)slot < (uint)m_seats.Length) ? slot : 0);
 }

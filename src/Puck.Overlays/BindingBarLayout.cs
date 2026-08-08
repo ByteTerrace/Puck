@@ -49,8 +49,13 @@ public readonly record struct BindingSlotPlacement(
 /// single-bar. No state, no rendering — indices in, placements out.
 /// </summary>
 public static class BindingBarLayout {
+    /// <summary>The number of slots a bar places — <see cref="SlotButtons"/>' length as a constant, so the binding
+    /// bar's channel reservation can be composed at compile time.</summary>
+    public const int SlotCount = 12;
+
     /// <summary>The physical buttons a bar's twelve slots represent, in slot order (the d-pad diamond, left
-    /// shoulder, left stick, the face diamond, right shoulder, right stick).</summary>
+    /// shoulder, left stick, the face diamond, right shoulder, right stick). Exactly <see cref="SlotCount"/>
+    /// entries.</summary>
     public static readonly GamepadButtons[] SlotButtons = [
         GamepadButtons.DpadUp,
         GamepadButtons.DpadRight,

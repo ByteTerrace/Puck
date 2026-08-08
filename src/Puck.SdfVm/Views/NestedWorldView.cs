@@ -12,13 +12,25 @@ namespace Puck.SdfVm.Views;
 /// frame of lag per hop, the same self-reference-safe TV-in-TV rule <see cref="ViewStack"/> enforces for every
 /// content kind).
 /// </summary>
+/// <remarks>
+/// ZERO construction sites in the buildable tree (unit 6b's constructor-chain census, 2026-08-02): the only callers
+/// ever built (a museum wallpaper fold, a Droste door, a demonstrative canary scene) lived in the quarantined
+/// <c>Puck.Demo</c>, which the repo's own doctrine never ports from — capabilities that lived only there are simply
+/// absent from <c>Puck.World</c>, with no plan of record bringing them over. This is deliberately NOT the dead-stack
+/// treatment, though: the destination is docs/vision.md's "recursion" note — a world document field/verb that lets a
+/// screen show another live, simulated world (the honest analogue is a second world document with its own server).
+/// That destination is real but UNPHASED — no unit owns building the document/verb seam yet, and vision.md says so
+/// plainly ("explicitly open and unsurveyed"). Recorded here rather than deleted, the same posture
+/// <see cref="Puck.SdfVm.Queries.IWorldQuery"/> takes beside its own named (and, unlike this one, phase-owned)
+/// destination: honest about being unconsumed today, not a claim of coverage that isn't there.
+/// </remarks>
 public sealed class NestedWorldView : IViewContent, IDisposable {
     /// <summary>The view's fixed render width — the native brick panel size (matches <see cref="SdfCameraView.DefaultWidth"/>).</summary>
     public const uint DefaultWidth = 160;
     /// <summary>The view's fixed render height.</summary>
     public const uint DefaultHeight = 144;
 
-    private readonly IServiceProvider m_services;
+    private readonly SdfViewGpuServices m_services;
     private readonly bool m_hostsOnDirectX;
     private readonly ISdfFrameSource m_frameSource;
     private readonly uint m_width;
@@ -27,13 +39,14 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
     private SdfWorldKernels? m_kernels;
 
     /// <summary>Wraps a nested world's own frame source as view content.</summary>
-    /// <param name="services">The application services (resolves the neutral GPU compute factories).</param>
+    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this view forwards
+    /// to its offscreen engine — resolved once at the composition root and stashed unchanged.</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="frameSource">The nested world's OWN frame source — captured fresh every <see cref="Resolve"/>,
     /// entirely independent of the host world's program/anchors/emitters.</param>
     /// <param name="width">The render width (default the native panel size).</param>
     /// <param name="height">The render height (default the native panel size).</param>
-    public NestedWorldView(IServiceProvider services, bool hostsOnDirectX, ISdfFrameSource frameSource, uint width = DefaultWidth, uint height = DefaultHeight) {
+    public NestedWorldView(SdfViewGpuServices services, bool hostsOnDirectX, ISdfFrameSource frameSource, uint width = DefaultWidth, uint height = DefaultHeight) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -56,10 +69,7 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
 
     /// <inheritdoc/>
     public nint Resolve(in ViewRenderContext context) {
-        if (
-            (m_services.GetService(serviceType: typeof(IGpuComputeServices)) is not IGpuComputeServices gpu) ||
-            !context.Host.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
-        ) {
+        if (!context.Host.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
             return 0;
         }
 
@@ -70,7 +80,7 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
             interpolationAlpha: (float)context.Host.InterpolationAlpha
         );
 
-        EnsureEngine(device: device, gpu: gpu, frame: frame);
+        EnsureEngine(device: device, gpu: m_services.Gpu, frame: frame);
         m_engine!.SubmitFrame(frame: frame);
 
         return m_engine.OutputImageViewHandle;
@@ -93,13 +103,13 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
 
         // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine / SdfCameraView.EnsureEngine —
         // GpuTimingControl.Shared, gated on the backend having registered the timing seam.
-        IGpuTimingPoolFactory? timingFactory = null;
-        IGpuTimingRecorder? timingRecorder = null;
-
-        if (ViewTiming.Enabled) {
-            timingFactory = (m_services.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory);
-            timingRecorder = (m_services.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder);
-        }
+        // WART PRESERVED BY NAME (unit 6b constructor-chain round): the timing bundle is resolved EAGERLY at the
+        // composition root regardless of arming state, but this engine only picks it up when ViewTiming.Enabled is
+        // true at THIS EnsureEngine call (once per engine lifetime) — a view whose engine builds with timing off
+        // never gains it until a device-lost rebuild re-runs EnsureEngine. Fixing this here would smuggle a behavior
+        // change into a pure restructuring; carried over unchanged from the retired IServiceProvider path.
+        var timingFactory = (ViewTiming.Enabled ? m_services.TimingFactory : null);
+        var timingRecorder = (ViewTiming.Enabled ? m_services.TimingRecorder : null);
 
         m_engine = new SdfWorldEngine(
             device: device,

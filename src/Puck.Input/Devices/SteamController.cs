@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Numerics;
 using Puck.Input.Hid;
 
@@ -44,8 +43,6 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
 
     // A freshly opened controller (especially a wireless slot) may not accept a feature write immediately, so each
     // setup command is retried briefly before giving up. Missing a write degrades a feature, never crashes.
-    private const int FeatureWriteAttempts = 50;
-    private const int FeatureWriteRetryDelayMilliseconds = 2;
     private const byte StateReportType = 0x01;                  // ValveInReport ucType for a controller-state report
     // ValveInReport ucType for a receiver pairing event; its single payload byte is the transition below.
     private const byte WirelessEventReportType = 0x03;
@@ -61,7 +58,6 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
     private const int AccelerometerOffset = 28;               // three int16 axes
     private const int GyroOffset = 34;                        // three int16 axes
     private const int MinimumStatePayload = 40;               // bytes required past the base to decode gyro
-    private const float StickDeadzone = 0.12f;
     private const float StickRange = 32768f;
     private const float TrackpadHalf = 32768f;
     private const float TrackpadRange = 65535f;
@@ -81,15 +77,11 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
     private const ushort HapticPulseCount = 40;                // spans ~one rumble-update cadence, re-fired to sustain
     private const byte HapticSideRight = 0;                    // pad indices are swapped for legacy reasons
     private const byte HapticSideLeft = 1;
-    // Coalesce equal-or-weaker rumble writes to a >=30 ms cadence so a per-tick streamer can't flood the link;
-    // stops, the first write, and any intensity increase always go through.
-    private const long RumbleWriteIntervalMilliseconds = 30L;
 
     private readonly IHidDevice m_device;
     private readonly byte[] m_featureBuffer;
     private readonly ImuOrientationTracker m_tracker = new();
-    private long m_lastRumbleSendTicks;
-    private float m_lastRumbleIntensity;
+    private RumbleThrottle m_rumbleThrottle;
 
     /// <summary>Initializes a new instance of the <see cref="SteamController"/> class.</summary>
     /// <param name="device">The opened HID device handle for the controller's vendor input interface.</param>
@@ -139,15 +131,7 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         buffer[2] = ((byte)payload.Length);
         Array.Copy(sourceArray: payload, sourceIndex: 0, destinationArray: buffer, destinationIndex: 3, length: payload.Length);
 
-        for (var attempt = 0; (attempt < FeatureWriteAttempts); ++attempt) {
-            if (m_device.TrySetFeatureReport(buffer: buffer)) {
-                return true;
-            }
-
-            await Task.Delay(millisecondsDelay: FeatureWriteRetryDelayMilliseconds, cancellationToken: cancellationToken);
-        }
-
-        return false;
+        return await HidFeatureWriteRetry.TryWriteAsync(device: m_device, buffer: buffer, cancellationToken: cancellationToken);
     }
     // The synchronous variant used during disposal (the async loop has already stopped, but the handle is still
     // open) to best-effort restore lizard mode without awaiting.
@@ -168,20 +152,10 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
         var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
         var intensity = MathF.Max(x: low, y: high);
-        var now = Stopwatch.GetTimestamp();
 
-        // Throttle equal-or-weaker updates inside the 30 ms window; stops, the first write, and any intensity
-        // increase always go through (so rumble-off and stronger effects stay instant).
-        if ((0f < intensity) && (intensity <= m_lastRumbleIntensity) && (0L != m_lastRumbleSendTicks)) {
-            var elapsedMilliseconds = (((now - m_lastRumbleSendTicks) * 1000L) / Stopwatch.Frequency);
-
-            if (elapsedMilliseconds < RumbleWriteIntervalMilliseconds) {
-                return ValueTask.CompletedTask;
-            }
+        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+            return ValueTask.CompletedTask;
         }
-
-        m_lastRumbleIntensity = intensity;
-        m_lastRumbleSendTicks = now;
 
         // Map the low band to the left pad and the high band to the right pad. A pad with no intensity is left
         // untouched (the device has no "stop"; a finite pulse train simply lapses).
@@ -291,10 +265,10 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         var leftPadAndStick = (0 != (b2 & 0x80));  // both are reported this frame
         var rightPadTouched = (0 != (b2 & 0x10));
 
-        var accelerometer = ReadVector3Int16(report: report, offset: (dataStart + AccelerometerOffset), scale: AccelerometerGPerLsb);
-        var gyro = ReadVector3Int16(report: report, offset: (dataStart + GyroOffset), scale: GyroRadiansPerSecondPerLsb);
+        var accelerometer = GamepadNormalization.ReadVector3Int16(source: report, offset: (dataStart + AccelerometerOffset), scale: AccelerometerGPerLsb);
+        var gyro = GamepadNormalization.ReadVector3Int16(source: report, offset: (dataStart + GyroOffset), scale: GyroRadiansPerSecondPerLsb);
         // The stick reads the shared bytes only when the left pad is not the sole occupant of them.
-        var leftStick = ((!leftPadTouched || leftPadAndStick) ? ReadStick(report: report, offset: (dataStart + LeftPadOffset)) : Vector2.Zero);
+        var leftStick = ((!leftPadTouched || leftPadAndStick) ? SteamControllerInput.ReadStick(report: report, offset: (dataStart + LeftPadOffset)) : Vector2.Zero);
         // The right pad doubles as the right stick (absolute position while touched, recentring when released).
         var rightStick = (rightPadTouched ? ReadPadAsStick(report: report, offset: (dataStart + RightPadOffset)) : Vector2.Zero);
 
@@ -303,10 +277,10 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
             Buttons: buttons,
             Gyro: gyro,
             LeftStick: leftStick,
-            LeftTrigger: NormalizeTrigger(raw: report[(dataStart + LeftTriggerOffset)]),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(raw: report[(dataStart + LeftTriggerOffset)], threshold: TriggerThreshold, range: TriggerRange),
             Orientation: m_tracker.Update(gyroRadiansPerSecond: ToFusionFrame(sensor: gyro), accelerometerG: ToFusionFrame(sensor: accelerometer), deltaSeconds: ImuSampleSeconds),
             RightStick: rightStick,
-            RightTrigger: NormalizeTrigger(raw: report[(dataStart + RightTriggerOffset)]),
+            RightTrigger: GamepadNormalization.NormalizeTrigger(raw: report[(dataStart + RightTriggerOffset)], threshold: TriggerThreshold, range: TriggerRange),
             Touch0: (rightPadTouched ? ReadTouch(report: report, offset: (dataStart + RightPadOffset), id: 0) : default),
             Touch1: (leftPadTouched ? ReadTouch(report: report, offset: (dataStart + LeftPadOffset), id: 1) : default)
         );
@@ -323,29 +297,6 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
     // gravity term anchors pitch/roll regardless of the exact mapping.
     private static Vector3 ToFusionFrame(Vector3 sensor) {
         return new Vector3(x: sensor.X, y: sensor.Y, z: -sensor.Z);
-    }
-    private static Vector3 ReadVector3Int16(ReadOnlySpan<byte> report, int offset, float scale) {
-        return new Vector3(
-            x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) * scale),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) * scale),
-            z: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 4)..]) * scale)
-        );
-    }
-    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset) {
-        // int16 axes centered at 0; Y grows up already, so no flip. Apply a radial deadzone then rescale.
-        var stick = new Vector2(
-            x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) / StickRange),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) / StickRange)
-        );
-        var magnitude = stick.Length();
-
-        if (magnitude <= StickDeadzone) {
-            return Vector2.Zero;
-        }
-
-        var scaled = ((MathF.Min(x: magnitude, y: 1f) - StickDeadzone) / (1f - StickDeadzone));
-
-        return ((stick / magnitude) * scaled);
     }
     private static Vector2 ReadPadAsStick(ReadOnlySpan<byte> report, int offset) {
         // The absolute pad position mapped to a stick vector (no deadzone: a touch anywhere is an intentional aim).
@@ -365,13 +316,6 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
             IsActive: true,
             Position: new Vector2(x: ((x + TrackpadHalf) / TrackpadRange), y: (1f - ((y + TrackpadHalf) / TrackpadRange)))
         );
-    }
-    private static float NormalizeTrigger(byte raw) {
-        if (raw <= TriggerThreshold) {
-            return 0f;
-        }
-
-        return ((raw - TriggerThreshold) / (TriggerRange - TriggerThreshold));
     }
 
     /// <summary>

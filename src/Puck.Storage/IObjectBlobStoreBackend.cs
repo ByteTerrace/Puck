@@ -15,4 +15,10 @@ internal interface IObjectBlobStoreBackend {
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     );
+    ValueTask<IReadOnlyList<string>> ListAsync(
+        ObjectStorageTarget target,
+        Guid objectId,
+        string keyPrefix,
+        CancellationToken cancellationToken = default
+    );
 }

@@ -8,4 +8,4 @@ namespace Puck.Text;
 /// </summary>
 /// <param name="NameHash">The FNV-1a hash of the variable's name (see <see cref="TextEnrichmentTags"/>'s sigil parse).</param>
 /// <param name="Value">The variable's current value.</param>
-public readonly record struct TextEnrichmentVariable(uint NameHash, float Value);
+public readonly record struct TextEnrichmentVariable(ulong NameHash, float Value);

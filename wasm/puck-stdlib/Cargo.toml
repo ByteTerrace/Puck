@@ -1,0 +1,16 @@
+[package]
+name = "puck-stdlib"
+version = "0.1.0"
+edition = "2021"
+description = "Puck's addon WASM standard library — ABI machinery, typed Inputs/Outputs cell views, and the bit-exact FixedQ4816 mirror every addon builds on."
+publish = false
+
+# rlib, not cdylib: this crate is a library other crates depend on (puck-addon-default, and any
+# future addon crate that joins this workspace or vendors this path). A cdylib-only crate cannot be
+# a Cargo dependency at all, which is exactly the problem this split fixes.
+[lib]
+crate-type = ["rlib"]
+
+[dev-dependencies]
+# fixed_tests.rs and fixed_vectors.rs run on the host target (not wasm32-unknown-unknown) via
+# `cargo test --target <host-triple>`; no crates needed beyond the standard test harness.

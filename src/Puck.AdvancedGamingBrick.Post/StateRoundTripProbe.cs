@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -18,8 +19,6 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// The core is fully deterministic, so any mismatch is a genuine hole in the state coverage, not noise.
 /// </summary>
 internal static class StateRoundTripProbe {
-    private const ulong FnvOffsetBasis = 0xCBF29CE484222325ul;
-    private const ulong FnvPrime = 0x100000001B3ul;
     private const int RecordFrames = 6;
     private const int WarmupFrames = 8;
 
@@ -147,7 +146,7 @@ internal static class StateRoundTripProbe {
         return (true, $"{baseline.Length} frames identical after restore (final fb 0x{baseline[^1].Frame:X16})");
     }
     private static ulong FramebufferHash(AdvancedGamingBrickMachine machine) =>
-        Fnv(data: MemoryMarshal.AsBytes(span: machine.Framebuffer));
+        Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: machine.Framebuffer));
     private static ulong RegisterHash(AdvancedGamingBrickMachine machine) {
         Span<uint> registers = stackalloc uint[17];
 
@@ -157,15 +156,6 @@ internal static class StateRoundTripProbe {
 
         registers[16] = machine.Cpu.Cpsr;
 
-        return Fnv(data: MemoryMarshal.AsBytes(span: registers));
-    }
-    private static ulong Fnv(ReadOnlySpan<byte> data) {
-        var hash = FnvOffsetBasis;
-
-        foreach (var value in data) {
-            hash = ((hash ^ value) * FnvPrime);
-        }
-
-        return hash;
+        return Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: registers));
     }
 }

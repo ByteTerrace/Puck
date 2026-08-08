@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <!--
+        Puck.World.Server — the authoritative world runtime, physically split out of Puck.World (headless P1) so it
+        is structurally unable to reach presentation: no GPU backend, no renderer, and no Puck.Overlays. Its contact
+        field consumes Puck.Forge's canonical creation emitter and Puck.SdfVm's fixed-point field evaluator through
+        the resolved World.Data → Forge dependency chain.
+        It carries WorldServer (the fold, the mutation journal, snapshot emission), WorldGrants (the one grant
+        table), WorldPopulation/WorldBody (the entity table and its per-tick advance, including the fold plumbing),
+        WorldOwnedWorlds (the owned-world identity catalog), WorldAddonRuntime and its wire/receipt types
+        (WorldAddonWire), the collision/contact/solid-field support WorldBody advances against
+        (WorldColliderSet/IContactField/WorldSolidField), WorldHandleTable, and the true-deterministic-replay codec
+        (WorldReplayTape/WorldReplaySnapshot/WorldReplayVerdict/WorldReplayRefusal/WorldReplayCodecException).
+        Puck.World (the composition root) is the only consumer that also holds presentation; the console verbs that
+        drive this layer (replay.*, world.grant/revoke, etc.) stay there as thin wrappers.
+    -->
+    <ItemGroup>
+        <!-- The engine's deterministic time base (EngineTicks) and FixedStepContext — WorldServer/WorldBody's
+             per-tick advance is expressed against both, and neither is reachable transitively through the
+             references below (Puck.Hosting sits on Shared substrate, beside Puck.Commands/Puck.Input, not upstream
+             of any of them). -->
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Scripting.Simulation\Puck.Scripting.Simulation.csproj" />
+        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
+        <ProjectReference Include="..\Puck.World.Data\Puck.World.Data.csproj" />
+    </ItemGroup>
+</Project>

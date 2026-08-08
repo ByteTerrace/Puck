@@ -1,0 +1,448 @@
+# Puck.World.Server — the authoritative world runtime
+
+This project is the server half of the world game: the entity table, the tick
+step, the capability-grant authority model, the P7 TCP network transport, the
+addon guest runtime, player profiles and their storage, and the deterministic
+replay codec. It consumes
+the document and protocol shapes from
+[`Puck.World.Data`](../Puck.World.Data/README.md) and knows nothing about
+rendering or input devices — the same architecture lane profile that fences
+`Puck.World.Data` (see `build/Architecture.props`) denies this project every
+presentation and backend assembly. The composition root that hosts it is
+[`Puck.World`](../Puck.World/README.md).
+
+Project references: `Puck.World.Data`, `Puck.Scripting.Simulation` (the addon
+simulation pump), `Puck.Storage`, and `Puck.Hosting`.
+
+## The tick (`WorldServer.cs`)
+
+`WorldServer.Step` advances one exact fixed tick, in a pinned order its own
+XML documentation states: tick the mounted addon guests
+(`WorldAddonRuntime.TickAddons` — decodes and validates, applies nothing) →
+drain the buffered live edits (mutations and whole-document swaps) → drain the
+buffered intents → apply the guests' contributions
+(`WorldAddonRuntime.ApplyContributions`) → fold each human-occupied body's
+contributions (`FoldChannelContributions`) → settle per-body contention →
+advance every body → resolve the guests' reads
+(`WorldAddonRuntime.ResolveReads`) → deliver the tick's `WorldSnapshot`.
+
+Every non-intent submission arrives as one `SubmissionEnvelope` through
+`WorldServer.Submit` — a single ordered domain, drained in submission order.
+The same queue also carries the server-authored `PeerAdmitted` and
+`PeerDisconnected` entries; clients cannot submit those events. They apply
+through the population/grant doors and are exposed to the replay tape only
+after their point of effect.
+On the in-process loopback that drain runs inline on the tick thread before
+the `Submit*` call returns, so commands, grants, session requests, and queries
+apply synchronously at submit, while definition swaps and mutations buffer to
+the tick boundary. The practical consequence for scripts: within one stdin
+batch, a grant submitted before a command is visible to that command, and a
+mutation followed by an `Immediate` read is serialized by the console's drain
+barrier (see the console section of
+[`Puck.World`'s README](../Puck.World/README.md)). Results return through
+typed completions (`WorldSubmissionResult`), and deliveries fan out through
+`WorldOutputHub.cs`, which supports multiple subscribed sinks.
+
+**Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
+candidate document, revalidating the WHOLE document through
+`WorldDefinitionValidator`, and only then swapping, journaling, and rebuilding
+the changed section's derived state; a failure rejects loudly and changes
+nothing. The journal is the undo engine: `world.undo` restores the loaded base
+definition and deterministically replays the journal minus its tail through
+the same apply path — no per-mutation inverse exists. `world.save` writes a
+canonical session snapshot and compacts the journal (the saved definition
+becomes the new base). `world.reset`/`world.load`/`world.reload` are ONE
+rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
+sources — the server's own base, a different file, or a re-read of the
+current origin — that also wipes and re-seeds the ENTIRE runtime grant table
+(`WorldGrants.Reset`, replaying only the new document's own `Grants` section
+plus every admitted peer connection's re-minted admission grant; every other
+live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
+the journal length.
+
+**Steady-state performance contract.** The per-tick pipeline — intent fold,
+sim step, snapshot emission, binding resolution — allocates nothing; document
+and JSON work is confined to the boundaries (load, save, and mutation
+application), and a mutation rebuilds only the changed section's derived
+state, never the whole document's.
+
+## Simulation authority
+
+Every entry in the entity table is a simulated player advanced on the server
+from a `PlayerIntent` — no entity is pose-driven, and poses are never accepted
+from outside the simulation. Drivers (seats, console verbs, addon guests,
+authored producers, replay tapes) only produce inputs; poses flow out through
+the tick snapshot. Simulation state is `Puck.Maths` fixed point and exact
+engine-tick durations throughout — no wall clock, no RNG, no float. That
+determinism is a design contract verified by running and by the replay verbs
+below; no build gate enforces it for this game (see `CLAUDE.md` rule 3).
+
+A body's pose is always six-degrees-of-freedom (a `Vector3` position and a
+quaternion attitude); its motion model (`grounded` or `free`) decides how an
+intent integrates. Ways of moving are DATA: a `WorldKit` row in the world
+document names a motion program, tuning, producer parameter maps, and action bindings, and
+entities distribute across kit rows by the document's assignment policy. A new
+way of moving is a new row, not an engine enum.
+
+Each entity carries one `IntentSource` — what fills its intent gaps between
+scripted tape segments: `live` (the submitted stream), `idle` (hold still), or
+`producer:<name>` (an authored producer program declared by the selected kit). The per-tick merge rule is
+tape > submitted > producer > zero.
+
+## The entity table (`WorldPopulation.cs`, `WorldBody.cs`)
+
+Capacities are single-sourced in `WorldPopulationLimits`
+(`Puck.World.Data`): up to 128 authoritative bodies, of which indices 0–3 are
+the reserved local seats and the rest host simulated stand-ins and network
+peers. `WorldBody` owns one entry's integration, pose, tape, motion model, and
+action state. Bodies advance against the one contact-resolution seam
+`IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
+(document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
+Both include solid scene rows, screen frames, and the shapes emitted by solid
+creation placements. The field compiles those surfaces into one fixed-point
+signed-distance program. The analytic provider emits exact isotropically
+scaled spheres and world-axis bounds for other finite placement primitives;
+rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
+conservative there. A solid row participates in simulation, which is why
+mutating scene, screen, creation, or placement geometry is a real authority
+widening.
+
+A disconnected seat or peer does not drop its body on the spot — it PARKS
+(`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceTicks` ticks,
+retained pose/state and all, before `ReclaimExpiredParks` tears it down; a
+matching re-Join resumes the retained body instead of minting a fresh one.
+See [references/session-lifecycle.md](../../.claude/skills/puck-world/references/session-lifecycle.md)
+for the full contract.
+
+## Network transport (`WorldTcpHost.cs`, `WorldTcpWireFormat.cs`)
+
+`WorldTcpHost` is the P7 socket door: a TCP listener bound from `host.listen`
+(a document field the composition root also lets `--listen` reflect for one
+run). Per connection: the raw Hello handshake (`WorldProtocol.WireProtocolKey`
+via `WorldHelloDoor.TryAccept`, `Puck.World.Data`) runs off the tick thread —
+it touches no server state — then admission
+(`WorldServer.TryAdmitPeerConnection` → `WorldPopulation.TryAdmitRemotePeer`,
+refused by name when the 128-body table is full or the document's
+`networkPlayers` admission cap is already met), every subsequent frame
+(decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
+loopback and tape use), and disconnect
+(`WorldServer.DisconnectPeerConnection`) are marshaled onto the tick thread —
+`WorldServer`/`WorldPopulation`/`WorldGrants` carry no lock, so nothing may
+touch them from a connection's background reader directly.
+`WorldTcpHost.DrainPending`, called from `WorldServerStepShell.Step` before
+`WorldServer.Step`, is where that hand-off actually applies: one global FIFO
+for v1, no per-connection quotas or bounded-queue backpressure. A decoded
+payload's own embedded principal (Command/Session/Mutation each carry one,
+read directly by their handlers) is re-stamped with the connection's admitted
+`Peer` identity before it becomes an envelope — a handler reads the identity
+the door resolved, never the one the client's bytes claimed.
+
+v1 is strictly request-then-response per connection, so no correlation id
+travels on the wire; the downstream reply is a small NEW grammar
+(`WorldTcpWireFormat`) carrying exactly the Completion lane
+(`WorldSubmissionResult`, i.e. Ack/Session/Query) — never a streamed
+snapshot/definition/composition/lever (`WorldOutputHub`'s encoded lane stays
+a scaffold beyond this one lane). `Puck.World.WorldRemoteClient` is the
+`--connect` side: a minimal, self-contained stdin client speaking this same
+Hello + leaf-codec grammar directly, not a second composition graph.
+`Puck.World.WorldNetworkCommandModule`'s `world.peers` echoes the connection
+table this class owns.
+
+A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
+(`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
+silently reassign or deactivate a connected human's body — see "The entity
+table" above.
+
+## Principals and grants (`WorldGrants.cs`)
+
+Every write submission carries its acting `WorldPrincipal` — a seat, the
+console, a named addon guest, or a generation-bearing `Peer(index,
+generation)` — and one server-side table,
+`WorldGrants`, is the single place a write is authorized. A grant row is
+`(principal, capability, subject)` plus optional exclusivity, an untrusted
+principal's per-tick dispatch budget, and the co-driving reach/consent pair.
+Capabilities are `Drive`, `Observe`, `Control`, `Mutate`, and `Edit`
+(`Present` was deleted 2026-08-02 — "contribute to what is drawn" is
+`Mutate` over presentation-shaped sections); subjects are the `all`
+wildcard, `body:<n>`, `screen:<n>`, `section:<name>`,
+`state:<name>`, `composition` (the shared window-composition authority), or
+the two world-events-feed subjects `region:<name>`/`seat:<n>` (legitimate
+only for `Observe`), with a positive per-capability legitimacy rule
+(`WorldGrants.IsLegitimateSubject`) so a new subject shape is refused by
+default. `state:<name>` is the one subject that
+narrows BOTH mutation kind pairs over one named row — the whole-row
+`UpsertStateRow`/`RemoveStateRow` AND the per-cell `UpsertStateCell`/
+`RemoveStateCell` (a slot is a table with one key, so there is one row and
+one subject, never a separate `table:<name>`) — beneath its
+own section-level `Mutate` hold — `Edit` over the concrete row, checked a
+SECOND time at apply — rather than replacing it.
+
+**Two mask payloads, two types, never one lane with two readings.** A grant
+row may carry a `MutationKindMask` (`WorldGrant.KindMask`, ordinals from
+`WorldMutationKindCatalog`) on a `Mutate`/`section:<name>` row — the addon
+mutation seam's dispatch door — or on an `Edit`/`state:<name>` row, where it
+separates the per-cell writes from the whole-row re-authoring beneath one
+subject (`verbs:UpsertStateCell,RemoveStateCell` grants "bump the score"
+without "redefine the score"). It may instead carry a `DocumentWriteMask`
+(`WorldGrant.WriteMask`, `WorldDocumentWriteKind`'s `Set`/`Add`) on a
+`Mutate`/`state:<name>` row — the cross-document durable-state write-back
+channel `WorldOwnedWorlds.Decide` gates. `WorldGrants.CarriesKindMask` /
+`CarriesWriteMask` state which row shape carries which, positively and in
+one place; a mask offered on any other shape is refused by name. The two are
+distinct C# types because they were one `ulong` once, read under whichever
+vocabulary the row's subject kind implied — bit 0 meaning `UpsertKit` on a
+section row and `Set` on a state row. An ABSENT kind mask means FULL reach
+(opt-in narrowing beneath an already deny-by-default capability); an ABSENT
+write mask admits nothing (that channel's mask is what admits a foreign
+write at all). Both echo BY NAME through `world.grants` and `world.why`, in
+the same `verbs:`/`writes:` spelling that authors them, and a mask denial
+names the verb it denied.
+
+Local play seeds permissively at boot (seats and the console hold wide
+grants; addon guests hold nothing until granted), and a world document can
+additionally ship grant rows in its `grants` section, applied at boot through
+the same path the live `world.grant` verb uses. Every enforcement point asks
+the table before acting — the intent drain, command application, mutation
+application, whole-document swaps and undo, engagement, profile edits, and
+addon dispatch — and a denial is loud and data-shaped (a named
+`[world.grant denied: …]` line; the write drops). The read-back verbs are
+`world.grants`, `world.why`, and `player.channels`.
+
+Peer authority is never pre-seeded by index. Each admission or census
+reactivation bumps the slot's generation, scrubs stale-generation grants and
+engagement routes through the revoke door, then mints the new generation's
+default Control grant through the grant door. Admission and disconnect are
+tape-covered server events, so offline replay uses those same doors.
+
+For untrusted principals, authority travels as handles rather than names:
+`WorldHandleTable.cs` projects a principal's grant rows into per-instance
+slots (never a whole-domain designation), stamped with the minting principal
+and capability, and generation-checked so a revoked or re-sorted handle
+refuses on its next use with a distinct verdict. The campaign that designed
+this model, its rulings, and its open work are in
+[`docs/capability-channels-STATE.md`](../../docs/capability-channels-STATE.md)
+(read it first),
+[`docs/capability-channels-plan.md`](../../docs/capability-channels-plan.md),
+and the campaign ledger. This README is the reader-facing summary; the state
+document and the code outrank it on any point of disagreement.
+
+Two settled rulings worth restating here because their absence is invisible:
+ownership latching is unified through this table (screen engagement's
+occupancy included — do not invent a parallel ownership mechanism), and the
+authority decision is deliberately not modeled as a lattice or quotient
+(see the state document's "What is NOT algebra" entry).
+
+## Screen machines (`WorldMachineHost.cs`)
+
+Owner ruling, 2026-08-03: a booted `IScreenMachine` (a diegetic screen's
+cartridge/cabinet — `Puck.Abstractions.Machines`) is CORE state, not
+presentation-fed. `WorldMachineHost` — a peer DI singleton `WorldServer`
+takes as a constructor parameter, never a private field it builds, so the
+container disposes the machines it holds — owns boot, per-tick stepping,
+cable-linking, live reconfiguration, and memory-peek for every declared
+screen's machine, in EVERY boot shape including headless. Stepping runs
+inside `WorldServer.Step`, immediately after `WorldEngagement.FoldTick`, fed
+that tick's per-screen pads directly (`WorldEngagement.BuildPadSnapshot()`,
+in-process — no client/wire round-trip). `screen.insert`/`.eject`/`.select`/
+`.options`/`.link`/`.unlink` (`Puck.World.ScreenCommandModule`) submit a
+`WorldScreenOp` (`Puck.World.Data`) through the ordered submission domain
+(`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
+`Revoke` and checked against the ordinary grant table (`Control` over
+`screen:<n>`) before `WorldMachineHost` is touched; `Insert` and a
+Machine-magazine `Select` share one boot path (`TryBootMachine`) and are BOTH
+CAS-pinned (`sha256-64` of the exact bytes read, or the `"absent"` sentinel
+when the file could not be read at all) — a failed boot is reported as a
+failure, never a disguised success, and the pinned signature rides the tape
+REGARDLESS of whether the op succeeded (INCLUDING an unresolved engine —
+content is read/signed before engine resolution is even attempted, never
+left unpinned on that path), so a replay re-drive refuses by name if the
+file's on-disk state no longer matches what was recorded. Declared cable
+links (`WorldMachineHost.ReconcileLinks`) are established/torn down at
+construction (for a link declared in the boot document itself) AND on every
+`WorldServer.Install` (every live mutation and every whole-document
+rebuild) — never only once; the reconcile itself is two-phase and atomic
+per call (every stale-or-changed declared link tears down FIRST, complete,
+before anything (re-)establishes), so a re-shape that moves a screen from
+one declared link to another within the SAME reconcile always succeeds
+rather than silently failing while the old link still owns the screen.
+Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
+`replay.record`'s arm gate refuses on THREE latches, none sufficient alone:
+`WorldServer.AnyAddonEverPumped`, `AnyMachineEverPumped` (once any machine
+has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
+AT ALL, independent of stepping — screen ops apply synchronously, between
+fixed steps, so an insert/eject/select/options/link/unlink can change live
+host state before a single tick has run, which the other two latches would
+miss) — offline replay reconstructs a FRESH `WorldMachineHost` from the
+tape's embedded definition, so a machine's accumulated core state (or a
+screen op's effect) from before recording began can never be re-established,
+and the pose hash covers no machine state to catch the divergence.
+`Puck.World.WorldScreenBinder` is a
+pure reader of this type's outputs for presentation (framebuffer
+handle/light, `PublishFrame`) and still owns the genuinely presentation
+screen sources (test pattern, authored QR, webcam, compositor capture,
+jumbotron view) that are not this type's concern. `docs/capability-channels-STATE.md`'s
+DECIDED table accounts for the channel-carried ones; the list above is the
+current set.
+
+## The addon runtime (`WorldAddonRuntime.cs`)
+
+A `WorldAddonRow` in the world document's `addons` section is a data-only
+descriptor (name, module path, content hash, fuel budget, enabled, requested
+capabilities). Mounting happens at boot: the runtime compiles each enabled
+row's WebAssembly module through `Puck.Scripting`, pins its content hash, and
+prints one capability-disclosure line per guest naming what its manifest
+requested versus what the grant table actually holds — granted, withheld, and
+holds-beyond-manifest. Requesting is not receiving: deny-by-default holds
+regardless of the manifest, and authority materializes only where the row
+asked AND the table grants (a hold outside the manifest mints no handle).
+`WorldAddonWire.cs` is the fixed engine-owned mapping from a guest's validated
+acts onto `PlayerIntent` values. `world.addon.mount`/`world.addon.unmount`
+(P5) live-mount a NEW guest, or fully remove one, through the ordered
+submission domain (`WorldSubmissionPayload.AddonLifecycle`, buffered to the
+tick boundary through the same `DrainPendingOps` door a document mutation
+drains through) and are captured on the replay tape through their own leaf
+codec — a recorded mount/unmount RE-EXECUTES on `replay.verify`, so they are
+not refused while a recording is armed. `world.addon.reload`,
+`world.addon.enable`, and `world.addon.disable` are the older, still-live
+side path: they manage already-mounted guests SYNCHRONOUSLY, calling
+straight into `WorldAddonRuntime` outside the ordered domain and outside the
+tape, so they stay refused outright while a recording is armed. `world.addons`
+is the per-guest cost surface (lifecycle state, fuel budget, fuel consumed) —
+an unmounted guest no longer appears there at all. Guests are pumped only
+from inside `WorldServer.Step` (the three pinned points above), which is
+what keeps guest driving reproducible under replay without recording it.
+
+## Owned worlds and storage
+
+`WorldOwnedWorlds` loads one `puck.world.def.v1` file per identity from
+`owned-worlds` beneath the state root. The machine-local installation id stays
+separate in `machine.id`; controller recognition is stored through named text
+state rows in the owned world. `--user-id` and `--state-dir` still resolve who
+is playing and where those worlds live. `WorldOwnedWorldSync` pushes and pulls
+those documents against the per-user cloud container (one blob per world under
+`puck/worlds/`, ETag-guarded, refuse-and-surface) when the composition root wires an
+endpoint and a resolved identity; cloud version tokens persist in
+`owned-worlds/sync-state.json`, and the `storage.push`/`storage.pull`/
+`storage.status`/`storage.credential` verbs in `Puck.World` drive and echo it.
+`IObjectBlobStore` also exposes `ListAsync(target, objectId, keyPrefix)` (the
+object-relative keys beneath a key path, matched by whole path segment — the same
+key space a read or write address carries, whichever route served the list); a
+whole-catalog `storage.pull` uses it to list the cloud `puck/worlds/` namespace
+and DISCOVER worlds the catalog has never seen.
+
+The platform edge (`AzureBlobObjectStorageTarget.EdgeNamespace`) cannot serve a
+container list AT ALL — its path rewrite has no segment for a query-string-only
+List Blobs request to occupy, so it 404s unconditionally before reaching blob
+storage (verified live 2026-08-05). An edge-shaped endpoint therefore never
+sends `ListAsync` through the edge: it routes to
+`AzureBlobObjectStorageTarget.DirectEndpoint` — the world doc's
+`storage.discoveryEndpoint` / its `--storage-discovery-uri` CLI reflection —
+or `WorldOwnedWorldSync.DiscoverCloudIds` refuses whole-catalog discovery BY
+NAME, before any network call, when no discovery endpoint is authored. A
+genuine 404 through the direct connection (the edge-shaped container is
+platform-managed and never legitimately absent) propagates as a named refusal
+too, rather than reading as an empty prefix — only the raw/dev-emulator shape
+(`EdgeNamespace` null, self-managed containers) swallows a 404 as "nothing
+written yet."
+
+Going direct means addressing a DIFFERENT layout of the same blob, and that is
+the part easy to get wrong: the edge rewrite maps `/{namespace}/{container}/{rest}`
+onto container `{container}`, blob `{namespace}/{rest}`, so what the edge route
+addresses as container `{namespace}`, blob `{objectId}/{key}` is *stored* as
+container `{objectId}`, blob `{namespace}/{key}`. The direct list therefore
+enumerates the object's own container beneath a `{namespace}/` prefix — which is
+also the only shape the per-user access policy grants — and strips that prefix
+back off, so both routes hand the caller the same object-relative keys.
+Enumerating the edge's view instead (a container named for the namespace) asks
+for something no account layout has, and an emulator that has been laid out to
+match the edge's view will pass while production 404s.
+
+`WorldOwnedWorldFileName` (in `Puck.World.Data`, because the earliest door that
+has to enforce it is document validation) is the id↔file/blob-name mapping, and
+it is lossy — reserved characters collapse to `_` — so it only names a location
+unambiguously for an id `IsSafe` accepts. Its escaped set is fixed rather than
+`Path.GetInvalidFileNameChars()`, so two machines on different operating systems
+agree on the name an id maps to. An id that does not survive the mapping, or that
+escapes onto a name another catalog id already claims, is refused BY NAME at
+every door: the document's authored `playerDefaults.identities` seeds (refused by
+`WorldDefinitionValidator`, so a colliding pair never reaches disk),
+`identity.create`, the directory load (a file whose name is not the one its
+declared id maps to is refused, which is also what makes an id unique in the
+catalog — two files can no more share an id than share a name), adoption from a
+pull, and push. A pull additionally refuses a cloud document whose own
+`identity.id` is not the id whose key was read, since adopting it would file the
+document under one name and its version token under another; a listed cloud name
+the mapping could never emit belongs to no reachable id and refuses by name in
+the pull's outcome list rather than being silently dropped.
+
+`storage.status`'s `lastWrite` reports the last push's actual outcome — `ok`,
+`precondition-failed`, or `failed` — not the precondition bit alone.
+
+The identity half is `Puck.World`'s `IPlayerStorageIdentityResolver`
+(`WorldStorageIdentity.cs`) — an authored `storage.userId` / `--user-id`
+override, or the local-only decline. There is no app registration and no
+interactive sign-in: game clients ARE users, so a player's machine authenticates
+ambiently and a hosted server runs as a user-assigned managed identity, both
+through the one `DefaultAzureCredential` the blob backend already uses.
+`storage.credential` probes whether that ambient credential can issue a storage
+token from this machine and records the verdict for `storage.status`. Parsing a
+STORAGE access token for identity remains ruled out — it says what a credential
+is scoped to, never who is playing.
+
+## Deterministic replay (`WorldReplayTape.cs`, `WorldReplaySnapshot.cs`)
+
+`replay.record <name>` captures the running session's record-start definition,
+active seats, mounted-guest receipts, and the per-tick server-input stream,
+while sampling the LIVE population's per-tick pose hash; `replay.stop`
+persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
+rehydrates a fresh boot-image world, re-drives the stream offline, and
+reports MATCH or MISMATCH naming the first divergent tick (tick 0 indicts the
+starting state; any later tick is a real trajectory divergence). A receipt
+disagreement — the live tree moved past the recording — refuses loudly with
+no verdict, and a codec defect (`WorldReplayCodecException.cs`) reports as a
+host bug, never folded into that refusal. Presentation (screen pixels,
+cameras, overlays, audio) is excluded by design: a match proves the
+authoritative pose trajectory, not the HUD. Known scope limits — the tape
+captures eight of the thirteen envelope payload kinds (command, grant, revoke,
+session, designation, rebuild, addon-lifecycle, and — as of the
+authoritative-machines campaign — screen-op) plus intents and the two
+peer-lifecycle server events; mutation, undo, composition, lever, and query
+submissions remain bare passthroughs, and a mid-session capture honestly
+reports MISMATCH at tick 0 — are tracked in
+[`docs/capability-channels-STATE.md`](../../docs/capability-channels-STATE.md).
+
+## Verifying a change here
+
+No build gate covers this project's behavior; verify by RUNNING `Puck.World`
+over stdin and by the committed, re-runnable batteries:
+
+- `docs/verification/undo-all-or-nothing/run.ps1` — the journal replay's
+  all-or-nothing contract.
+
+`docs/verification/ordered-domain/run.ps1` — the envelope's ordering
+contract — is QUARANTINED (owner ruling, 2026-08-06); it prints a pointer
+and exits 3 rather than asserting anything. Verify the ordering contract
+live instead: one stdin batch interleaving a grant and the command that
+needs it, plus the reversed order as the discriminating control (see the
+stub's own header).
+
+`verification/authority/run.ps1` — the principal/grant enforcement battery
+(denial/control pairs per player-facing verb) — is likewise QUARANTINED
+(2026-08-06): cases 04-06 assumed the retired `default` world's `screen:0`
+and mounted addon, which no shipped world authors today. Its README
+documents every case as historical record; the successor is
+`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests` (not yet in
+`Puck.slnx`), with an engage-authority law chartered to follow there.
+
+A change that moves simulation math is expected to change replay hashes;
+re-record any persisted tape it invalidates in the same change (`CLAUDE.md`
+rule 4).
+
+Verify a network-transport change by running two `Puck.World` processes: a
+headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a
+`--connect <ip:port>` client, both scripted over stdin — `world.peers`/
+`world.grants peer:<index>:<generation>` on the host prove admission and the
+disconnect-driven revoke; the client's own query replies prove the Completion
+lane round-trips. No persisted battery exists for this yet (a live owner
+conversation — see `docs/capability-channels-STATE.md`'s runner disposition
+note); do not add one without asking.

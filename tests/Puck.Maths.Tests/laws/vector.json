@@ -1,0 +1,1425 @@
+[
+  {
+    "Id": "vector.plane-products-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.Dot and FixedVector2.Wedge, both lanes \u2014 the narrow long accumulator under the 2\u00B3\u00B9 OR gate and the Int128 accumulator above it, each through FixedQ4816.RoundProductSum",
+        "Against": "Oracles.FusedDot and Oracles.FusedWedge \u2014 ONE Oracles.RoundDyadic at shift 16 of the exact BigInteger product sum, formed without any machine-width accumulator and without observing the lane gate at all. ENVELOPE: on this full-range domain a random draw reaches the narrow lane with probability 2\u207B\u00B3\u00B2, so the narrow branch here is pinned by the edge battery and the neighbourhood draws only; vector.narrow-lane-vs-oracle sweeps it densely. ENVELOPE: at the corner x\u2081=y\u2081=x\u2082=y\u2082=long.MinValue the subject\u0027s Int128 accumulator wraps at exactly 2\u00B9\u00B2\u2077 \u2014 the wrap shifts the rounded result by k\u00B72\u00B9\u00B9\u00B2, invisible under the carrier\u0027s own 2\u2076\u2074 wrap and unable to move tie parity, so the oracle\u0027s unwrapped exact sum is still the contract even though the doc\u0027s phrase \u0027accumulated exactly\u0027 means exactly modulo 2\u00B9\u00B2\u2078",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.space-products-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Dot at the mixed pair and at BOTH self-pairs, both lanes \u2014 the narrow long accumulator under the 2\u00B3\u2070 OR gate and the Int128 accumulator above it",
+        "Against": "Oracles.FusedDot \u2014 ONE Oracles.RoundDyadic at shift 16 of the exact three-product BigInteger sum. ENVELOPE: three Int128 products can total 3\u00B72\u00B9\u00B2\u2076 and DO wrap the accumulator; the wrap moves the rounded result by k\u00B72\u00B9\u00B9\u00B2 \u2261 0 (mod 2\u2076\u2074) and ties-to-even is invariant under an even translation, so the exact-sum oracle remains the contract",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Cross, all three lanes, both accumulator lanes",
+        "Against": "Oracles.FusedCross \u2014 each lane ONE Oracles.RoundDyadic at shift 16 of its exact two-product difference in BigInteger. A transposed or mis-signed lane assignment fails outright, because the oracle spells the right-handed cycle out lane by lane rather than delegating it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.narrow-lane-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all four fused kernels ON THE NARROW BRANCH \u2014 operands folded by Subjects.NarrowRaw to |raw| \u003C 2\u00B2\u2079, so every OR gate opens and the plain long accumulator is the one that runs",
+        "Against": "Oracles.FusedDot, Oracles.FusedWedge and Oracles.FusedCross \u2014 the same one-rounding BigInteger references the wide-lane cases use, so the two lanes are proved to implement ONE contract rather than two",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "under the fold the narrow accumulator is provably exact \u2014 two 2\u00B2\u2079-bounded products sum below 2\u2075\u2079 and three below 3\u00B72\u2075\u2078 \u2014 so any disagreement here is the ROUNDING and never an overflow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.componentwise-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Lerp"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Lerp"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2 and FixedVector3 op_Addition, op_Subtraction and op_UnaryNegation, every component",
+        "Against": "Oracles.WrapToRaw over the exact BigInteger sum, difference and negation \u2014 EXACT on both sides, so condition (B) drops out entirely and the statement is purely the componentwise lift and the two\u0027s-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2 and FixedVector3 op_Multiply by a scalar, every component",
+        "Against": "Oracles.RoundDyadic at shift 16 of the exact BigInteger product \u2014 ONE ties-to-even rounding per component, no accumulation",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2 and FixedVector3 op_Division by a scalar, every component",
+        "Against": "Oracles.RoundDyadicRatio at shift 16 \u2014 one ties-to-even rounding of the exact ratio value\u00B72\u00B9\u2076 / divisor in BigInteger, wrapped. ENVELOPE: a sampled zero divisor is mapped to one by Subjects.NonZeroDivisor, identically on both sides; the zero divisor is a REFUSAL and belongs to vector.construction-and-refusals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.Lerp and FixedVector3.Lerp, every component",
+        "Against": "Oracles.LerpRaw \u2014 the DOCUMENTED expression from \u002B (to \u2212 from)\u00B7amount re-derived in BigInteger, with the difference wrapped to the carrier, one Oracles.RoundDyadic at shift 16, and the sum wrapped again. ENVELOPE: the published contract itself names the intermediate wrap, so this law pins the wrap policy alongside the arithmetic",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the lift is LANE-FAITHFUL: every operator\u0027s X answer depends only on the operands\u0027 X, its Y only on their Y and its Z only on their Z \u2014 the oracle is evaluated per component from that component\u0027s raws alone, so a transposed lane fails",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the interpolation is exact at BOTH ends \u2014 amount zero returns \u0027from\u0027 bit-for-bit and amount FixedQ4816.One returns \u0027to\u0027 bit-for-bit, at every swept component including the carrier extremes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.norm-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_UnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.TryLengthSquared and FixedVector3.TryLengthSquared \u2014 the exact UInt128 sum of squares and its one ties-to-even Q16 rounding",
+        "Against": "Oracles.RoundedSquaredNorm \u2014 ONE Oracles.RoundToEvenUnits at shift 16 of the exact BigInteger \u03A3|raw\u1D62|\u00B2, returned UNWRAPPED so the refusal predicate can be stated against long.MaxValue",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.TryLength and FixedVector3.TryLength \u2014 the full-width root that rounds ONLY the final raw Q32 root",
+        "Against": "Oracles.NormRoot \u2192 Oracles.NearestIntegerRoot, a bracketed integer search whose predicate is one exact squaring \u2014 a deliberately different route from the kernel\u0027s floor-then-compare-the-remainder-with-the-root repair",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two saturating properties are exactly their Try siblings\u0027 refusals: Length and LengthSquared return FixedQ4816.MaxValue on precisely the cases where TryLength and TryLengthSquared return false, and a refused out parameter is left at default. Both refusals are REACHED from the committed edge set \u2014 two long.MinValue lanes drive \u03A3 to 2\u00B9\u00B2\u2077, whose root exceeds the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedVector3.LengthSquared and FixedVector2.LengthSquared",
+        "Against": "the self dot product Dot(v, v) of the same vector",
+        "Shared": "not the code and not the member \u2014 FixedVectorMath.TryRoundSquaredSum rounds a UInt128 in its own inline block while Dot rounds through FixedQ4816.RoundProductSum \u2014 but the SAME rounding shape at the same scale, one ties-to-even Q16 rounding of \u03A3 raw\u1D62\u00B2. Agreement therefore proves the two bodies implement one rule and nothing about whether the rule is right; the two classical legs above are what pin that",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the self dot product always reports the WRAPPED rounding, so where the squared norm REFUSES it saturates to FixedQ4816.MaxValue while the dot product wraps: the two disciplines part company exactly at the carrier boundary, which is the whole reason TryLengthSquared exists beside Dot",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both norms are EVEN \u2014 Length(\u2212v) equals Length(v) and LengthSquared(\u2212v) equals LengthSquared(v) at every swept raw INCLUDING the asymmetric two\u0027s-complement minimum, where negation is a fixed point and the magnitude is unchanged",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both norms are LANE-SYMMETRIC: permuting the components of v leaves them bit-identical, at both arities",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.kinship-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLengthSquared"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedVector2.Wedge",
+        "Against": "the Z lane of FixedVector3.Cross at the embedded plane (z = 0 on both operands)",
+        "Shared": "FixedQ4816.RoundProductSum, BOTH overloads \u2014 the IDENTICAL member, not a sibling copy, selected by an OR gate that opens at the same 2\u00B3\u00B9 on both sides because the two zero Z lanes contribute nothing to the OR",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin, on the same operand pairs, in the same law",
+        "Against": "Oracles.FusedWedge and Oracles.FusedDot \u2014 ONE Oracles.RoundDyadic at shift 16 of the exact expression in BigInteger. The third leg runs INSIDE the twin, so the kinship statement never leans on a transitive bracket",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the plane\u0027s dot product equals the space\u0027s at the embedded plane at every swept raw, ACROSS the gate boundary: the plane gate opens at 2\u00B3\u00B9 and the space gate at 2\u00B3\u2070, so between them one side takes the narrow accumulator and the other the Int128 one and they must still agree bit-for-bit \u2014 which is the exactness of the narrow lane, stated as a fact",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both norms embed exactly: TryLength, TryLengthSquared and the two saturating properties agree between a plane and that plane embedded at z = 0, refusals included, so the saturation boundary is the same fact at both arities",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.exact-algebra-on-the-sublattice",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the planar Lagrange identity as the subject computes it \u2014 Dot(a,b)\u00B2 \u002B Wedge(a,b)\u00B2 against LengthSquared(a)\u00B7LengthSquared(b), all four values read off the kernels",
+        "Against": "the exact BigInteger identity (m\u00B7n)\u00B2 \u002B (m\u2227n)\u00B2 == |m|\u00B2\u00B7|n|\u00B2 over the sublattice integers, evaluated inline in Subjects.VectorExactAlgebra \u2014 EXACT on both sides, so condition (B) drops out and the statement is the algebra itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Cross is orthogonal to both factors on the exact lattice: Dot(a, Cross(a,b)) and Dot(b, Cross(a,b)) are exactly zero, which no amount of correct rounding would give if a lane of Cross were mis-assigned",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Jacobi identity closes exactly: Cross(a,Cross(b,c)) \u002B Cross(b,Cross(c,a)) \u002B Cross(c,Cross(a,b)) is the zero vector",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the vector triple product expands exactly: Cross(a, Cross(b,c)) equals b\u00B7Dot(a,c) \u2212 c\u00B7Dot(a,b), which pins the scalar multiply and the vector subtraction INSIDE a cross-product identity rather than beside one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "all three products are exactly bilinear in their first argument on the lattice: Dot(a\u002Bb,c) == Dot(a,c) \u002B Dot(b,c), Cross(a\u002Bb,c) == Cross(a,c) \u002B Cross(b,c) and Wedge(a\u002Bb,c) == Wedge(a,c) \u002B Wedge(b,c)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Dot is exactly symmetric, Wedge and Cross exactly antisymmetric, and each product is exactly zero on a repeated argument",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the scalar multiply is undone EXACTLY by the scalar divide on the lattice \u2014 (v\u00B7s)/s == v at every swept lattice scalar, a zero draw substituted by one \u2014 which pins the division inside an exact identity rather than only against a rounding reference",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.identity-and-negation",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared grid is one fact for both types: AdditiveIdentity and Zero are the SAME value, every component raw is zero, and default(FixedVector2) and default(FixedVector3) equal it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is a two-sided additive identity at every swept raw, v \u2212 v is Zero, and v \u002B (\u2212v) is Zero \u2014 the last including the carrier minimum, where negation is a fixed point and the wrapping sum still closes on zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "negation is an involution over the FULL raw range for both types, the asymmetric two\u0027s-complement minimum included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Wedge and Cross are antisymmetric at FULL range, not only on an exact lattice: the rounding is sign-symmetric and the carrier\u0027s wrap is its own negation at the minimum, so Wedge(a,b) == \u2212Wedge(b,a) and Cross(a,b) == \u2212Cross(b,a) hold bit-for-bit everywhere, and Dot is symmetric at full range for the same reason",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero annihilates every product \u2014 Dot(Zero, v), Wedge(Zero, v) and Cross(Zero, v) are zero, and Wedge(v, v) and Cross(v, v) are zero \u2014 with no rounding anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.One is neutral for BOTH scalar operators at every swept raw \u2014 v\u00B7One == v and v/One == v \u2014 and FixedQ4816.Zero annihilates the scalar multiply, exactly and at both arities",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero\u0027s norms are exactly zero, its Try surfaces accept, and its normalization is Zero, so the family\u0027s absorbing element reads the same value at every surface",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the positional constructor is LANE-FAITHFUL over a sixteen-raw ladder \u2014 both carrier extremes, both narrow-gate seams (\u00B1(2\u00B3\u00B9\u22121), \u00B12\u00B3\u00B9, \u00B1(2\u00B3\u00B9\u002B1)), the 2\u00B3\u2070 seam, zero, \u00B11, \u00B12\u00B9\u2076 and \u00B12\u2074\u2077 \u2014 placed at X, then Y, then Z in turn with distinct sentinels in the other lanes: every component reads back bit-for-bit at exactly its own lane, so a swapped or duplicated component fails",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "record equality is componentwise over the raws at every ladder raw: equal components compare equal and a single moved lane compares unequal",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Cross over the right-handed basis ladder and FixedVector2.Wedge over the plane basis",
+        "Against": "Subjects.VectorOrientationLadder \u2014 e\u2093\u00D7e_y == e_z, e_y\u00D7e_z == e\u2093, e_z\u00D7e\u2093 == e_y, each reversed pair the negation, each repeated pair Zero, and Wedge(e\u2093, e_y) == \u002B1 with the reversed pair \u22121",
+        "Shared": "",
+        "Citation": "the standard right-handed orientation of Euclidean three-space and the counterclockwise-positive convention FixedVector2.Wedge\u0027s own remark declares; authored outside this tree\u0027s arithmetic and captured from no subject output. This is what makes a transposed lane assignment or a flipped sign a FAILURE rather than a consistent alternative convention",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "dividing either vector type by the zero scalar REFUSES with a DivideByZeroException, and it refuses for every vector including Zero \u2014 the throw is reached on the first component, so no operand escapes it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "dividing by the carrier\u0027s MINIMUM is not a refusal: the sign-magnitude quotient is defined there and agrees with Oracles.RoundDyadicRatio at every lane of the ladder, which separates the documented exception from an overflow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.normalize-vs-ideal-and-staged",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Normalize at full range",
+        "Against": "Oracles.IdealUnitVector \u2014 each component ONE ties-to-even rounding of the exact ratio raw\u1D62\u00B72\u00B9\u2076 / \u221A(\u03A3 raw\u2C7C\u00B2), bracketed in BigInteger by q\u00B2\u00B7S \u2264 (|raw\u1D62|\u00B72\u00B9\u2076)\u00B2 with the tie resolved against (2q\u002B1)\u00B2\u00B7S, forming no square root, no shift and no common denominator at all. ENVELOPE: an INEQUALITY, not a bit identity \u2014 agreement to within ONE raw per component, a bound that is proved from the two preconditioning regimes rather than observed. vector.normalize-ideal-bound-full-width-sweep measures the same bound over 200000 inline full-width draws at the Exhaustive tier, and holds the internal one-pass normalizer to it beside this one; that is corroboration at volume, not the evidence this leg rests on",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the returned direction\u0027s OWN norm",
+        "Against": "Oracles.NearestIntegerRoot of the exact BigInteger sum of squares of the OUTPUT raws, required within 4 of 2\u00B9\u2076 \u2014 a statement computed from the answer alone that shares nothing with the pipeline that produced it, and that no scale error could survive",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedVector3.Normalize",
+        "Against": "Oracles.StagedUnitVector, bit-for-bit at every component",
+        "Shared": "the shipped three-stage derivation itself: the common power-of-two precondition at leading bit forty-five with its ties-to-even shrinking shift, the Q16-scaled nearest root as the single common denominator, and one ties-to-even ratio per component. No code is shared and the STAGING is, so a shared staging error would cancel",
+        "Citation": "the two classical legs in this same case, on the same operand stream: Oracles.IdealUnitVector to within one raw, and the output\u0027s own norm to within four of 2\u00B9\u2076",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero normalizes to Zero, and no non-zero direction normalizes to Zero \u2014 the largest component always reaches at least 2\u00B9\u2076/\u221A3, so the (x|y|z)==0 guard in FixedVector3.Normalize is UNREACHABLE for a non-zero input and the live statement is only the one about Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the direction\u0027s SIGNS are carried, never inverted: no output component comes back with the sign opposite its input, and a zero input component stays exactly zero. A component whose ratio underflows the Q16 grid lands on zero, which is why the statement is \u0027never opposite\u0027 rather than \u0027always equal\u0027",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the normalization is EXACTLY invariant under a power-of-two rescale: for a direction folded below 2\u2074\u2075 \u2014 where the common precondition is a pure LEFT shift \u2014 scaling every component by 2, 2\u2078 and 2\u00B9\u2077 leaves the unit vector bit-identical, because the precondition\u0027s shift falls by exactly the rescale and the right shift it becomes is exactly divisible. This is the doc\u0027s \u0027unit length at every representable input scale\u0027 as a bit-exact statement",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.normalize-with-magnitude-full-unsigned-width",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVectorMath.TryNormalizeWithMagnitude's RAW MAGNITUDE output, on BOTH branches - the narrow one, which roots the Q32-shifted squared sum once and settles the Q16 truncation against the exact halfway square, and the wide one past a 2^48 norm, which roots the exact sum and settles by remainder. The member is INTERNAL, so coverage-manifest.json cannot name it and the ratchet could not notice its only gate being deleted; it is reached here through Puck.Maths.Tests' InternalsVisibleTo and no public member is credited, because none is called",
+        "Against": "Oracles.NearestIntegerRoot of the exact BigInteger sum of squares - a bracketed integer search whose predicate is one exact squaring, forming no square root at all. This is an EXACT IDENTITY at every swept direction, not a tolerance: whichever branch runs, the returned magnitude IS the nearest integer root rather than a value inside a measured ULP band",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same call's UNIT DIRECTION output, all three lanes",
+        "Against": "Oracles.IdealUnitVector - each component ONE ties-to-even rounding of the exact ratio raw_i*2^16 / sqrt(sum of raw_j^2), bracketed in BigInteger with no square root, no shift and no common denominator - to within ONE raw per lane. That is the same bound vector.normalize-vs-ideal-and-staged proves for the public FixedVector3.Normalize, reached here for a pipeline that shares none of its preconditioning: this member does NOT precondition onto leading bit forty-five, and it switches denominator at the 2^48 norm where the public one never does. ENVELOPE: an inequality, not a bit identity",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal is complete: the zero direction returns false AND leaves all three unit lanes and the magnitude at their documented default, so a caller that ignores the bool cannot read a stale value out of the out parameters",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every branch and boundary the member declares is REACHED, asserted rather than assumed. Both arms of the 2^96-minus-2^32 gate run; the hand-derived row ((2^48)-1, 2^24, (2^24)-1) lands INSIDE the 2^32-wide band below 2^96 that the narrow path deliberately excludes - its exact squared sum is 2^96 - 2^25 + 2, which the ladder comment derives rather than searches for - so the exclusion is exercised on the nose; and the all-minimum direction produces a magnitude PAST long.MaxValue, which is the whole reason this member returns a ulong instead of saturating into the signed Q48.16 carrier. Mutation-probed: an off-by-one in the narrow branch's halfway square leaves all 425 other Default-tier tests green and is caught only here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.normalize-ideal-bound-full-width-sweep",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Normalize over 200000 inline draws spanning every scale of the signed carrier. MIRROR of vector.normalize-vs-ideal-and-staged at strictly stronger operands - that case sweeps a 512-index frontier block, this one runs 200000 draws across every scale of the carrier",
+        "Against": "Oracles.IdealUnitVector, to within ONE raw per lane - the same bound and the same reference, restated at volume rather than restated differently",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVectorMath.TryNormalizeWithMagnitude over the SAME draws - direction and magnitude both",
+        "Against": "the same Oracles.IdealUnitVector at one raw per lane, and Oracles.NearestIntegerRoot of the exact squared sum as an EXACT identity for the magnitude. Holding the two normalizers to one bound over one operand stream is the point: they share no preconditioning and switch denominators at different thresholds, so a defect in either shows here without either standing as the other's reference",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sweep takes its OWN BASIS and consumes no Domain, which is what an Exhaustive case owes: consuming one would advance the frontier counter vector.normalize-vs-ideal-and-staged reads and slide that case's operands sideways as a side effect of this sweep having run. The draws are a pure SplitMix64 function of a running counter, arithmetically shifted by a count taken from their own bits so the stream spans single raws through the carrier's extremes - never System.Random, never the wall clock",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.presentation-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "ToVector3"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": ".ctor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.ToVector3 over the fourteen-row raw ladder \u2014 both carrier extremes, both unit values, the single-raw quantum, and the three 2\u00B2\u2074 rows whose binary32 roundings are exact, a tie down and a tie up",
+        "Against": "Subjects.VectorPresentationLadder, a constant table of IEEE-754 binary32 bit patterns compared through BitConverter.SingleToInt32Bits so no floating-point arithmetic enters the law",
+        "Shared": "",
+        "Citation": "hand-derived from the binary32 layout and the Q48.16 scale: the conversion is the user-defined narrowing to double followed by the standard narrowing to float, so every row is the raw\u0027s exact real value raw\u00B72\u207B\u00B9\u2076 rounded once to binary64 and once to binary32, each rounding resolved by hand. Shares no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three lanes are carried in order \u2014 each ladder raw is placed at X, then Y, then Z with two distinct sentinels in the other lanes, and both the raw and the sentinels read back at exactly their own lanes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.adoption-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "FromVector3"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.FromVector3 over the twenty-row binary32 ladder \u2014 both signed zeros, both unit values, the 2\u207b\u00b9\u2076 quantum, three exact scaled HALVES and their negatives resolving ties to even in both directions, 0.1f, both float extremes, both infinities and a NaN",
+        "Against": "Subjects.AdoptionBinary32Ladder, a constant table of IEEE-754 binary32 bit patterns fed in through BitConverter.Int32BitsToSingle and compared as exact int64 raws, so no floating-point arithmetic authors an operand or an expectation",
+        "Shared": "",
+        "Citation": "hand-derived from the binary32 layout and the Q48.16 scale: a binary32 widens to binary64 exactly and the 2\u00b9\u2076 scale is a pure exponent shift, so the scaled value is EXACT and the conversion is one round-half-to-even of that exact dyadic followed by saturation \u2014 every expectation is that integer, resolved by hand. Shares no code and no substrate with the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ties are decided in three different directions on the SAME magnitude class \u2014 scaled \u00bd rounds down to 0, 1\u00bd rounds up to 2, and 2\u00bd rounds down to 2 \u2014 so a nearest-away-from-zero, a truncation and a floor are each excluded rather than merely unobserved; the saturating rows exclude a wrapping cast at both ends, and negative zero must land on 0 rather than carrying a sign into a carrier that has none",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three lanes are carried in order \u2014 each ladder row is placed at X, then Y, then Z with two distinct sentinels in the other lanes, and both the row and the sentinels land at exactly their own lanes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.fused-products-diverge-from-per-product",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the fused one-rounding kernels FixedVector2.Dot, FixedVector2.Wedge and FixedVector3.Dot on Subjects.NarrowRaw-folded operands",
+        "Against": "Oracles.PerProductDot and Oracles.PerProductWedge \u2014 the per-product-rounding discipline in exact BigInteger, each raw Q32 product rounded to Q16 on its own before an exact sum, sharing no code with the subject",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "vector.narrow-lane-vs-oracle \u2014 the same three kernels on the same fold against Oracles.FusedDot and Oracles.FusedWedge, bit-for-bit"
+      }
+    ]
+  },
+  {
+    "Id": "vector.fused-norm-diverges-from-per-square",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LengthSquared"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedVector3.LengthSquared and FixedVector2.LengthSquared \u2014 ONE rounding of the exact raw Q32 sum of squares \u2014 on Subjects.NarrowRaw-folded operands, where the norm never saturates",
+        "Against": "Oracles.PerSquareNorm \u2014 each raw Q32 square rounded to Q16 on its own before an exact BigInteger sum",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "vector.norm-vs-oracle \u2014 the same two properties against Oracles.RoundedSquaredNorm, bit-for-bit, with the saturation predicate stated"
+      }
+    ]
+  },
+  {
+    "Id": "vector.hexagonal-coordinate-ring-and-rotation",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "Direction"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "RotatedLeft"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "RotatedRight"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "MultiplicativeIdentity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the six unit directions are pairwise distinct and each at Length exactly one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Eisenstein ring relation omega squared plus omega plus one equals zero holds exactly, against the additive and multiplicative identities",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "RotatedLeft has order six, RotatedLeft and RotatedRight are exact inverses, and rotation preserves both Length and Norm over a 49 by 49 coordinate box",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ring product is associative over the same box. ENVELOPE: the multiply operator also resolves the scaling overload, which this case never exercises and which this citation does not claim to cover",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.hexagonal-coordinate-length-matches-graph-distance",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "Length"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "HexagonalCoordinate.Length",
+        "Against": "an array breadth-first search over the six-neighbour graph out to radius twelve, self-contained with no generic collections \u2014 the true hex-grid graph distance, computed independently of the field-norm formula Length itself uses",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.hexagonal-coordinate-round-is-nearest-cell",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalCoordinate",
+        "Name": "Round"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "HexagonalCoordinate.Round",
+        "Against": "a brute-force nearest-cell search over a 29 by 29 candidate window at 161 by 161 fractional positions, using the EXACT algebraic identity that the Euclidean hex-plane distance collapses to the Eisenstein quadratic form \u2014 a different derivation route from Round\u0027s own balanced-cube algorithm, computed in Int128 with no floating point and NO epsilon tolerance, where a double formulation would need one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.plane-full-width-oracle-and-identities",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "LengthSquared"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.Dot and Wedge over the FULL fourth-power edge cross product",
+        "Against": "the exact BigInteger product sum with one ties-to-even rounding, hand-derived inline over the fused-edge set",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the wedge of a vector with itself is zero, the wedge is antisymmetric and the dot symmetric at every combination; an epsilon-component vector reports epsilon length; a full-range single-axis vector\u0027s length is exact while the squared length refuses and saturates",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.space-full-width-oracle-and-length-policy",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLength"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LengthSquared"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Dot and Cross over the curated edge triples",
+        "Against": "the exact BigInteger product sum with one ties-to-even rounding, hand-derived inline",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the cross product is antisymmetric, and the length-overflow policy holds at the carrier\u0027s extreme: the length is exact where representable and refuses where it is not, and the squared length refuses independently where it overflows first",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.record-print-is-components-only",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.ToString and FixedVector3.ToString at the all-MaxValue and mixed-extreme corners — where TryLength and TryLengthSquared both refuse — and at a representative interior vector",
+        "Against": "hand-assembled constant strings built from the Q48.16 text contract: MaxValue's exact expansion 140737488355327 + (2^16 − 1)/2^16 and MinValue's exact integer −2^47, authored away from the subject and never captured from its output",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rendering is BOUNDED to the declared components: the hand-written PrintMembers emits X, Y (and Z) only, so the saturating derived norms Length and LengthSquared never execute during formatting and the saturation sentinel FixedQ4816.MaxValue can never print in the position of a measured length — at the refusing corners the string still renders componentwise, with no Length token at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

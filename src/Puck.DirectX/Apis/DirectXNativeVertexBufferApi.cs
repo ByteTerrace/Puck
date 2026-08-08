@@ -49,13 +49,13 @@ public sealed unsafe class DirectXNativeVertexBufferApi : IDirectXVertexBufferAp
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &resource
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            pDesc: in bufferDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &resource,
+            riidResource: in resourceIid
         );
 
         var buffer = (ID3D12Resource*)resource;
@@ -64,17 +64,17 @@ public sealed unsafe class DirectXNativeVertexBufferApi : IDirectXVertexBufferAp
             void* mapped;
 
             buffer->Map(
-                0,
-                (D3D12_RANGE*)null,
-                &mapped
+                Subresource: 0,
+                pReadRange: (D3D12_RANGE*)null,
+                ppData: &mapped
             );
             request.VertexData.Span.CopyTo(destination: new Span<byte>(
                 pointer: mapped,
                 length: (int)sizeBytes
             ));
             buffer->Unmap(
-                0,
-                (D3D12_RANGE*)null
+                Subresource: 0,
+                pWrittenRange: (D3D12_RANGE*)null
             );
 
             return new DirectXVertexBufferCreateResult(

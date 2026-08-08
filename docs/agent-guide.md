@@ -1,12 +1,13 @@
 # Working on Puck
 
 This guide explains how to investigate, change, and verify Puck. Use
-[capability-catalog.md](capability-catalog.md) for the feature inventory and
 [project-map.md](project-map.md) for project ownership and dependency rules.
+There is deliberately no feature inventory document — ask the code, or run
+`Puck.World`.
 
 ## Start here
 
-- A run is a versioned `puck.run.v1` JSON document. CLI conveniences
+- A run is a versioned `puck.world.def.v1` JSON document. CLI conveniences
   synthesize the same model; they do not create a second execution path.
 - Vulkan and Direct3D 12 implement the same neutral GPU contracts. Shared GPU
   changes must be verified on both backends.
@@ -18,60 +19,65 @@ This guide explains how to investigate, change, and verify Puck. Use
   snapshots. Wall-clock time, ambient randomness, and floating-point state do
   not enter replay-bearing simulation.
 
-Load the matching skill under `.agents/skills/` before working on the SDF
-world, run documents, emulators, ROM forge, verification, semantic C# analysis,
+Load the matching skill under `.claude/skills/` before working on the SDF
+world, emulators, ROM forge, verification, semantic C# analysis,
 or .NET performance.
 
 ## Analyze C# semantically
 
-Use text search for file discovery, literals, JSON, HLSL, and MSBuild. Use the
-compiler or Roslyn for questions such as who references a symbol, what
-implements an interface, whether code is unused, or whether a rename is safe.
-Text matching misses extension methods, aliases, overload resolution, generated
-code, and XML `cref` references.
+Use text search for file discovery, literals, JSON, HLSL, and project files. Use the
+compiler for questions such as who references a symbol, what implements an
+interface, whether code is unused, or whether a rename is safe. Text matching
+misses extension methods, aliases, overload resolution, generated code, and XML
+`cref` references.
 
-The `roslyn-first-analysis` skill provides tested syntax and semantic query
-templates. Prefer the cheapest correct tool:
+The `symbol-analysis` skill owns those questions and documents the traps.
+Prefer the cheapest correct tool:
 
-1. `rg` for orientation and non-C# text.
-2. A syntax-tree walk for declaration, member, attribute, trivia, and XML-doc
-   inventories.
-3. `MSBuildWorkspace` and `SymbolFinder` for cross-project symbol questions.
+1. `puck search` for orientation and non-C# text (the `content-search` skill;
+   `rg`, `grep` and `Select-String` are not used in this repo).
+2. `puck declarations` for declaration, member, attribute, base-list, and XML-doc
+   inventories — parse-only, no build.
+3. `puck references` for cross-project symbol questions: references,
+   implementers, overrides, derived types, dead-code candidacy.
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
    that changes `cref` values.
 
 ## Verification
 
-### Engine changes
+### Engine changes — THERE IS NO ENGINE GATE TODAY
 
-`Puck.Post` is the engine power-on self-test:
+**`Puck.Post` is quarantined** (`experimental/Puck.Post`, owner ruling
+2026-08-02) — out of the solution, out of the build, and off limits. Do not
+run it, cite it, or write a stage for it.
 
-```powershell
-dotnet run --project src/Puck.Post -c Release
-dotnet run --project src/Puck.Post -c Release -- --tier A
-dotnet run --project src/Puck.Post -c Release -- --filter world
-dotnet run --project src/Puck.Post -c Release -- --stage run-document
-dotnet run --project src/Puck.Post -c Release -- --fuzz-seed 12345
-dotnet run --project src/Puck.Post -c Release -- --artifacts out
-```
+So the shared engine contract it used to gate — the cross-backend render path,
+the SDF VM ISA, the document schemas, the deterministic numerics, the
+differential fuzzer — **currently has no automated gate at all.** Say that
+plainly when it matters; do not imply coverage that does not exist, and do not
+reach into `experimental/` to manufacture some. An engine change is verified
+today by running what is still in the build and by argument, and a change that
+would once have been gated should say in its own commit what was and was not
+checked.
 
-Exit code 0 means pass, 1 means a check failed, and 2 means infrastructure
-failure. The battery prints the current stage count; do not copy that count
-into documentation.
+Still in the build and still applicable: the architecture gate (every build),
+the two emulator batteries below, `dotnet build Puck.slnx -c Release`, and
+running `Puck.World`.
 
 | Change | Minimum verification |
 |---|---|
-| Fixed-point, commands, input routing, bindings, run documents | Tier A |
+| Fixed-point, commands, input routing, bindings, world documents | Tier A |
 | Same-device GPU code, kernels, compositor, capture | Tiers A and B |
 | Shared shaders, either backend, surface sharing | Full battery, including Tier C |
 | Present pacing, device loss, backend switching | Full battery, including Tier D |
 | Suspected backend divergence | Differential fuzzer with `--filter fuzz` or one seeded fuzz stage |
-| Run-document model or schema | `--stage run-document` after regenerating the schema |
 
-For changes under `src/Puck.Maths`, also run the deep oracle battery:
+For changes under `src/Puck.Maths`, also run the maths law suite. The default
+tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
 
 ```powershell
-dotnet run -c Release tools/maths-battery.cs
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/default.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
 ```
 
 ### Game and demo changes
@@ -79,32 +85,31 @@ dotnet run -c Release tools/maths-battery.cs
 Run greenfield composition roots instead of adding engine gates:
 
 ```powershell
-dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 2
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
-`Puck.Demo --validate-overworld` remains its document and deterministic replay
-sanity check. Do not add another `--validate-*` mode or a `Puck.Post` stage for
-game-specific behavior unless explicitly requested.
+`Puck.World` is the only composition root that runs. `Puck.Demo` is a library
+with no entry point, quarantined at `experimental/Puck.Demo` and OUT of the
+solution and root build (owner ruling, 2026-08-01) — every `dotnet run` against
+it, including the former `--validate-overworld` check, is void. Nothing plans
+bringing its capabilities across: the port plan that used to sequence that work
+was deleted with the quarantine. Do not add a `--validate-*` mode or a
+`Puck.Post` stage for game-specific behavior unless explicitly requested.
 
 The console is the scriptable control plane. On-screen input and process stdin
 use the same registry; an ACCEPTED result echoes to stdout and a REFUSED one to
 stderr, so a driver merging the two streams reads submission order while still
 telling the two apart. A run that must prove no step silently no-opped ends with
 `wire.errors` and asserts `[wire.errors: 0 rejected]`. The runnable proofs live
-in `src/Puck.World/scripts/proof.cs`.
+in the proof suite — which is quarantined under `experimental/` and off
+limits, so those proofs are not runnable today and the console-scripting
+contract they demonstrated has no executable witness.
 
-Use the `review-creation` scenario for isolated creation turntables:
-
-```powershell
-dotnet run --project src/Puck.Demo -c Release -- `
-  --scenario review-creation `
-  --scenario-set Scenario:Creation=docs/examples/creations/lantern-fish.creation.json `
-  --scenario-set Scenario:Capture:Directory=artifacts/my-review
-```
-
-The scenario pins content time and camera poses. Use
-`Scenario:Backdrop=room` for an in-world capture.
+The `review-creation` scenario — isolated creation turntables with pinned content
+time and camera poses — has no runnable host today, and no plan to get one. It
+does not exist in `Puck.World`; the document that scheduled the move was deleted
+with the quarantine. Treat creation review as an absent capability, not a
+pending one.
 
 ### Emulator changes
 
@@ -120,51 +125,51 @@ project README.
 
 ### Performance changes
 
-Use `puck.bench` for engine-performance claims. Run it through the console
-(`bench.list`, `bench.run`, `bench.abort`, `bench.sweep`) or use the headless
-proof:
+**There is no way to score engine performance today, and no code in the build
+that could.** `Puck.Bench` was quarantined to `experimental/Puck.Bench` on
+2026-08-02 — it had been compiling on every build while ZERO projects referenced
+it: nothing implemented its scene controller, nothing registered its
+`bench.list`/`bench.run`/`bench.abort`/`bench.sweep` verbs. Its host, the
+headless `--bench` entry point, and the suite registration went with `Puck.Demo`;
+the plan that scheduled re-homing them and the benchmark plan itself were
+deleted. So the suite, the scoring formula, and the reference configuration are
+not written down anywhere.
 
-```powershell
-dotnet run --project src/Puck.Demo -c Release -- --bench standard
-```
+**Treat every engine-performance claim as unmeasurable.** Do not quote historical
+numbers as current — they were taken on a machine and a suite nothing in the tree
+can reproduce. If performance work becomes necessary, the honest first step is
+building an instrument in a real project, not reviving a quarantined one.
 
-A clean scored run exits 0. An abort, refusal, or missing GPU timestamps exits
-1. The benchmark writes a versioned report under `bench-reports/`. Do not use
-the machine during a scored run or run other GPU workloads concurrently. See
-[engine-bench-plan.md](engine-bench-plan.md) for the current suite, scoring
-formula, reference configuration, and expected duration.
-
-## Run documents
+## World documents
 
 The validator is the thick semantic gate. A valid document must be buildable;
 builders do not repeat validator checks. When a document field or polymorphic
 kind changes:
 
 1. Update the nullable model and XML documentation.
-2. Add all semantic validation to `RunDocumentValidator`.
-3. Regenerate `schema/run.schema.json`:
+2. Add all semantic validation to `WorldDefinitionValidator`, which runs over
+   the entire composed candidate document rather than the changed section
+   alone — including an owned identity's document, which is validated the
+   same way.
+3. Register the type in `WorldJsonContext`; a polymorphic kind also needs its
+   `[JsonDerivedType]` line.
+4. Verify by RUNNING `Puck.World` and round-tripping the document over stdin.
 
-   ```powershell
-   dotnet run -c Release tools/Tools.cs schema schema/run.schema.json
-   ```
-
-4. Add or update an example.
-5. Run the `run-document` POST stage and the relevant live graph.
-
-The `run-document` skill documents serializer construction behavior and the
-complete add-a-field procedure.
+`src/Puck.World.Data/README.md` documents the serializer's construction
+behavior; the procedure above is the complete add-a-field procedure.
 
 ## Configuration and diagnostics
 
-The demo does not use `PUCK_*` configuration variables. Durable configuration
-belongs in the run document; live operations belong in console verbs.
+`Puck.World` does not use `PUCK_*` configuration variables. Durable
+configuration belongs in the world document; live operations belong in console
+verbs.
 
 The remaining environment variables are engine, launcher, emulator, or
 content-development diagnostics:
 
 | Variable | Purpose |
 |---|---|
-| `PUCK_RAY_QUERY` | Permit or deny the ray-query path. The run-document equivalent is `host.rayQuery`. |
+| `PUCK_RAY_QUERY` | Permit or deny the ray-query path. |
 | `PUCK_GENLOCK=0` | Disable the launcher genlock control law. The document equivalent is `host.genlock`. |
 | `PUCK_PRESENT_TIMING` | Log measured present intervals. |
 | `PUCK_TEST_DEVICE_LOSS=<seconds>` | Request synthetic device loss for live verification. |
@@ -220,6 +225,13 @@ framed as unverified when no device run exists.
 - GBA co-simulation compares instruction deltas because mGBA rebases cumulative
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.
+- Windows App Control on the reference system blocks loading never-seen Debug
+  binaries (`FileLoadException` `0x800711C7`), which broke the file-based
+  `dotnet run <script>.cs` programs at their default Debug configuration —
+  relocating the runfile cache did not help; `-c Release` loaded cleanly. Kept
+  because the App Control behaviour is a property of the machine and will bite
+  the next thing that loads a fresh Debug binary, not because those scripts are
+  reachable: they are quarantined under `experimental/` and off limits.
 
 ## Engineering doctrine
 
@@ -250,6 +262,84 @@ framed as unverified when no device run exists.
    replays or calibrated baselines the correction invalidates in the same
    change. Preserving a wrong result to keep a hash stable, or adding a path
    that reproduces old-wrong behavior, is the defect.
+
+## Verification doctrine
+
+Rules earned the hard way during the capability-channels campaign, general to
+all verification work here. Each keeps one compressed instance as evidence.
+
+- **Never verify with the parameters the documentation uses.** Every worked
+  example in a document is a cell someone already ran and found working — the
+  single worst cell to verify against; the defect sits one value over. Evidence:
+  an addon-drive regression check passed only against the one body the mount
+  line's own example names; any other body produced 7418 error lines in 31
+  seconds. Pick a different value, and pick it before you know the answer.
+- **Run the control in the same configuration as the test.** The control and
+  the cell must differ in exactly one thing. Evidence: a control measured
+  before an addon had moved anything, compared against a cell where it had —
+  two variables, not one. Corollaries: neutralising a confound beats recording
+  it (remove the boulder, do not document its coordinates); when testing a
+  path rather than an effect, prove you are on the path (a verb with the same
+  observable effect can run a different principal down a different path); and
+  a measurement must be capable of distinguishing the hypotheses before it is
+  worth running (choose an axis the other driver cannot produce).
+- **A control must fail for the RIGHT reason — by its message, never merely by
+  failing.** Evidence: a grant-gating check against a nonexistent path produced
+  a refusal line and incremented the error counter — both signals a reader
+  checks — while never reaching the grant check at all. Read the reason, every
+  time.
+- **A derivation that fires less often than its source is a retirement wearing
+  enforcement's clothes.** When mechanising a prose rule, measure whether the
+  mechanism ADMITS anything the prose forbade — it fails in the direction that
+  never produces a failure. Evidence: a closure rule derived for the
+  architecture gate came out wide enough to permit direct backend dependencies
+  it existed to forbid, and would have flagged nothing, forever. Corollary:
+  empty-because-too-wide and empty-because-clean are indistinguishable in a
+  report and opposite in meaning — one honest named exception is worth more
+  than a clean sheet produced by not asking.
+- **Too strict announces itself; too wide sits silent.** A rule that is too
+  strict files its own bug report on first contact; a rule that is too wide
+  never complains. When a rule's scope is uncertain, err strict, and arm the
+  gate early — arming is what settles scope. Evidence: the architecture gate's
+  terminal-kind rule was correctly narrowed only when it fired on an analyzer
+  test suite.
+- **A correction that lands in prose while the artifact it condemns survives is
+  not a correction.** It is a second, contradictory source of truth, and the
+  artifact is what gets read and copied. When retracting a claim, hunt the
+  tables, examples, comments, and cross-references that embody it in the same
+  change. Evidence: a corrected lanes argument left a condemned channel table
+  printing unchanged a hundred lines below.
+- **Hunt echoes in the summaries first.** A summary restates a conclusion
+  without the qualifications that made it true, so it is where a retracted
+  claim survives longest and reads most confidently — checklists,
+  by-construction lists, phase tables, and README overviews all count.
+  Evidence: a fence claim was corrected in the section that argues it and
+  survived in the by-construction list one screen away.
+- **"Doc-only" is not a safety class.** A `cref` is a compile-time dependency:
+  with `TreatWarningsAsErrors`, an XML comment naming a private, renamed, or
+  deleted member fails the build (CS1574) exactly like broken code. Risk
+  categories describe intent; the compiler does not care about intent. Verify
+  by the mechanism that will actually judge the change.
+
+### Git in a shared working tree
+
+- Commit with explicit paths — `git commit -- <paths>` — never add-then-commit.
+  A stage command is only as scoped as its narrowest pattern; nothing about
+  "I only touched my files" stops `-A` from sweeping a sibling session's work.
+- `git add` with multiple pathspecs is all-or-nothing on a bad spec: one stale
+  path silently aborts the entire staging, leaving a commit whose message
+  describes contents it lacks.
+- An amend commits the index, not your diff — the one shape that silently
+  swallows a sibling's staged work. Run `git diff HEAD@{1} HEAD` after every
+  amend, announce staged work, and prefer plain commits in a shared tree.
+- A verification scoped to the warning you received is not a verification of
+  the operation you performed. Answer the question the command itself raised,
+  not the narrower one handed to you; a true answer to a narrower question
+  leaves no trace of the gap.
+- A relocation is not complete until something that consumed the old location
+  has been run at the new one. Evidence: a `git mv` left seventeen dangling
+  `ProjectReference`s behind an exit-0 restore — a moved tree that nobody has
+  built is a claim, not a state.
 
 ## Code and documentation conventions
 
@@ -296,3 +386,8 @@ Use parallel agents for independent, disjoint workstreams:
    agent; a worker report is evidence, not proof.
 6. Avoid performance measurements while other builds or GPU workloads are
    active.
+7. Verify a handed-off defect is still live — against the worktree **and** the
+   commit — before recording it anywhere. A fix and a report can cross, and a
+   wrong belief committed to a shared ledger outlives every session that could
+   refute it. When one is already written down, correct it in place rather than
+   leaving the claim standing.

@@ -1,13 +1,11 @@
 using System.Numerics;
-using Puck.World.Client;
 
 namespace Puck.World;
 
 /// <summary>
 /// The one shared static resolver for a <see cref="WorldAnchor"/>'s STAMPED-transform geometry — the placement math both
 /// the audio director (speaker poses) and the camera path (binder offscreen views + the main-window composer) read, so
-/// cameras and speakers resolve a placement anchor through the SAME code (P9). This is exactly the seam whose absence
-/// forced the validator to reject placement-anchored cameras; with it, that rejection is gone.
+/// cameras and speakers resolve a placement anchor through the SAME code.
 /// </summary>
 internal static class WorldAnchorGeometry {
     /// <summary>The stamped world position of a placement anchor: the placement's root position, or — when a shape id is
@@ -27,7 +25,7 @@ internal static class WorldAnchorGeometry {
                 continue;
             }
 
-            var creation = WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId);
+            var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId);
 
             return ((creation is null) ? placement.Position : StaticShapePosition(placement: placement, creation: creation, shapeId: shapeId));
         }

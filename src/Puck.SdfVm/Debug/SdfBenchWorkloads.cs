@@ -24,6 +24,12 @@ public static class SdfBenchWorkloads {
     // stay well framed while the pose sweeps a full revolution).
     private const int StormCameraRung = 1024;
 
+    // The DYNAMIC MATRIX ladder (Phase 3 L1 ceiling-measurement arc, 2026-08-02): N=0 is the per-cell baseline
+    // control (see the mission protocol), the rest is the requested N sweep. Tops out at
+    // SdfVm.SdfProgramBuilder.MaxInstances (16384) — unlike Storm's motion rungs (capped at MaxStormInstances=4096),
+    // DynamicMatrix is the workload this ceiling arc measures TO the full instance cap, moving or static.
+    private static readonly int[] DynamicMatrixLadder = [0, 256, 1024, 4096, 16384];
+
     /// <summary>Builds the SHAPES ladder — one config per catalogued <see cref="SdfDebugShapeKind"/> (fullscreen, no
     /// modifier). This IS <c>sdf.bench shapes</c>' battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildShapesLadder() {
@@ -146,6 +152,39 @@ public static class SdfBenchWorkloads {
         }
 
         configs.Add(item: StormRung(mode: SdfBenchStormMode.Camera, count: StormCameraRung));
+
+        return configs;
+    }
+
+    /// <summary>A single DYNAMIC MATRIX config — <paramref name="count"/> spheres placed by <paramref name="placement"/>,
+    /// either baked STATIC (grid-invariant, no per-frame CPU rebuild) or MOVING (dynamic slots orbiting per produced
+    /// frame — forces the per-frame instance-grid rebuild). This IS the rung a caller (e.g. the ceiling-measurement
+    /// harness) requests directly.</summary>
+    public static SdfBenchConfig DynamicMatrixRung(SdfBenchPlacement placement, bool moving, int count) {
+        var n = Math.Clamp(value: count, min: 0, max: SdfVm.SdfProgramBuilder.MaxInstances);
+        var placementToken = placement switch {
+            SdfBenchPlacement.Clustered => "clustered",
+            SdfBenchPlacement.FarCorners => "far-corners",
+            _ => "uniform",
+        };
+        var movingToken = (moving ? "moving" : "static");
+
+        return new SdfBenchConfig(Label: $"matrix {placementToken} {movingToken} x{n}", Workload: SdfBenchWorkload.DynamicMatrix, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, Placement: placement, Moving: moving);
+    }
+
+    /// <summary>Builds the DYNAMIC MATRIX ladder — N ∈ {0, 256, 1024, 4096, 16384} × <see cref="SdfBenchPlacement"/>
+    /// {Clustered, Uniform, FarCorners} × {static, moving}, one config per cell (30 rows). The N=0 rung of every
+    /// (placement, moving) pair is that cell's baseline control. This IS <c>sdf.bench matrix</c>'s battery.</summary>
+    public static IReadOnlyList<SdfBenchConfig> BuildDynamicMatrixLadder() {
+        var configs = new List<SdfBenchConfig>();
+
+        foreach (var placement in Enum.GetValues<SdfBenchPlacement>()) {
+            foreach (var moving in new[] { false, true }) {
+                foreach (var n in DynamicMatrixLadder) {
+                    configs.Add(item: DynamicMatrixRung(placement: placement, moving: moving, count: n));
+                }
+            }
+        }
 
         return configs;
     }

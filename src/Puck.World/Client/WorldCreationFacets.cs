@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Numerics;
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 
 namespace Puck.World.Client;
 
@@ -11,22 +11,37 @@ namespace Puck.World.Client;
 /// become <see cref="WorldCamera"/> feeds on <see cref="WorldAnchor.Placement"/>) and the FACES facet (a creation's
 /// declared screen surfaces become derived <see cref="WorldScreen"/> rows lit by any feed the author names — including
 /// another creation's eye). Every derivation shares this one entry point rather than forking the "derive a world row from
-/// a facet" contract N ways (P5). The implicit-creation-look facet resolves inline in the frame source (an inhabited
+/// a facet" contract N ways. The implicit-creation-look facet resolves inline in the frame source (an inhabited
 /// body wears its own creation), so it needs no row here.
 /// </summary>
 internal static class WorldCreationFacets {
     /// <summary>The first reserved derived-face screen index — high in the 0..<see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/>
     /// range so it never collides with authored screens (which pack from index 0). The binder registers
     /// <c>[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)</c> up front so a derived face re-points a slot that
-    /// already exists (the render provider key set is frozen at boot).</summary>
-    public const int DerivedFaceBase = 24;
+    /// already exists (the render provider key set is frozen at boot). Single-sourced in
+    /// <see cref="WorldPlacementPolicy.DerivedFaceBase"/> (Puck.World.Data) — the document validator needs the same
+    /// reserved band and cannot reference this class (it needs Puck.SdfVm).</summary>
+    public const int DerivedFaceBase = WorldPlacementPolicy.DerivedFaceBase;
+
+    /// <summary>Whether <paramref name="index"/> falls inside the reserved derived-face band
+    /// <c>[<see cref="DerivedFaceBase"/>, DerivedFaceBase + <paramref name="derivedFaceScreens"/>)</c> — the ONE
+    /// exclusion every rule that hands out a screen index shares. Two of them exist:
+    /// <c>WorldDefinitionValidator</c> refuses an AUTHORED screen here, and <c>WorldSceneEmitter</c>'s authoring-headroom
+    /// scan skips it. They must not be two independently-correct rules — a headroom slot claimed inside this band
+    /// collides with the binder's boot-reserved placeholder just as an authored screen would. Forwards to
+    /// <see cref="WorldPlacementPolicy.IsReservedFaceIndex"/>.</summary>
+    /// <param name="index">The engine screen-surface index to test.</param>
+    /// <param name="derivedFaceScreens">The count of reserved derived-face slots (<c>authoring.derivedFaceScreens</c>).</param>
+    /// <returns><see langword="true"/> when the index is reserved for a derived face.</returns>
+    public static bool IsReservedFaceIndex(int index, int derivedFaceScreens) =>
+        WorldPlacementPolicy.IsReservedFaceIndex(index: index, derivedFaceScreens: derivedFaceScreens);
 
     // A derived face slab's half-extents and screen-plane basis — a small static billboard at the placement position.
     private const float FaceHalfWidth = 0.6f;
-    private const float FaceHalfHeight = 0.45f;
     private const float FaceHalfDepth = 0.04f;
-    private const uint FaceRenderWidth = 256;
+    private const float FaceHalfHeight = 0.45f;
     private const uint FaceRenderHeight = 192;
+    private const uint FaceRenderWidth = 256;
 
     /// <summary>The derived rows a delivery produces: creation-eye cameras and creation-face screens. Neither is ever
     /// written to the document — they are recomputed each delivery from <c>(placements × creations)</c>.</summary>
@@ -48,7 +63,7 @@ internal static class WorldCreationFacets {
         var faceIndex = derivedFaceBase;
 
         foreach (var placement in placements) {
-            if (WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
+            if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
                 continue;
             }
 
@@ -60,8 +75,11 @@ internal static class WorldCreationFacets {
                 cameras.Add(item: new WorldCamera(
                     Name: name,
                     Anchor: new WorldAnchor.Placement(PlacementId: placement.Id, ShapeId: eye.ShapeId),
-                    Offset: eye.Position,
-                    Rig: new WorldRig.FirstPerson(EyeOffset: Vector3.Zero, FocusDistance: (eye.Focus ?? 1f), FieldOfViewRadians: ((eye.Fov ?? 60f) * (MathF.PI / 180f))),
+                    Rig: new WorldCameraRig(
+                        Motion: new WorldCameraMotion.Follow(Offset: eye.Position, WorldAxes: false, SpreadPullback: 0f),
+                        Aim: new WorldCameraAim.Forward(FocusDistance: (eye.Focus ?? 1f)),
+                        Lens: new WorldCameraLens(FieldOfViewRadians: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))
+                    ),
                     RenderWidth: FaceRenderWidth,
                     RenderHeight: FaceRenderHeight
                 ));
@@ -69,7 +87,7 @@ internal static class WorldCreationFacets {
         }
 
         foreach (var placement in placements) {
-            if (WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
+            if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
                 continue;
             }
 
@@ -81,8 +99,8 @@ internal static class WorldCreationFacets {
                 }
 
                 var source = (FindOverride(faceSources: placement.FaceSources, face: face.Name)
-                    ?? ParseDefaultSource(token: face.DefaultSource, cameras: derivedCameraNames, definition: definition, placement: placement, face: face)
-                    ?? new WorldScreenSource.None());
+                    ?? (ParseDefaultSource(token: face.DefaultSource, cameras: derivedCameraNames, definition: definition, placement: placement, face: face)
+                    ?? new WorldScreenSource.None()));
 
                 faces.Add(item: FaceScreen(index: faceIndex, placement: placement, source: source));
                 faceIndex++;
@@ -132,7 +150,6 @@ internal static class WorldCreationFacets {
             Route: WorldScreenRoute.Passive
         );
     }
-
     private static WorldScreenSource? FindOverride(IReadOnlyList<WorldPlacementFace>? faceSources, string face) {
         foreach (var entry in (faceSources ?? [])) {
             if (string.Equals(a: entry.Face, b: face, comparisonType: StringComparison.Ordinal)) {
@@ -157,8 +174,8 @@ internal static class WorldCreationFacets {
         }
 
         var name = (token.StartsWith(value: "camera:", comparisonType: StringComparison.Ordinal) ? token["camera:".Length..]
-            : token.StartsWith(value: "feed:", comparisonType: StringComparison.Ordinal) ? token["feed:".Length..]
-            : null);
+            : (token.StartsWith(value: "feed:", comparisonType: StringComparison.Ordinal) ? token["feed:".Length..]
+            : null));
 
         if ((name is not null) && (cameras.Contains(item: name) || DeclaresCamera(definition: definition, name: name))) {
             return new WorldScreenSource.View(CameraName: name);
@@ -168,7 +185,6 @@ internal static class WorldCreationFacets {
 
         return null;
     }
-
     private static bool DeclaresCamera(WorldDefinition definition, string name) {
         foreach (var camera in definition.Cameras) {
             if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {

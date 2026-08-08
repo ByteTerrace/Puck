@@ -1,0 +1,36 @@
+{
+  "Machines": [
+    {
+      "Fingerprint": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD x16",
+      "CalibrationNs": 16456000,
+      "Benches": [
+        {
+          "Id": "bench.complex-mul-ratio",
+          "Median": 0.96634969868245,
+          "Runs": [
+            0.9702067785544637,
+            0.96634969868245,
+            0.960954266490783
+          ],
+          "Mad": 0.003857079872013669
+        }
+      ]
+    },
+    {
+      "Fingerprint": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel x6",
+      "CalibrationNs": 22030100,
+      "Benches": [
+        {
+          "Id": "bench.complex-mul-ratio",
+          "Median": 0.45401474562417016,
+          "Runs": [
+            0.45401474562417016,
+            0.4467768035441513,
+            0.45514573521690926
+          ],
+          "Mad": 0.0011309895927391067
+        }
+      ]
+    }
+  ]
+}

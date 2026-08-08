@@ -13,8 +13,8 @@ namespace Puck.Recording.Audio;
 /// Opus bytes on the same build — the container-plus-codec output is reproducible.</remarks>
 public sealed class OpusStreamEncoder : IDisposable {
     private const int Channels = 2;
-    private const int FrameSamplesPerChannel = 960;
     private const int FrameSamples = (FrameSamplesPerChannel * Channels);
+    private const int FrameSamplesPerChannel = 960;
     private const int MaxPacketBytes = 8192;
     private const long NanosecondsPerSecond = 1_000_000_000L;
     private const int OutputSampleRate = 48000;

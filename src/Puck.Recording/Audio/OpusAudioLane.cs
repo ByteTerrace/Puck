@@ -23,14 +23,14 @@ public sealed class OpusAudioLane : IDisposable {
     private const int SeekPreRollNanoseconds = 80_000_000;
 
     private sealed class SourceState {
-        public required IAudioCaptureSource Source { get; init; }
+        public required OpusStreamEncoder Encoder { get; init; }
+        public long EpochNanoseconds { get; set; }
         public required float Gain { get; init; }
+        public bool HasEpoch { get; set; }
+        public required bool IsMix { get; init; }
         public required LinearResampler Resampler { get; init; }
         public required FloatRing Ring { get; init; }
-        public required OpusStreamEncoder Encoder { get; init; }
-        public required bool IsMix { get; init; }
-        public bool HasEpoch { get; set; }
-        public long EpochNanoseconds { get; set; }
+        public required IAudioCaptureSource Source { get; init; }
     }
 
     private float[] m_dequeueScratch = new float[9600];
@@ -115,26 +115,10 @@ public sealed class OpusAudioLane : IDisposable {
     }
 
     /// <summary>Starts device capture on every bound source.</summary>
-    public void Start() {
-        foreach (var state in m_mix) {
-            state.Source.Start();
-        }
-
-        foreach (var state in m_isolated) {
-            state.Source.Start();
-        }
-    }
+    public void Start() => SetCaptureRunning(running: true);
 
     /// <summary>Stops device capture on every bound source (buffered samples remain drainable).</summary>
-    public void Stop() {
-        foreach (var state in m_mix) {
-            state.Source.Stop();
-        }
-
-        foreach (var state in m_isolated) {
-            state.Source.Stop();
-        }
-    }
+    public void Stop() => SetCaptureRunning(running: false);
 
     /// <summary>Drains every source, resamples, mixes, and emits any completed Opus frames. Call on the audio thread.</summary>
     /// <param name="sink">The packet sink.</param>
@@ -185,6 +169,19 @@ public sealed class OpusAudioLane : IDisposable {
         m_disposed = true;
     }
 
+    private void SetCaptureRunning(bool running) {
+        SetCaptureRunning(states: m_mix, running: running);
+        SetCaptureRunning(states: m_isolated, running: running);
+    }
+    private static void SetCaptureRunning(List<SourceState> states, bool running) {
+        foreach (var state in states) {
+            if (running) {
+                state.Source.Start();
+            } else {
+                state.Source.Stop();
+            }
+        }
+    }
     private void DrainSources(List<SourceState> states) {
         foreach (var state in states) {
             var read = state.Source.Read(interleaved: m_readScratch, firstSampleTimestampNanoseconds: out var timestamp);
@@ -201,7 +198,6 @@ public sealed class OpusAudioLane : IDisposable {
             state.Resampler.Resample(input: m_readScratch.AsSpan(start: 0, length: read), output: state.Ring);
         }
     }
-
     private void PumpMix(IAudioPacketSink sink) {
         if ((m_mixEncoder is null) || (m_mix.Count == 0)) {
             return;
@@ -245,7 +241,6 @@ public sealed class OpusAudioLane : IDisposable {
             sink: sink
         );
     }
-
     private void PumpIsolated(SourceState state, IAudioPacketSink sink) {
         var available = state.Ring.Count;
 
@@ -263,7 +258,6 @@ public sealed class OpusAudioLane : IDisposable {
             sink: sink
         );
     }
-
     private void EnsureScratch(int length) {
         if (m_dequeueScratch.Length < length) {
             m_dequeueScratch = new float[length];

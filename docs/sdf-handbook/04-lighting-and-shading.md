@@ -242,7 +242,12 @@ from the shipped build on both backends, byte-for-byte.
   family: [../sdf-wiki/shading-ao-shadows.md](../sdf-wiki/shading-ao-shadows.md).
 - The de-scale invariant and why coverage AA is the exception:
   [../sdf-wiki/lipschitz-and-field-correctness.md](../sdf-wiki/lipschitz-and-field-correctness.md).
-- The shadow-cull correctness finding and the win/lose-on-density measurements:
-  [../sdf-bench-notes.md](../sdf-bench-notes.md) (the shadow-cull section).
-- The shading feature switches as measured levers:
-  [../engine-bench-plan.md](../engine-bench-plan.md) (§4, the v1 switch roster).
+- Shadow culling wins or loses depending on occluder density — that much is
+  settled. The measurements that located the win/lose boundary, and the
+  correctness finding recorded alongside them, are **gone**: the bench notes
+  holding them were deleted on 2026-08-02 and no other document repeats them.
+  Treat the boundary as unmeasured until someone measures it again.
+- The shading feature switches were a swept lever roster. That roster is also
+  gone with the bench plan, and `Puck.Bench` is quarantined and cannot supply it — the sweep
+  machinery there is generic and takes switch names from a host that no longer
+  composes it (see [08-performance.md](08-performance.md)).

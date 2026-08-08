@@ -15,12 +15,12 @@ internal static class AvcConfigRecord {
         var start = -1;
 
         while (index < (length - 2)) {
-            if ((annexB[index] == 0) && (annexB[index + 1] == 0) && (annexB[index + 2] == 1)) {
+            if ((annexB[index] == 0) && (annexB[(index + 1)] == 0) && (annexB[(index + 2)] == 1)) {
                 if (start >= 0) {
                     var end = index;
 
                     // A four-byte start code (00 00 00 01) trailing zero belongs to the next code, not this NAL.
-                    if ((end > start) && (annexB[end - 1] == 0)) {
+                    if ((end > start) && (annexB[(end - 1)] == 0)) {
                         end--;
                     }
 
@@ -55,26 +55,26 @@ internal static class AvcConfigRecord {
                 continue;
             }
 
-            var nalType = (annexB[offset] & 0x1F);
+            var nalType = annexB[offset] & 0x1F;
 
             switch (nalType) {
                 case 7: {
-                    sps = annexB.Slice(start: offset, length: count).ToArray();
+                        sps = annexB.Slice(start: offset, length: count).ToArray();
 
-                    continue;
-                }
+                        continue;
+                    }
                 case 8: {
-                    pps = annexB.Slice(start: offset, length: count).ToArray();
+                        pps = annexB.Slice(start: offset, length: count).ToArray();
 
-                    continue;
-                }
+                        continue;
+                    }
                 case 9: {
-                    // Access-unit delimiter: redundant in the length-prefixed mapping.
-                    continue;
-                }
+                        // Access-unit delimiter: redundant in the length-prefixed mapping.
+                        continue;
+                    }
                 default: {
-                    break;
-                }
+                        break;
+                    }
             }
 
             output.Add(item: (byte)((count >> 24) & 0xFF));
@@ -83,7 +83,7 @@ internal static class AvcConfigRecord {
             output.Add(item: (byte)(count & 0xFF));
 
             for (var i = 0; (i < count); i++) {
-                output.Add(item: annexB[offset + i]);
+                output.Add(item: annexB[(offset + i)]);
             }
         }
 
@@ -99,7 +99,7 @@ internal static class AvcConfigRecord {
             return [];
         }
 
-        var record = new List<byte>(capacity: (sps.Length + pps.Length + 16)) {
+        var record = new List<byte>(capacity: ((sps.Length + pps.Length) + 16)) {
             1,             // configurationVersion
             sps[1],        // AVCProfileIndication
             sps[2],        // profile_compatibility

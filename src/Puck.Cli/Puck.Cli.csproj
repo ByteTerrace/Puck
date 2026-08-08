@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Tool</PuckKind>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- BenchmarkDotNet compiles and loads generated runners at run time. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <!-- Server GC because the search verb fans its scan across worker threads. Invariant globalization is not set
+             here: Directory.Build.props turns it on repo-wide, and no verb has a culture-sensitive surface. -->
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+        <!-- The bench verb's BenchmarkDotNet classes and their [Benchmark] methods must be PUBLIC for the framework's
+             generated runner, which collides with the repo-wide GenerateDocumentationFile=true (CS1591). Documenting
+             each is noise; the search verb's own surface is entirely internal, so this only relaxes the benchmark files. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <!-- The compiler-platform packages ship translations of their diagnostic and exception strings;
+             without this the publish directory gains a localization folder per language for messages no
+             verb surfaces. -->
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The C# parser, syntax rewriters and semantic model behind the scan and format verbs. Already
+             arrived transitively through BenchmarkDotNet; declared directly because two verbs compile
+             against it. Credit: repository ACKNOWLEDGMENTS.md. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
+        <!-- The workspace layer behind the references verb: the symbol search (CSharp.Workspaces) and the
+             project-graph loader that runs the design-time build (Workspaces.MSBuild). The three
+             compiler-platform references move together — the packages pin each other at an exact version
+             internally, so floating one alone is a restore conflict rather than a resolution.
+             Workspaces.MSBuild delivers its out-of-process build host as contentFiles copied to the
+             output directory: never add ExcludeAssets or PrivateAssets=contentfiles here, or the
+             published layout loses BuildHost-netcore/ and every workspace load fails. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="[5.*, )" />
+        <PackageReference Include="Resharp" Version="1.0.5" />
+        <!-- The engine is F#-authored and loads FSharp.Core at runtime (assembly version 10.0.0.0);
+             the Resharp package does not declare the dependency, so it is pinned here explicitly. -->
+        <PackageReference Include="FSharp.Core" Version="10.0.110" />
+        <!-- House floating style [major.*, ). BenchmarkDotNet is pre-1.0, so its breaking-change axis is the minor
+             component: this pins the 0.15 API line and floats the patch, the semantic equivalent of [major.*, )
+             for a 1.0+ package. Resolve forward on a minor bump; never revert lock churn. -->
+        <PackageReference Include="BenchmarkDotNet" Version="[0.15.*, )" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- The `wasm-stdlib` verb writes Puck.Scripting.WasmStdlibSources.All — the registry lives here
+             (not Puck.Maths) because two of its three generated artifacts mirror types Puck.Scripting owns
+             or already depends on; see WasmStdlibSources's remarks. -->
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+        <!-- The `schema` verb generates the JSON Schema for puck.world.def.v1 from Puck.World.WorldSchema, which
+             walks WorldDefinition over its source-generated WorldJsonContext. Puck.Cli is a Tool kind — it sits
+             above every layer by construction (build/Architecture.props) — so this Engine-services edge needs no
+             architecture-gate exception. Data pulls in no backend, so the backend quarantine is unaffected. -->
+        <ProjectReference Include="..\Puck.World.Data\Puck.World.Data.csproj" />
+    </ItemGroup>
+
+    <!-- The command is `puck`, the assembly is Puck.Cli: the benchmark toolchain discovers the source project by
+         matching the assembly name to {name}.csproj, so the assembly keeps the conventional name and the friendly
+         command is a post-publish copy of the apphost (which binds to its embedded .dll name, not its own file name). -->
+    <Target Name="PublishPuckLauncher" AfterTargets="Publish">
+        <Copy
+            DestinationFiles="$(PublishDir)puck.exe"
+            SourceFiles="$(PublishDir)$(AssemblyName).exe"
+        />
+    </Target>
+
+</Project>

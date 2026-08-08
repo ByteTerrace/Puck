@@ -6,8 +6,10 @@ uses an integer 2^24 Hz clock, where one tick is one CPU cycle and one frame is
 280,896 cycles.
 
 Use [verdict-index.md](verdict-index.md) for a compact capability and gap table.
-Use [../agb-sota-survey.md](../agb-sota-survey.md) for prioritized engineering
-work. Topic pages contain the hardware reasoning and reproducible evidence.
+Topic pages contain the hardware reasoning and reproducible evidence. There is
+no prioritized work list: the survey that ranked the open accuracy items was
+deleted on 2026-08-02 and nothing replaced it, so the gap table's own status and
+effort labels are all the ordering that survives.
 
 ## Reading guide
 
@@ -62,5 +64,7 @@ inputs. RTC and sensor values cross a recordable input seam. Whole-machine
 snapshots include every live latch and scheduler event. Presentation resampling
 may use floating point only when it cannot feed back into emulation.
 
-The SM83 AGB compatibility costume is documented separately in
-[../ideal-gaming-brick-plan.md](../ideal-gaming-brick-plan.md).
+The SM83 AGB compatibility costume is not documented here. It belongs to the
+shared SM83 core in `src/Puck.HumbleGamingBrick`, and the `gaming-bricks` skill
+carries its settled contract facts — the plan document that used to hold them
+was deleted on 2026-08-02.

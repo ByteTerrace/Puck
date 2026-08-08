@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="System.IO.Hashing" Version="[10.*,)" />
     </ItemGroup>

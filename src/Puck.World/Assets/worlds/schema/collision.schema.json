@@ -1,0 +1,41 @@
+{
+  "description": "The contact-solver tuning (see WorldCollision) \u2014 SIM-AFFECTING.",
+  "type": "object",
+  "properties": {
+    "requirements": {
+      "description": "The contact qualities the world requires. An empty list permits analytic primitive contact; any declared requirement selects the SDF field.",
+      "type": "array",
+      "items": {
+        "description": "A contact quality authored by the world, independent of the engine implementation that supplies it.",
+        "enum": [
+          "SmoothUnionContact",
+          "GradientDerivedUp"
+        ]
+      }
+    },
+    "contactSkin": {
+      "description": "The signed skin the solver keeps between a body and every surface (world units).",
+      "type": "number"
+    },
+    "maxIterations": {
+      "description": "The relaxation iteration count per tick (above 8 is a solver pathology, not a choice).",
+      "type": "integer"
+    },
+    "maxSlopeDegrees": {
+      "description": "The steepest surface a body still counts as STANDING on. A contact whose normal leans further from the body\u0027s up axis than this pushes the body but never grounds it \u2014 the walkable-slope limit.",
+      "type": "number"
+    },
+    "gradientProbe": {
+      "description": "The finite-difference step field contact samples the surface normal with, in world units; 0 takes the evaluator\u0027s own default. Meaningful only when a requirement selects field contact.",
+      "type": "number"
+    }
+  },
+  "required": [
+    "requirements",
+    "contactSkin",
+    "maxIterations",
+    "maxSlopeDegrees",
+    "gradientProbe"
+  ],
+  "additionalProperties": false
+}

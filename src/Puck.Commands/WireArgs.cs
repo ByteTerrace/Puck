@@ -99,7 +99,7 @@ public readonly ref struct WireArgs {
             return string.Empty;
         }
 
-        var length = (count - start - 1);
+        var length = ((count - start) - 1);
 
         for (var index = start; (index < count); index++) {
             length += this[index].Length;

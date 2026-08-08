@@ -1,0 +1,249 @@
+[
+  {
+    "Id": "presented.clifford-planar-complex-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.Multivector", "Name": "FromCoefficients" },
+      { "Type": "Puck.Maths.FixedComplex", "Name": "op_Multiply" },
+      { "Type": "Puck.Maths.FixedComplex", "Name": ".ctor" }
+    ],
+    "Legs": [
+      { "Kind": "SharedSubstrate", "Flavor": "FusedSubstrate", "Subject": "GeometricAlgebra.Create(0,1,0).GeometricProduct, full raw range", "Against": "FixedComplex.op_Multiply", "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) — the IDENTICAL kernel on both sides (GeometricAlgebra.cs:190,221; FixedComplex.cs:68-69,74-75). The two sides pick their narrow/wide accumulation width at different gates (2^29 in GeometricAlgebra, 2^31 in FixedComplex), but RoundProductSum's narrow and wide overloads are proven to agree wherever both are legal (GeometricAlgebra.cs's own remarks on GeometricProduct), so the differing threshold is not what this twin exercises — verified full-range bit-identical empirically before authoring this row", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "BOTH sides of the twin, on the same operand quads, in the same law, at full raw range", "Against": "Oracles.QuadraticMultiply at (P,Q) = (0,-1) — reused verbatim from complex.mul-vs-oracle and complex.twin-quad's own witness leg, one Oracles.RoundDyadic at shift 32 in BigInteger, sharing no code with GeometricAlgebra or FixedComplex", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the one-generator (0,1,0) signature IS the QuadraticAlgebra (0,-1) relation the complex family already reproduces, so this twin closes the missing GeometricAlgebra-side leg of that unification rather than re-deriving it", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-planar-split-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.Multivector", "Name": "FromCoefficients" },
+      { "Type": "Puck.Maths.FixedSplit", "Name": "op_Multiply" },
+      { "Type": "Puck.Maths.FixedSplit", "Name": ".ctor" }
+    ],
+    "Legs": [
+      { "Kind": "SharedSubstrate", "Flavor": "FusedSubstrate", "Subject": "GeometricAlgebra.Create(1,0,0).GeometricProduct, full raw range", "Against": "FixedSplit.op_Multiply", "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) — the IDENTICAL kernel on both sides (GeometricAlgebra.cs:190,221; FixedSplit.cs:82-83,88-89). The narrow/wide gates differ (2^29 vs 2^31), harmlessly for the same reason as presented.clifford-planar-complex-twin — verified full-range bit-identical empirically before authoring this row", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "BOTH sides of the twin, on the same operand quads, in the same law, at full raw range", "Against": "Oracles.QuadraticMultiply at (P,Q) = (0,+1) — reused verbatim from split.mul-vs-oracle and split.twin-quad's own witness leg, one Oracles.RoundDyadic at shift 32 in BigInteger, sharing no code with GeometricAlgebra or FixedSplit", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the one-generator (1,0,0) signature IS the QuadraticAlgebra (0,+1) relation the split family already reproduces, so this twin closes the missing GeometricAlgebra-side leg of that unification rather than re-deriving it", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-planar-dual-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.Multivector", "Name": "FromCoefficients" },
+      { "Type": "Puck.Maths.FixedDual`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "op_Multiply" },
+      { "Type": "Puck.Maths.FixedDual`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": ".ctor" }
+    ],
+    "Legs": [
+      { "Kind": "SharedSubstrate", "Flavor": "FusedSubstrate", "Subject": "GeometricAlgebra.Create(0,0,1).GeometricProduct, full raw range", "Against": "FixedDual<FixedQ4816>.op_Multiply", "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) — the IDENTICAL kernel on both sides (GeometricAlgebra.cs:190,221; FixedDual.cs:252-253,255-256). The narrow/wide gates differ (2^29 vs 2^31), harmlessly for the same reason as presented.clifford-planar-complex-twin — verified full-range bit-identical empirically before authoring this row", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "BOTH sides of the twin, on the same operand quads, in the same law, at full raw range", "Against": "Oracles.QuadraticMultiply at (P,Q) = (0,0) — reused verbatim from dual.mul-vs-oracle and dual.twin-quad's own witness leg, one Oracles.RoundDyadic at shift 32 in BigInteger, sharing no code with GeometricAlgebra or FixedDual", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the one-generator (0,0,1) degenerate signature IS the QuadraticAlgebra (0,0) relation the dual family already reproduces, so this twin closes the missing GeometricAlgebra-side leg of that unification rather than re-deriving it", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-quaternion-even-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "IsEven" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "op_Multiply" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": ".ctor" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "X" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "Y" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "Z" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "W" }
+    ],
+    "Legs": [
+      { "Kind": "SharedSubstrate", "Flavor": "FusedSubstrate", "Subject": "the even (3,0,0) embedding of two quaternions (i ↔ -e23, j ↔ e13, k ↔ -e12) under GeometricAlgebra.GeometricProduct, full raw range less the ENVELOPE fold below, then read back and required to stay in the even subalgebra (GeometricAlgebra.IsEven)", "Against": "FixedQuaternion.op_Multiply (the Hamilton product)", "Shared": "FixedQ4816.RoundProductSum(long) and (Int128) — the IDENTICAL kernel on both sides (GeometricAlgebra.cs:190,221; FixedQuaternion.cs:111-114,116-119)", "Citation": "ENVELOPE: the embedding negates the swept quaternion's X and Z components (i ↔ -e23, k ↔ -e12). FixedQ4816.MinValue's unary negation is documented to wrap rather than throw (FixedQ4816.cs's operator- remarks) because MinValue's positive magnitude is exactly 2^47, one raw past MaxValue and therefore unrepresentable in FixedQ4816 at all — not a defect of negation, and not something any FixedQ4816 blade coefficient could hold either. A swept X or Z of exactly long.MinValue therefore embeds as itself instead of the +2^47 this sign convention requires, corrupting entry to GeometricProduct: this was the twin's counterexample (left=[0,1,0,0] right=[0,0,-9223372036854775808,0], lane=0, +2^47 vs -2^47). GeometricAlgebraClaims.ExcludeUnembeddableMinValue folds exactly that one raw value on X and Z (both operands) onto MinValue+1, whose negation is exact; Y and W (never negated by this embedding) keep the full raw range including MinValue unchanged", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "GeometricQuaternionEvenFirst's recovered quaternion, on the SAME (envelope-folded) operand pair the twin sweeps", "Against": "GeometricAlgebraClaims.QuaternionHamiltonOracle — the same four-term Hamilton-product formula FixedQuaternion.op_Multiply implements, transcribed once more but computed with no call into FixedQuaternion or GeometricAlgebra and rounded once via Oracles.RoundDyadic at shift 16, the shared-nothing dyadic rounding face every classical leg in this suite routes through; checked inline in GeometricQuaternionEvenFirst (thrown as InvalidOperationException on mismatch, exactly like the existing IsEven check) rather than through Laws.VectorTwin's own witness parameter, whose LawRegistry.cs binding is out of scope for this change — the disagreement this twin originally reported (see the SharedSubstrate leg's ENVELOPE) is exactly what this oracle would have caught independently, closing THIS row's own admitted gap (it no longer needs to mirror presented.clifford-twin-geometric-3-0-0's; that other law's own witness is unaffected by this change)", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the embedding never leaves the even subalgebra of (3,0,0): IsEven holds on the geometric product of two even embeddings, over the full raw range this law sweeps less the same ENVELOPE fold", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-motor-rigid-transform-twin",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Exponential" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "SandwichTransform" },
+      { "Type": "Puck.Maths.FixedRigidTransform", "Name": "FromRotationTranslation" },
+      { "Type": "Puck.Maths.FixedRigidTransform", "Name": "TransformPoint" },
+      { "Type": "Puck.Maths.FixedRigidTransform", "Name": "op_Multiply" },
+      { "Type": "Puck.Maths.FixedQuaternion", "Name": "Normalize" }
+    ],
+    "Legs": [
+      { "Kind": "InTreeIndependent", "Flavor": "None", "Subject": "the motor translator·rotor of (3,0,1) — Exponential of a null translation bivector composed via GeometricProduct with the rotor embedding — applied by SandwichTransform to an embedded point, and the composed motor of two such motors applied the same way", "Against": "FixedRigidTransform.FromRotationTranslation(...).TransformPoint and FixedRigidTransform.op_Multiply followed by TransformPoint — a second shipped rigid-motion implementation sharing no code with GeometricAlgebra's motor machinery", "Shared": "", "Citation": "ENVELOPE: this is a MEASURED-PRECISION statement, not exact bit-identity — both sides round FixedQ4816.Sqrt/SinCos/Exp2 transcendentals along different evaluation paths (Exponential's circular/hyperbolic/degenerate branch selection versus FixedRigidTransform's own dual-quaternion construction), each independently pinned by scalar.sqrt-exact, scalar.sincos-vs-series and scalar.exp2-vs-series over their own operand bands. Rotation is bounded to raw ±65536 (a unit-length neighborhood) and translation/point to the exact 8-fractional-bit sublattice (raw a multiple of 256, magnitude ≤ 2000×256), an envelope verified empirically (2000 samples) to stay ≤128 raw (~2×10⁻³ world units) before this ceiling was chosen", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "motor composition matches transform composition: SandwichTransform of the GeometricProduct of two motors, applied to a point, agrees with FixedRigidTransform.op_Multiply's composed transform applied to the same point, to the same 128-raw ceiling", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-reverse-anti-automorphism",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Reverse" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Reverse(x·y) == Reverse(y)·Reverse(x) at signature (3,0,1) (sixteen blades), for whole-number multivector coefficients where two chained products stay exact, so the identity holds bit-for-bit rather than only to a rounding tolerance", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "GeometricAlgebra.Reverse is exercised directly through its public entry point, distinct from the private ReverseCore that GeometricAlgebra.SandwichTransform calls internally and that presented.clifford-motor-rigid-transform-twin therefore does NOT exercise", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "presented.clifford-multivector-decomposition",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Multivector", "Name": "FromCoefficients" },
+      { "Type": "Puck.Maths.Multivector", "Name": "Scalar" },
+      { "Type": "Puck.Maths.Multivector", "Name": "op_Addition" },
+      { "Type": "Puck.Maths.Multivector", "Name": "op_Subtraction" },
+      { "Type": "Puck.Maths.Multivector", "Name": "BladeCapacity" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GradeProjection" }
+    ],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "Multivector.op_Addition and op_Subtraction, blade for blade, over whole-number coefficients", "Against": "FixedQ4816's own + and - operators applied directly to the same two coefficient arrays, computed independently of Multivector's implementation", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "FromCoefficients round-trips every blade through the indexer; Scalar(v) sets blade 0 to v and every other blade to zero; BladeCapacity is 16; summing GeometricAlgebra.GradeProjection over every grade 0..GeneratorCount reconstructs the original multivector exactly, and each grade projection zeroes every blade of a different grade, at signature (3,0,1)", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.clifford-exponential-scalar-square-domain",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Exponential" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Reverse" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "BladeCount" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the acceptance boundary of Exponential, in both directions. Eleven in-domain bivectors are accepted, covering all three branches and the zero-generator scalar algebra: circular at (2,0,0) and (0,2,0), hyperbolic at (1,1,0), degenerate at (1,0,1), a mixed rotor at (3,0,0), the zero bivector, and the translator and screw generators at (3,0,1). Nine out-of-domain inputs are refused, and every refusal is an ArgumentException naming the 'bivector' parameter: a nonzero lane of grade zero, one, three or four; a grade-two element carrying an additional scalar or vector lane; and three genuine grade-two elements of (4,0,0) whose squares are not scalar (e12+e34, e13+e24, and an unequally weighted e12+e34)", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "every accepted value, and the true exponential of the leading refused input", "Against": "the versor identity: Reverse negates every grade-two blade, so for a bivector b the reverse of exp(b) is exp(−b) and exp(b)·Reverse(exp(b)) is exactly 1. That is a standard fact about the exponential of a grade-two element, read here off no implementation — it is applied through GeometricProduct and Reverse, which presented.clifford-reverse-anti-automorphism and the planar twins pin on their own", "Shared": "", "Citation": "ENVELOPE: a MEASURED-PRECISION statement on the accepted side, since the branches round FixedQ4816.Sqrt, SinCos and Exp2. The worst residual over the eleven accepted cases is 4 raw on the scalar lane and 0 on every other, so the 16-raw ceiling is generous; it sits four thousand times below the 63942 raw by which the refused input's branch value misses", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the refusal of the non-simple bivector is WARRANTED, not over-strict. In (4,0,0) the blades e12 and e34 commute and are disjoint, so exp(e12+e34) is the product exp(e12)·exp(e34) of two IN-DOMAIN exponentials the same law accepts; the claim confirms that product carries a nonzero e1234 lane, which no branch of the scalar-square closed form can produce, and that it meets the versor identity to one raw. Reconstructing what the closed form would have returned for the same input — the circular branch on the square's scalar lane — gives a value that misses the versor identity by 63942 raw, more than two thirds of a unit, so the refused answer was wrong rather than imprecise", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.clifford-descriptor-identity-is-the-signature",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Create" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "Square" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeometricProduct" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "PositiveCount" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "NegativeCount" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "DegenerateCount" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "GeneratorCount" },
+      { "Type": "Puck.Maths.GeometricAlgebra", "Name": "BladeCount" },
+      { "Type": "Puck.Maths.Multivector", "Name": "FromCoefficients" },
+      { "Type": "Puck.Maths.Multivector", "Name": "BladeCapacity" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "over all 35 signatures with at most four generators, two independently created descriptors of the same signature are equal, agree with their == and != operators and with the boxed Equals, refuse equality with a value of another type, and hash to the same value; and the default descriptor — whose null multiplication table is the deliberate encoding of the zero-generator scalar algebra — is equal to Create(0,0,0) in both directions and hashes with it, as its documented behavior across the whole public surface requires", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "inequality across all 35·34 ordered pairs of distinct signatures, each pair EXHIBITED computing something different rather than merely reported unequal", "Against": "the classical fact that distinct Clifford signatures are distinct algebras: either the generator counts differ, so some blade exists in one and lies outside the other — the claim finds that blade and shows the narrower descriptor refuses the operand the wider accepts — or the counts agree and some generator's square differs, and the claim shows the geometric product of that generator with itself disagrees on the scalar lane. The separating operand is derived from the signatures, never read off the equality being tested", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Multivector value identity beside the descriptor's: two multivectors built from the same sixteen coefficients are equal and share a hash, and perturbing any single blade by one raw unit — all sixteen tried — breaks equality. The digest is an Fnv1aHash fold rather than a per-process-seeded one, so it is the same value on every run and every machine and may be fingerprinted", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.monogenic-identity-is-tail-and-coordinates",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "One" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Zero" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Root" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "FromCoordinates" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "FromWindow" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Add" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "MultiplyByRoot" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "ProjectiveStep" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "One" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromCoordinates" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "a descriptor IS its modulus tail: two descriptors built from equal tails are equal, agree with their == and != operators and the boxed Equals, refuse equality with another type, and share a hash; five tails differing in a coefficient, in a sign, or in degree are each unequal to it; two default descriptors are equal and no constructed one is equal to a default. Over the FixedQ4816 carrier — whose degree-2 surface runs the delegating quadratic lane rather than the general one — the same holds, so the rule is the type's rather than BigInteger's", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "an Element or a Projective IS its coordinate vector, and the modulus is DELIBERATELY no part of it — the value-level face of the receiver-affinity contract, under which any degree-2 receiver reinterprets a degree-2 vector as its own. The claim pins the choice in both directions at once: One under the tail [1,1] equals One under the tail [5,7], while the two descriptors that produced them stay unequal, so the modulus is distinguished exactly where it is stored and nowhere else. Degree is still part of identity — a degree-2 One is unequal to a degree-1 and a degree-3 One — as are default values, which equal only other defaults", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "the algebraic identities hold as VALUE equality, through the framework's own comparers rather than only coordinate by coordinate: Add(One, Zero) equals One, Zero equals the all-zero coordinate vector, Root equals MultiplyByRoot(One), a FixedQ4816 element times One lands back on an equal element, ProjectiveStep of two equal windows agrees while a window is unequal to its own successor, and a HashSet holding One both recognizes Add(One, Zero) as the same value and refuses a second read of One as a new one. Elements differing by one raw unit or one coordinate stay unequal. The digest is an Fnv1aHash fold over the carrier's own hash codes rather than a per-process-seeded one, so it is stable across runs and machines", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.monogenic-degree2-and-degree3-match-independent-reference",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "FromCoordinates" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "FromWindow" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Add" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Subtract" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Negate" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Norm" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Trace" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "CharacteristicDiscriminant" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "CompanionPower" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "ProjectiveStep" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Degree" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Modulus" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Root" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "One" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Zero" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Element[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Coordinates" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Element[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Dimension" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Element[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Item" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Projective[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Coordinates" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Projective[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Dimension" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1+Projective[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Item" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Norm" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Trace" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "CompanionPower" },
+      { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "MobiusStep" }
+    ],
+    "Legs": [
+      { "Kind": "InTreeIndependent", "Flavor": "None", "Subject": "degree-2 MonogenicAlgebra<BigInteger> at tail [-Q,-P] — Create/FromCoordinates/FromWindow/Multiply/Add/Subtract/Negate/Norm/Trace/CharacteristicDiscriminant/CompanionPower(exponent 13)/ProjectiveStep/One/Zero/Root/Degree/Modulus, plus the Element and Projective accessors", "Against": "QuadraticAlgebra<BigInteger> at (P,Q) — a second shipped implementation of the same degree-2 construction, sharing no code with MonogenicAlgebra's general-degree machinery (convolution, companion reduction, Berkowitz/cofactor determinant)", "Shared": "", "Citation": "ENVELOPE: over BigInteger neither side ever rounds, so this is exact-integer agreement with no rounding substrate to pin", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "the same degree-2 operations, and degree-3 Multiply/Norm/Trace at a second, independently drawn modulus and element pair (no QuadraticAlgebra sibling exists at degree 3)", "Against": "GeometricAlgebraClaims.MonogenicReference<TScalar> — a from-scratch reimplementation of the convolution-and-companion-reduction algorithm and the recursive cofactor determinant, independent of MonogenicAlgebra<TScalar> and calling no member of it, sharing no code with the subject", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Root satisfies Root^2 = P*Root + Q*One at degree 2, and Element.Dimension/Projective.Dimension equal the constructing degree at degree 3, so a wrong Root or a wrong dimension accessor reddens this case even though it never appears in the Multiply/Norm/Trace comparisons above", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.monogenic-plastic-ratio-recurrence",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "CompanionPower" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "CharacteristicDiscriminant" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Norm" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Trace" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Add" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "FromCoordinates" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "at the degree-3 modulus x^3-x-1 (the plastic-ratio world), CompanionPower reproduces the order-3 recurrence a(n)=a(n-2)+a(n-3) for terms 3 through 60, coordinate for coordinate, a regime no degree-2 law in this suite reaches", "Against": "", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Classical", "Flavor": "None", "Subject": "CharacteristicDiscriminant() at x^3-x-1", "Against": "-23, the classically known discriminant of x^3-x-1 (a standard fact about this specific cubic, not a value read off the subject and re-asserted)", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "at the same modulus, Norm is multiplicative and Trace is additive over five hand-picked, exact-integer element pairs spanning small, mixed-sign and larger coefficients", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "algebra.monogenic-fixed-fusion-diverges-from-reference",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Multiply" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "Create" },
+      { "Type": "Puck.Maths.MonogenicAlgebra`1[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]", "Name": "FromCoordinates" }
+    ],
+    "Legs": [
+      { "Kind": "Structural", "Flavor": "None", "Subject": "at a fixed non-integer degree-3 modulus, MonogenicAlgebra<FixedQ4816>.Multiply's accumulate-wide-round-once fusion diverges from a per-product recomputation (GeometricAlgebraClaims.MonogenicReference<FixedQ4816>.Multiply, which rounds through FixedQ4816's own * operator once per pairwise product before combining) on at least 100 of the domain's operand pairs — a canary: if fusing every term before one rounding agreed with rounding each term first, the fused discipline this suite pins elsewhere would be decorative", "Against": "", "Shared": "", "Citation": "", "Absolute": "owed: a BigInteger dyadic oracle check of MonogenicAlgebra<FixedQ4816>.Multiply's fused rounding against the exact rational value at the natural scale; presented.clifford-twin-geometric-3-0-0/-3-0-1 establish the analogous absolute statement for GeometricAlgebra's own fused product, but no sibling exists yet for MonogenicAlgebra's general-degree fused lane" }
+    ]
+  }
+]

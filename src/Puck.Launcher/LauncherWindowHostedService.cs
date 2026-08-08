@@ -19,10 +19,6 @@ namespace Puck.Launcher;
 /// loop merely drains the resulting exit request (and honors <c>--exit-after</c> for scripted runs).
 /// </summary>
 public sealed class LauncherWindowHostedService : BackgroundService {
-    // Below this much time remaining the pacer busy-waits for an accurate wake-up; above it, it sleeps.
-    private const int SpinThresholdMilliseconds = 2;
-    // Fixed simulation rate (Hz); a divisor of EngineTicks.PerSecond so the step is a whole number of ticks.
-    private const uint TargetUpdateRate = 240U;
     // Cap on back-to-back device-loss recoveries with no successful frame between them, so a permanently-dead GPU (or a
     // presenter that cannot recover) fails loudly instead of spinning forever. Reset to 0 after any good frame.
     private const int MaxConsecutiveDeviceLossRecoveries = 8;
@@ -100,7 +96,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_externalClocks = externalClocks;
         m_frameTimingHub = frameTimingHub;
         m_inputClock = inputClock;
-        m_inputRouter = SingleOrDefault(items: inputRouters, name: nameof(InputRouter));
+        m_inputRouter = LauncherHostLoop.SingleOrDefault(items: inputRouters, name: nameof(InputRouter), hostDescription: "launcher");
         m_logger = logger;
         m_options = options;
         m_presentPacing = presentPacing;
@@ -109,7 +105,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_rootHostContext = rootHostContext;
         m_registry = registry;
         m_shell = shell;
-        m_simulation = SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation));
+        m_simulation = LauncherHostLoop.SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation), hostDescription: "launcher");
         m_snapshotInputCaptures = snapshotInputCaptures.ToArray();
         m_terminal = terminal;
         m_windowFactory = windowFactory;
@@ -118,24 +114,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
         }
 
-        m_registry.RouteSimulationTo(sink: m_inputRouter);
-    }
-
-    private static T? SingleOrDefault<T>(IEnumerable<T> items, string name)
-        where T : class {
-        using var enumerator = items.GetEnumerator();
-
-        if (!enumerator.MoveNext()) {
-            return null;
-        }
-
-        var item = enumerator.Current;
-
-        if (enumerator.MoveNext()) {
-            throw new InvalidOperationException(message: $"The launcher accepts at most one {name}.");
-        }
-
-        return item;
+        // The console text door's OWN sink — bound to the Console principal when the router built it, so wiring it
+        // here cannot choose what a submitted line acts as.
+        m_registry.RouteSimulationTo(sink: m_inputRouter?.ConsoleTextSink);
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) {
@@ -175,10 +156,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 window.Show();
 
-                var accumulatorTicks = 0UL;
                 var clock = TickClock.Start();
-                var captureOriginTicks = m_inputClock.NowTicks;
-                var elapsedTicks = 0UL;
+                // The shared fixed-step accumulator (Puck.Launcher.FixedStepPump) — null when no simulation is
+                // registered (a composition root that drives no fixed-step sim at all), mirroring the ORIGINAL
+                // m_simulation/m_inputRouter pairing check the constructor already enforces.
+                var pump = (((m_simulation is { } pumpSimulation) && (m_inputRouter is { } pumpInputRouter))
+                    ? new FixedStepPump(simulation: pumpSimulation, inputRouter: pumpInputRouter, registry: m_registry, captureOriginTicks: m_inputClock.NowTicks)
+                    : null);
+                // Reused every iteration (never reallocated) so [frame-timing]'s sub-bucket breakdown costs nothing
+                // while disarmed and no per-frame garbage while armed.
+                var fixedStepTiming = new FixedStepTimingAccumulator();
                 var hostFrame = 0UL;
                 var frequency = Stopwatch.Frequency;
                 var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
@@ -189,14 +176,15 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 var displayTiming = (displayTimingInfo?.QueryDisplayTiming() ?? DisplayTimingSnapshot.Unknown);
                 var displayConfigurationVersion = (displayTimingInfo?.DisplayConfigurationVersion ?? 0UL);
                 const int displayTimingRetryLimit = 8;
-                var displayTimingRetryAttemptsRemaining = (displayTimingInfo is not null && !displayTiming.IsKnown ? displayTimingRetryLimit : 0);
+                var displayTimingRetryAttemptsRemaining = (((displayTimingInfo is not null) && !displayTiming.IsKnown) ? displayTimingRetryLimit : 0);
                 var nextDisplayTimingRetryTimestamp = 0L;
                 var precisionWaiter = (window as IPrecisionWaiter);
-                // An optional HELD root capability (contributed by the composition root, e.g. the demo's
-                // PointerStore) that wants every raw pointer event as it is dequeued — see IPointerInputSink's
-                // doc comment for why pointer/button state bypasses the InputSignal/command-binding pipeline
-                // below entirely. Resolved once: the set of contributed capabilities never changes mid-run.
-                _ = m_rootHostContext.HoldsCapability<IPointerInputSink>(capability: out var pointerSink);
+                // An optional HELD root capability (contributed by the composition root) that wants every
+                // raw window input event as it is dequeued — see IWindowInputObserver's doc comment for why
+                // pointer/button state bypasses the InputSignal/command-binding pipeline below entirely, and for
+                // how a root with several observers (a camera-orbit sink, a console text sink) fans them out
+                // through one composite. Resolved once: the set of contributed capabilities never changes mid-run.
+                _ = m_rootHostContext.HoldsCapability<IWindowInputObserver>(capability: out var windowInputObserver);
                 // CLOSED-LOOP present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
                 // instant it was confirmed. The pacer OBSERVES this rhythm — reporting the measured display interval (the
                 // DELTA between consecutive confirmed presents, the only phase-meaningful part of the sample) — but it does
@@ -228,8 +216,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
                 var renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
-                var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
-                var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
+                var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
+                var stepTicks = EngineTicks.PerRate(ratePerSecond: LauncherHostLoop.TargetUpdateRate);
                 var startTimestamp = Stopwatch.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
                 var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
@@ -252,6 +240,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // is one SUBSCRIBER of that hub rather than a private code path — the bench runner is another.
                 var frameTimingSkipFeedback = (m_presenter as IPresentationSkipFeedback);
                 var frameTimingProducedFrames = 0UL;
+                // IInputFocus.IsActiveFor is a LEVEL, not an edge — tracked across iterations so the focus-loss
+                // reset below fires once on the transition into unfocused, never every frame the level stays low.
+                var wasInputUnfocused = false;
 
                 m_frameTimingHub.Published += PublishFrameTimingDigest;
 
@@ -331,23 +322,49 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
                     // When the window is not focused, key/button releases are not delivered, so drop any held
-                    // inputs — otherwise a value down at the moment focus was lost would stay stuck.
-                    if (
+                    // inputs — otherwise a value down at the moment focus was lost would stay stuck. Fire only on
+                    // the TRANSITION into unfocused (wasInputUnfocused above): this is a level read, and resetting
+                    // on the level would re-run ReleaseHeld() — and its ResetAll chord reset — every single frame
+                    // focus stays away, unlatching a trigger resting in the hysteresis band for good and re-arming
+                    // (and re-firing) an armed chord command at frame rate. Distinct from the FocusLost windowInput
+                    // kind below, which is OS-level and already edge-shaped on its own.
+                    var isInputUnfocused = (
                         m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var heldFocus) &&
                         !heldFocus.IsActiveFor(deviceId: default)
-                    ) {
-                        m_shell.ReleaseHeld();
+                    );
+
+                    if (isInputUnfocused && !wasInputUnfocused) {
                         m_inputRouter?.ReleaseHeld();
                     }
 
-                    m_shell.BeginFrame();
+                    wasInputUnfocused = isInputUnfocused;
 
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
-                        // Hand the RAW event to the pointer sink first, unconditionally (not focus-gated): pointer
-                        // state is presentation/session-only, never simulation input, so it never touches
-                        // CaptureTick/CommandSnapshot below — it just mirrors the window's own button/position
-                        // truth for whichever composition root wants it (e.g. a draggable overlay panel).
-                        pointerSink?.Observe(inputEvent: in windowInput);
+                        // Hand the RAW event to the window input observer first, unconditionally (not focus-gated):
+                        // it captures presentation/session-only state (pointer drag, a console's typed keystrokes)
+                        // that never touches CaptureTick/CommandSnapshot below — the focus gate a few lines down is
+                        // what stops a captured keystroke from ALSO driving the avatar or firing a bound command
+                        // (see IWindowInputObserver's doc comment).
+                        windowInputObserver?.Observe(inputEvent: in windowInput);
+
+                        if (windowInput.Kind == WindowInputKind.FocusLost) {
+                            // OS WINDOW focus loss (Alt-Tab, click-away) — distinct from the IInputFocus/TerminalControl
+                            // check above, which is engine-terminal focus and never fires from an OS-level Alt-Tab.
+                            // WindowInputMapper has no case for this kind; it must never reach it.
+                            m_inputRouter?.ReleaseHeld();
+                            continue;
+                        }
+
+                        if (windowInput.Kind is WindowInputKind.PointerMove or WindowInputKind.PointerPosition or WindowInputKind.PointerButton or WindowInputKind.PointerWheel) {
+                            // The pointer is BROWSING state, not bound input: where the cursor is, what it is over,
+                            // which buttons are held, and how far the wheel turned are presentation/session-only and must never reach a
+                            // CommandSnapshot. The observer call above is therefore the pointer's WHOLE path — a pointer
+                            // act enters the simulation only when a consumer of that state dispatches an ordinary
+                            // console verb, through the same door a typed line uses. No InputSources entry names a
+                            // pointer control, so, exactly like FocusLost, these kinds must never reach
+                            // WindowInputMapper: it has no case for them and throws.
+                            continue;
+                        }
 
                         // Stamp at the pump: the wndproc dispatched these during PollEvents above, so capture
                         // time ≈ now. Monotonic and sufficient to attribute the input to a fixed-step tick;
@@ -360,11 +377,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
                             inputFocus.IsActiveFor(deviceId: signal.DeviceId)
                         ) {
-                            if (m_inputRouter is { } router) {
-                                router.Capture(signal: in signal);
-                            } else {
-                                m_shell.Enqueue(signal: signal);
-                            }
+                            // The router is the ONLY door physical input has. Its predecessor had a second, frame-driven
+                            // branch for a root with no router — that path produced no tick, no recording, and no
+                            // stamped principal, so it was deleted with the sources facet rather than secured. A root
+                            // without an InputRouter is therefore a root with no bound input at all, BY DESIGN; the
+                            // constructor above already refuses a simulation registered without one.
+                            m_inputRouter?.Capture(signal: in signal);
                         }
                     }
 
@@ -399,65 +417,27 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                     var deltaTicks = clock.Sample();
 
-                    if (deltaTicks > maxFrameTicks) {
-                        // InputClock never clamps, while the simulation intentionally drops excess wall time. Rebase the
-                        // capture-to-simulation pin by the dropped interval so newly captured input remains due now rather
-                        // than waiting for simulation time the host deliberately discarded.
-                        captureOriginTicks += (deltaTicks - maxFrameTicks);
-                        deltaTicks = maxFrameTicks;
-                    }
-
-                    accumulatorTicks += deltaTicks;
-
-                    var consumedTicks = ((accumulatorTicks / stepTicks) * stepTicks);
-
-                    accumulatorTicks -= consumedTicks;
-                    var previousElapsedTicks = elapsedTicks;
-
-                    elapsedTicks += consumedTicks;
-
                     if (frameTimingEnabled) {
                         frameTimingClockTicks = (Stopwatch.GetTimestamp() - frameTimingClockStart);
                     }
 
                     var frameTimingFixedStepStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
 
-                    if ((m_simulation is { } simulation) && (m_inputRouter is { } inputRouter)) {
-                        var stepCount = (consumedTicks / stepTicks);
-                        var firstTick = (previousElapsedTicks / stepTicks);
+                    if (pump is { } activePump) {
+                        var timing = (frameTimingEnabled ? fixedStepTiming : null);
 
-                        for (var stepIndex = 0UL; (stepIndex < stepCount); stepIndex++) {
-                            var tick = (firstTick + stepIndex);
-                            var stepElapsedTicks = ((tick + 1UL) * stepTicks);
-                            var windowEndTick = (captureOriginTicks + stepElapsedTicks);
-                            var frameTimingInputSnapshotStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
-                            var commands = inputRouter.SnapshotForTick(tick: tick, windowEndTick: windowEndTick);
+                        if (timing is not null) {
+                            timing.InputSnapshotTicks = 0L;
+                            timing.CommandApplyTicks = 0L;
+                            timing.SimulationStepTicks = 0L;
+                        }
 
-                            if (frameTimingEnabled) {
-                                frameTimingInputSnapshotTicks += (Stopwatch.GetTimestamp() - frameTimingInputSnapshotStart);
-                            }
+                        frameTimingFixedSteps += (ulong)activePump.Advance(deltaTicks: deltaTicks, maxFrameTicks: maxFrameTicks, stepTicks: stepTicks, timing: timing);
 
-                            var frameTimingCommandApplyStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
-
-                            m_registry.ApplySnapshot(snapshot: in commands);
-
-                            if (frameTimingEnabled) {
-                                frameTimingCommandApplyTicks += (Stopwatch.GetTimestamp() - frameTimingCommandApplyStart);
-                            }
-
-                            var fixedStep = new FixedStepContext(
-                                ElapsedTicks: stepElapsedTicks,
-                                StepTicks: stepTicks,
-                                Tick: tick
-                            );
-                            var frameTimingSimulationStepStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
-
-                            simulation.Step(context: in fixedStep, commands: in commands);
-
-                            if (frameTimingEnabled) {
-                                frameTimingSimulationStepTicks += (Stopwatch.GetTimestamp() - frameTimingSimulationStepStart);
-                                frameTimingFixedSteps++;
-                            }
+                        if (timing is not null) {
+                            frameTimingInputSnapshotTicks = timing.InputSnapshotTicks;
+                            frameTimingCommandApplyTicks = timing.CommandApplyTicks;
+                            frameTimingSimulationStepTicks = timing.SimulationStepTicks;
                         }
                     }
 
@@ -517,9 +497,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             (height > 0)
                         ) {
                             var frameContext = new FrameContext(
-                                AccumulatorTicks: accumulatorTicks,
-                                DeltaTicks: consumedTicks,
-                                ElapsedTicks: elapsedTicks,
+                                AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
+                                DeltaTicks: (frameTimingFixedSteps * stepTicks),
+                                ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                                 FrameDeltaTicks: deltaTicks,
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
@@ -644,7 +624,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                             var frameTimingPacerStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
 
-                            WaitUntil(
+                            LauncherHostLoop.WaitUntil(
                                 deadlineTimestamp: nextRenderDeadline,
                                 frequency: frequency,
                                 precisionWaiter: precisionWaiter,
@@ -874,7 +854,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}).",
                 (displayTiming.Signal.IsKnown ? $"{displayTiming.Signal.Hertz:0.###} Hz" : "unknown"),
                 displayTiming.VariableRefresh.Support,
-                (displayTiming.VariableRefresh.Range is { } range ? $"{range.MinimumHertz:0.###}-{(range.MaximumHertz is { } maximum ? $"{maximum:0.###}" : "mode-max")} Hz" : "unknown"),
+                ((displayTiming.VariableRefresh.Range is { } range) ? $"{range.MinimumHertz:0.###}-{((range.MaximumHertz is { } maximum) ? $"{maximum:0.###}" : "mode-max")} Hz" : "unknown"),
                 displayTiming.VariableRefresh.Source,
                 decision.TargetHertz,
                 decision.Basis
@@ -909,26 +889,5 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_frameTimingDigestWorst = default;
 
         Console.Error.WriteLine(value: $"[frame-timing] worst-of-{FrameTimingReportInterval} frame {worst.ProducedFrameIndex} | interval {worst.IntervalMs:0.000}ms | pump {worst.PumpMs:0.000} | clock {worst.ClockMs:0.000} | input-snapshot {worst.InputSnapshotMs:0.000} | command-apply {worst.CommandApplyMs:0.000} | simulation-step {worst.SimulationStepMs:0.000} | fixed-overhead {worst.FixedStepOverheadMs:0.000} | sim-output {worst.SimulationOutputMs:0.000} | gpu-drain {worst.GpuDrainMs:0.000} | produce {worst.ProduceMs:0.000} | present {worst.PresentMs:0.000} | post-present {worst.PostPresentMs:0.000} | pacer {worst.PacerMs:0.000} | remainder {worst.RemainderMs:0.000} | gc-pause {worst.GcPauseMs:0.000} ({worst.GcCollections}) | steps {worst.FixedSteps} | skippedTotal {worst.SkippedPresentTotal}");
-    }
-    private static void WaitUntil(long deadlineTimestamp, long spinThreshold, long frequency, IPrecisionWaiter? precisionWaiter) {
-        while (true) {
-            var remaining = (deadlineTimestamp - Stopwatch.GetTimestamp());
-
-            if (remaining <= 0L) {
-                break;
-            }
-
-            if (remaining > spinThreshold) {
-                // Wake within ~0.5 ms of (deadline - spinThreshold) via the high-resolution waiter, then spin the
-                // remainder for an accurate edge; fall back to a coarse 1 ms sleep where no precision waiter exists.
-                var sleepTicks = (remaining - spinThreshold);
-
-                if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: ((double)sleepTicks / frequency)))) {
-                    Thread.Sleep(millisecondsTimeout: 1);
-                }
-            } else {
-                Thread.SpinWait(iterations: 48);
-            }
-        }
     }
 }

@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 namespace Puck.Commands;
 
 /// <summary>
-/// A passive <see cref="ICommandSource"/> fed with command lines that are run through a registry's text
-/// path, making a piped or scripted stream a first-class input.
+/// A passive queue of command lines that are run through a registry's text path, making a piped or scripted stream a
+/// first-class input.
 /// </summary>
 /// <remarks>
 /// Lines are pushed in with <see cref="Enqueue"/> by any producer — for example, a host service that
@@ -12,8 +12,10 @@ namespace Puck.Commands;
 /// thread and submits each non-blank line, surfacing the line and its <see cref="CommandResult"/>
 /// through the optional result callback supplied at construction. The queue is thread-safe, so a
 /// background producer may enqueue while the frame thread collects.
+/// <para>Every line submitted here dispatches as <see cref="CommandPrincipal.Console"/>: the registry's text path is
+/// the console door, and a line's identity is a property of that door rather than of the line.</para>
 /// </remarks>
-public sealed class TextCommandSource : ICommandSource {
+public sealed class TextCommandSource {
     private readonly Action<string, CommandResult>? m_onResult;
     private readonly ConcurrentQueue<string> m_pending = new();
     private readonly CommandRegistry m_registry;
@@ -48,11 +50,7 @@ public sealed class TextCommandSource : ICommandSource {
     }
 
     /// <summary>Submits every line enqueued since the last call, in arrival order.</summary>
-    /// <param name="sink">The sink for the current frame. Unused; lines run through the registry's text path.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    public void Collect(ICommandSink sink) {
-        ArgumentNullException.ThrowIfNull(sink);
-
+    public void Collect() {
         // Honor the HOLD gate BEFORE draining and AGAIN after each submitted line: a line whose handler arms the gate
         // (a step/settle verb) stops the drain for this frame, and the remaining queued lines wait for the gate to
         // release on a later frame — the queue itself is FIFO, so their order is preserved across the pause.

@@ -9,7 +9,7 @@ namespace Puck.SdfVm.Queries;
 // implementation (like SdfProgram's own host-side AnalyzeBounds/AnalyzeLipschitz passes), not a codegen of the
 // shader. Touching mapCore's RESET/TRANSLATE/ROTATE/SCALE/REPEAT/REPEAT_LIMITED/SYMMETRY_PLANE/ELONGATE/ONION/
 // DILATE/PUSH_FIELD/POP_FIELD/SHAPE cases, or blendShape/evaluateShape's Sphere/Box/ScreenSlab/Torus/Plane/
-// RoundCone/Capsule/Cylinder/Ellipsoid/Vesica bodies, means updating this file's mirror in the SAME change (and vice
+// RoundCone/Capsule/Cylinder/Ellipsoid/Vesica/Trapezoid bodies, means updating this file's mirror in the SAME change (and vice
 // versa) — a divergence is silent (both sides compile and run; only the ANSWER differs).
 //
 // THE EXCLUDED-OPS RULE (asserted once at construction, never per query): this evaluator is WARP-FREE — it rejects
@@ -33,15 +33,18 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     private static readonly FixedQ4816 EllipsoidMinDenom = FixedQ4816.FromDouble(value: 0.0001);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
-    // The tetrahedron central-difference probe offset for TryFieldGradient, in RAW world units. Two failure modes
+    // The central-difference probe offset for TryFieldGradient, in RAW world units. Two failure modes
     // bound it from both sides: too small and both TryDistance taps quantize to the SAME raw Q48.16 distance (the
     // format's resolution is 2^-16 ~ 0.0000153, and every supported shape/blend involves at least one Sqrt whose
     // rounding is coarser still near a smooth seam), collapsing the estimated gradient to zero; too large and the
     // central-difference TRUNCATION error grows (the estimate is only accurate where the field is locally near-linear
     // across the probe span, and any accumulated blend seam or Repeat cell wall inside that span corrupts the taps).
-    // 0.01 world units is documented, not derived: it sits three orders of magnitude above the format's raw floor and
-    // three orders below room-scale content. Consumers authoring much smaller or larger geometry may need a
-    // different probe — this is a tuning constant, not a physical law.
+    // The 6-tap per-axis probe's reconstruction response is 2*step*g per axis (the retired 4-tap tetrahedron's was
+    // 4*step*g), so the quantize-to-equal collapse threshold DOUBLED: both taps landing on the same raw Q48.16
+    // distance now requires 2*step >= 2^-16, i.e. step >= ~7.6e-6 (was ~3.8e-6 under the tetrahedron). The default
+    // 0.01 world units still sits ~3 orders of magnitude above that floor and three orders below room-scale content.
+    // 0.01 is documented, not derived. Consumers authoring much smaller or larger geometry may need a different
+    // probe — this is a tuning constant, not a physical law.
     private static readonly FixedQ4816 GradientEpsilon = FixedQ4816.FromDouble(value: 0.01);
     // The march accept threshold (Raycast/SphereCast/TryGroundHeight/LineOfSight): a sample within this of the
     // surface counts as a hit rather than one more step. Matches the scale of GradientEpsilon (both are "close
@@ -60,17 +63,21 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // hit" rather than spin — the standard non-convergence contract every sphere tracer carries, never a hang.
     private const int MaxMarchIterations = 512;
 
-    // The tetrahedron normal-estimate offsets: four isotropic directions whose outer products sum to 4*I, so the
-    // weighted sum TryFieldGradient computes reconstructs the same gradient a 6-tap central difference would, at 2/3
-    // the TryDistance calls (see the sdf-world skill's analytic-normal gotcha — this evaluator uses the TAP form
-    // deliberately, Decision B: direction dominates for gravity, and matching the renderer's own probe shape keeps
-    // the two systems' "which way is down" answers comparable at a shared point).
-    private static readonly FixedVector3[] TetrahedronOffsets = [
-        new(X: FixedQ4816.One, Y: -FixedQ4816.One, Z: -FixedQ4816.One),
-        new(X: -FixedQ4816.One, Y: -FixedQ4816.One, Z: FixedQ4816.One),
-        new(X: -FixedQ4816.One, Y: FixedQ4816.One, Z: -FixedQ4816.One),
-        new(X: FixedQ4816.One, Y: FixedQ4816.One, Z: FixedQ4816.One),
-    ];
+    // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. The old 4-tap tetrahedron
+    // (equivalent only where the field is locally LINEAR across the probe span) aliased edge/seam curvature into a
+    // spurious tangential component with a fixed sign pattern — its fingerprint is a normal with two exactly-equal
+    // components (measured (0.3589, 0.3589, 0.8616) at a wall-floor union corner whose true gradient has no X), and
+    // the contact solver consuming that normal converted commanded planar momentum into a deterministic tangential
+    // runaway while a body ground against a wall. Central differences are exact where the field is mirror-symmetric
+    // about the probe point ONLY when every op between the probe point and the shape body is exactly affine in fixed
+    // point (ResetPoint/Translate plus a symmetric shape body) — the same fixed-point subtraction on bitwise-mirrored
+    // taps. Through Rotate/Scale the rounding of r(c+d) and r(c-d) is independent (a yaw-90 quaternion quantizes to
+    // |q|^2 = 1 + 2.1e-6), leaving a systematic tangential residual of order 1e-3 in the normalized gradient — ~400x
+    // smaller than the tetrahedron's edge aliasing, sub-perceptual at feel scale, and zero on unrotated geometry. The
+    // tetrahedron's original rationale — matching the
+    // renderer's probe shape — is stale: the renderer's lit normal is ANALYTIC by default now (the dual-gradient
+    // path; see the sdf-world skill), leaving accuracy at contact edges as the governing requirement over the two
+    // saved taps.
     private readonly CompiledInstruction[] m_instructions;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
@@ -93,7 +100,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
 
     /// <inheritdoc/>
-    public bool TryDistance(WorldCoord3 position, out FixedQ4816 distance, out int material) {
+    public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
@@ -205,11 +212,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    public bool TryFieldGradient(WorldCoord3 position, out FixedVector3 gradient) =>
+    public bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient) =>
         TryFieldGradient(position: position, epsilon: GradientEpsilon, gradient: out gradient);
 
     /// <summary>Evaluates the field's GRADIENT at <paramref name="position"/> with a caller-chosen probe step — the
-    /// per-call peer of <see cref="TryFieldGradient(WorldCoord3, out FixedVector3)"/> for a consumer authoring geometry
+    /// per-call peer of <see cref="TryFieldGradient(FixedPosition, out FixedVector3)"/> for a consumer authoring geometry
     /// at a scale the baked default probe does not suit. A non-positive <paramref name="epsilon"/> takes the evaluator's
     /// documented default (0.01 world units); the interface method is exactly this overload at that default.</summary>
     /// <param name="position">The world-space point to evaluate.</param>
@@ -217,29 +224,38 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <param name="gradient">The unit-length gradient, when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when every probe <see cref="TryDistance"/> call succeeded and the raw gradient was
     /// non-zero.</returns>
-    public bool TryFieldGradient(WorldCoord3 position, FixedQ4816 epsilon, out FixedVector3 gradient) {
+    public bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient) {
         gradient = FixedVector3.Zero;
 
         var step = ((epsilon > FixedQ4816.Zero) ? epsilon : GradientEpsilon);
-        var accumulator = FixedVector3.Zero;
 
-        for (var index = 0; (index < TetrahedronOffsets.Length); index++) {
-            var offset = TetrahedronOffsets[index];
-
-            if (!TryDistance(position: (position + (offset * step)), distance: out var probeDistance, material: out _)) {
-                return false;
-            }
-
-            accumulator += (offset * probeDistance);
+        if (!TryAxisDifference(position: position, offset: new FixedVector3(X: step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), difference: out var differenceX) ||
+            !TryAxisDifference(position: position, offset: new FixedVector3(X: FixedQ4816.Zero, Y: step, Z: FixedQ4816.Zero), difference: out var differenceY) ||
+            !TryAxisDifference(position: position, offset: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: step), difference: out var differenceZ)) {
+            return false;
         }
 
-        var normalized = accumulator.Normalize();
+        var normalized = new FixedVector3(X: differenceX, Y: differenceY, Z: differenceZ).Normalize();
 
         if (normalized == FixedVector3.Zero) {
             return false;
         }
 
         gradient = normalized;
+
+        return true;
+    }
+
+    // One central-difference pair: d(p + offset) - d(p - offset). Both taps must answer.
+    private bool TryAxisDifference(FixedPosition position, FixedVector3 offset, out FixedQ4816 difference) {
+        difference = FixedQ4816.Zero;
+
+        if (!TryDistance(position: (position + offset), distance: out var positive, material: out _) ||
+            !TryDistance(position: (position + (-offset)), distance: out var negative, material: out _)) {
+            return false;
+        }
+
+        difference = (positive - negative);
 
         return true;
     }
@@ -252,19 +268,19 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         new(HasBlocked: true, HasHeightfield: true, HasOccupancy: true);
 
     /// <inheritdoc/>
-    public bool Raycast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
+    public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
         March(origin: origin, direction: dir, maxDistance: maxDist, radius: FixedQ4816.Zero, hit: out hit);
 
     /// <inheritdoc/>
-    public bool SphereCast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
+    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
         March(origin: origin, direction: dir, maxDistance: maxDist, radius: radius, hit: out hit);
 
     /// <inheritdoc/>
-    public bool Overlap(WorldCoord3 center, FixedQ4816 radius) =>
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
         (TryDistance(position: center, distance: out var distance, material: out _) && (distance <= radius));
 
     /// <inheritdoc/>
-    public bool TryGroundHeight(WorldCoord3 position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
+    public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
 
         var probeRange = (probeUp + probeDown);
@@ -288,7 +304,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    public bool LineOfSight(WorldCoord3 from, WorldCoord3 to) {
+    public bool LineOfSight(FixedPosition from, FixedPosition to) {
         var delta = (to - from);
         var distance = delta.Length;
 
@@ -309,7 +325,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // field's own clearance (see MinMarchStep's remarks on why no extra Lipschitz clamp is needed), testing against
     // HitEpsilon each iteration. Mirrors BakedWorldQuery.March's shape so the two providers read as the same family
     // of verb despite one walking a baked grid and the other a live field.
-    private bool March(WorldCoord3 origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
+    private bool March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
         hit = default;
 
         var unit = direction.Normalize();
@@ -329,9 +345,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             var clearance = (fieldDistance - radius);
 
             if (clearance <= HitEpsilon) {
-                _ = TryFieldGradient(position: position, gradient: out var normal); // best-effort; Zero on a degenerate field
-
-                hit = new RayHit(Confidence: WorldQueryConfidence.Exact, Distance: traveled, Material: material, Normal: normal, Point: position);
+                // Normal is deliberately NOT computed here — see RayHit.Normal's remarks. Call TryFieldGradient at
+                // hit.Point if a future consumer needs it.
+                hit = new RayHit(Confidence: WorldQueryConfidence.Exact, Distance: traveled, Material: material, Normal: FixedVector3.Zero, Point: position);
 
                 return true;
             }
@@ -411,6 +427,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             SdfShapeType.Plane or
             SdfShapeType.Ellipsoid or
             SdfShapeType.Vesica or
+            SdfShapeType.Trapezoid or
             SdfShapeType.RoundCone or
             SdfShapeType.ScreenSlab => true,
             _ => false,
@@ -447,6 +464,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             SdfShapeType.Cylinder => SdfCylinder(p: p, radius: instruction.Data0X, halfHeight: instruction.Data0Y),
             SdfShapeType.Ellipsoid => SdfEllipsoid(p: p, inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W)),
             SdfShapeType.Vesica => SdfVesica(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
+            SdfShapeType.Trapezoid => SdfTrapezoidSolid(p: p, bottomHalfWidth: instruction.Data0X, topHalfWidth: instruction.Data0Y, halfHeight: instruction.Data0Z, liftAmount: instruction.Data0W, lift: instruction.Data1Y),
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {(SdfShapeType)instruction.Shape} reached EvaluateShape unvalidated."),
         };
     }
@@ -510,6 +528,47 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (((qx * a) + (qy * b)) - lowerRadius);
     }
+    private static FixedQ4816 SdfTrapezoidSolid(FixedVector3 p, FixedQ4816 bottomHalfWidth, FixedQ4816 topHalfWidth, FixedQ4816 halfHeight, FixedQ4816 liftAmount, FixedQ4816 lift) {
+        if (lift > Half) {
+            var distance2D = SdfTrapezoid2D(p: new FixedVector2(X: p.X, Y: p.Y), r1: bottomHalfWidth, r2: topHalfWidth, halfHeight: halfHeight);
+
+            return SdfExtrude2D(distance2D: distance2D, z: p.Z, halfDepth: liftAmount);
+        }
+
+        return SdfTrapezoid2D(
+            p: new FixedVector2(X: (RadialLength(x: p.X, z: p.Z) - liftAmount), Y: p.Y),
+            r1: bottomHalfWidth,
+            r2: topHalfWidth,
+            halfHeight: halfHeight
+        );
+    }
+    private static FixedQ4816 SdfTrapezoid2D(FixedVector2 p, FixedQ4816 r1, FixedQ4816 r2, FixedQ4816 halfHeight) {
+        var k1 = new FixedVector2(X: r2, Y: halfHeight);
+        var k2 = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
+
+        p = p with { X = FixedQ4816.Abs(value: p.X) };
+
+        var ca = new FixedVector2(
+            X: (p.X - FixedQ4816.Min(x: p.X, y: ((p.Y < FixedQ4816.Zero) ? r1 : r2))),
+            Y: (FixedQ4816.Abs(value: p.Y) - halfHeight)
+        );
+        var projection = FixedQ4816.Clamp(
+            value: (FixedVector2.Dot(left: (k1 - p), right: k2) / FixedVector2.Dot(left: k2, right: k2)),
+            minimum: FixedQ4816.Zero,
+            maximum: FixedQ4816.One
+        );
+        var cb = ((p - k1) + (k2 * projection));
+        var sign = (((cb.X < FixedQ4816.Zero) && (ca.Y < FixedQ4816.Zero)) ? -FixedQ4816.One : FixedQ4816.One);
+
+        return (sign * FixedQ4816.Sqrt(value: FixedQ4816.Min(x: FixedVector2.Dot(left: ca, right: ca), y: FixedVector2.Dot(left: cb, right: cb))));
+    }
+    private static FixedQ4816 SdfExtrude2D(FixedQ4816 distance2D, FixedQ4816 z, FixedQ4816 halfDepth) {
+        var w = new FixedVector2(X: distance2D, Y: (FixedQ4816.Abs(value: z) - halfDepth));
+        var inside = FixedQ4816.Min(x: FixedQ4816.Max(x: w.X, y: w.Y), y: FixedQ4816.Zero);
+        var outside = new FixedVector2(X: FixedQ4816.Max(x: w.X, y: FixedQ4816.Zero), Y: FixedQ4816.Max(x: w.Y, y: FixedQ4816.Zero)).Length;
+
+        return (inside + outside);
+    }
     private static FixedQ4816 RadialLength(FixedQ4816 x, FixedQ4816 z) =>
         new FixedVector2(X: x, Y: z).Length;
 
@@ -555,13 +614,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // the result).
     private static FixedQ4816 BlendSmoothUnion(FixedQ4816 a, FixedQ4816 b, FixedQ4816 k) {
         var h = FixedQ4816.Clamp(value: (Half + ((Half * (b - a)) / k)), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
-        var blended = ((h <= FixedQ4816.Zero) ? b : Lerp(a: a, b: b, t: (FixedQ4816.One - h)));
+        var blended = ((h <= FixedQ4816.Zero) ? b : FixedQ4816.Lerp(from: a, to: b, amount: (FixedQ4816.One - h)));
 
         return (blended - ((k * h) * (FixedQ4816.One - h)));
     }
-    private static FixedQ4816 Lerp(FixedQ4816 a, FixedQ4816 b, FixedQ4816 t) =>
-        (a + ((b - a) * t));
-
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================
 

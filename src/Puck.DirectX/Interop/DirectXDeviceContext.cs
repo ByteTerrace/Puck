@@ -150,7 +150,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         void* infoQueuePtr;
         var infoQueueIid = ID3D12InfoQueue.IID_Guid;
 
-        if (((IUnknown*)m_device.Handle)->QueryInterface(in infoQueueIid, out infoQueuePtr).Succeeded) {
+        if (((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out infoQueuePtr, riid: in infoQueueIid).Succeeded) {
             m_infoQueue = (nint)infoQueuePtr;
         }
 
@@ -255,11 +255,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         var fence = (ID3D12Fence*)m_idleFence;
         var value = m_idleFenceValue;
 
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(fence, value);
+        ((ID3D12CommandQueue*)m_commandQueue)->Signal(Value: value, pFence: fence);
         m_idleFenceValue++;
 
         if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(value, m_idleFenceEvent);
+            fence->SetEventOnCompletion(Value: value, hEvent: m_idleFenceEvent);
             _ = PInvoke.WaitForSingleObject(hHandle: m_idleFenceEvent, dwMilliseconds: uint.MaxValue);
         }
 

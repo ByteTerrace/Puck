@@ -1,0 +1,28 @@
+# Case M: WorldDefinitionValidator REQUIRES a role-bound channel to declare Bipolar. That rule is present
+# and confirmed (216fe466, an ancestor of this crate's pinned SHA -- see the README header); it is not
+# pending. What is still unexercised is the NEGATIVE half: this battery ships no world declaring a
+# role-bound Unipolar/Binary channel, so the refusal itself is never fired here. The half below IS asserted:
+# a Unipolar/Binary COMPOSITION channel must still boot, proving the rule does not over-reach past roles.
+#
+# EXPECTED (once the fix lands): a world declaring a ROLE channel (Role != null) with Unipolar or Binary shape
+# refuses at document PARSE/validate time, naming the ordinal, the role, and the offending shape -- mirroring
+# WorldDefinitionValidator.ValidateChannels' existing per-row shape/threshold checks (see e.g. the
+# 'threshold is only meaningful on a binary channel' refusal this same validator already emits).
+#
+# At THIS crate's pinned SHA, only the SECOND half below is verified: the channel-walk test world's Unipolar
+# COMPOSITION channel ('level', Role == null) must still load and boot cleanly -- composition rows are
+# untouched by the incoming role-shape rule, and this half is asserted for real, not merely documented.
+#
+# --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
+replay.status
+world.wait 5
+# Verified at this SHA: the world booted at all (this line only runs if it did) and 'level' is a real,
+# resolvable channel ordinal -- both proven by a clean player.channels read naming it.
+player.channels 1
+world.affordances
+#
+# NOT exercised by this battery (the rule itself is present, only this negative case is unbuilt): a second
+# world document declaring a Role-bound channel with Unipolar or Binary shape (e.g. a 'forward' row carrying
+# "role": "MoveForward", "shape": "Unipolar") must refuse to boot at all, naming channel, shape and role.
+# Author such a document, re-point --world at it, and confirm the refusal names all three. Verified separately
+# by hand at 216fe466 (both Unipolar and Binary role rows refuse, exit 1); it simply has no script here.

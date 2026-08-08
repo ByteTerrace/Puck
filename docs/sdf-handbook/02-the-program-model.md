@@ -273,7 +273,7 @@ per-pixel interpreter fast.
 ## Related resources
 
 - The accumulator rule, the intersection-annihilation bug, and the `Xor`
-  exemption: [`.agents/skills/sdf-world/SKILL.md`](../../.agents/skills/sdf-world/SKILL.md)
+  exemption: [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md)
   ("The accumulator rule"), and the doctrine on `SdfBlendOp`.
 - Per-op Lipschitz norms and the `stepScale == 1.0` byte-identity contract:
   [`docs/sdf-wiki/lipschitz-and-field-correctness.md`](../sdf-wiki/lipschitz-and-field-correctness.md).
@@ -281,6 +281,6 @@ per-pixel interpreter fast.
   the `SdfOp.PushField`/`PopField` doc comments in
   [`src/Puck.SdfVm/SdfOp.cs`](../../src/Puck.SdfVm/SdfOp.cs).
 - The ISA admission rule and current instruction inventory: the sync-pair
-  preamble in [`.agents/skills/sdf-world/SKILL.md`](../../.agents/skills/sdf-world/SKILL.md).
+  preamble in [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md).
 - Parked-instance cost tracking and the capacity-probe envelope: the
   "Engine semantics" section of the same skill.

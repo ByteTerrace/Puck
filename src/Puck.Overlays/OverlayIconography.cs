@@ -3,10 +3,8 @@ using Puck.Input.Devices;
 namespace Puck.Overlays;
 
 /// <summary>
-/// Procedural badge-glyph ids for the icon element kind's physical-button badges. Values below
-/// <see cref="AtlasBase"/> select a procedural SDF function in <c>overlay-unified.frag.hlsl</c> (KEEP IN SYNC);
-/// values at or above it are reserved for a texture-atlas tile (<c>id - AtlasBase</c>) so a themed texture path can
-/// slot in later without touching the data model.
+/// Procedural badge-glyph ids for the icon element kind's physical-button badges. Each id selects a procedural SDF
+/// function in <c>overlay-unified.frag.hlsl</c> (KEEP IN SYNC).
 /// </summary>
 public enum OverlayGlyphId : ushort {
     /// <summary>No glyph.</summary>
@@ -40,16 +38,13 @@ public enum OverlayGlyphId : ushort {
     StickLeft = 13,
     /// <summary>The right-stick-press pictogram glyph.</summary>
     StickRight = 14,
-
-    /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
-    AtlasBase = 1024,
 }
 
 /// <summary>
-/// Procedural action-icon ids for the symbol drawn on an icon element's plate. The same procedural/atlas split as
-/// <see cref="OverlayGlyphId"/> (KEEP IN SYNC with the shader); <see cref="Number1"/> through <see cref="Number12"/>
-/// render as the icon grammar's hairline drafting digits for generic placeholder actions. The editor verbs
-/// (<see cref="EditPrev"/> onward) are the sculpt/select/place repertoire the editor pages bind.
+/// Procedural action-icon ids for the symbol drawn on an icon element's plate (KEEP IN SYNC with the shader);
+/// <see cref="Number1"/> through <see cref="Number12"/> render as the icon grammar's hairline drafting digits for
+/// generic placeholder actions. The editor verbs (<see cref="EditPrev"/> onward) are the sculpt/select/place
+/// repertoire the editor pages bind.
 /// </summary>
 public enum OverlayIconId : ushort {
     /// <summary>No icon.</summary>
@@ -124,9 +119,6 @@ public enum OverlayIconId : ushort {
     AudioSpeaker = 35,
     /// <summary>An ambient bed (concentric presence rings around the focal dot — a region, not a position).</summary>
     AudioBed = 36,
-
-    /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
-    AtlasBase = 1024,
 }
 
 /// <summary>

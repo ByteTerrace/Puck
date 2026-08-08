@@ -90,19 +90,42 @@ public interface ISdfSceneEmitter {
     /// <see cref="SdfEmitContext.ParkPosition"/>, and <see cref="SdfEmitContext.Time"/>.</param>
     void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) { }
 
-    /// <summary>This emitter's own content revision (0 = never changes, the default — a purely static emitter). The
-    /// composition host sums every registered emitter's <see cref="Revision"/> into one aggregate; the composed
-    /// program rebuilds whenever that sum changes, so bumping this on a state edit is how an emitter signals "my next
-    /// <see cref="Emit"/> would produce different content."</summary>
-    int Revision => 0;
+    /// <summary>How many INDEPENDENT revision counters this emitter watches (0 = never changes, the default — a purely
+    /// static emitter). Read ONCE by the composition host to lay out its revision vector, so — exactly like
+    /// <see cref="DynamicSlotCount"/> — it must stay constant for the emitter's lifetime.
+    /// <para>
+    /// AN EMITTER WATCHING SEVERAL COUNTERS DECLARES SEVERAL COMPONENTS, NEVER THEIR SUM. A sum can CANCEL: not every
+    /// counter in this codebase is monotonic (at least one is assigned from a server-supplied snapshot value and can
+    /// move DOWN), so one term rising by k while another falls by k leaves the total unchanged and the host holds a
+    /// stale program. Keeping the counters apart makes that impossible by construction rather than by hoping every
+    /// contributor only ever counts up.
+    /// </para></summary>
+    int RevisionComponentCount => 0;
 
-    /// <summary>Whether this emitter is a POSITIONAL-material-stride author — it calls
-    /// <see cref="SdfProgramBuilder.WallpaperFold"/>/<see cref="SdfProgramBuilder.RepeatPolar"/> with a nonzero
-    /// <c>materialStride</c> and expects the fold's per-cell/per-sector recolor to reach only materials THIS emitter
-    /// itself registered via <see cref="SdfProgramBuilder.AddMaterial"/>. <see langword="true"/> tells the composition
-    /// host to wrap this emitter's <see cref="Emit"/>
-    /// call in a <see cref="SdfProgramBuilder.BeginMaterialScope"/> scope, which clamps any such reach to this
-    /// emitter's own added-material span instead of leaving it to author discipline. Default <see langword="false"/>
-    /// for emitters that do not use a positional stride.</summary>
+    /// <summary>Writes this emitter's current revision counters into <paramref name="destination"/> — the host's own
+    /// scratch, sliced to exactly <see cref="RevisionComponentCount"/> entries. The composed program rebuilds whenever
+    /// ANY component differs from what this emitter reported when the held program was built, so bumping a counter on a
+    /// state edit is how an emitter signals "my next <see cref="Emit"/> would produce different content".
+    /// <para>
+    /// MUST write every entry of <paramref name="destination"/>: the host reuses one buffer across frames, so an unwritten
+    /// entry silently carries last frame's value and can mask the very change this call exists to report. Called every
+    /// frame on the render path — read counters, allocate nothing. The default no-op is correct for a
+    /// <see cref="RevisionComponentCount"/>-0 emitter (the slice is empty).
+    /// </para></summary>
+    /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
+    void WriteRevision(Span<int> destination) { }
+
+    /// <summary>Whether this emitter OWNS its material palette: <see langword="true"/> tells the composition host to
+    /// wrap this emitter's <see cref="Emit"/> call in a <see cref="SdfProgramBuilder.BeginMaterialScope"/> scope, so
+    /// any positional material recolor it emits — <see cref="SdfProgramBuilder.WallpaperFold"/>/
+    /// <see cref="SdfProgramBuilder.RepeatPolar"/> with a nonzero <c>materialStride</c> — can only ever reach materials
+    /// THIS emitter itself registered via <see cref="SdfProgramBuilder.AddMaterial"/>, instead of leaving that to
+    /// author discipline.
+    /// <para>
+    /// An emitter that authors a positional stride today MUST set this. An emitter whose palette is its own but that
+    /// emits no stride yet MAY also set it, and should: the scope is INERT without a stride (its clamp never runs, and
+    /// the composed words are byte-identical to the unscoped build), so declaring ownership up front costs nothing and
+    /// makes a stride grown later safe by construction rather than by remembering. Default <see langword="false"/>.
+    /// </para></summary>
     bool OwnsMaterialScope => false;
 }

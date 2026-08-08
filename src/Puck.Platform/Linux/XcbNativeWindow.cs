@@ -9,9 +9,10 @@ using Puck.Platform.Linux.Interop;
 namespace Puck.Platform.Linux;
 
 /// <summary>An X11 (XCB) native window backed by libxcb. Drives the window lifecycle and
-/// the events the engine loop needs (resize, close, first paint, pointer motion and buttons, and a
-/// fixed set of navigation/function keys on the standard Linux evdev keymap). Full keysym
-/// text input and clipboard integration are out of scope; on the Steam Deck this path runs
+/// the events the engine loop needs (resize, close, first paint, pointer motion and buttons, the full F1–F12
+/// function-key range plus a fixed set of navigation keys, and the Control/Shift/Alt/Super modifier keys — each
+/// side its own <see cref="KeyCode"/> — on the standard Linux evdev keymap). Full keysym
+/// text input, letters, Space, Tab, and clipboard integration are out of scope; on the Steam Deck this path runs
 /// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>. No pointer
 /// capture equivalent to Win32's <c>SetCapture</c> is implemented (XCB's is <c>xcb_grab_pointer</c>): a drag
 /// that leaves the client area on this path stops receiving motion until the pointer re-enters.</summary>
@@ -30,30 +31,50 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const uint XcbEventMaskButtonPress = 4;
     private const uint XcbEventMaskButtonRelease = 8;
     private const uint XcbEventMaskExposure = 32768;
+    private const uint XcbEventMaskFocusChange = 2097152;
     private const uint XcbEventMaskKeyPress = 1;
     private const uint XcbEventMaskKeyRelease = 2;
     private const uint XcbEventMaskPointerMotion = 64;
     private const uint XcbEventMaskStructureNotify = 131072;
     private const byte XcbExpose = 12;
+    private const byte XcbFocusOut = 10;
     private const byte XcbKeyPress = 2;
     private const byte XcbKeyRelease = 3;
     private const byte XcbMotionNotify = 6;
+    // xcb_focus_out_event_t's 'detail'/'mode' values (X11 protocol X.h) that do NOT mean this window lost keyboard
+    // focus — see HandleFocusOut.
+    private const byte XcbNotifyGrab = 1;
+    private const byte XcbNotifyPointer = 5;
+    private const byte XcbNotifyUngrab = 2;
+    private const byte XcbNotifyVirtual = 1;
     private const byte XcbPropModeReplace = 0;
     private const byte XcbResponseTypeMask = 0x7F;
     private const ushort XcbWindowClassInputOutput = 1;
 
     // Standard Linux evdev keycodes (X11 keycode = evdev scancode + 8); stable on the
-    // Steam Deck and mainstream desktops, so a small fixed table covers the navigation and
-    // function keys the terminal app binds without an xkb keysym dependency.
-    private const byte KeycodeEscape = 9;
+    // Steam Deck and mainstream desktops, so a small fixed table covers the navigation,
+    // function, and modifier keys the terminal app binds without an xkb keysym dependency.
+    private const byte KeycodeAltLeft = 64;
+    private const byte KeycodeAltRight = 108;
     private const byte KeycodeBackspace = 22;
+    private const byte KeycodeControlLeft = 37;
+    private const byte KeycodeControlRight = 105;
     private const byte KeycodeDown = 116;
+    private const byte KeycodeEscape = 9;
     private const byte KeycodeF1 = 67;
-    private const byte KeycodeF8 = 74;
+    // F1..F10 are contiguous from 67, so the range check below spans them with these two bounds alone; F11/F12 sit at
+    // 95/96 and are matched individually.
+    private const byte KeycodeF10 = 76;
+    private const byte KeycodeF11 = 95;
+    private const byte KeycodeF12 = 96;
     private const byte KeycodeGrave = 49;
     private const byte KeycodeLeft = 113;
     private const byte KeycodeReturn = 36;
     private const byte KeycodeRight = 114;
+    private const byte KeycodeShiftLeft = 50;
+    private const byte KeycodeShiftRight = 62;
+    private const byte KeycodeSuperLeft = 133;
+    private const byte KeycodeSuperRight = 134;
     private const byte KeycodeUp = 111;
 
     private readonly nint m_connection;
@@ -113,7 +134,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             depth: XcbCopyFromParent,
             height: (ushort)m_options.Height,
             parent: rootWindow,
-            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskKeyRelease | XcbEventMaskButtonPress | XcbEventMaskButtonRelease | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify)],
+            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskKeyRelease | XcbEventMaskButtonPress | XcbEventMaskButtonRelease | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify | XcbEventMaskFocusChange)],
             valueMask: XcbCwBackPixel | XcbCwEventMask,
             visual: rootVisual,
             width: (ushort)m_options.Width,
@@ -344,6 +365,9 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
                 m_pendingReleaseKeycode = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
                 m_pendingReleaseTime = (uint)Marshal.ReadInt32(ofs: 4, ptr: eventPointer);
                 return;
+            case XcbFocusOut:
+                HandleFocusOut(eventPointer: eventPointer);
+                return;
             case XcbDestroyNotify:
                 m_isOpen = false;
                 m_isVisible = false;
@@ -351,6 +375,29 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             default:
                 return;
         }
+    }
+    // xcb_focus_out_event_t carries 'detail' at byte offset 1 and 'mode' at byte offset 8. Many window managers
+    // grab the keyboard for their own global hotkeys, which delivers FocusOut with mode = XcbNotifyGrab (and the
+    // matching FocusIn back with XcbNotifyUngrab) even though this window never stopped being the keyboard focus —
+    // treating that as a real loss would cancel every held command on each hotkey press. detail = XcbNotifyPointer
+    // (a pointer-relative notice) and XcbNotifyVirtual (an inferior-relative notice) are likewise not losses of
+    // this top-level window's keyboard focus. The X11 twin of Win32's WM_KILLFOCUS otherwise: a modifier key's own
+    // release can go to whatever window the window manager just handed focus to and never reach this process at
+    // all. See Win32NativeWindow's WmKillFocus case for the full hazard.
+    private void HandleFocusOut(nint eventPointer) {
+        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
+        var mode = Marshal.ReadByte(ofs: 8, ptr: eventPointer);
+
+        if (
+            (mode == XcbNotifyGrab) ||
+            (mode == XcbNotifyUngrab) ||
+            (detail == XcbNotifyPointer) ||
+            (detail == XcbNotifyVirtual)
+        ) {
+            return;
+        }
+
+        m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
     }
     private void HandleConfigureNotify(nint eventPointer) {
         var width = (uint)(ushort)Marshal.ReadInt16(
@@ -484,16 +531,21 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
         }
     }
+    // F1-F10 are contiguous on the standard evdev keymap (67-76), so one range check covers them; F11/F12
+    // (95/96) break the sequence and are mapped individually below rather than widening the range check over
+    // a gap it would then have to exclude.
     private static bool TryMapKeycode(byte keycode, out KeyCode key) {
         if (
             (keycode >= KeycodeF1) &&
-            (keycode <= KeycodeF8)
+            (keycode <= KeycodeF10)
         ) {
             key = (KeyCode)((int)KeyCode.F1 + (keycode - KeycodeF1));
             return true;
         }
 
         key = keycode switch {
+            KeycodeF11 => KeyCode.F11,
+            KeycodeF12 => KeyCode.F12,
             KeycodeEscape => KeyCode.Escape,
             KeycodeBackspace => KeyCode.Backspace,
             KeycodeReturn => KeyCode.Enter,
@@ -502,6 +554,14 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             KeycodeDown => KeyCode.ArrowDown,
             KeycodeLeft => KeyCode.ArrowLeft,
             KeycodeRight => KeyCode.ArrowRight,
+            KeycodeControlLeft => KeyCode.ControlLeft,
+            KeycodeControlRight => KeyCode.ControlRight,
+            KeycodeShiftLeft => KeyCode.ShiftLeft,
+            KeycodeShiftRight => KeyCode.ShiftRight,
+            KeycodeAltLeft => KeyCode.AltLeft,
+            KeycodeAltRight => KeyCode.AltRight,
+            KeycodeSuperLeft => KeyCode.SuperLeft,
+            KeycodeSuperRight => KeyCode.SuperRight,
             _ => KeyCode.None,
         };
 

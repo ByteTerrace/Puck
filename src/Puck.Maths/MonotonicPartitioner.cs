@@ -24,8 +24,7 @@ public readonly record struct MonotonicPartitionerMetrics(
     int MigrationDistance,
     int Rank,
     ushort Value
-)
-{
+) {
     /// <summary>Gets the instantaneous migration pressure; 1.0f indicates a jump on the next increment, while 0.0f
     /// signifies complete stability.</summary>
     public float Velocity =>
@@ -38,7 +37,8 @@ public readonly record struct MonotonicPartitionerMetrics(
 /// tables, so the common lookup is one indexed checkpoint scan and a bit scan.
 /// </summary>
 /// <remarks>
-/// <para>Three invariants hold over the whole domain (proven by the POST battery's exhaustive sweep):</para>
+/// <para>Three invariants hold over the whole domain (once proven by a battery's exhaustive sweep, which left the
+/// build on 2026-08-02 and has no replacement):</para>
 /// <list type="bullet">
 ///   <item><description><b>Deterministic</b> — the same (value, bucketCount) pair always yields the same bucket,
 ///   on every machine; routing decisions made on both sides of a wire agree bit-for-bit.</description></item>
@@ -62,8 +62,8 @@ public static class MonotonicPartitioner {
     private const int MinUpperOwnersForTail = 16;
     // Odd, so (value * multiplier) mod 65536 permutes the domain; decorrelates sequential values from bucket ranks.
     private const uint PermutationMultiplier = 40503U;
-    private const uint NaturalMaxRank = ((65535U * PermutationMultiplier) & 0xFFFFU);
-    private const uint NaturalRankSwapMask = (NaturalMaxRank ^ 0xFFFFU);
+    private const uint NaturalMaxRank = (65535U * PermutationMultiplier) & 0xFFFFU;
+    private const uint NaturalRankSwapMask = NaturalMaxRank ^ 0xFFFFU;
     private const int RankBucketCount = (MaxValueCount / RanksPerBucket);
     private const int RanksPerBucket = 16;
 
@@ -84,8 +84,7 @@ public static class MonotonicPartitioner {
         ushort checkpointRankOffset,
         ushort lastRank,
         ulong lowerBucketBitmask
-    )
-    {
+    ) {
         [FieldOffset(offset: 10)]
         public readonly ushort CheckpointRankOffset = checkpointRankOffset;
         [FieldOffset(offset: 8)]
@@ -118,6 +117,7 @@ public static class MonotonicPartitioner {
             tailStream: out TailOwnerDeltaStream
         );
     }
+
     private static void AdvanceJumpChain(
         ulong[] divModByBucketCount,
         ref int currentBucket,
@@ -132,11 +132,11 @@ public static class MonotonicPartitioner {
         var jumpQuotient = ((int)(jumpDivMod >> 32));
         var jumpRemainder = unchecked((int)jumpDivMod);
         var priorDonationTotal = (
-            (currentBucket * (priorQuotient - jumpQuotient)) +
-            Math.Min(currentBucket, priorRemainder) -
-            Math.Min(currentBucket, jumpRemainder)
+            ((currentBucket * (priorQuotient - jumpQuotient)) +
+            Math.Min(val1: currentBucket, val2: priorRemainder)) -
+            Math.Min(val1: currentBucket, val2: jumpRemainder)
         );
-        var donationThreshold = (((MaxValueCount - 1 - currentBucket) / jumpAtBucketCount) + 1);
+        var donationThreshold = ((((MaxValueCount - 1) - currentBucket) / jumpAtBucketCount) + 1);
 
         remainingRank = (priorDonationTotal + (remainingRank - donationThreshold));
         currentBucket = donorBucket;
@@ -150,9 +150,9 @@ public static class MonotonicPartitioner {
             runningTotal += BitOperations.PopCount(value: tailBits[i]);
         }
 
-        return (runningTotal != expectedTailCount)
+        return ((runningTotal != expectedTailCount)
             ? throw new InvalidOperationException(message: $"Tail index mismatch. Expected {expectedTailCount}; got {runningTotal}.")
-            : cumulativeCounts;
+            : cumulativeCounts);
     }
     private static ushort[] BuildFirstCheckpointByRankBucket(OwnershipCheckpoint[] checkpoints) {
         var bucketIndex = new ushort[RankBucketCount];
@@ -186,7 +186,7 @@ public static class MonotonicPartitioner {
             var quotient = ((ulong)(MaxValueCount / n));
             var remainder = ((ulong)(MaxValueCount % n));
 
-            divModByBucketCount[n] = ((quotient << 32) | remainder);
+            divModByBucketCount[n] = (quotient << 32) | remainder;
         }
 
         var checkpoints = new List<OwnershipCheckpoint>(capacity: 2048);
@@ -228,8 +228,7 @@ public static class MonotonicPartitioner {
                 currentCheckpointRankBase = checkpointRank;
                 currentCheckpointStartRank = rank;
                 hasCheckpoint = true;
-            }
-            else {
+            } else {
                 var expectedCheckpointRank = (currentCheckpointRankBase + (rank - currentCheckpointStartRank));
 
                 if (checkpointRank != expectedCheckpointRank) {
@@ -289,7 +288,7 @@ public static class MonotonicPartitioner {
         firstBlock = (tailRanks[0] >> 6);
 
         var lastBlock = (tailRanks[^1] >> 6);
-        var window = new ulong[(lastBlock - firstBlock + 1)];
+        var window = new ulong[((lastBlock - firstBlock) + 1)];
 
         foreach (var rank in tailRanks) {
             window[((rank >> 6) - firstBlock)] |= (1UL << (rank & 0x3F));
@@ -315,7 +314,7 @@ public static class MonotonicPartitioner {
         checkpointRank = remainingRank;
 
         while (0 != remainingRank) {
-            var jumpAtBucketCount = (((MaxValueCount - 1 - currentBucket) / remainingRank) + 1);
+            var jumpAtBucketCount = ((((MaxValueCount - 1) - currentBucket) / remainingRank) + 1);
 
             if (MaxBucketCount < jumpAtBucketCount) {
                 break;
@@ -332,8 +331,7 @@ public static class MonotonicPartitioner {
                 lowerBucketBitmask |= (1UL << currentBucket);
                 checkpointBucket = currentBucket;
                 checkpointRank = remainingRank;
-            }
-            else {
+            } else {
                 upperBuckets.Add(item: currentBucket);
             }
         }
@@ -355,7 +353,7 @@ public static class MonotonicPartitioner {
                 return currentBucket;
             }
 
-            var bucketDelta = (firstByte & 0x7F);
+            var bucketDelta = firstByte & 0x7F;
 
             if (0 != (firstByte & 0x80)) {
                 bucketDelta |= ((stream[streamPosition++] & 0x7F) << 7);
@@ -381,8 +379,7 @@ public static class MonotonicPartitioner {
 
         if (0x80 > value) {
             destination.Add(item: ((byte)value));
-        }
-        else {
+        } else {
             destination.Add(item: ((byte)((value & 0x7F) | 0x80)));
             destination.Add(item: ((byte)(value >> 7)));
         }
@@ -427,7 +424,7 @@ public static class MonotonicPartitioner {
 
             if (0 != (tailPresenceBits & rankBitInBlock)) {
                 var tailCountBeforeBlock = CumulativeTailCountByBlock[(int)tailBlockOffset];
-                var tailCountWithinBlock = BitOperations.PopCount(value: (tailPresenceBits & (rankBitInBlock - 1UL)));
+                var tailCountWithinBlock = BitOperations.PopCount(value: tailPresenceBits & (rankBitInBlock - 1UL));
 
                 return DecodeTailOwner(
                     bucketCount: bucketCount,
@@ -447,7 +444,7 @@ public static class MonotonicPartitioner {
     // declared endianness makes the route machine-independent by definition.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static ushort GetGuidHash(Guid value) {
-        var entropy = BinaryPrimitives.ReadUInt32LittleEndian(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Guid>(in value))[12..]);
+        var entropy = BinaryPrimitives.ReadUInt32LittleEndian(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Guid>(reference: in value))[12..]);
 
         return ((ushort)(((65534UL * entropy) >> 32) + 1));
     }
@@ -455,19 +452,19 @@ public static class MonotonicPartitioner {
     // the top rank, keeping the rank domain's extremes addressable.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static uint GetNormalizedRank(ushort value) {
-        var rank = ((value * PermutationMultiplier) & ushort.MaxValue);
+        var rank = (value * PermutationMultiplier) & ushort.MaxValue;
         var mask = (((int)(((rank ^ NaturalMaxRank) - 1U) | ((rank ^ ushort.MaxValue) - 1U))) >> 31);
 
-        return (rank ^ (((uint)mask) & NaturalRankSwapMask));
+        return rank ^ (((uint)mask) & NaturalRankSwapMask);
     }
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static ulong KeepLowestBits(ulong value, int bitCount) =>
-        Bmi2.X64.IsSupported
+        (Bmi2.X64.IsSupported
             ? Bmi2.X64.ZeroHighBits(
                 index: ((uint)bitCount),
                 value: value
             )
-            : ((bitCount >= 64) ? value : (value & ((1UL << bitCount) - 1UL)));
+            : ((bitCount >= 64) ? value : value & ((1UL << bitCount) - 1UL)));
     [DoesNotReturn]
     private static void ThrowBucketCountOutOfRange() =>
         throw new ArgumentOutOfRangeException(
@@ -483,11 +480,11 @@ public static class MonotonicPartitioner {
 
         // A no-op at runtime (callers validate the range); gives the JIT the bound that proves the two indexed
         // loads below never need a bounds check.
-        bucketCount = Math.Min(bucketCount, ((uint)MaxBucketCount));
+        bucketCount = Math.Min(val1: bucketCount, val2: ((uint)MaxBucketCount));
 
         unchecked {
             while (0 != remainingRank) {
-                var jumpAtBucketCount = (((MaxValueCount - 1U - currentBucket) / remainingRank) + 1U);
+                var jumpAtBucketCount = ((((MaxValueCount - 1U) - currentBucket) / remainingRank) + 1U);
 
                 if (jumpAtBucketCount > bucketCount) {
                     break;
@@ -504,7 +501,7 @@ public static class MonotonicPartitioner {
                 var minPrior = (priorRemainder + ((currentBucket - priorRemainder) & ((uint)(diffPrior >> 31))));
                 var diffJump = ((int)(currentBucket - jumpRemainder));
                 var minJump = (jumpRemainder + ((currentBucket - jumpRemainder) & ((uint)(diffJump >> 31))));
-                var priorDonationTotal = ((currentBucket * (priorQuotient - jumpQuotient)) + minPrior - minJump);
+                var priorDonationTotal = (((currentBucket * (priorQuotient - jumpQuotient)) + minPrior) - minJump);
                 var donationThreshold = (jumpQuotient + ((uint)(diffJump >> 31) & 1U));
 
                 remainingRank = (priorDonationTotal + (remainingRank - donationThreshold));
@@ -533,7 +530,7 @@ public static class MonotonicPartitioner {
 
         ref readonly var checkpoint = ref checkpoints[checkpointIndex];
 
-        return (FastPathBucketLimit >= bucketCount)
+        return ((FastPathBucketLimit >= bucketCount)
             ? BitOperations.Log2(value: KeepLowestBits(
                 bitCount: bucketCount,
                 value: checkpoint.LowerBucketBitmask
@@ -543,7 +540,7 @@ public static class MonotonicPartitioner {
                 checkpointBucket: BitOperations.Log2(value: checkpoint.LowerBucketBitmask),
                 checkpointRankOffset: checkpoint.CheckpointRankOffset,
                 rank: ((int)rank)
-            );
+            ));
     }
     /// <summary>
     /// Maps an input value to a bucket id without any safety checks.
@@ -611,7 +608,7 @@ public static class MonotonicPartitioner {
         var remainingRank = ((int)rank);
 
         while (0 != remainingRank) {
-            var nextJump = (((MaxValueCount - 1 - currentBucket) / remainingRank) + 1);
+            var nextJump = ((((MaxValueCount - 1) - currentBucket) / remainingRank) + 1);
 
             if (nextJump > MaxBucketCount) {
                 break;

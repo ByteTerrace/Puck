@@ -5,7 +5,7 @@
 // MASK-FIRST: this kernel runs AFTER the instance-cull pass (sdf-instance-cull.comp) and cone-marches the
 // TILE-MASKED field (mapMasked at this tile's mask base) — each march sample walks only the instances whose bounds
 // overlap the tile's cone, so a march step costs O(instances near this tile) instead of O(all instances). That
-// per-sample enumeration WAS the measured O(n) beam wall (docs/sdf-bench-notes.md — ~187 ms at 4096 instances, while
+// per-sample enumeration WAS the measured O(n) beam wall (measured ~187 ms at 4096 instances, while
 // the per-tile binning itself costs ~0.1 ms). Bit-exactness is coneMarchTileBounds' argument (sdf-world.hlsli): a
 // masked-out instance's bound excludes every point of the tile's cone, and the bound-sizing contract
 // (SdfProgram.PackInstances) makes its compose return the accumulator bit-exactly at any such point — the SAME
@@ -44,6 +44,11 @@
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+    if (params.sampleIndex == SDF_ISA_REPORT_REQUEST) {
+        tiles[0] = asfloat(SDF_ISA_VERSION);
+        return;
+    }
+
     if (
         (id.z >= params.viewportCount) ||
         (id.x >= params.tileGrid.x) ||

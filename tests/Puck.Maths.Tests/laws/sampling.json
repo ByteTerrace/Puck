@@ -1,0 +1,1373 @@
+[
+  {
+    "Id": "sampling.bit-mix-constants-invert",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Mix"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Unmix"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstMultiplier"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstMultiplierInverse"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "SecondMultiplier"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "SecondMultiplierInverse"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "FirstShift"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "MiddleShift"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two multiplier/inverse pairs multiply to ONE modulo 2^32, and both multipliers are odd \u2014 an algebraic fact about the declared constants that holds whether or not Mix is ever called, and the first thing a mistyped digit breaks. The shift values are pinned by the conditions Unmix\u0027s inversion actually rests on: 2\u00B7FirstShift and 3\u00B7MiddleShift each reach 32 so their iterates vanish off the word, while 2\u00B7MiddleShift does NOT, which is exactly why Unmix\u0027s two xor-shift steps have different term counts. ENVELOPE: this pins the shifts as CORRECT for the inversion, not as GOOD for mixing \u2014 avalanche quality is not a correctness claim and no leg here makes one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Unmix o Mix and Mix o Unmix as mutual inverses over thirteen edge words and a 4096-step deterministic spread",
+        "Against": "each other",
+        "Shared": "the round trip calls BOTH members and nothing else, so it pins them only as a PAIR: a compensating error in Mix and Unmix together would survive it. What breaks that symmetry is the constants leg above, which reads the multipliers without calling either",
+        "Citation": "a SAMPLE only \u2014 bijectivity over the whole carrier is sampling.bit-mix-is-a-permutation at the Exhaustive tier, and nothing here reaches it",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.bit-mix-is-a-permutation",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Mix"
+      },
+      {
+        "Type": "Puck.Maths.InvertibleBitMix",
+        "Name": "Unmix"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Unmix(Mix(x)) == x at EVERY one of the 2^32 words, swept in 256 partitions across cores and reporting the smallest counterexample so the message is scheduling-independent. On a finite set a left inverse forces injectivity and injectivity forces bijectivity, so this is the whole permutation claim rather than evidence for it \u2014 the member\u0027s one documented property, decided outright",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.direction-number-refusal-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildBitReversalDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildPlaneDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DirectionNumberCount"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "PlaneDirectionNumberCount"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "PlaneGenerator"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the degree window, as a WINDOW: degrees \u22121, 0, 33 and 40 are each refused with ArgumentOutOfRangeException naming \u0060generator\u0060 and carrying the derived degree as the exception\u0027s actual value, while degrees 1 and 32 \u2014 both ends, inclusive \u2014 build without refusing. The name is the whole point of the row: the degree is derived inside the builder from the polynomial the caller passed, so a refusal that named the derived local would be a complaint about a variable no caller can reach. The exception type is compared EXACTLY, not by catch clause, so the ArgumentOutOfRangeException rows cannot be satisfied by the ArgumentException base the later gates throw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the validation ORDER, as five rows each pairing the fault under test against a LATER fault the ladder must not reach first: a bad degree beside a short destination names \u0060generator\u0060; a short destination beside a wrong numerator count names \u0060destination\u0060; a wrong numerator count beside a non-primitive generator names \u0060initialNumbers\u0060; a non-primitive generator with a correct numerator count names \u0060generator\u0060 as a plain ArgumentException; and an even or over-large numerator names \u0060initialNumbers\u0060. Order stated this way is falsifiable \u2014 a ladder asserted one fault at a time is satisfied by any permutation of the gates",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the three declared constants and the shipped generator, read into locals before comparison so the run makes the comparison rather than the compiler folding it away",
+        "Against": "DirectionNumberCount is 32, PlaneDirectionNumberCount is twice it, and PlaneGenerator is t \u002B 1 at degree one",
+        "Shared": "",
+        "Citation": "Sobol\u0027s construction as src/Puck.Maths/Sampling/README.md states it: one direction number per bit of the coordinate, two dimensions in the shipped plane, and t \u002B 1 as the smallest primitive polynomial there is \u2014 the degree-one generator a (0, 2)-sequence needs, whose direction matrix is Pascal\u0027s triangle modulo two",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both builders\u0027 leading direction number is the coordinate\u0027s top bit \u2014 2\u00B3\u00B9 for the degree-one recurrence and for both dimensions of the plane \u2014 and the degree-32 recurrence\u0027s trailing direction number is non-zero, so the accepting arm at the top of the window is reached rather than merely not refused. ENVELOPE: this case pins the SHAPE the builders produce at two indices, never the recurrence itself. The direction numbers\u0027 agreement with the anti-diagonal and Pascal oracles is sampling.digital-net-identities-and-net-property\u0027s statement, the (0, m, 2) net property is sampling.digital-net-property-through-order-fourteen\u0027s, and the primitive census to degree 14 is polynomial.primitive-order-and-census\u0027s; those are the gates of record",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.alias-refusal-and-fixed-twins",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable\u00601",
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable\u00601",
+        "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable\u00601",
+        "Name": "SampleIndex"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ONE count contract across four weight types, compared as data rather than asserted four times: the empty span and the 2\u00B3\u2070 \u002B 1 span are refused by all four \u0060Create\u0060 overloads with the same exception type, the same parameter name \u0060entries\u0060, and \u2014 row against row \u2014 the same message string. Four overloads documenting one sentence and throwing four diagnoses is the failure this shape is built to catch, and equality against overload zero catches it whichever overload drifts",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the over-limit refusal is reached WITHOUT paying for it. The probe hands each overload a synthetic ReadOnlySpan of length 2\u00B3\u2070 \u002B 1 over a single real element, which is legal exactly because the count refusal precedes every read and every allocation; an over-limit conversion buffer is tens of gigabytes, so a count checked after the buffer would reach the caller as OutOfMemoryException rather than as the promised ArgumentException. ENVELOPE: the synthetic span is evidence about the ORDER of the gates and nothing else \u2014 no element of it is ever dereferenced, and a build that removed the guard would fault rather than report",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the signed overload\u0027s negative-weight refusal, PRICED: a quarter-million-entry span whose first weight is negative is refused while GC.GetAllocatedBytesForCurrentThread advances by under 64 KiB, where a factory that converted before it refused would have spent four megabytes. The exception type alone cannot separate the two orders; the meter can",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the all-zero and malformed-weight refusals that survive the reordering: an all-zero set at each of the four weight types, and a non-finite and a negative weight at the real one, each an ArgumentException naming \u0060entries\u0060",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "the FixedQ4816 and UFixedQ4816 overloads over an eleven-entry weight set carrying zeros, ones, 65536, long.MaxValue and its half \u2014 a length that is deliberately not a power of two, so the padding columns exist",
+        "Against": "the raw ulong overload built from the same carrier values, drawn 4096 times from an identically seeded Pcg32XshRr",
+        "Shared": "AliasTable\u003CTElement\u003E.CreateCore \u2014 the identical member, not a sibling copy: the fixed-point overloads convert the carrier and delegate the whole Vose partition to it",
+        "Citation": "the twin is carriage evidence and claims exactly that the conversion is the identity on the carrier\u0027s bits; the partition\u0027s own correctness is sampling.alias-table-frequency-at-scale, which measures multi-million-draw distributions against the construction weights over six weight shapes, and the exact-shape probes recorded in docs/reviews/2026-07-28-puck-maths-adversarial-review.md. What this leg adds over that case is that all THREE overloads reach the same table, which a distribution measured on one of them does not state",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sampling contract read off the same 4096 draws: every selected index is within [0, Count), no zero-weight entry is ever selected \u2014 the padding columns and the three zero rows both \u2014 Count is the construction length and not the padded column count, and Sample and SampleIndex consume the identical two advances, checked by comparing the two generators\u0027 State after each draw rather than by counting calls",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.cone-table-stored-norm-and-uniqueness",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "Build"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "AzimuthEntryCount"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "AzimuthOffset"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "DirectionNumberOffset"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "RadiusEntryCount"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "RadiusOffset"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "TableIndexBitCount"
+      },
+      {
+        "Type": "Puck.Maths.ConeDirectionTable",
+        "Name": "WordCount"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildPlaneDirectionNumbers"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the stored-norm envelope, measured on what a CONSUMER reads back: for all 4096 azimuth pairs and all 4096 polar pairs, at each of six half-angles, |stored\u00B2 \u002B stored\u00B2 \u2212 1| \u2264 2\u207B\u00B2\u00B3 \u002B 2\u207B\u2074\u2070. The bound is DERIVED FROM THE FORMAT and not recorded from a run \u2014 two independent binary32 roundings at a relative error of at most the 2\u207B\u00B2\u2074 unit roundoff move the squared norm by at most 2\u00B72\u207B\u00B2\u2074, and the second term absorbs their product and the double-side construction\u0027s own rounding with room to spare. The measurement is EXACT: each component\u0027s square is an integer shift of a 24-bit integer square, and the whole comparison runs in BigInteger at a common scale of 2\u207B\u2074\u2070\u2070, so no float arithmetic enters the law that judges a float table",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the envelope BITES rather than decorating: the law asserts that the worst departure across the whole ladder is strictly positive, so a table that happened to store exactly unit pairs \u2014 or a reader that silently measured the pre-rounding doubles the builder discarded \u2014 would be reported rather than passed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "uniqueness as the contract now states it \u2014 a property of the half-angle rather than a promise made for all of them. At the zero half-angle all 4096 polar entries are the identical axis pair (1, 0), because a cap of zero angle IS one direction, and at each of 0.01, \u03C0/6, \u03C0/3 and the closest double below \u03C0/2 the 4096 cells resolve into 4096 distinct stored pairs, counted rather than sampled. The old XML said cell-centre sampling means quantization \u0060never produces a duplicated or degenerate direction\u0060, unconditionally, while the same member\u0027s parameter documentation admitted the zero cap that duplicates every entry; the XML and src/Puck.Maths/Sampling/README.md are both re-spelled in this change, so the law and the prose state one thing. ENVELOPE: distinctness is asserted at those four rungs and is NOT claimed for every positive half-angle \u2014 as the angle shrinks the entries approach the axis and coincide there below binary32\u0027s resolution, continuously, exactly as the geometry does",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the \u00B10.0 policy, decided in this change rather than inherited: a negative-zero half-angle is admitted and is NOT canonicalized. It stores radial bits 0x80000000 where \u002B0.0 stores 0x00000000, and the axial word is 0x3F800000 either way, so the two tables differ in exactly the sign of a zero \u2014 unobservable, because a zero radial scales the whole azimuth contribution away. Both bit patterns are asserted by value, so the policy cannot drift into whichever the runtime happened to produce, and both the XML and the wing README now state it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the layout, read into locals before comparison so the run makes the comparison rather than the compiler folding it away \u2014 TableIndexBitCount 12, both entry counts 2\u00B9\u00B2, DirectionNumberOffset zero, AzimuthOffset the plane\u0027s direction-number count, and each further offset the previous plus twice its table \u2014 and the direction-number prefix compared word for word against DigitalNetSampler.BuildPlaneDirectionNumbers at every rung, so the builder\u0027s own opening slice is pinned rather than assumed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder, with the angle gate proved to PRECEDE the destination gate by pairing a negative angle with a short destination: a negative, a not-a-number, an infinite and an exactly-\u03C0/2 half-angle each throw ArgumentOutOfRangeException naming \u0060capHalfAngleRadians\u0060, and a short destination throws a plain ArgumentException naming \u0060destination\u0060. The exception types are compared exactly, so the out-of-range rows cannot be satisfied by the base class",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: nothing here pins WHICH constants the table holds, and nothing can. The azimuth entries come from the platform\u0027s cosine and sine and every polar entry is scaled by its tangent, so the table is a per-machine input and the type\u0027s determinism tier is same-machine replay. What this case states is exactly what survives that: the storage rounding, the layout, the refusals, and the uniqueness policy \u2014 every one of them a statement about the FORMAT rather than about the platform\u0027s transcendental library",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-reference-vector-and-state",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Advance"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "DefaultMultiplier"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Increment"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "MaxStream"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Multiplier"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextGaussian"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextGaussianPair"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextUInt32"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextUnitFraction16"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextUnitFraction32"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Shuffle"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "State"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg32XshRr.Create(state: 42, stream: 54)\u0027s opening six draws, and the same six from the explicit-multiplier factory given the default multiplier",
+        "Against": "0xA15C02B7, 0x7B47F409, 0xBA1D3330, 0x83D2F293, 0xBFA4784B, 0xCBED606E",
+        "Shared": "",
+        "Citation": "the reference PCG32 implementation\u0027s published demo output for srandom(42, 54), tabulated outside this tree. What a published vector states that no in-tree comparison can is that the SEEDING RECIPE and the output permutation are the reference\u0027s, not merely self-consistent",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the two declared constants and the stream-to-increment map, read into locals before comparison",
+        "Against": "DefaultMultiplier is 6364136223846793005 and MaxStream is 2\u2076\u00B3 \u2212 1; stream 54 selects increment 109",
+        "Shared": "",
+        "Citation": "the reference implementation\u0027s 64-bit LCG constant and its \u0060inc = (initseq \u003C\u003C 1) | 1\u0060 mapping",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the snapshot contract, which is what makes this generator simulation state: the three readable words ARE the generator, and a value restored through FromRawBits reproduces 1024 further draws and 1024 further states exactly. State equality is checked at every step rather than at the end, so a divergence is reported at the draw it happened on",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Advance(n) over a nine-rung ladder \u2014 the identity, the first few steps, a byte boundary, 4096 and 100000",
+        "Against": "n sequential NextUInt32 calls, compared on the resulting STATE. The subject composes the affine map by binary exponentiation over log n squarings; the reference simply walks. Different procedure, exact on both sides, so the substrate condition does not arise. The backward direction is asserted at every rung too: Advance(2\u2076\u2074 \u2212 n) returns to the starting state",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the bounded draw\u0027s three declared shapes, each read off the STATE as well as the value so the advance count is part of the statement: a singleton range returns its only value for one advance; a full range IS the raw draw for one advance; and swapping the bounds changes neither the value nor the advance count, over 256 distinct starting states, with every draw asserted inside its interval",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "NextUnitFraction32 and NextUnitFraction16 over 256 draws each",
+        "Against": "the raw draw, and the raw draw\u0027s top sixteen bits, taken from a generator advanced in lockstep",
+        "Shared": "the subject\u0027s own rule \u2014 the raw draw, and the raw draw\u0027s top sixteen bits \u2014 restated against a generator advanced in lockstep",
+        "Citation": "none stands, and the leg says so: the adapters ARE those two expressions (Pcg32XshRr.cs:224-229), so this states the SHIFT and the WIDTH and nothing about the draw beneath them. The draw itself is what the published reference vector above pins",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Gaussian pair\u0027s consumption and cap: exactly two advances per pair over 4096 pairs, checked against a generator advanced twice by hand; every value inside the documented \u22486.66\u03C3 cap; and NextGaussian is the pair\u0027s first value at the same cost. ENVELOPE: this states the CONSUMPTION and the BOUND, never the distribution \u2014 sampling.gaussian-moments-cdf-tail-at-scale is the gate of record for the moments, the CDF bins and the tail, at 40 million samples, with sampling.gaussian-moments-cdf-tail standing beside it at a tenth the volume for the everyday run",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder in both factories\u0027 own order, each row pairing the fault under test with a later one it must not reach first: a stream above MaxStream beside a bad multiplier names \u0060stream\u0060; an even increment beside a bad multiplier names \u0060increment\u0060; and both multiplier gates name \u0060multiplier\u0060. MaxStream itself is accepted, so the bound is inclusive",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the default instance\u0027s documented degeneracy, stated by value rather than left as an accident: all three words are zero, the first draw is zero, and the state does not move. A type whose default were quietly usable would be the more dangerous outcome, and this row is what makes the documentation checkable",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "Shuffle over a 64-element identity span",
+        "Against": "a Fisher-Yates walk restated in the claim body over an identically seeded generator",
+        "Shared": "the Fisher-Yates walk the member documents \u2014 one inclusive bounded draw per element from the high end down \u2014 restated against a generator seeded identically, compared position for position AND on the final state, so the advance count is part of the statement",
+        "Citation": "none stands for the ORDERING: the reference is the same algorithm. What stands independently beside it is the permutation property the same rows assert \u2014 the output is a permutation of the input, with all 64 elements distinct \u2014 and sampling.shuffle-permutation-uniformity-at-scale, which measures all 24 permutations of four elements to within 700 of uniform over 480000 trials",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.digital-net-identities-and-net-property",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "SamplePlane"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "ShuffleIndex"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DeriveKey"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DeriveScramble"
+      },
+      {
+        "Type": "Puck.Maths.StratifiedShuffle",
+        "Name": "Permute"
+      },
+      {
+        "Type": "Puck.Maths.StratifiedShuffle",
+        "Name": "Unpermute"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildBitReversalDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "BuildPlaneDirectionNumbers"
+      },
+      {
+        "Type": "Puck.Maths.DigitalNetSampler",
+        "Name": "DirectionNumberCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "DigitalNetSampler.Sample against dimension zero\u0027s direction numbers, unshifted, at all 4096 opening indices",
+        "Against": "the index with its bits reversed, computed by the claim body\u0027s own bit loop rather than through any shipped reversal helper. That IS the van der Corput sequence \u2014 the classical statement dimension zero is defined by \u2014 and it shares no code with the subject\u0027s trailing-zero-count walk over set bits",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the shipped plane\u0027s dimension-one direction numbers, all 32",
+        "Against": "Pascal\u0027s triangle modulo two, built from Lucas\u0027s criterion \u2014 C(k, j) is odd exactly when j is a submask of k \u2014 and left-aligned in the coordinate. The subject reaches the same table through a linear recurrence over the generator t \u002B 1; the reference takes a submask test over binomial parity. Different criterion, different arithmetic, exact on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the (0, m, 2) NET PROPERTY itself, at every m through ten, at every dyadic box shape of area 2\u207B\u1D50, unshifted and under a digital shift \u2014 for each, the first 2\u1D50 points must place exactly one point in every box",
+        "Against": "the theorem, checked by occupancy: a second point in any box is a named counterexample. This is the statement the whole type exists for and the one no sample-by-sample comparison implies. ENVELOPE: finite, to m = 10 and 2048 points; sampling.digital-net-property-through-order-fourteen is the gate of record for the exhaustive envelope, and the digital shift\u0027s box-preservation is asserted here only at the one shift vector",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the digital shift is an exclusive-or on the coordinate, over 2048 indices, and SamplePlane is exactly its two halves sampled apart with the two shifts \u2014 so the plane wrapper adds no arithmetic of its own. Both span-shape refusals name \u0060directionNumbers\u0060",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "StratifiedShuffle\u0027s aligned-block law at four seeds: for every m through twelve, the block [0, 2\u1D50) lands inside ONE aligned block of the same size \u2014 every image sharing the same high 32 \u2212 m bits, and all 2\u1D50 of them distinct, so the image is the whole block and not a part of it",
+        "Against": "the property the type is specified by, asserted directly. This is what separates it from a general mixing bijection, which scatters the block; a shuffle that lost it would leave the re-indexed net unstratified while every round trip still succeeded",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Unpermute is the exact inverse of Permute over 1024 indices at each of four seeds, including the zero seed and the all-ones seed. Each shift-exclusive-or step is undone by a finite geometric sum of its own shift and each multiplication by its constant\u0027s inverse, so a wrong inverse constant or a wrong sum length fails here and nowhere else",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "DigitalNetSampler.ShuffleIndex over 1024 indices at four seeds",
+        "Against": "StratifiedShuffle.Permute at the same arguments",
+        "Shared": "the whole permutation \u2014 the sampler\u0027s member is a one-line forward (DigitalNetSampler.cs)",
+        "Citation": "the aligned-block and round-trip legs above, which are evidence for the delegated-to permutation itself over exactly the indices this leg forwards",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the site key\u0027s refusal names the coordinate AT FAULT \u2014 \u0060x\u0060 for a seventeen-bit first coordinate, \u0060y\u0060 for a seventeen-bit second, and \u0060x\u0060 when both are out of range \u2014 the sixteen-bit corner (0xFFFF, 0xFFFF) is accepted, and the keys of all 4096 sites of a 64\u00D764 grid in one stream are distinct, which is the injectivity the packing claims",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the scramble derivation keeps the two coordinates apart: the first shift IS the key over 4096 keys, the second is injective over the same range, and at most one key of 4096 shifts both coordinates by the same vector \u2014 a tripwire against the second shift collapsing onto the first, not a decorrelation claim",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.field-noise-bounds-and-gradient",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Hash"
+      },
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "SampleGradient"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "determinism and the declared bounds over 512 drawn positions at 512 seeds: every Sample repeats bit for bit, every Hash repeats bit for bit, every value lies in [\u22121, 1] as a raw magnitude at or below 2\u00B9\u2076, and every one of the sixteen octave counts stays inside the same bound. Determinism is the property this type\u0027s whole contract rests on \u2014 it is stateless, so a machine-dependent sample would be undetectable downstream",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "Sample at 256 WHOLE-unit lattice positions",
+        "Against": "the top-bits extraction of the PUBLIC Hash at the same lattice point \u2014 at integer coordinates every fade is zero, so the blend collapses onto the near corner and the sample must BE that corner\u0027s value",
+        "Shared": "the eight-corner hash tree: Sample\u0027s corners are Hash\u0027s outputs, so this ties the two public members together rather than checking either against an outside reference. ENVELOPE: it pins the corner extraction and the fade\u0027s value at zero, never the blend between corners \u2014 the seam and gradient legs are what reach that",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the octave overload\u0027s exact identity at one layer: Sample(seed, position, 1) is the plain lattice sample arithmetically halved, at every one of the 512 positions. One layer is the whole sum, so the identity pins the amplitude schedule\u0027s first term exactly rather than by a bound",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "seam continuity across a cell boundary, in the direction that matters: the samples one raw unit apart across a whole-unit boundary in X differ by at most 2\u207B\u2074 over 256 lattice points. Two points 2\u207B\u00B9\u2076 of a world unit apart must agree closely; a blend that paired the wrong corners would jump by the corner spread instead, which is four times the whole output range",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "Sample(seed, FixedPosition) at 256 lattice points inside the native window",
+        "Against": "Sample(seed, FixedVector3) at the same points",
+        "Shared": "the native lattice sampler \u2014 the hierarchical overload\u0027s documented fast path calls it when the cell-derived coordinate fits (FieldNoise.cs)",
+        "Citation": "the corner-identity and bound legs in this same case, which are evidence for the delegated-to native path over exactly these positions. ENVELOPE: the WIDE path \u2014 the one taken when a coordinate leaves signed-64 \u2014 is not reached by any position here, and no leg claims it",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the gradient\u0027s value twin, exactly: SampleGradient returns bit for bit what Sample returns at the same arguments, over all 512 positions, so the one-pass sampler cannot drift from the value sampler while its slopes stay plausible. Every slope component is inside the documented [\u22123.75, 3.75]",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all three analytic partials at 128 drawn positions",
+        "Against": "a central difference the law forms in EXACT INTEGERS: the step is 2\u207B\u2076 world units, so the divided difference is a multiplication by 32 and no rounding enters the reference at all. The subject differentiates the trilinear blend symbolically and scales by the quintic fade\u0027s derivative; the reference re-samples the field either side and subtracts. ENVELOPE: the agreement is gated at 2\u207B\u00B3 of a world unit per unit, which is the central difference\u0027s own truncation with margin \u2014 it separates a wrong axis, a wrong sign and a wrong fade derivative, and it does not pin the last bits of the analytic form",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the octave refusals: zero, negative and seventeen each throw ArgumentOutOfRangeException naming \u0060octaves\u0060, and the sixteen admitted counts all run",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.normal-quantile-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ProbabilityFunctions",
+        "Name": "InverseStandardNormalCdf"
+      },
+      {
+        "Type": "Puck.Maths.ProbabilityFunctions",
+        "Name": "InverseNormalCdf"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "InverseStandardNormalCdf at seven probabilities spanning the central region and the first tail region, compared on EXACT BIT DISTANCE \u2014 the ordering of the positive doubles is the ordering of their bit patterns, so the comparison is integer arithmetic and no float enters the law",
+        "Against": "0.75 \u2192 0.6744897501960817, 0.9 \u2192 1.2815515655446004, 0.95 \u2192 1.6448536269514722, 0.975 \u2192 1.9599639845400545, 0.99 \u2192 2.3263478740408408, 0.995 \u2192 2.5758293035489004, 0.999 \u2192 3.0902323061678132, each within 256 units in the last place",
+        "Shared": "",
+        "Citation": "the standard normal deviates, tabulated outside this tree",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "antisymmetry, EXACTLY, at the dyadic probabilities 2\u207B\u00B2 through 2\u207B\u2074\u2070 \u2014 the only ones whose complement 1 \u2212 p is itself representable, so both arms of the tail branch see the identical argument and the answer must be the negated bit pattern. The 2\u207B\u2074\u2070 rung is the only rung in the whole case that reaches the THIRD approximation region, where r exceeds five; antisymmetry is the one exact statement available there. The median is stated separately because it is the one probability where the claim is about a sign bit: its deviate is positive zero, whose negation is the other zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the endpoints by value: zero maps to negative infinity, one to positive infinity, and the median to POSITIVE zero read off the bit pattern rather than compared with ==, which cannot tell the two zeroes apart",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "strict monotonicity over 4096 probabilities from 10\u207B\u00B3\u2070 to the median, walked through the double LATTICE by a fixed integer stride over bit patterns rather than by a floating-point step, so the sweep\u0027s own arithmetic is exact. It crosses both region seams, and every deviate is finite",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder in the wrapper\u0027s own order, each row pairing the fault under test with a later one it must not reach first: a non-finite mean beside a zero deviation names \u0060mean\u0060; a zero deviation beside a not-a-number probability names \u0060standardDeviation\u0060; and a valid mean and deviation beside a not-a-number probability names \u0060probability\u0060, so the wrapper does not swallow the inner refusal. Negative, zero and infinite deviations are all refused, and the inner function rejects a not-a-number probability and both off-by-one neighbours of the closed unit interval",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "InverseNormalCdf(p, mean: 10, standardDeviation: 2) at all seven ladder rungs",
+        "Against": "10 \u002B 2\u00B7InverseStandardNormalCdf(p), formed in the claim body and compared on bit patterns",
+        "Shared": "the member\u0027s own affine rule, mean \u002B deviation\u00B7z, restated at a power-of-two deviation where the scaling is exact and the comparison can be made on bit patterns",
+        "Citation": "none stands for the affine step itself \u2014 it is one line \u2014 and the leg says so. What stands beside it is the published ladder above, which pins the z it carries",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the THIRD approximation region\u0027s VALUES are not pinned anywhere in this case beyond antisymmetry, monotonicity and finiteness. OWED: an independent deep-tail quantile reference in exact arithmetic; sampling.gaussian-moments-cdf-tail-at-scale measures the |z| \u003E 3 tail statistically from the generator side and no gate of record states this branch\u0027s values. The type is presentation and tooling tier \u2014 it is float and it is outside the simulation value path \u2014 which is why the gap is stated rather than closed with a float oracle",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.low-discrepancy-recurrence",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.LowDiscrepancy",
+        "Name": "R1"
+      },
+      {
+        "Type": "Puck.Maths.LowDiscrepancy",
+        "Name": "R2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LowDiscrepancy.R1 and both coordinates of R2 at 2048 indices \u2014 the first eight, then drawn 64-bit indices",
+        "Against": "the same recurrence formed in BigInteger, where the whole product is taken in arbitrary width and the modulus 2\u2076\u2074 is applied EXPLICITLY. The subject relies on the carrier\u0027s wrap to perform the reduction; the reference never wraps. Different route, exact on both sides, so the substrate condition does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the sequences\u0027 opening points",
+        "Against": "R1(0) and both R2(0) coordinates are zero; R1(1) is 0x9E3779B9",
+        "Shared": "",
+        "Citation": "the golden-ratio Weyl increment floor(2\u2076\u2074/\u03C6), whose top 32 bits are the conventional 0x9E3779B9 \u2014 the constant is the sequence\u0027s definition, and a first point that is not it is a different sequence",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the coverage the name CLAIMS, which the recurrence alone does not imply: 4096 golden points fall 16 to a bin, give or take four, in every one of 256 equal bins, and 4096 plastic points fall 16 to a cell, give or take eight, in every one of 256 cells of a 16\u00D716 grid. A deterministic sequence that reproduced its own oracle exactly while covering the interval badly would satisfy every other leg here and fail this one. ENVELOPE: this is a bounded-occupancy statement at one scale, not a discrepancy measurement \u2014 sampling.certified-low-discrepancy-measured-across-scales is the gate of record for measured star discrepancy across scales, over the sibling CertifiedLowDiscrepancy family",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the full 2\u2076\u2074 period is not witnessed and cannot be. What the recurrence leg reaches instead is 2048 indices spread over the whole 64-bit index space, which is what makes the wide-integer agreement a statement about the map rather than about a prefix",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.secure-random-intervals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SecureRandom",
+        "Name": "NextUInt"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the interval contracts at five carrier widths \u2014 8, 16, 32, 64 and 128 bits \u2014 each instantiated through a constrained generic helper so the statement is made about the generic member and not about one substitution: a singleton interval returns its only value 32 times running, the full interval draws without refusing, and 256 bounded draws all land inside [minimum, maximum]",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the inverted-interval refusal, which is the one place this type can be wrong loudly rather than silently: an unsigned maximum below the minimum would wrap into a huge span and draw an unrelated value, so it throws ArgumentOutOfRangeException naming \u0060maximum\u0060 \u2014 asserted at two widths",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "liveness, stated as such: 256 bounded draws over a thirty-value interval produce at least four distinct values, and 64 unbounded draws at least two. A generator that returned one constant satisfies every interval row above, and these two rows are the cheapest statement that separates it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: there is deliberately NO value oracle and no distribution claim. The draws are cryptographic and non-reproducible by design \u2014 nothing this type returns may enter a snapshot, a hash or a replay \u2014 so a deterministic reference would be a category error, and a frequency test at Default-tier volume would state nothing. Uniformity here rests on the platform\u0027s RandomNumberGenerator and on the rejection bound the type derives from it, which is an argument rather than a measurement, and the campaign says so",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-transcribed-reference-and-decorrelation",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextUInt32"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "DefaultMultiplier"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "Pcg32XshRr.NextUInt32 via FromRawBits(increment, DefaultMultiplier, state) over sixteen hand-chosen raw state/increment pairs, 50000 draws each",
+        "Against": "a private PcgRef struct transcribing the third-party reference PCG32 XSH-RR generator\u0027s published algorithm verbatim, sharing no code with Pcg32XshRr",
+        "Shared": "the REFERENCE implementation\u0027s algorithm, not the subject\u0027s own rule \u2014 agreement proves Pcg32XshRr carries that third-party specification faithfully across a wide operand sweep, and NOT that either side matches the true published generator: a transcription error shared by both would be invisible here",
+        "Citation": "the published opening six draws of srandom(42, 54), independently pinned as a PublishedConstant leg in sampling.pcg-reference-vector-and-state \u2014 the one witness a shared transcription error cannot fool",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "five stream-id pairs give at most 10 identical draws in 1000 \u2014 a decorrelation tripwire against two stream ids silently colliding, not a distribution claim",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.gaussian-moments-cdf-tail",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextGaussianPair"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg32XshRr.NextGaussianPair's empirical mean, variance, skew and kurtosis, six two-sided CDF bins, and the tail frequency beyond three sigma, over 2000000 pairs",
+        "Against": "the closed-form standard normal's own moments (mean 0, variance 1, skew 0, kurtosis 3), hand-tabulated two-sided Phi values at six edges, and — no longer a bare published constant — an exact BigInteger enclosure of P(|Z|>3) from Oracles.EncloseGaussianTailBeyondThreeSigma: Gordon's classical inequality (3/10)·φ(3) < Q(3) < φ(3)/3, with φ(3) = e^(−4.5)/√(2π) built from e^4.5's own Taylor series (all-positive terms, so the partial sum is a lower bound and a geometric tail bound gives the upper one, forty terms at 256 working bits) and Oracles.Pi's Machin-derived π via IntegerSquareRoot — no offline double computation anywhere in the reference itself. ENVELOPE: 2000000 pairs rather than the full-volume 20000000 \u2014 every gate is the full-volume threshold, met at reduced volume with margin rather than loosened to fit. A SECOND envelope, new with the derived reference: Gordon's bound is classical, not razor-tight (~10% relative width at x=3), so the acceptance band widens by that width beyond a bare \u00B13e-4 around a magic number \u2014 an honest, stated tradeoff for provenance, not a loosened fit, since the SAME ±3e-4 statistical margin still applies on top of the enclosure unchanged. Mutation-probed: swapping the Taylor series' exponent (9→6, i.e. e^3 instead of e^4.5) moves the reference band to roughly 4x the true tail and reddens the case with the exact bounds printed; restored before landing. The full-volume statement at the original 20000000 pairs is sampling.gaussian-moments-cdf-tail-at-scale",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.shuffle-permutation-uniformity",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Shuffle"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Pcg32XshRr.Shuffle over a four-element span produces all 24 permutations, each within 500 of the uniform 10000, over 240000 trials at one fixed seed. ENVELOPE: reduced from 480000 trials; the tolerance carries margin rather than merely shrinking in proportion. The full 480000-trial statement is sampling.shuffle-permutation-uniformity-at-scale",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.alias-table-frequency-distribution",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "AliasTable draw frequency over three weight shapes \u2014 small integer ratios, a uniform four-way split, and an extreme one-to-a-million ratio \u2014 2000000 draws each",
+        "Against": "weight over total formed in exact BigInteger rational arithmetic and compared to count over draws by cross-multiplication, within three parts in a thousand \u2014 no floating-point ratio anywhere. ENVELOPE: draws reduced from 12000000 to 2000000 per shape, and three weight shapes rather than six; the band is a fresh wider one chosen for this volume and met with several-fold margin. All six shapes at their original volumes are sampling.alias-table-frequency-at-scale",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.field-noise-periodicity-canary-and-distribution",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Sample"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FieldNoise.Sample at a position and at that position plus the former hash periods in each axis, at 32 probe seeds",
+        "Against": "the same sample \u2014 required to DIFFER",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "sampling.field-noise-sample-vs-exact-oracle"
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FieldNoise.Sample at a perturbed seed versus the original seed at a unit-translated position, at the same 32 probe seeds",
+        "Against": "the same sample \u2014 required to DIFFER",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "sampling.field-noise-sample-vs-exact-oracle"
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the octave-wrap seam at raw two-to-the-sixty-two holds the same sixteen-raw continuity bound the interior lattice boundaries do, at five octaves",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "range, mean and standard deviation over 500000 positions across the full signed-raw span on all three axes, against the full-volume thresholds. ENVELOPE: reduced from 10000000 positions, met with wide margin",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.field-noise-sample-vs-exact-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Sample"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FieldNoise.Sample(ulong, FixedVector3) at a hand-picked ladder of seeds and positions -- the origin, every axis's unit step at both signs, both lattice-cell-boundary fractions (zero and the top of the mask), an interior multi-cell position, extreme seeds (zero and ulong.MaxValue), and a position spanning several cells on every axis",
+        "Against": "FieldNoiseOracleClaims.SampleOracle, an independent transcription of the same hash-and-interpolate recipe in BigInteger that calls no Puck.Maths member and shares no line with FieldNoise.cs -- every domain-separation constant, the three-round avalanche mix, the corner-value sign extension and the quintic fade polynomial are computed from scratch, with a hand-derived floor-shift standing in for BigInteger's own division semantics wherever a value can go negative (FieldNoise.cs has no external published specification, so the constants necessarily match; what is independent is the arithmetic that consumes them)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: only the flat Sample(ulong, FixedVector3) overload is pinned at exact values here. Sample(ulong, FixedPosition) (the hierarchical wide-lattice overload) and the octave-summing Sample(ulong, FixedVector3, int) are not retranscribed -- sampling.field-noise-periodicity-canary-and-distribution's own legs are what the coverage citation on those two continues to rest on, alongside its octave-wrap and distribution statements; a defect confined to the wide-lattice or octave path would not redden this case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.certified-low-discrepancy-bound-and-teeth",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "MetallicMean"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "Point"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "DiscrepancyBound"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CertifiedLowDiscrepancy.DiscrepancyBound at three certificates and three point counts each",
+        "Against": "the exact star discrepancy of the generated points by BigInteger cross-multiplication over a common denominator, with no rounding anywhere \u2014 EXACT rather than a sort of doubles",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "teeth: the badly-approximable certificate\u0027s measured discrepancy exceeds twice the golden certificate\u0027s at three point counts, and the three certificates measure strictly monotone at every one of them",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "no sequence leaves an empty circular gap wider than a twentieth of the unit interval over its first 4096 points, computed exactly on the raw fixed-point values",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two independently constructed instances for the same generator agree bit for bit over 4096 points",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the golden sequence\u0027s second point",
+        "Against": "0x9E3779B9",
+        "Shared": "",
+        "Citation": "the golden ratio\u0027s conventional 32-bit Fibonacci-hashing multiplier, tabulated outside this tree and in the hashing literature since Knuth",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a zero metallic index and a zero point count are both refused, each naming its own parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.gaussian-moments-cdf-tail-at-scale",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "NextGaussianPair"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Advance"
+      },
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "State"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg32XshRr.NextGaussianPair\u0027s empirical mean, variance, skew and kurtosis and six two-sided CDF bins, over 20000000 pairs \u2014 40000000 samples \u2014 at state 2026 and stream 13. This is the full-volume statement the sampling family\u0027s ENVELOPE legs cite",
+        "Against": "the closed-form standard normal\u0027s own moments (mean 0, variance 1, skew 0, kurtosis 3) and six two-sided Phi values at |z| of 0.5, 1, 1.5, 2, 2.5 and 3, hand-tabulated outside this tree. Every gate is the TIGHTER of a committed threshold and eight standard errors derived from the sample count in the same run: the four moment gates land at 1.0e-3, 1.79e-3, 3.10e-3 and 6.20e-3 against committed thresholds of 1e-3, 3e-3, 5e-3 and 2e-2, and the six CDF bins between 6.6e-5 and 6.1e-4 against a flat committed 1.5e-3. Measured margins at this volume run from 7.6x at the |z| within 2 bin to 31x at variance",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the beyond-three-sigma tail frequency over the same 40000000 samples, measured at 2.70302e-3",
+        "Against": "an exact BigInteger enclosure of P(|Z| beyond 3) from Oracles.EncloseGaussianTailBeyondThreeSigma \u2014 Gordon\u0027s classical inequality over e^4.5\u0027s own Taylor series and Oracles.Pi\u0027s Machin-derived pi, with no offline double anywhere in the reference \u2014 widened by a statistical margin of 6.87e-5, the tighter of a committed 3e-4 and eight binomial standard errors at this volume. The measurement lands INSIDE the enclosure itself, so at forty million samples the statistical margin is not what carries the leg; the enclosure\u0027s own roughly ten per cent width is",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "consumption AT SCALE: twenty million pairs consume exactly forty million advances, read off the generator\u0027s State at the end of the run against a twin moved by a single Advance(40000000) call. Checked after the whole run rather than per draw, so a per-pair advance count that drifted anywhere in forty million draws is caught, which a probe at the front of the stream cannot promise",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a DISTRIBUTIONAL statement that pins no individual draw and reaches no line of the Box-Muller kernel\u0027s own arithmetic \u2014 the value contract, the roughly 6.66 sigma cap and the two-advance consumption at everyday volume are sampling.pcg-reference-vector-and-state\u0027s. It is also a statement at ONE seed: a generator wrong on some other stream is not reached here. Mutation-probed: scaling every sample by 1.01 reddens it at \u0027variance 1.0101060 departs from 1 by more than 1.7889E-003\u0027, and moving the tail cut from 3.0 to 3.05 reddens it at \u0027tail P(|z| beyond 3) 2.28900E-003 is outside [2.59046E-003, 3.02322E-003]\u0027; both restored before landing. Runtime is about two seconds, so the Deep sibling sampling.gaussian-moments-cdf-tail buys less by its tenfold reduction than its own envelope implies",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.shuffle-permutation-uniformity-at-scale",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg32XshRr",
+        "Name": "Shuffle"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Pcg32XshRr.Shuffle over a four-element span produces all 24 permutations, each within 700 of the uniform 20000, over 480000 trials at state 777, stream 30. Uniformity over the whole symmetric group on four letters is the one statement a Fisher-Yates transcription cannot make about itself: the transcription leg in sampling.pcg-reference-vector-and-state proves the walk is CARRIED faithfully and says nothing about whether the walk is unbiased, and this is the row that does. The histogram is a flat 256-slot array keyed two bits per position rather than a string dictionary \u2014 the same statement with no per-trial allocation",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two companion rows at a second seed (state 5, stream 31) over eight elements: two identically seeded generators shuffle to the identical ordering position for position, and the result is a permutation \u2014 every one of the eight elements survives exactly once, read off an occupancy mask rather than by sorting",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: 480000 trials over FOUR elements. Twenty-four cells is the largest symmetric group a frequency test at this volume resolves, so nothing here states the shuffle is unbiased at larger spans, and the 700-of-20000 band is about five standard errors of the uniform binomial \u2014 it separates a structurally biased shuffle rather than measuring a small bias. Mutation-probed: shuffling only the first three of the four elements reddens it at \u0027permutation 0123 occurred 79624 times over 480000 trials, expected 20000 +/- 700\u0027; restored before landing. Runtime is a few hundredths of a second, which is why the Deep sibling sampling.shuffle-permutation-uniformity\u0027s halved trial count bought nothing worth having",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.alias-table-frequency-at-scale",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable`1",
+        "Name": "SampleIndex"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable`1",
+        "Name": "Count"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the alias table\u0027s draw frequencies over six weight shapes \u2014 small integer ratios, a uniform four-way split, three interleaved zeros, a singleton, a one-to-a-trillion ratio and a 257-way vector \u2014 36100000 draws in all",
+        "Against": "each entry\u0027s construction weight over the total, compared EXACTLY: the departure, count times total minus draws times weight, is formed in BigInteger and no floating-point ratio enters the comparison. Only the BAND is float \u2014 eight binomial standard errors, floored at 2e-9 so a vanishing probability still has one. What makes this classical rather than a restatement is that the construction weights are the caller\u0027s input while the Vose partition built from them is the thing under test: the two sides share no code and no rounding substrate",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rows the distribution alone does not state, read off the same 36100000 draws: every selected index lies inside [0, Count), Count is the CONSTRUCTION length at each of the six shapes rather than the padded column count, and no zero-weight entry is EVER selected \u2014 which the interleaved-zero shape asserts at three entries and the 257-way vector asserts at one zero buried at index thirteen, where a partition that let a zero column reach an alias slot would surface only under a long run",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "construction determinism at each of the six shapes: a second table built from the identical entries samples identically over 10000 draws from an identically seeded generator, so the Vose partition\u0027s own tie-breaking is pinned as reproducible rather than assumed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the 257-way weight vector is drawn from Pcg32XshRr rather than System.Random, whose sequence is not a stable contract across runtimes \u2014 only the SHAPE of the vector is fixed and the exact weights are not, which is a deliberate determinism choice. Not reached here: the refusal ladder, the allocation-priced ordering probes and the fixed-point weight overloads, all of which are sampling.alias-refusal-and-fixed-twins\u0027. Mutation-probed: rotating the constructed weights by one entry while comparing against the unrotated vector reddens it at \u0027small-integer-ratios[0]: weight 1 of 10 drew 1600688 of 8000000, departing by 8006880 against the 8-sigma allowance 67883\u0027; restored before landing. Runtime is under half a second",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.certified-low-discrepancy-measured-across-scales",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "Certificate"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "Point"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "DiscrepancyBound"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CertifiedLowDiscrepancy.DiscrepancyBound at SIX certificates spanning K of 1, 2, 2, 6, 14 and 100 \u2014 golden, silver, root two, root thirteen, root fifty and root 2501, each named beside the continued-fraction expansion its certificate comes from \u2014 at every one of five point counts: 64, 256, 1024, 4096 and 16384. Across-scales is the whole point of the row: a bound that happened to dominate at one N says nothing about its 1/N term, and thirty measurements over a 256-fold range of N are what this row carries",
+        "Against": "the EXACT star discrepancy of the generated points, the maximum over i of the larger of (i+1)/N minus x_i and x_i minus i/N, formed in BigInteger over a common denominator of N times two-to-the-thirty-two and compared with the bound by cross-multiplication, so no rounding enters anywhere and no double is sorted",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "teeth at three of those scales: the K of 100 certificate measures more than TWICE the K of 1 certificate at 1024, 4096 and 16384 points, and the three certificates 1, 2 and 14 measure strictly monotone at every one of them. A certificate that was merely a number carried alongside the sequence would satisfy the bound leg above and fail this one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "coverage at all six certificates: no sequence leaves an empty circular gap wider than a twentieth of the unit interval over its first 4096 points, computed exactly on the raw UQ0.32 values with the wrap-around gap included, so a sequence that clustered its points and left the rest of the interval bare is reported rather than passed by the discrepancy bound alone",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "determinism at 200000 points: two independently constructed instances of the golden generator agree bit for bit at every index, which is what lets a certificate be rebuilt from its four integers instead of persisted",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the certified bound is a classical UPPER bound and is NOT tight, and this case states how loose rather than leaving a reader to find out. Mutation-probed: the bound leg still holds with the bound QUARTERED and reddens with it cut to an eighth \u2014 at N of 64 the bound is 0.1875 against a measured 0.02897 \u2014 so what the leg separates is a badly wrong bound, never the bound\u0027s constant. The teeth leg was probed too: substituting a second golden sequence for the K of 100 one reddens the case at \u0027K=100 discrepancy 8115527680 is not more than twice K=1\u0027s 8115527680 at N=1024\u0027. Both restored before landing. The certificates themselves are not pinned here beyond the six declared values; certified.certificate-vs-partial-quotients is what compares them with Oracles.MaximumPartialQuotient. Runtime is well under a second",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

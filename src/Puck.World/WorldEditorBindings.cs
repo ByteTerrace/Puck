@@ -51,6 +51,17 @@ internal static class WorldEditorBindings {
     /// visible evidence the editor group is live.</summary>
     public const string RestingPageLabel = "Editor";
 
+    /// <summary>The editor group's wheel hold page id (chord: Tab held) — its selection presents the editor wheel,
+    /// whose Exit sector is the keyboard's way out of the mode (Tab belongs wholly to the wheel).</summary>
+    public const string WheelHoldPageId = "editor-wheel";
+    /// <summary>The editor wheel's sole ring page id.</summary>
+    public const string WheelRingId = "editor-wheel-acts";
+
+    /// <summary>The sculpt group's wheel hold page id (chord: Tab held) — its Done sector closes the workbench.</summary>
+    public const string SculptWheelHoldPageId = "sculpt-wheel";
+    /// <summary>The sculpt wheel's sole ring page id.</summary>
+    public const string SculptWheelRingId = "sculpt-wheel-acts";
+
     /// <summary>Builds the editor group's chord rows (the <see cref="WorldDefaultBindings.BuildDocument"/> fold).</summary>
     /// <returns>The rows, resting page first.</returns>
     public static BindingChordDefinition[] Rows() {
@@ -65,14 +76,18 @@ internal static class WorldEditorBindings {
                         .. StickEntries(),
                         .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Rise", icon: "action.jump"),
                         .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Sink", icon: "edit.place"),
-                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.CameraToggleCommand, label: "Camera", icon: "edit.op"),
+                        // A constant zero (not a plain Press) — editor.camera now declares Axis1D (every OTHER row
+                        // targeting it carries a real +1/-1 constant), so this row must dispatch the SAME kind too,
+                        // or BindingVocabularyCheck refuses every future recompose over the mismatch. Zero reads as
+                        // "no explicit direction" in the handler, which falls through to the toggle.
+                        PressValue(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.CameraToggleCommand, value: CommandValue.Axis(value: 0f), label: "Camera", icon: "edit.op"),
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
-                        Press(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.FasterCommand, label: "Faster", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SlowerCommand, label: "Slower", icon: "edit.prev"),
-                        // The same controls that entered the mode leave it (Back/Tab mirror the play page's enter twins).
+                        PressValue(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.SpeedCommand, value: CommandValue.Axis(value: 1f), label: "Faster", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SpeedCommand, value: CommandValue.Axis(value: -1f), label: "Slower", icon: "edit.prev"),
+                        // The same control that entered the mode leaves it (Back mirrors the play page's enter row);
+                        // the keyboard leaves through the wheel's Exit sector — Tab belongs wholly to the wheel.
                         Press(source: InputSources.Gamepad.Back, command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
-                        Press(source: InputSources.Keyboard.Tab, command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
                     ],
                     Label: RestingPageLabel
                 )
@@ -87,11 +102,11 @@ internal static class WorldEditorBindings {
                     Id: CameraPageId,
                     Entries: [
                         .. StickEntries(),
-                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.FlyCommand, label: "Fly", icon: "edit.play"),
-                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorCommandModule.OrbitCommand, label: "Orbit", icon: "action.target"),
+                        PressValue(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.CameraToggleCommand, value: CommandValue.Axis(value: 1f), label: "Fly", icon: "edit.play"),
+                        PressValue(source: InputSources.Gamepad.ButtonWest, command: EditorCommandModule.CameraToggleCommand, value: CommandValue.Axis(value: -1f), label: "Orbit", icon: "action.target"),
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSelectionCommandModule.PickCommand, label: "Focus", icon: "action.target"),
-                        Press(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.FasterCommand, label: "Faster", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SlowerCommand, label: "Slower", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.SpeedCommand, value: CommandValue.Axis(value: 1f), label: "Faster", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SpeedCommand, value: CommandValue.Axis(value: -1f), label: "Slower", icon: "edit.prev"),
                     ],
                     Label: "Camera"
                 )
@@ -107,16 +122,20 @@ internal static class WorldEditorBindings {
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.PickCommand, label: "Pick", icon: "action.target"),
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSelectionCommandModule.GrabCommand, label: "Grab", icon: "edit.place"),
-                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.DeselectCommand, label: "Clear", icon: "edit.deselect"),
+                        // A constant zero (not a plain Press) — editor.select now declares Axis1D (the DpadRight/Left
+                        // rows below carry real +1/-1 constants), so this row must dispatch the SAME kind too, or
+                        // BindingVocabularyCheck refuses every future recompose over the mismatch. Zero reads as
+                        // "deselect" in the handler.
+                        PressValue(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.SelectCommand, value: CommandValue.Axis(value: 0f), label: "Clear", icon: "edit.deselect"),
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorSelectionCommandModule.DeleteCommand, label: "Delete", icon: "edit.delete"),
-                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSelectionCommandModule.NextCommand, label: "Next", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSelectionCommandModule.PrevCommand, label: "Prev", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.DpadRight, command: EditorSelectionCommandModule.SelectCommand, value: CommandValue.Axis(value: 1f), label: "Next", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadLeft, command: EditorSelectionCommandModule.SelectCommand, value: CommandValue.Axis(value: -1f), label: "Prev", icon: "edit.prev"),
                     ],
                     Label: "Select"
                 )
             ),
-            // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap), the two scene spawn ghosts,
-            // and place-by-name — D-pad Left/Right cycle the armed world creation, North ghosts a placement of it.
+            // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap), and place-by-name — D-pad
+            // Left/Right cycle the armed world creation, North ghosts a placement of it.
             // While a drag is live the sticks translate the pending row instead of flying (the session's
             // routing).
             new BindingChordDefinition(
@@ -130,8 +149,6 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorCreationCommandModule.SpawnCommand, label: "Stamp", icon: "edit.duplicate"),
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorSelectionCommandModule.CancelCommand, label: "Cancel", icon: "edit.deselect"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.SnapCommand, label: "Snap", icon: "edit.style"),
-                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSelectionCommandModule.SpawnBoulderCommand, label: "Boulder", icon: "edit.duplicate"),
-                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSelectionCommandModule.SpawnSlabCommand, label: "Slab", icon: "edit.duplicate"),
                         Press(source: InputSources.Gamepad.DpadRight, command: EditorCreationCommandModule.NextCommand, label: "Creation+", icon: "edit.next"),
                         Press(source: InputSources.Gamepad.DpadLeft, command: EditorCreationCommandModule.PrevCommand, label: "Creation-", icon: "edit.prev"),
                     ],
@@ -147,6 +164,20 @@ internal static class WorldEditorBindings {
                     Id: ReversePageId,
                     Entries: [.. StickEntries()],
                     Label: "RT+LT"
+                )
+            ),
+            // The editor wheel hold page — Tab held; sticks keep flying, the arrows/D-pad cycle the ring, and Tab's
+            // release commits (see WorldDefaultBindings.WheelHoldEntries).
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [WorldDefaultBindings.TabModifierId],
+                Page: new BindingPageDefinition(
+                    Id: WheelHoldPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. WorldDefaultBindings.WheelHoldEntries(),
+                    ],
+                    Label: "Wheel"
                 )
             ),
             // ---- the sculpt group: the workbench mode's page family. Sticks stay bound on EVERY page (the
@@ -168,10 +199,9 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptCommandModule.RedoCommand, label: "Redo", icon: "edit.redo"),
                         Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptShapeCommandModule.DuplicateCommand, label: "Twin", icon: "edit.duplicate"),
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptShapeCommandModule.RemoveCommand, label: "Delete", icon: "edit.delete"),
-                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.NextCommand, label: "Next", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.PrevCommand, label: "Prev", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.SelectCommand, value: CommandValue.Axis(value: 1f), label: "Next", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.SelectCommand, value: CommandValue.Axis(value: -1f), label: "Prev", icon: "edit.prev"),
                         Press(source: InputSources.Gamepad.Back, command: EditorSculptCommandModule.ExitCommand, label: "Done", icon: "edit.exit"),
-                        Press(source: InputSources.Keyboard.Tab, command: EditorSculptCommandModule.ExitCommand, label: "Done", icon: "edit.exit"),
                     ],
                     Label: "Sculpt"
                 )
@@ -189,8 +219,8 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptCommandModule.CommitCommand, label: "Commit", icon: "edit.place"),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptCommandModule.EaselCommand, label: "Easel", icon: "edit.link"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptShapeCommandModule.DeselectCommand, label: "Clear", icon: "edit.deselect"),
-                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptCommandModule.ZoomInCommand, label: "Zoom+", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptCommandModule.ZoomOutCommand, label: "Zoom-", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.DpadUp, command: EditorSculptCommandModule.ZoomCommand, value: CommandValue.Axis(value: 1f), label: "Zoom+", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadDown, command: EditorSculptCommandModule.ZoomCommand, value: CommandValue.Axis(value: -1f), label: "Zoom-", icon: "edit.prev"),
                     ],
                     Label: "Bench"
                 )
@@ -207,12 +237,12 @@ internal static class WorldEditorBindings {
                         .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptStyleCommandModule.BlendCommand, label: "Blend", icon: "edit.op"),
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptStyleCommandModule.MirrorCommand, label: "Mirror", icon: "edit.style"),
-                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptStyleCommandModule.MaterialNextCommand, label: "Color+", icon: "edit.material"),
-                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptStyleCommandModule.MaterialPrevCommand, label: "Color-", icon: "edit.material"),
-                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSculptStyleCommandModule.SmoothUpCommand, label: "Smooth+", icon: "edit.op"),
-                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptStyleCommandModule.SmoothDownCommand, label: "Smooth-", icon: "edit.op"),
-                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.GrowCommand, label: "Grow", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.ShrinkCommand, label: "Shrink", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.ButtonEast, command: EditorSculptStyleCommandModule.MaterialCommand, value: CommandValue.Axis(value: 1f), label: "Color+", icon: "edit.material"),
+                        PressValue(source: InputSources.Gamepad.ButtonWest, command: EditorSculptStyleCommandModule.MaterialCommand, value: CommandValue.Axis(value: -1f), label: "Color-", icon: "edit.material"),
+                        PressValue(source: InputSources.Gamepad.DpadUp, command: EditorSculptStyleCommandModule.SmoothCommand, value: CommandValue.Axis(value: 1f), label: "Smooth+", icon: "edit.op"),
+                        PressValue(source: InputSources.Gamepad.DpadDown, command: EditorSculptStyleCommandModule.SmoothCommand, value: CommandValue.Axis(value: -1f), label: "Smooth-", icon: "edit.op"),
+                        PressValue(source: InputSources.Gamepad.DpadRight, command: EditorSculptShapeCommandModule.ScaleCommand, value: CommandValue.Axis(value: 1f), label: "Grow", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.DpadLeft, command: EditorSculptShapeCommandModule.ScaleCommand, value: CommandValue.Axis(value: -1f), label: "Shrink", icon: "edit.prev"),
                     ],
                     Label: "Style"
                 )
@@ -229,8 +259,8 @@ internal static class WorldEditorBindings {
                         .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptRigCommandModule.FrameRecordCommand, label: "Record", icon: "edit.record"),
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptRigCommandModule.PlayCommand, label: "Play", icon: "edit.play"),
-                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptRigCommandModule.FrameNextCommand, label: "Frame+", icon: "edit.next"),
-                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptRigCommandModule.FramePrevCommand, label: "Frame-", icon: "edit.prev"),
+                        PressValue(source: InputSources.Gamepad.ButtonEast, command: EditorSculptRigCommandModule.FrameCommand, value: CommandValue.Axis(value: 1f), label: "Frame+", icon: "edit.next"),
+                        PressValue(source: InputSources.Gamepad.ButtonWest, command: EditorSculptRigCommandModule.FrameCommand, value: CommandValue.Axis(value: -1f), label: "Frame-", icon: "edit.prev"),
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorSculptRigCommandModule.FrameRemoveCommand, label: "Del frame", icon: "edit.delete"),
                     ],
                     Label: "Frames"
@@ -247,7 +277,7 @@ internal static class WorldEditorBindings {
                         .. StickEntries(),
                         .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Raise", icon: "action.jump"),
                         .. HoldRelease(source: InputSources.Gamepad.LeftShoulder, command: EditorCommandModule.DescendCommand, label: "Lower", icon: "edit.place"),
-                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptRigCommandModule.ChainDefineCommand, label: "Chain", icon: "edit.link"),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSculptRigCommandModule.ChainCommand, label: "Chain", icon: "edit.link"),
                         Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSculptRigCommandModule.ChainKindCommand, label: "Kind", icon: "edit.style"),
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorSculptRigCommandModule.ChainRemoveCommand, label: "Del chain", icon: "edit.delete"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorSculptRigCommandModule.ChainNextCommand, label: "Chain+", icon: "edit.next"),
@@ -255,8 +285,64 @@ internal static class WorldEditorBindings {
                     Label: "Rig"
                 )
             ),
+            // The sculpt wheel hold page — the editor hold page's sculpt-group twin.
+            new BindingChordDefinition(
+                Group: SculptGroupId,
+                Chord: [WorldDefaultBindings.TabModifierId],
+                Page: new BindingPageDefinition(
+                    Id: SculptWheelHoldPageId,
+                    Entries: [
+                        .. StickEntries(),
+                        .. WorldDefaultBindings.WheelHoldEntries(),
+                    ],
+                    Label: "Wheel"
+                )
+            ),
         ];
     }
+
+    /// <summary>Builds the editor and sculpt groups' wheels (folded into the engine-default document's
+    /// <c>wheels</c> beside <see cref="WorldDefaultBindings"/>' play wheel). One ring each: the mode's deliberate
+    /// acts, its Exit/Done sector carrying the same act the retired Tab press row used to fire directly.</summary>
+    /// <returns>The two wheels, editor first.</returns>
+    public static BindingWheelDefinition[] Wheels() => [
+        new BindingWheelDefinition(
+            Group: GroupId,
+            HoldPage: WheelHoldPageId,
+            Rings: [
+                new BindingPageDefinition(
+                    Id: WheelRingId,
+                    Entries: [
+                        WorldDefaultBindings.Sector(command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
+                        WorldDefaultBindings.Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
+                        WorldDefaultBindings.Sector(command: EditorCommandModule.CameraToggleCommand, label: "Camera", icon: "edit.op"),
+                        WorldDefaultBindings.Sector(command: "editor.creations", label: "Creations", icon: "edit.duplicate"),
+                        WorldDefaultBindings.Sector(command: "world.view.pointer", label: "Pointer", icon: "action.target"),
+                        WorldDefaultBindings.Sector(command: "world.view.state", label: "Layout", icon: "edit.style"),
+                    ],
+                    Label: "Editor"
+                ),
+            ]
+        ),
+        new BindingWheelDefinition(
+            Group: SculptGroupId,
+            HoldPage: SculptWheelHoldPageId,
+            Rings: [
+                new BindingPageDefinition(
+                    Id: SculptWheelRingId,
+                    Entries: [
+                        WorldDefaultBindings.Sector(command: EditorSculptCommandModule.ExitCommand, label: "Done", icon: "edit.exit"),
+                        WorldDefaultBindings.Sector(command: EditorSculptCommandModule.CommitCommand, label: "Commit", icon: "edit.place"),
+                        WorldDefaultBindings.Sector(command: EditorSculptCommandModule.UndoCommand, label: "Undo", icon: "edit.undo"),
+                        WorldDefaultBindings.Sector(command: EditorSculptCommandModule.RedoCommand, label: "Redo", icon: "edit.redo"),
+                        WorldDefaultBindings.Sector(command: EditorSculptCommandModule.EaselCommand, label: "Easel", icon: "edit.link"),
+                        WorldDefaultBindings.Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
+                    ],
+                    Label: "Sculpt"
+                ),
+            ]
+        ),
+    ];
 
     // The two stick routers every editor page carries: a held analog re-dispatches each tick against the ACTIVE page,
     // so a page missing these entries would stall fresh flight input while its chord is held.
@@ -265,20 +351,34 @@ internal static class WorldEditorBindings {
         new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: EditorCommandModule.LookCommand, Label: "Look"),
     ];
 
-    // A press-edge entry, AnyModifiers so an incidental keyboard modifier never eats an editor act.
+    // A press-edge entry.
     private static BindingPageEntryDefinition Press(string source, string command, string label, string icon) => new(
         Source: source,
         Command: command,
         ActivateOn: CommandPhase.Started,
         Label: label,
-        Icon: icon,
-        AnyModifiers: true
+        Icon: icon
+    );
+
+    // A press-edge entry carrying a CONSTANT value in place of the source's own — the step/direction-twin fold: a
+    // WithWireArgs verb sees an EMPTY WireArgs on a bound dispatch and reads this constant off context.Value
+    // instead (see EditorCommandModule.TryDirection's doctrine comment). This is how a .next/.prev/.up/.down/
+    // .grow/.shrink twin retired in this wave keeps its chord without a sibling command: the surviving verb stays
+    // Bindable, and the binding row that used to name the twin now names the verb with the twin's direction baked
+    // into Value.
+    private static BindingPageEntryDefinition PressValue(string source, string command, CommandValue value, string label, string icon) => new(
+        Source: source,
+        Command: command,
+        Value: value,
+        ActivateOn: CommandPhase.Started,
+        Label: label,
+        Icon: icon
     );
 
     // A source bound on BOTH edges (the WorldDefaultBindings HoldRelease pattern) so a held vertical reads held until
     // its release edge.
     private static BindingPageEntryDefinition[] HoldRelease(string source, string command, string label, string icon) => [
-        new BindingPageEntryDefinition(Source: source, Command: command, Label: label, Icon: icon, AnyModifiers: true),
-        new BindingPageEntryDefinition(Source: source, Command: command, ActivateOn: CommandPhase.Completed, AnyModifiers: true),
+        new BindingPageEntryDefinition(Source: source, Command: command, Label: label, Icon: icon),
+        new BindingPageEntryDefinition(Source: source, Command: command, ActivateOn: CommandPhase.Completed),
     ];
 }

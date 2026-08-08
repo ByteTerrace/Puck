@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 
 using Puck.Commands;
 using Puck.Input.Devices;
@@ -9,30 +10,62 @@ namespace Puck.Input;
 /// The snapshot input path's capture step: turns one frame's already-drained per-device state (an
 /// <see cref="IInputArbiter"/>'s <see cref="IInputArbiter.DrainedDevices"/>) into provider-neutral, timestamped
 /// <see cref="InputSignal"/>s — button press/release edges, stick/trigger/touch/gyro/accel axes, and the fused
-/// orientation — appending each to an <see cref="InputRouter"/>, replacing <see cref="GamepadInputSource"/> on the
-/// router path. The destructive <see cref="GamepadManager.Drain"/> itself lives one layer up, in the arbiter: this
-/// type never drains — its caller drains once (<see cref="IInputArbiter.DrainFrame"/>) and hands the result in.
+/// orientation — appending each to an <see cref="InputRouter"/>. The destructive <see cref="GamepadManager.Drain"/>
+/// itself lives one layer up, in the arbiter: this type never drains — its caller drains once
+/// (<see cref="IInputArbiter.DrainFrame"/>) and hands the result in.
 /// </summary>
 public sealed class GamepadCaptureSource {
-    private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = [
-        (GamepadButtons.ButtonSouth, InputSources.Gamepad.ButtonSouth),
-        (GamepadButtons.ButtonEast, InputSources.Gamepad.ButtonEast),
-        (GamepadButtons.ButtonWest, InputSources.Gamepad.ButtonWest),
-        (GamepadButtons.ButtonNorth, InputSources.Gamepad.ButtonNorth),
-        (GamepadButtons.DpadUp, InputSources.Gamepad.DpadUp),
-        (GamepadButtons.DpadDown, InputSources.Gamepad.DpadDown),
-        (GamepadButtons.DpadLeft, InputSources.Gamepad.DpadLeft),
-        (GamepadButtons.DpadRight, InputSources.Gamepad.DpadRight),
-        (GamepadButtons.LeftShoulder, InputSources.Gamepad.LeftShoulder),
-        (GamepadButtons.RightShoulder, InputSources.Gamepad.RightShoulder),
-        (GamepadButtons.LeftStickPress, InputSources.Gamepad.LeftStickPress),
-        (GamepadButtons.RightStickPress, InputSources.Gamepad.RightStickPress),
-        (GamepadButtons.Back, InputSources.Gamepad.Back),
-        (GamepadButtons.Start, InputSources.Gamepad.Start),
-        (GamepadButtons.Guide, InputSources.Gamepad.Guide),
-        (GamepadButtons.Touchpad, InputSources.Gamepad.Touchpad),
-        (GamepadButtons.Mute, InputSources.Gamepad.Mute),
-    ];
+    // Derived from GamepadButtons itself — NOT a hand-kept parallel list — so a newly added flag cannot silently
+    // fail to reach an InputSignal. Every named GamepadButtons flag (other than None) is required to have a same-
+    // named constant in InputSources.Gamepad (ButtonSouth -> InputSources.Gamepad.ButtonSouth, and so on); this
+    // walks Enum.GetValues once at type init (not per frame — the per-frame path only ever indexes the resulting
+    // array) and throws immediately if a flag has no matching source, rather than the bit reaching GamepadState and
+    // silently going nowhere. Adding a button now means: add the GamepadButtons flag AND the InputSources.Gamepad
+    // constant of the same name; forgetting the second one fails loudly the first time any capture runs (including
+    // GamepadCaptureSource's own constructor, since a beforefieldinit type's static fields are guaranteed to be
+    // initialized before the type is otherwise touched).
+    private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = BuildButtonSources();
+
+    private static (GamepadButtons Flag, string Source)[] BuildButtonSources() {
+        var gamepadSources = typeof(InputSources.Gamepad);
+        var flags = Enum.GetValues<GamepadButtons>();
+        var map = new List<(GamepadButtons Flag, string Source)>(capacity: flags.Length);
+        var highestBit = -1;
+
+        foreach (var flag in flags) {
+            if (flag == GamepadButtons.None) {
+                continue;
+            }
+
+            var name = flag.ToString();
+            var field = (gamepadSources.GetField(name: name, bindingAttr: BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException(
+                    message: (($"GamepadButtons.{name} has no matching InputSources.Gamepad.{name} source constant. " +
+                    "Every digital button must be reachable as an InputSignal source or it can never be bound (nor ") +
+                    $"synthesized by an addon). Add 'public const string {name} = \"gamepad.{char.ToLowerInvariant(c: name[0])}{name[1..]}\";' to InputSources.Gamepad.")));
+
+            map.Add(item: (flag, (string)field.GetValue(obj: null)!));
+
+            var bit = BitOperations.TrailingZeroCount(value: (uint)flag);
+
+            if (bit > highestBit) {
+                highestBit = bit;
+            }
+        }
+
+        // The sibling hand-sync: GamepadButtonEdges reserves one press-stamp slot per bit, sized by a compile-time
+        // constant (InlineArray requires one) that cannot itself be derived from the enum at compile time. This
+        // assert is the runtime backstop — it fails loudly, once, at the same type-init point as the check above,
+        // instead of the coalescer indexing out of range on a fresh pad's first press of the forgotten button.
+        if ((highestBit + 1) > GamepadButtonEdges.Count) {
+            throw new InvalidOperationException(
+                message: ($"GamepadButtons defines a flag at bit {highestBit} but GamepadButtonEdges.Count is only " +
+                $"{GamepadButtonEdges.Count}. Bump GamepadButtonEdges.Count to at least {(highestBit + 1)}."));
+        }
+
+        return [.. map];
+    }
+
     private readonly IInputClock m_clock;
     private readonly Func<InputDeviceId, bool> m_isActiveFor;
     private readonly InputRouter m_router;

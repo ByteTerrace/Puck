@@ -1,0 +1,21 @@
+diff --git a/src/Puck.World.Server/WorldServer.cs b/src/Puck.World.Server/WorldServer.cs
+index 683731c6..96c4a993 100644
+--- a/src/Puck.World.Server/WorldServer.cs
++++ b/src/Puck.World.Server/WorldServer.cs
+@@ -2168,11 +2168,14 @@ private WorldSubmissionResult ApplyEnvelope(SubmissionEnvelope envelope) {
+ 
+                 return WorldSubmissionResult.Ack.Instance;
+             case WorldSubmissionPayload.Grant grant:
+-                Grant(grant: grant.Value, actor: envelope.Principal, connectionId: envelope.ConnectionId, correlationId: envelope.CorrelationId);
++                // SABOTAGE-INJECTED (docs/verification/ordered-domain): swaps the Grant/Revoke dispatch so a
++                // world.grant envelope actually revokes and a world.revoke envelope actually grants — temporary,
++                // never present outside that runner's sabotage patch.
++                Revoke(grant: grant.Value, actor: envelope.Principal, connectionId: envelope.ConnectionId, correlationId: envelope.CorrelationId);
+ 
+                 return WorldSubmissionResult.Ack.Instance;
+             case WorldSubmissionPayload.Revoke revoke:
+-                Revoke(grant: revoke.Value, actor: envelope.Principal, connectionId: envelope.ConnectionId, correlationId: envelope.CorrelationId);
++                Grant(grant: revoke.Value, actor: envelope.Principal, connectionId: envelope.ConnectionId, correlationId: envelope.CorrelationId);
+ 
+                 return WorldSubmissionResult.Ack.Instance;
+             case WorldSubmissionPayload.Session session:

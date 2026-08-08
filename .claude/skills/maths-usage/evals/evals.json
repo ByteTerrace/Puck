@@ -1,0 +1,23 @@
+{
+  "skill_name": "maths-usage",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to advance a signed three-dimensional velocity by a fixed rate every tick, persist mid-tick progress in snapshots, and replay bit-identically. Which Puck.Maths primitives and state belong in the design?",
+      "expected_output": "Selects fixed-point vector and rate-accumulator primitives instead of floats or hand-scaled integers, treats the accumulator remainder as authoritative snapshot state, keeps conversions at one-way presentation seams, and verifies the exact contracts in the relevant wing README and tests.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Add a deterministic weighted loot choice that can be saved and resumed without changing later random decisions.",
+      "expected_output": "Selects Pcg32XshRr for the system stream and a load-time AliasTable for weighted selection, preserves State, Increment, Multiplier, stream identity, and draw order, avoids reseeding or sharing streams, and notes that alias-table construction order is significant.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Change the rounding behavior of a public FixedQ4816 method and add a new public helper alongside it. What verification and governance work does this require?",
+      "expected_output": "Requires the Release Default test tier, the Deep tier for a rounding change, current VerifiedCode manifest inspection when applicable, and classification of the new public member. Routes law, leg, oracle, or waiver authoring to maths-laws; does not hand-edit generated coverage or leg registers and reports exact commands and failure provenance.",
+      "files": []
+    }
+  ]
+}

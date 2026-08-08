@@ -1,0 +1,159 @@
+{
+  "description": "The placeable speaker rows (default empty) \u2014 the camera family\u0027s audio sibling (see WorldSpeaker): name-keyed transducers whose feeds tap shared sources.",
+  "type": "array",
+  "items": {
+    "description": "One placeable speaker in the world \u2014 the camera family\u0027s sibling: abstract, name-keyed, $type-discriminated, whole-row UpsertSpeaker/RemoveSpeaker. Routing chiasmus: screens consume cameras; speakers consume audio sources. Omni-only v1 (no cones \u2014 stereo separation is already the feed model). A new speaker kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "required": [
+      "$type"
+    ],
+    "anyOf": [
+      {
+        "description": "A speaker posed directly in world space.",
+        "properties": {
+          "$type": {
+            "const": "fixed"
+          },
+          "position": {
+            "description": "The emitter position, world space."
+          },
+          "name": {
+            "description": "The speaker\u0027s stable name \u2014 its mutation address.",
+            "type": "string"
+          },
+          "feed": {
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+          },
+          "attenuation": {
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation"
+          }
+        },
+        "required": [
+          "position",
+          "name",
+          "feed"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "description": "A speaker anchored to a WorldAnchor \u2014 the entity/part/placement pose it rides supplies the live position; Offset is the exact attachment point in the anchor\u0027s local axes on top of that. Unlike cameras, speakers resolve EVERY anchor kind, placements included (the placement\u0027s stamped transform is reachable client-side from the definition plus the animator state).",
+        "properties": {
+          "$type": {
+            "const": "anchored"
+          },
+          "anchor": {
+            "description": "What the speaker rides (see WorldAnchor).",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "$ref": "./common.schema.json#/$defs/Entity"
+              },
+              {
+                "$ref": "./common.schema.json#/$defs/EntityPart"
+              },
+              {
+                "$ref": "./common.schema.json#/$defs/Placement"
+              },
+              {
+                "$ref": "./common.schema.json#/$defs/Group"
+              }
+            ]
+          },
+          "offset": {
+            "description": "The attachment point relative to the anchor\u0027s resolved pose, in anchor-local axes."
+          },
+          "name": {
+            "description": "The speaker\u0027s stable name \u2014 its mutation address.",
+            "type": "string"
+          },
+          "feed": {
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+          },
+          "attenuation": {
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation"
+          }
+        },
+        "required": [
+          "anchor",
+          "offset",
+          "name",
+          "feed"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "description": "An ambient bed \u2014 a region PRESENCE, not a position: center-panned, its gain an envelope of the listener\u0027s distance from Center \u2014 full inside InnerRadius, zero at Radius \u2014 with its presence slew bounded by FadeSeconds. Box extents become a later $type only if a sphere proves dishonest.",
+        "properties": {
+          "$type": {
+            "const": "bed"
+          },
+          "center": {
+            "description": "The region\u0027s extent center, world space."
+          },
+          "radius": {
+            "description": "The region\u0027s outer radius \u2014 the envelope\u0027s zero and the cull edge.",
+            "type": "number"
+          },
+          "innerRadius": {
+            "description": "The full-presence inner radius; 0 shoulders the envelope from the center.",
+            "type": "number"
+          },
+          "fadeSeconds": {
+            "description": "The presence slew bound in seconds (null = the audio defaults\u0027 DefaultBedFadeSeconds).",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The speaker\u0027s stable name \u2014 its mutation address.",
+            "type": "string"
+          },
+          "feed": {
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+          },
+          "attenuation": {
+            "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "radius": {
+                "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is CULLED (finite support IS the cull).",
+                "type": "number"
+              },
+              "curve": {
+                "description": "The falloff curve token (CurveSmoothstep or CurveLinear), or null for the audio-defaults curve.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "radius",
+              "curve"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "center",
+          "radius",
+          "innerRadius",
+          "fadeSeconds",
+          "name",
+          "feed"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

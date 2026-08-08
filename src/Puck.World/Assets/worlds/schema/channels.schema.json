@@ -1,0 +1,56 @@
+{
+  "description": "The world\u0027s channel table (see WorldChannel) \u2014 the intent vector\u0027s declared vocabulary every binding destination, player.press, kit Actions entry, and the addon wire resolve channel names against.",
+  "type": "array",
+  "items": {
+    "description": "One row of the world\u0027s channel table \u2014 the intent vector\u0027s declared vocabulary (see PlayerIntent). The consumer is exactly one of Role (an engine motion channel, claimable by at most one channel) or Composition (a kit composition trigger, bound \u2014 or left inert \u2014 per kit via Actions).",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, player.press, kit Actions entry, and the addon wire resolve against.",
+        "type": "string"
+      },
+      "shape": {
+        "description": "The declared value shape: bipolar [-1, 1], unipolar [0, 1], or binary.",
+        "enum": [
+          "Bipolar",
+          "Unipolar",
+          "Binary"
+        ]
+      },
+      "role": {
+        "description": "The engine motion role this channel claims, or null for a composition channel.",
+        "enum": [
+          "MoveForward",
+          "MoveStrafe",
+          "Turn",
+          "MoveUp",
+          "Pitch",
+          "Roll",
+          null
+        ],
+        "default": null
+      },
+      "composition": {
+        "description": "Whether this channel is a kit-composition trigger. Exactly one of Role or this must be set.",
+        "type": "boolean",
+        "default": false
+      },
+      "threshold": {
+        "description": "The binary crossing threshold in [0, 1] raw units (binary channels only); null takes DefaultBinaryThreshold (One/2).",
+        "type": [
+          "number",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "shape"
+    ],
+    "additionalProperties": false
+  }
+}

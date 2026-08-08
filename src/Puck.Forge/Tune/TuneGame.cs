@@ -1,4 +1,4 @@
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.Forge.Framework;
 
 namespace Puck.Forge.Tune;
@@ -29,7 +29,7 @@ internal sealed class TuneGame {
     private static GameManifest BuildManifest(AudioDocument document, byte[] musicLoop) {
         var manifest = new GameManifest();
 
-        manifest.DefineTiles(name: "game-tiles", tiles2bpp: BuildBlankTile());
+        manifest.DefineTiles(name: "game-tiles", tiles2bpp: MinimalArt.BuildBlankTile());
         manifest.DefineFontTiles();
         manifest.DefineBackgroundPalettes(name: "bg-gameplay", paletteData: BuildPalette());
         manifest.DefineObjectPalettes(name: "obj-gameplay", paletteData: BuildPalette());
@@ -59,7 +59,7 @@ internal sealed class TuneGame {
     }
 
     /// <summary>Assembles the jukebox <c>.gbc</c> from a compiled audio document.</summary>
-    /// <param name="document">The normalized document (see <see cref="AudioDocumentStore.Load"/>).</param>
+    /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <param name="title">The cartridge header title.</param>
     /// <returns>The 32 KiB ROM image.</returns>
     public static byte[] Build(AudioDocument document, string title) {
@@ -145,15 +145,6 @@ internal sealed class TuneGame {
         var sanitized = builder.ToString().Trim();
 
         return ((sanitized.Length > 20) ? sanitized[..20] : sanitized);
-    }
-
-    // A single flat 2bpp tile (colour index 1 throughout) — the jukebox's whole "art": a plain fill behind the text.
-    private static byte[] BuildBlankTile() {
-        var indices = new byte[64];
-
-        Array.Fill(array: indices, value: (byte)1);
-
-        return HgbImage.EncodeTile2bpp(tileIndices: indices);
     }
 
     // A calm two-tone palette (both BG/OBJ tables share it — the OBJ table is unused, but the boot spec needs one).

@@ -1,0 +1,44 @@
+[
+  {
+    "Id": "certified.certificate-vs-partial-quotients",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "Certificate"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "FromQuadraticIrrational"
+      },
+      {
+        "Type": "Puck.Maths.CertifiedLowDiscrepancy",
+        "Name": "MetallicMean"
+      },
+      {
+        "Type": "Puck.Maths.ContinuedFraction",
+        "Name": "Expand"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CertifiedLowDiscrepancy.FromQuadraticIrrational(p,q,d,r).Certificate \u2014 the max over terms[1..] of ContinuedFraction.Expand (CertifiedLowDiscrepancy.cs:47-88)",
+        "Against": "Oracles.MaximumPartialQuotient \u2014 the same fraction walked in BigInteger as a reduced triple (A \u002B B\u221Ad)/C, with a bracketed integer search instead of a square root and a repeat-of-triple period test (Oracles.cs:167-257); no Puck.Maths call on the oracle side. ENVELOPE: it pins the MAXIMUM only, never the order, the length or the periodStart (worklist C25)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every metallic mean n certifies at exactly n, on BOTH sides \u2014 a hand-derived closed form that pins the ORACLE as well as the subject over the all-n expansion family (Subjects.cs:4366-4373)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

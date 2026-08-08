@@ -611,11 +611,11 @@ public sealed partial class AgbBus : IAgbBus {
                     return biosValue;
                 }
             case RegionEwram:
-                value = ReadArray(array: m_ewram, index: aligned & 0x3FFFFu, width: width);
+                value = AgbArrayAccess.Read(array: m_ewram, index: aligned & 0x3FFFFu, width: width);
 
                 break;
             case RegionIwram:
-                value = ReadArray(array: m_iwram, index: aligned & 0x7FFFu, width: width);
+                value = AgbArrayAccess.Read(array: m_iwram, index: aligned & 0x7FFFu, width: width);
 
                 break;
             case RegionIo:
@@ -655,8 +655,8 @@ public sealed partial class AgbBus : IAgbBus {
     // charge, no open-bus latch update, no burst-counter/DMA state). Callers pre-align address to the access width.
     private uint DebugReadRegion(uint address, int width) => (address >> 24) switch {
         RegionBios => ReadBios(address: address, width: width),
-        RegionEwram => ReadArray(array: m_ewram, index: address & 0x3FFFFu, width: width),
-        RegionIwram => ReadArray(array: m_iwram, index: address & 0x7FFFu, width: width),
+        RegionEwram => AgbArrayAccess.Read(array: m_ewram, index: address & 0x3FFFFu, width: width),
+        RegionIwram => AgbArrayAccess.Read(array: m_iwram, index: address & 0x7FFFu, width: width),
         RegionIo => DebugReadIoRegion(address: address, width: width),
         RegionPalette or RegionVram or RegionOam => m_ppu.ReadVideo(address: address, width: width),
         0x8 or 0x9 or 0xA or 0xB or 0xC or 0xD => DebugReadRom(address: address, width: width),
@@ -690,11 +690,11 @@ public sealed partial class AgbBus : IAgbBus {
 
         switch (address >> 24) {
             case RegionEwram:
-                WriteArray(array: m_ewram, index: aligned & 0x3FFFFu, width: width, value: value);
+                AgbArrayAccess.Write(array: m_ewram, index: aligned & 0x3FFFFu, width: width, value: value);
 
                 break;
             case RegionIwram:
-                WriteArray(array: m_iwram, index: aligned & 0x7FFFu, width: width, value: value);
+                AgbArrayAccess.Write(array: m_iwram, index: aligned & 0x7FFFu, width: width, value: value);
 
                 break;
             case RegionIo:
@@ -754,13 +754,13 @@ public sealed partial class AgbBus : IAgbBus {
         }
 
         if (m_inCodeFetch) {
-            m_lastBiosOpcode = ReadArray(array: m_bios, index: address & 0x3FFCu, width: 4);
+            m_lastBiosOpcode = AgbArrayAccess.Read(array: m_bios, index: address & 0x3FFCu, width: 4);
 
-            return ReadArray(array: m_bios, index: address & 0x3FFFu, width: width);
+            return AgbArrayAccess.Read(array: m_bios, index: address & 0x3FFFu, width: width);
         }
 
         return (m_executingInBios
-            ? ReadArray(array: m_bios, index: address & 0x3FFFu, width: width)
+            ? AgbArrayAccess.Read(array: m_bios, index: address & 0x3FFFu, width: width)
             : SelectLane(value: m_lastBiosOpcode, address: address, width: width));
     }
 
@@ -1319,27 +1319,5 @@ public sealed partial class AgbBus : IAgbBus {
         return ((access == BusAccessType.Sequential)
             ? (seq + 1)
             : (nonSeq + 1));
-    }
-    private static uint ReadArray(byte[] array, uint index, int width) {
-        return width switch {
-            1 => array[index],
-            2 => (uint)(array[index] | (array[(index + 1u)] << 8)),
-            _ => (uint)(array[index]
-                | (array[(index + 1u)] << 8)
-                | (array[(index + 2u)] << 16)
-                | (array[(index + 3u)] << 24)),
-        };
-    }
-    private static void WriteArray(byte[] array, uint index, int width, uint value) {
-        array[index] = (byte)value;
-
-        if (width >= 2) {
-            array[(index + 1u)] = (byte)(value >> 8);
-        }
-
-        if (width == 4) {
-            array[(index + 2u)] = (byte)(value >> 16);
-            array[(index + 3u)] = (byte)(value >> 24);
-        }
     }
 }

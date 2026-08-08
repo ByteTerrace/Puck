@@ -1,0 +1,73 @@
+{
+  "description": "The interactions section (default null = none) \u2014 the generalized property x property (or property x region) -\u003E effect table (see WorldInteractionsSection), which LOWERS to the SAME rule substrate Rules evaluates rather than a second engine. OPTIONAL, for the SAME reason Rules is.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "interactions": {
+      "description": "The declared interaction rows, in authoring/evaluation order.",
+      "type": "array",
+      "items": {
+        "description": "One row of the world\u0027s interactions section \u2014 an authorable property x property (or property x region) -\u003E effect table entry: the generalized A x B -\u003E F emergent-chemistry primitive. NOT a second rule engine: WorldRuleCompiler.CompileAllInteractions DESUGARS every row into a synthesized WorldRule \u2014 its co-occurrence spelled as an ordinary CompareState/ All gate over the SAME reserved channels a hand-authored rule already reads \u2014 and compiles it through the identical WorldRuleCompiler.Compile path, so it rides the SAME per-tick evaluation, EDGE/LEVEL latch, journal, and undo a rule already has. There is exactly one evaluation engine; this is a second AUTHORING SURFACE over it.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The interaction\u0027s stable name \u2014 unique within the section (a SEPARATE namespace from Name: an interaction desugars into its OWN synthesized rule rather than sharing the authored rule list, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the ENGINE mints, and nothing mints an interaction."
+          },
+          "left": {
+            "description": "A property name, validated against the declared properties registry \u2014 the carrier a candidate co-occurrence is searched FROM (the $argmax: resolution \u2014 \u0022the carrier most strongly tagged Left\u0022).",
+            "type": "string"
+          },
+          "right": {
+            "description": "For Distance, a SECOND property name, validated the same way as Left. For Region, a placement id carrying a region facet \u2014 validated against the declared placements section instead, never against the property registry.",
+            "type": "string"
+          },
+          "coOccurrence": {
+            "description": "How the two operands\u0027 coming-together is detected.",
+            "enum": [
+              "Distance",
+              "Region"
+            ]
+          },
+          "range": {
+            "description": "The distance threshold, for Distance alone \u2014 ignored (and unchecked) under Region.",
+            "type": "number"
+          },
+          "effects": {
+            "description": "The effects applied in order when the interaction fires \u2014 see this type\u0027s remarks.",
+            "type": "array",
+            "items": {
+              "$ref": "./common.schema.json#/$defs/ActionEffect"
+            }
+          },
+          "mode": {
+            "description": "Whether the interaction fires every tick the co-occurrence holds (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the SAME reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
+            "enum": [
+              "Level",
+              "Edge"
+            ],
+            "default": "Edge"
+          }
+        },
+        "required": [
+          "name",
+          "left",
+          "right",
+          "coOccurrence",
+          "range",
+          "effects"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "interactions"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

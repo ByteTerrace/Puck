@@ -1,0 +1,2584 @@
+[
+  {
+    "Id": "deep.presented-clifford-twin",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Clifford"
+      },
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.GeometricAlgebra",
+        "Name": "GeometricProduct"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "PresentedAlgebra\u003CFixedQ4816, FixedMaterial\u003E.Multiply at Presentations.Clifford(3,0,0), ChargeLane.Exact",
+        "Against": "GeometricAlgebra.GeometricProduct at (3,0,0)",
+        "Shared": "FixedQ4816.RoundProductSum \u2014 the same kernel. MIRROR of presented.clifford-twin-geometric-3-0-0 at Tier.Deep; the owed leg lands on the Default case",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BOTH sides of the twin over the Deep tier\u2019s exhaustive edge cross product",
+        "Against": "Oracles.TwistedGroupProduct with charges from Oracles.CliffordCharge \u2014 one Oracles.RoundDyadic at shift 16 per blade. MIRROR of presented.clifford-twin-geometric-3-0-0\u2019s third leg, at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.presented-complement-all-signatures",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "FromSupport"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "Clifford"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Algebra"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "LeftComplement"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "OuterProduct"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pseudoscalar"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "RegressiveProduct"
+      },
+      {
+        "Type": "Puck.Maths.GradedComplement\u00602[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[Puck.Maths.IntegerMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "RightComplement"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Subtract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both complement compositions are the identity on every basis key of every Clifford signature (p,q,r) with one through eight generators \u2014 164 signatures and all of their blades, extending the Default law\u0027s four-generator ceiling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.complex-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Multiply over the exhaustive four-operand edge cross product",
+        "Against": "Oracles.QuadraticMultiply at (0, \u22121) \u2014 the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of complex.mul-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.split-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Multiply over the exhaustive four-operand edge cross product",
+        "Against": "Oracles.QuadraticMultiply at (0, \u002B1) \u2014 the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of split.mul-vs-oracle; it is the only classical side split.twin-quad has at Deep operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.quaternion-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQuaternion.op_Multiply over the Deep tier\u0027s 4096-vector batch on each operand side",
+        "Against": "Oracles.CayleyDicksonProduct at two floors \u2014 the doubling recursion\u0027s charged twisted group product, one Oracles.RoundDyadic per lane at shift 16. MIRROR of quaternion.mul-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.dual-quaternion-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedDual\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDual\u003CFixedQuaternion\u003E.op_Multiply \u2014 eight lanes and eight leaf products per lane, the widest fused accumulator in the tree",
+        "Against": "Oracles.DoublingDualProduct at two floors \u2014 the exact charged sums a\u00B7d \u002B b\u00B7c in BigInteger, one Oracles.RoundDyadic at shift 16 per lane. MIRROR of dual.quaternion-mul-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.complex-div-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.op_Division over the exhaustive four-operand edge cross product, which is what puts BOTH division branches under every gate combination",
+        "Against": "Oracles.ComplexQuotient \u2192 Oracles.RoundDyadicRatio, one ties-to-even rounding of each exact rational at shift 16. MIRROR of complex.div-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor substitution is identical on both sides: Subjects.ComplexDivisor maps the additive identity onto the multiplicative identity. MIRROR of complex.div-vs-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.complex-rotate-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "Rotate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedComplex.Rotate over the exhaustive four-operand edge cross product, which is the only way to reach the corners of its ASYMMETRIC 2\u00B9\u2077/2\u2074\u2075 gate \u2014 a mixed-magnitude quad",
+        "Against": "Oracles.QuadraticMultiply at (0, \u22121), one Oracles.RoundDyadic per component at shift 32. MIRROR of complex.rotate-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.split-div-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.op_Division over the exhaustive four-operand edge cross product, which sweeps the INDEFINITE denominator\u0027s sign combinations",
+        "Against": "Oracles.SplitQuotient \u2192 Oracles.RoundDyadicRatio over the exact form c\u00B2 \u2212 d\u00B2, one ties-to-even rounding per component at shift 16. MIRROR of split.div-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the divisor substitution is identical on both sides: Subjects.SplitDivisor maps the whole light cone onto the multiplicative identity. MIRROR of split.div-vs-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.split-transform-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSplit",
+        "Name": "Transform"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSplit.Transform over the exhaustive four-operand edge cross product",
+        "Against": "Oracles.QuadraticMultiply at (0, \u002B1), one Oracles.RoundDyadic per component at shift 32. MIRROR of split.transform-vs-oracle at strictly stronger operands, and the case that completes the Deep set already holding deep.split-mul-vs-oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.fractional-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at (0, \u00BD), the fractional lane, over the exhaustive four-operand edge cross product",
+        "Against": "Oracles.QuadraticMultiply \u2014 the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of algebra.fractional-mul-vs-oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.presented-tangle-sweep",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "AreEqual"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Compile"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Generator"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.Presentations",
+        "Name": "PlanarTangle"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charge"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "KeyCount"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Target"
+      },
+      {
+        "Type": "Puck.Maths.CompiledProduct\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TargetCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "GeneratorCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasFiniteNormalForms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "HasLiveReassociation"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Lane"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Material"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "MaximumCellTerms"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormCount"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "NormalFormWord"
+      },
+      {
+        "Type": "Puck.Maths.ChargedPresentation\u00602[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "WindowDegree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Inputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Outputs"
+      },
+      {
+        "Type": "Puck.Maths.Generator",
+        "Name": "Symbol"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Charges"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "PackReplacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Pattern"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Replacement"
+      },
+      {
+        "Type": "Puck.Maths.RewriteRule\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "TermCount"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Coefficients"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Keys"
+      },
+      {
+        "Type": "Puck.Maths.PresentedAlgebra\u00602\u002BElement[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.FixedMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "SupportCount"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedLinear"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "FusedChargedSum"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.IntegerMaterial",
+        "Name": "Subtract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ChargedPresentation.NormalFormCount/GeneratorCount at PlanarTangle(0..6)",
+        "Against": "Subjects.TangleBasisTable",
+        "Shared": "",
+        "Citation": "the published Catalan numbers. MIRROR of presented.tangle-basis-counts extended to the cap, which is where the cap is PROVED REACHABLE at 377",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Oracles.PlanarDiagrams block counts through width six",
+        "Against": "the ballot difference and Subjects.TangleCatalanTable \u2014 MIRROR of presented.tangle-basis-counts",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CompiledProduct\u003CBigInteger\u003E.KeyCount, TargetCount, Target and Charge at PlanarTangle(6), all 142129 ordered pairs",
+        "Against": "Oracles.PlanarCompose plus Oracles.PlanarSymbols \u2014 MIRROR of smoke.presented-tangle-composes at the last admissible width",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "IntraPresented",
+        "Subject": "PresentedAlgebra.Multiply by the identity sum at PlanarTangle(6)",
+        "Against": "the element itself",
+        "Shared": "one PresentedAlgebra instance \u2014 MIRROR of smoke.presented-tangle-composes",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the unit carries one identity diagram per width through six",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unit-fraction16-exhaustive",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_OnesComplement"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "op_Explicit"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction16",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.ToString, Parse, the double projection and FromDouble at EVERY one of the 65 536 raws",
+        "Against": "Oracles.ExactDyadicDecimal and Oracles.ExactBinary64Bits, plus the swept raw itself as the parse expectation. MIRROR of unit-fraction16.text-vs-oracle and unit-fraction16.double-projection-exact with the sampling removed: at this width the type is finite and the statement is total",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction16.op_Multiply and op_Division at every raw against the twelve-value committed divisor band",
+        "Against": "Oracles.UnitFractionProduct and Oracles.UnitFractionQuotient. MIRROR of unit-fraction16.mul-vs-oracle and unit-fraction16.div-vs-oracle, exhaustive in the first operand and banded in the second \u2014 786 432 pairs on each kernel, where the sampled laws reach roughly a thousand",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the complement and the negation are exhaustively involutive and exhaustively equal to 2\u00B9\u2076 \u2212 1 \u2212 raw and to (2\u00B9\u2076 \u2212 raw) mod 2\u00B9\u2076 \u2014 no raw is left to a sample",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unit-fraction32-mul-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction32.op_Multiply over the Deep tier\u0027s sixteen-fold random batch and the full edge square",
+        "Against": "Oracles.UnitFractionProduct \u2192 Oracles.RoundDyadic at shift 32. MIRROR of unit-fraction32.mul-vs-oracle at strictly stronger operands; the 32-bit width admits no exhaustive pair sweep, so depth is bought in samples rather than in totality",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unit-fraction32-div-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitFraction32.op_Division on the UNORDERED operand fold \u2014 the sampled pair taken as it comes, with only a zero divisor substituted \u2014 over the Deep tier\u0027s sixteen-fold random batch and the full edge square",
+        "Against": "Oracles.UnitFractionQuotient at fraction width 32: one ties-to-even rounding of the exact rational (x\u00B72\u00B3\u00B2)/y in BigInteger, THEN the clamp onto MaxValue \u2014 the same round-before-clamp order the subject takes, reached without a machine-width quotient anywhere. MIRROR of unit-fraction32.div-vs-oracle with the min/max ordering removed, which is what carries the sweep into the above-one regime the ordered fold cannot reach. ENVELOPE, stated rather than implied: the exact tie 2\u00B7(x\u00B72\u00B3\u00B2 mod y) == y is UNREACHABLE at every legal operand pair on this fold as on the ordered one \u2014 the remainder\u0027s 2-adic valuation is at least v\u2082(y) while y/2\u0027s is v\u2082(y) \u2212 1 \u2014 so the tie clause of the subject\u0027s rounding is pinned by the closed-unit and Q48.16 families, never here",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unit-fraction32-text-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitFraction32",
+        "Name": "TotalBitCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the UQ0.32 text seam \u2014 the renderer, the span formatter\u0027s refusal ladder, all four parse routes and the two derived texts \u2014 over the Deep tier\u0027s sixteen-fold batch",
+        "Against": "Oracles.ExactDyadicDecimal and Oracles.TryUnitFractionText. MIRROR of unit-fraction32.text-vs-oracle; this is the family\u0027s heaviest law (thirty-three-digit BigInteger rationals per case) and Deep is where it is paid for",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.fixed-divide-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Division over the Deep tier\u0027s sixteen-fold random batch \u2014 the INTERIOR of both divide branches, the hardware lane under raw_x \u003E\u003E 48 \u003C raw_y and the UInt128 fallback above it, and the interior of the wrap",
+        "Against": "Oracles.RoundDyadicRatio at shift 16. MIRROR of scalar.divide-vs-oracle. ENVELOPE, stated rather than implied: Domains.Pairs runs the SAME exhaustive twenty-four-by-twenty-four edge square at every tier, so the lane boundary and the MinValue-over-NegativeOne wrap are already swept by the Default mirror and are not what this case buys. What Deep buys is the 4096-draw batch against Default\u0027s 256",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.fixed-transcendental-envelope",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Log2"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Exp2"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Cos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Atan2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Sqrt over the deep tier\u0027s exhaustive edge square and sixteen-fold random batch",
+        "Against": "Oracles.IntegerSquareRoot \u2014 bit-exact. MIRROR of scalar.sqrt-exact at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Log2 and FixedQ4816.Exp2 over the same stream",
+        "Against": "Oracles.EncloseLog2 and Oracles.EncloseExp2, each widened by its own committed envelope. MIRROR of scalar.log2-vs-series and scalar.exp2-vs-series at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.SinCos and FixedQ4816.Atan2 over the same stream, with the two one-line projections read alongside the pair",
+        "Against": "Oracles.EncloseSinCos under its three-band envelope and Oracles.EncloseAtan2 under 0.75 raw ULP. MIRROR of scalar.sincos-vs-series and scalar.atan2-vs-series at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.fixed-text-round-trip",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.ToString and FixedQ4816.TryFormat over the deep tier\u0027s exhaustive edge square and sixteen-fold random batch",
+        "Against": "Oracles.ExactDyadicDecimalSigned. MIRROR of scalar.text-round-trip at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all eight parse entry points on the exact text the renderer produced, over the same stream",
+        "Against": "Oracles.DecimalToRaw. MIRROR of scalar.text-round-trip at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unsigned-scalar-div-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.op_Division over the Deep tier\u0027s sixteen-fold random batch \u2014 the family\u0027s branch-richest kernel, with two divide paths, an eighty-bit intermediate, a wrap and a ties-to-even correction",
+        "Against": "Oracles.UnsignedFixedQuotient \u2014 one Oracles.RoundRationalTiesToEven of the exact rational (raw_x\u00B72\u00B9\u2076)/raw_y in BigInteger, reduced once. MIRROR of unsigned-scalar.div-vs-oracle. ENVELOPE, stated rather than implied: Domains.Pairs runs the SAME exhaustive twenty-four-by-twenty-four edge square at every tier, so what Deep buys here is the 4096-draw batch against the Default tier\u0027s 256 \u2014 sixteen times the INTERIOR coverage of the two divide branches and of the wrap boundary \u2014 and not a wider edge battery",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.unsigned-scalar-fraction-sweep",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Truncate"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Fractional"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsEvenInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsInteger"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "IsOddInteger"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.Floor, Truncate, Fractional, Ceiling and Round over EVERY one of the 2\u00B9\u2076 fraction words, crossed with seven integer parts",
+        "Against": "the same inline BigInteger expressions unsigned-scalar.integer-decomposition-exact uses \u2014 the identical claim helper, run without sampling \u2014 plus Oracles.RoundToEvenUnits for the ties-to-even integer rounding. EXHAUSTIVE over the branch space: every branch of all five members is decided by the fraction word and the parity of the integer part, and this sweep visits every fraction word at both parities",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UFixedQ4816.IsInteger, IsEvenInteger and IsOddInteger over the same exhaustive cross product",
+        "Against": "the same inline BigInteger predicates unsigned-scalar.number-predicates-exact uses, again through the identical helper. MIRROR at exhaustive fraction coverage",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Ceiling and Round refusals are EXHAUSTIVELY located: at the top integer part 2\u2074\u2078 \u2212 1 the ceiling refuses at exactly the 65535 non-zero fractions and answers at zero, and the rounding refuses at exactly the 32768 fractions from the half upward \u2014 the tie included, because that integer part is odd \u2014 while no other integer part in the sweep refuses anything. The counts are hand-derived from the two kernels and compared against OBSERVED refusals, so a refusal that moved by one raw fails the case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seven integer parts are chosen so both parities appear at the bottom, the middle and the top of the integer range, which is what makes the ties-to-even statement exhaustive rather than one-sided",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-plane-products-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector2.Dot and FixedVector2.Wedge over the EXHAUSTIVE four-operand edge cross product \u2014 every ordered quad of the committed edge set, which walks both operands across the 2\u00B3\u00B9 gate in every combination",
+        "Against": "Oracles.FusedDot and Oracles.FusedWedge. MIRROR of vector.plane-products-vs-oracle at strictly stronger operands; this is where the narrow/wide seam is swept exhaustively rather than sampled",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-narrow-lane-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector2",
+        "Name": "Wedge"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the NARROW branch of FixedVector2.Dot and FixedVector2.Wedge over the exhaustive four-operand edge cross product, every operand folded by Subjects.NarrowRaw",
+        "Against": "Oracles.FusedDot and Oracles.FusedWedge. MIRROR of vector.narrow-lane-vs-oracle\u0027s plane half at exhaustive edge operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-cross-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Cross"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Cross and FixedVector3.Dot over the Deep lane-vector stream \u2014 4096 edge-biased random operand vectors per run plus the enlarged frontier block",
+        "Against": "Oracles.FusedCross and Oracles.FusedDot. MIRROR of vector.space-products-vs-oracle. ENVELOPE: the lane-vector streams have no exhaustive edge cross product \u2014 Tier.Deep grows their random batch and their frontier block only \u2014 so this mirror is stronger by VOLUME and not by exhaustion",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.vector-normalize-vs-ideal-and-staged",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Normalize"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Z"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Normalize over 4096 edge-biased directions per run plus the enlarged frontier block",
+        "Against": "Oracles.IdealUnitVector to within one raw per component, and the output\u0027s own norm within four of 2\u00B9\u2076 through Oracles.NearestIntegerRoot. MIRROR of vector.normalize-vs-ideal-and-staged; the heaviest law in the family, because each case pays a BigInteger bracketing search per component. ENVELOPE: the lane-vector stream grows by VOLUME at Tier.Deep, never by exhaustion",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedVector3.Normalize",
+        "Against": "Oracles.StagedUnitVector, bit-for-bit",
+        "Shared": "the shipped three-stage derivation. MIRROR of vector.normalize-vs-ideal-and-staged",
+        "Citation": "the classical leg above, in this same case, on the same operand stream",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.rigid-compose-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.op_Multiply \u2014 eight lanes and eight leaf products per lane, the widest fused accumulator this family drives \u2014 over the Deep tier\u0027s 4096-vector batch on each operand side",
+        "Against": "Oracles.DoublingDualProduct at two floors \u2014 the exact charged sums a\u00B7d \u002B b\u00B7c in BigInteger, one Oracles.RoundDyadic at shift 16 per lane. MIRROR of rigid.compose-vs-oracle. ENVELOPE, stated rather than implied: what Deep buys is INTERIOR volume on both of MultiplyQuaternion\u0027s gates, not a wider battery. Domains.Vectors varies with tier only in its random count, so the single-lane edge battery is identical at both tiers \u2014 and that battery is the only thing that reaches the ASYMMETRIC arm, which needs all eight real-block raws below 2\u00B9\u2077 while a dual-block raw sits in [2\u00B2\u2079, 2\u2074\u00B2). The full-broadcast battery cannot reach it, because it makes the two magnitudes equal; the random and frontier draws vary every lane independently, so 4096 of them essentially never do either. Edge index 2 \u2014 a real lane at \u22121 against a dual lane at 2\u00B3\u00B9 \u2212 1 \u2014 is where that arm is actually taken, at Default just as much as here",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.position-delta-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryDelta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Delta"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.TryDelta over the Deep tier\u0027s enlarged operand stream \u2014 BOTH code paths, the conservative 2\u00B2\u2076 gate crossed against every offset extreme at once",
+        "Against": "Oracles.CellDelta \u2014 the single exact BigInteger expression, one branch and no gate. MIRROR of position.delta-vs-oracle at strictly stronger operands; every statement here is exact on both sides, so a Deep failure is unambiguous",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal predicate, the zero residue, the two throwing readers, exact antisymmetry and the two reached paths, all as position.delta-vs-oracle states them. MIRROR of position.delta-vs-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.position-translate-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryTranslate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "Local"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellX"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellY"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPosition.TryTranslate over the Deep tier\u0027s enlarged operand stream \u2014 the narrow/wide canonicalizer choice is made by the WORST of three axes, so only the enlarged sweep reaches the mixed cases where one axis overflows and two do not",
+        "Against": "Oracles.CellSplit of the exact BigInteger sum against the existing cell, per axis. MIRROR of position.translate-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal predicate, the zero residue, the throwing operator, the zero-vector fixed point and the two reached paths, all as position.translate-vs-oracle states them. MIRROR of position.translate-vs-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.rigid-transform-point-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "TransformPoint"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Rotation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Translation"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Identity"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedRigidTransform",
+        "Name": "FromRotationTranslation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRigidTransform.TransformPoint over the Deep tier\u0027s enlarged operand stream, which is what puts mixed magnitudes on the rotor and the point simultaneously and so reaches the corners of the asymmetric 2\u00B9\u2077/2\u2074\u2070 rotate gate",
+        "Against": "Oracles.RigidPointAction \u2014 the sandwich\u0027s two exactly accumulated stages plus the independent doubling-recursion translation. MIRROR of rigid.transform-point-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "the SCHEDULE the oracle runs \u2014 sandwich first, then add a freshly formed translation",
+        "Against": "the subject\u0027s documented \u0027rotate, then translate\u0027",
+        "Shared": "the number and the order of the roundings. MIRROR of rigid.transform-point-vs-oracle at strictly stronger operands",
+        "Citation": "the exact identity and pure-translation poles and the hand-derived geometric ladder in this same claim body",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.rate-schedule-vs-ledger",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Integrate"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "Remainder"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "TicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.FixedRateAccumulator",
+        "Name": "FromRemainder"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedRateAccumulator.Integrate through the twelve-step schedule at every edge rate and every edge base the Deep stream reaches \u2014 which is where the checked quotient boundary actually lives",
+        "Against": "Oracles.RateIntegrationLedger, twelve steps of exact BigInteger division with no checked cast anywhere. MIRROR of rate.schedule-vs-ledger at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the prefix ledger identity, the remainder\u0027s band, the zero-tick fixed point and the atomicity of an overflowing step, all as rate.schedule-vs-ledger states them. MIRROR of rate.schedule-vs-ledger at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-multiply-vs-carryless-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_CheckedMultiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_LeftShift"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.operator * and the checked operator\u0027s overflow predicate over the Deep tier\u0027s sixteen-fold random batch",
+        "Against": "Oracles.CarrylessProduct in BigInteger. MIRROR of polynomial.multiply-vs-carryless-oracle at strictly stronger operands: Domains.Pairs runs the same exhaustive edge square at every tier, so what Deep buys is 4096 draws against 256 on both operands \u2014 which is where the degree-63 truncation seam is crossed by dense high-weight operands the smaller batch essentially never produces together",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the quotient-ring laws, the identity, the annihilator, the monomial shift and the four published vectors, all as polynomial.multiply-vs-carryless-oracle states them. MIRROR of polynomial.multiply-vs-carryless-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-divrem-vs-monomial-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "DivRem"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.DivRem over the Deep tier\u0027s sixteen-fold random batch",
+        "Against": "Oracles.BinaryPolynomialDivRem\u0027s bottom-up monomial route. MIRROR of polynomial.divrem-vs-monomial-oracle at strictly stronger operands: the 4096-draw batch is where near-equal dividend and divisor degrees (one loop iteration) and maximal degree gaps (sixty-three iterations) both appear in volume",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the division identity, the remainder\u0027s degree bound, the operator projections, the zero-divisor refusals and the four poles, all as polynomial.divrem-vs-monomial-oracle states them. MIRROR of polynomial.divrem-vs-monomial-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-gcd-vs-binary-descent-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "GreatestCommonDivisor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Modulus"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.GreatestCommonDivisor over the Deep tier\u0027s sixteen-fold random batch, and with it 4096 planted common-factor pairs",
+        "Against": "Oracles.BinaryPolynomialGcd, the division-free binary descent. MIRROR of polynomial.gcd-vs-binary-descent-oracle at strictly stronger operands: the planted pairs ARE the descent\u0027s real operand class, and the Default block reaches a few hundred of them where this reaches thousands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "divisibility, maximality against the planted witness, the poles and the automatic monicity, all as polynomial.gcd-vs-binary-descent-oracle states them. MIRROR of polynomial.gcd-vs-binary-descent-oracle at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-irreducible-census-and-trial-division",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the exhaustive count of monic irreducible polynomials at every degree 1 through 16 \u2014 131 070 decisions",
+        "Against": "Subjects.BinaryIrreducibleCounts, the whole committed table through 4080",
+        "Shared": "",
+        "Citation": "OEIS A001037. MIRROR of polynomial.irreducible-census-and-trial-division at strictly stronger operands: the census runs to the end of the published table rather than to degree 12",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible at EVERY monic polynomial of degree 1 through 12, both constant terms \u2014 8190 decisions",
+        "Against": "Oracles.BinaryPolynomialIsIrreducible, exhaustive trial division, roughly a million BigInteger remainders. MIRROR of polynomial.irreducible-census-and-trial-division at strictly stronger operands: the per-polynomial statement reaches four degrees further, which is where the Ben-Or/Rabin loop\u0027s own iteration count grows",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the short circuits, the oracle-constructed reducible products and the catalog moduli, all as polynomial.irreducible-census-and-trial-division states them. MIRROR of polynomial.irreducible-census-and-trial-division at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-primitive-order-and-census",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsPrimitive"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "MaximumPrimitiveDegree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Indeterminate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": ".ctor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.IsPrimitive at EVERY monic polynomial with a non-zero constant term of degree 1 through 14 \u2014 16 383 decisions",
+        "Against": "Oracles.BinaryPolynomialIsPrimitive\u0027s exact order of t, and the closed form \u03C6(2^d \u2212 1)/d at each degree. MIRROR of polynomial.primitive-order-and-census at strictly stronger operands: degree 14 matches Post\u0027s own digital-net census reach, with the per-polynomial ORDER statement that stage does not make",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrimitive at every candidate of an ascending search at degrees 16, 24 and 32, up to and including the first the oracle accepts",
+        "Against": "Oracles.BinaryPolynomialIsPrimitive at each candidate. This is what deliberately reaches the accepting arm ABOVE the census ceiling rather than hoping a hoisted table contains one; the search\u0027s step budget is bounded and its EXHAUSTION is a named failure, so a search that never reaches a primitive polynomial fails loudly instead of passing on an empty sweep",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the witnesses, the degree cap from both sides, the unlabelled high-degree ladder and the indeterminate\u0027s false verdict, all as polynomial.primitive-order-and-census states them. MIRROR of polynomial.primitive-order-and-census at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.polynomial-factor-odd-cycle-vs-cyclotomic-cosets",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "FactorOddCycle"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Degree"
+      },
+      {
+        "Type": "Puck.Maths.BinaryPolynomial",
+        "Name": "Bits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryPolynomial.FactorOddCycle at ALL SIXTEEN odd orders the member admits, 1 through 31",
+        "Against": "Oracles.BinaryCyclotomicFactorDegrees, Oracles.CarrylessProduct and Oracles.BinaryPolynomialIsIrreducible, exactly as at Default. MIRROR of polynomial.factor-odd-cycle-vs-cyclotomic-cosets at strictly stronger operands: order 29 is the worst row \u2014 its factors are degree 1 and degree 28, so the search sweeps every candidate through degree 14 and the oracle then trial-divides a degree-28 factor",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "distinctness, monicity, the non-zero constant term, the declared order and the refusal ladder, all as polynomial.factor-odd-cycle-vs-cyclotomic-cosets states them. MIRROR of polynomial.factor-odd-cycle-vs-cyclotomic-cosets at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.binary-field-multiplicative-group",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Divide"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Exponentiate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "SquareRoot"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the whole multiplicative-group statement \u2014 Inverse, Divide, SquareRoot and Exponentiate at all five catalog fields \u2014 over the Deep tier\u0027s 4096-draw batch and enlarged frontier block",
+        "Against": "the same BigInteger certificates, and the extended-Euclid and sequential-fold oracles EXTENDED from two catalog degrees to five. MIRROR of binary-field.multiplicative-group-vs-oracle at strictly stronger operands AND with the second derivation carried to every degree: at 32, 64 and 128 the Default case has the certificate alone, and here Oracles.BinaryFieldInverse re-derives the answer by a route that never exponentiates. ENVELOPE: the lane-vector streams have no exhaustive edge cross product \u2014 Tier.Deep grows their random batch and their frontier block only \u2014 so the operand side of this mirror is stronger by VOLUME rather than by exhaustion; deep.binary-field-degree8-exhaustive is where the sampling comes off entirely",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusals, the zero-exponent identity and the group-order identities, all as binary-field.multiplicative-group-vs-oracle states them, the refusal ladder again as its own fixed claim. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.binary-field-irreducible-census",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "IsIrreducible"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree16"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree32"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree64"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree128"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the count of constructible irreducible moduli at every degree from one through sixteen, by exhaustive construction of all 65535 legal tails",
+        "Against": "Subjects.BinaryIrreducibleCounts, the whole committed table through 4080, with the degree-one entry taken as one",
+        "Shared": "",
+        "Citation": "OEIS A001037. MIRROR of binary-field.irreducibility-vs-trial-division\u0027s census extended from degree 8 to degree 16 \u2014 the sampling was never there to remove, so what Deep buys is the eight further degrees, which is 65280 further moduli and both the sixteen-bit carrier and the whole degree-below-the-carrier-width band at that carrier",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsIrreducible at every legal modulus of degree one through twelve \u2014 4095 decisions against 255",
+        "Against": "Oracles.BinaryPolynomialIsIrreducible. MIRROR of binary-field.irreducibility-vs-trial-division\u0027s exhaustive agreement extended from degree 8 to degree 12. ENVELOPE: degree 12 is where trial division stops paying \u2014 the divisor space doubles per degree \u2014 and the census leg above is what carries degrees 13 through 16",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the five catalog moduli and the five maximally reducible t^degree \u002B 1 probes, exactly as binary-field.irreducibility-vs-trial-division states them, under the same ENVELOPE: the kernel\u0027s closing \u0060power == indeterminate\u0060 test is unreachable as a decision, and 65535 further moduli here do not reach it either. MIRROR of that case: at those degrees Deep adds nothing, and the census and trial-division legs above are what this row is for",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.binary-field-degree8-exhaustive",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "SquareRoot"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Divide"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "Exponentiate"
+      },
+      {
+        "Type": "Puck.Maths.BinaryField\u00601[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFields",
+        "Name": "Degree8"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryFields.Degree8.Multiply at EVERY one of the 65536 ordered operand pairs",
+        "Against": "Oracles.BinaryFieldProduct. MIRROR of binary-field.product-and-reduction-vs-oracle\u0027s degree-8 rows with the sampling REMOVED: at this width the field is finite and the statement is total",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Inverse at every non-zero element, Square and SquareRoot at every element, and Divide over a twelve-value dividend band crossed with every non-zero divisor",
+        "Against": "Oracles.BinaryFieldInverse \u2014 extended Euclid \u2014 and Oracles.BinaryFieldProduct as the squaring and quotient certificates. MIRROR of binary-field.multiplicative-group-vs-oracle at degree 8, total rather than sampled",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the number of elements of GF(2^8) whose multiplicative order is the full 255, counted from each element\u0027s order measured by a sequential walk",
+        "Against": "128",
+        "Shared": "",
+        "Citation": "Euler\u0027s totient of 255 = 3 \u00D7 5 \u00D7 17, so \u03C6(255) = 2 \u00D7 4 \u00D7 16 = 128 \u2014 the number of generators of any cyclic group of order 255. Every element\u0027s order additionally divides 255, by Lagrange, and Exponentiate at each measured order is required to be one, which is what ties the walk to the member",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "multiplication by each of the 255 non-zero elements is a BIJECTION of the whole field \u2014 255 exhaustive sweeps, each image visited exactly once. A reduction that loses a single bit collapses two elements onto one and destroys this, whether or not it agrees with any particular oracle row",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-arithmetic-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Subtract"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Reduce"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Add, Subtract, Negate, Multiply and both Reduce overloads at the FULL fifteen-rung modulus ladder",
+        "Against": "the same exact BigInteger residue expressions. MIRROR of prime-field.arithmetic-vs-oracle at strictly stronger operands: the Deep tier\u0027s 4096-draw random batch and enlarged frontier block, and a ladder that adds the small primes 5, 7, 11, 13, 97 and 257 \u2014 where the guards outnumber the arithmetic \u2014 both Mersenne widths and the largest prime below 2^32",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the reduced-answer invariant, the two identities and the two inverses, all as prime-field.arithmetic-vs-oracle states them. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-pow-vs-modpow",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Pow"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.Pow at the FULL fifteen-rung ladder, five exponents per rung",
+        "Against": "BigInteger.ModPow. MIRROR of prime-field.pow-vs-modpow at strictly stronger operands: the 4096-draw random batch, and ten further moduli \u2014 which is ten further (p \u2212 2) and (p \u2212 1)/2 exponents, so ten further square-and-multiply schedules",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two exponent poles and Fermat\u0027s little theorem, as prime-field.pow-vs-modpow states them, under the same ENVELOPE about the routine not being constant-time. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-inverse-and-batch",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "BatchInverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "One"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Inverse and BatchInverse at the FULL fifteen-rung ladder, with the LONG length ladder \u2014 through 1024 elements \u2014 at every rung rather than only at the carrier corner",
+        "Against": "BigInteger.ModPow at exponent p \u2212 2 per element. MIRROR of prime-field.inverse-and-batch at strictly stronger operands, and the mirror that lifts that case\u0027s stated ENVELOPE: the pooled ArrayPool path is exercised at fifteen moduli here rather than at one",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the scalar/batch agreement, the multiplicative certificate, the zero refusals, the untouched region after a refusal and the empty no-op, all as prime-field.inverse-and-batch states them. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-root-and-character",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "LegendreCharacter"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "TrySqrt"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "Negate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LegendreCharacter at the FULL fifteen-rung ladder",
+        "Against": "Oracles.JacobiSymbolReciprocity AND BigInteger.ModPow at (p \u2212 1)/2, both as at Default. MIRROR of prime-field.legendre-vs-reciprocity at strictly stronger operands: the 4096-draw batch, and the small-prime rungs 5, 7, 11, 13, 97 and 257 where the character has the fewest values to take and the descent its shortest run",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TrySqrt\u0027s accept/reject decision at the FULL fifteen-rung ladder, every returned root squared back with its sibling",
+        "Against": "Oracles.JacobiSymbolReciprocity. MIRROR of prime-field.sqrt-descent-and-refusal at strictly stronger operands \u2014 which is where the descent meets its most degenerate shapes, the small p \u2261 1 (mod 4) rungs 5, 13, 17, 97 and 257",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal\u0027s zero out-parameter, zero rooting to zero, the branch-straddle assertion and the agreement with LegendreCharacter on an identical operand stream, all as prime-field.sqrt-descent-and-refusal states them, under the same two ENVELOPEs \u2014 the unenforced reduced-operand precondition and the unbounded non-residue walk. MIRROR of that case and of prime-field.legendre-vs-reciprocity at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-is-prime-exact",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime at EVERY value through 1,000,000",
+        "Against": "Oracles.PrimeSieve. MIRROR of prime-field.is-prime-vs-sieve-and-witness-ladder with its exhaustive band grown FIFTYFOLD \u2014 and that is what makes the sieve leg this family\u0027s real anchor, because a sieve shares no idea with the subject and this band is total rather than sampled",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the twelve-base witness set, base by base",
+        "Against": "Subjects.PrimeFieldWitnessPseudoprimes",
+        "Shared": "",
+        "Citation": "the published psi_k table, exactly as prime-field.is-prime-vs-sieve-and-witness-ladder states it. MIRROR of that case: the rows are a fixed ladder, so Deep adds nothing here and the sieve leg above is what this row rides with",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsPrime over the swept candidate stream, both drawn raws and their forced-odd images",
+        "Against": "Oracles.ExactPrimality. MIRROR of prime-field.is-prime-vs-witness-oracle at strictly stronger operands \u2014 the 4096-draw batch \u2014 under the same ENVELOPE: trial division alone through 8191\u00B2, the shared criterion above it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-strong-round-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsStrongProbablePrime at six witness bases per candidate over the Deep tier\u0027s 4096-draw candidate batch",
+        "Against": "Oracles.ModularStrongProbablePrime. MIRROR of prime-field.strong-round-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the zero-base clause, the every-prime-passes direction and the guards below the arithmetic, all as prime-field.strong-round-vs-oracle states them, under the same ENVELOPE: a passed round proves nothing about primality. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-lucas-vs-companion-matrix",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsStrongLucasProbablePrime at BOTH drawn raws per iteration rather than one, over the Deep tier\u0027s 4096-draw batch",
+        "Against": "Oracles.StrongLucasSelfridge. MIRROR of prime-field.lucas-vs-companion-matrix at strictly stronger operands: this family\u0027s most expensive oracle, so Default runs one candidate per iteration and Deep takes the second",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the Selfridge Method A parameter search over the same doubled stream",
+        "Against": "the same search inside Oracles.StrongLucasSelfridge, on its own reciprocity symbol. MIRROR of prime-field.lucas-vs-companion-matrix\u0027s second leg at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the every-prime-passes direction and the adversarial perfect-square rejection, as prime-field.lucas-vs-companion-matrix states them, under both of its ENVELOPEs \u2014 the unbounded, wrappable Selfridge search and the perfect-square guard being a cost bound rather than a termination guarantee. MIRROR of that case at strictly stronger operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-field-baillie-and-populations",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsBaillieProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsBaillieProbablePrime over the Deep tier\u0027s 4096-draw candidate batch",
+        "Against": "Oracles.ExactPrimality, the exact decision outside Puck.Maths, under the same ENVELOPE prime-field.baillie-composition states: through 8191\u00B2 the oracle is trial division and shares no idea with the subject, and above it the oracle\u0027s twenty BigInteger rounds open with the base-two round the subject\u0027s own first half runs, so the criterion is shared there and only the arithmetic, the base set and the loop are not. MIRROR of prime-field.baillie-composition at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "both pseudoprime POPULATIONS enumerated to 10^5 rather than 10^4",
+        "Against": "Oracles.PrimeSieve over the ten-times-wider band, which decides which candidates are composite. MIRROR of prime-field.pseudoprime-populations at strictly stronger operands: eleven further pseudoprimes each of which the enumeration must find and neither test may miss",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the two enumerated populations below 10^5, compared list against list",
+        "Against": "Subjects.PrimeFieldDeepBaseTwoPseudoprimes and Subjects.PrimeFieldDeepLucasPseudoprimes \u2014 the FULL lists, sixteen base-two entries and twelve Lucas entries, rather than the below-10^4 prefixes",
+        "Shared": "",
+        "Citation": "OEIS A001262 and OEIS A217255 below 10^5, the same two published sequences prime-field.pseudoprime-populations names \u2014 the Lucas list for the Selfridge Method A parameters (Baillie and Wagstaff, 1980), which is the parameter choice the subject runs. MIRROR of prime-field.pseudoprime-populations at strictly stronger operands",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the carriage on its fixed ladder, the disjointness thesis, the sole-rejecter controls, the Carmichael row and the small-value ladder, all as prime-field.baillie-composition and prime-field.pseudoprime-populations state them, under the same two ENVELOPEs \u2014 prime-field.baillie-psw-exhaustive being the gate of record for scale, and the witness base not being pinned by any of this. MIRROR of both cases; the carriage ladder is fixed, so Deep adds nothing to that row and the enumerated populations above are what this case is for",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.extension-field-product-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Multiply at 2\u2076\u00B9 \u2212 1 over the EXHAUSTIVE four-operand edge cross product \u2014 24\u2074 quads, every element component at every committed edge raw against every other \u2014 plus the 4096-draw random batch",
+        "Against": "Oracles.PrimeFieldPolynomialProduct at tail [p \u2212 d, 0]. MIRROR of extension-field.product-vs-oracle at strictly stronger operands: Domains.Quads switches from the budget-bounded rotation to the full product only at Tier.Deep, so this is exhaustion and not merely volume",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.extension-field-ring-and-norm",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Subtract"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "FromBase"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Trace"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Frobenius"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the whole ring statement of extension-field.ring-vs-oracle over the FULL thirteen-prime ladder \u2014 including F_3 and F_5, where the residue set is small enough that the sweep visits most of it, and both published NTT moduli, whose p \u2212 1 carries 2\u00B2\u00B3 and 2\u00B2\u2077",
+        "Against": "the same Oracles.PrimeFieldPolynomialProduct and the same unbounded BigInteger coordinate arithmetic. MIRROR of extension-field.ring-vs-oracle at strictly stronger operands \u2014 stronger in TWO directions at once: the Deep lane stream\u0027s 4096-draw batch and enlarged frontier block, and a ladder four times longer",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the whole norm, trace and conjugation statement of extension-field.norm-trace-frobenius-vs-oracle over the same full ladder",
+        "Against": "the same Oracles.QuadraticExtensionConjugateProduct and the same BigInteger references. MIRROR of extension-field.norm-trace-frobenius-vs-oracle at strictly stronger operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every structural statement both Default siblings make \u2014 the ring axioms, the element round trip, the characteristic equation, the defining equations of the conjugation and the automorphism laws \u2014 at the same strictly stronger operands. ENVELOPE: the lane-vector streams have no exhaustive edge cross product, because Tier.Deep grows their random batch and their frontier block only, so what this mirror adds is VOLUME and LADDER BREADTH and never exhaustion. The exhaustive direction is deep.extension-field-product-vs-oracle\u0027s",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

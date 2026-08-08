@@ -1,0 +1,1930 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "motion": {
+    "moveSpeed": 14,
+    "turnSpeed": 2.2,
+    "maxSmoothError": 3
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        -3,
+        0,
+        8
+      ]
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        -1,
+        0,
+        8
+      ]
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        1,
+        0,
+        8
+      ]
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        3,
+        0,
+        8
+      ]
+    }
+  ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "screens": [],
+  "cameras": [],
+  "population": {
+    "capacity": 128,
+    "reconnectGraceTicks": 720,
+    "seatActivation": [
+      "Eager",
+      "OnDemand",
+      "OnDemand",
+      "OnDemand"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "wander"
+    },
+    "seatSpawns": [
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4"
+    ],
+    "distribution": {
+      "region": {
+        "$type": "disc",
+        "radius": 40,
+        "sampleCount": 124
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
+    },
+    "peerVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "seatVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "peerColors": {
+      "name": "additive",
+      "offset": -4,
+      "step": 0.618034
+    }
+  },
+  "inputHold": {
+    "ceilingTicks": 120,
+    "lowerAfterTicks": 60,
+    "defaultTicks": 0,
+    "equalizeByDefault": true,
+    "participants": []
+  },
+  "targetRegisters": [
+    {
+      "name": "target",
+      "maximumRange": 50,
+      "maximumHalfAngleDegrees": 30,
+      "requiresLineOfSight": true
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveForward"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    },
+    {
+      "name": "pitch",
+      "shape": "Bipolar",
+      "role": "Pitch"
+    },
+    {
+      "name": "roll",
+      "shape": "Bipolar",
+      "role": "Roll"
+    },
+    {
+      "name": "boost",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "drift",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "dash",
+      "shape": "Binary",
+      "composition": true
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "grounded",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "free",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "IntegrateLocalAttitude",
+        "ComputeLocalTargetVelocity",
+        "RunActionTriggers",
+        "ApplyVerticalDecay",
+        "IntegrateScratchVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "wander",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceWanderIntent"
+      ]
+    },
+    {
+      "name": "vehicle-ground",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveVehicleFrame",
+        "ShapeVehicleVelocity",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "vehicle-air",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveVehicleFrame",
+        "ShapeVehicleVelocity",
+        "RunActionTriggers",
+        "ApplyVerticalDecay",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "kart",
+      "bodyMotionProgram": "vehicle-ground",
+      "motion": {
+        "$type": "vehicle",
+        "topSpeed": 16,
+        "topSpeedEnvelope": {
+          "min": 8,
+          "max": 20
+        },
+        "reverseTopSpeed": 5,
+        "accel": 7,
+        "brake": 18,
+        "coastDrag": 4,
+        "grip": 22,
+        "steerRate": 2.4,
+        "steerReferenceSpeed": 4,
+        "steerFalloff": 0.55,
+        "pitchRate": 0,
+        "riseGravity": 14,
+        "fallGravity": 26,
+        "maxFallSpeed": 30,
+        "driftGrip": 5,
+        "driftSteerScale": 1.35,
+        "boostMultiplier": 1.35,
+        "driftChannel": "drift",
+        "boostChannel": "boost"
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.88,
+            "softRadius": 45,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0,
+            "turnWave": 0.42,
+            "upWave": 0,
+            "pitchWave": 0,
+            "rollTurn": 0,
+            "pressThreshold": 0,
+            "altitudeBase": 0,
+            "altitudeRange": 0
+          },
+          "channels": {
+          }
+        }
+      },
+      "actions": {
+        "dash": {
+          "state": [
+            {
+              "name": "dashCooldown",
+              "kind": "Timer",
+              "initial": 0
+            }
+          ],
+          "onPress": {
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "now",
+                  "fact": "Grounded"
+                },
+                {
+                  "$type": "timerElapsed",
+                  "state": "dashCooldown"
+                }
+              ]
+            },
+            "latchSeconds": 0.05,
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "speed": 12,
+                "durationSeconds": 0.35
+              },
+              {
+                "$type": "startTimer",
+                "state": "dashCooldown",
+                "seconds": 2
+              }
+            ]
+          },
+          "onRelease": null
+        }
+      },
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          0.6,
+          0
+        ],
+        "radius": 0.45
+      }
+    },
+    {
+      "name": "hover",
+      "bodyMotionProgram": "vehicle-ground",
+      "motion": {
+        "$type": "vehicle",
+        "topSpeed": 14,
+        "topSpeedEnvelope": {
+          "min": 7,
+          "max": 18
+        },
+        "reverseTopSpeed": 4,
+        "accel": 6,
+        "brake": 12,
+        "coastDrag": 1.5,
+        "grip": 6,
+        "steerRate": 2.8,
+        "steerReferenceSpeed": 3,
+        "steerFalloff": 0.7,
+        "pitchRate": 0,
+        "riseGravity": 10,
+        "fallGravity": 18,
+        "maxFallSpeed": 24,
+        "driftGrip": 2.5,
+        "driftSteerScale": 1.25,
+        "boostMultiplier": 1.35,
+        "driftChannel": "drift",
+        "boostChannel": "boost"
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.6,
+            "softRadius": 45,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0.2,
+            "turnWave": 0.3,
+            "upWave": 0,
+            "pitchWave": 0,
+            "rollTurn": 0,
+            "pressThreshold": 0,
+            "altitudeBase": 0,
+            "altitudeRange": 0
+          },
+          "channels": {
+          }
+        }
+      },
+      "actions": {
+        "dash": {
+          "state": [
+            {
+              "name": "dashCooldown",
+              "kind": "Timer",
+              "initial": 0
+            }
+          ],
+          "onPress": {
+            "gate": {
+              "$type": "timerElapsed",
+              "state": "dashCooldown"
+            },
+            "latchSeconds": 0.05,
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "speed": 10,
+                "durationSeconds": 0.4
+              },
+              {
+                "$type": "startTimer",
+                "state": "dashCooldown",
+                "seconds": 2
+              }
+            ]
+          },
+          "onRelease": null
+        }
+      },
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          0.6,
+          0
+        ],
+        "radius": 0.45
+      }
+    },
+    {
+      "name": "air",
+      "bodyMotionProgram": "vehicle-air",
+      "motion": {
+        "$type": "vehicle",
+        "topSpeed": 18,
+        "topSpeedEnvelope": {
+          "min": 9,
+          "max": 22
+        },
+        "reverseTopSpeed": 0,
+        "accel": 8,
+        "brake": 10,
+        "coastDrag": 2,
+        "grip": 10,
+        "steerRate": 1.9,
+        "steerReferenceSpeed": 5,
+        "steerFalloff": 0.8,
+        "pitchRate": 1.6,
+        "riseGravity": 8,
+        "fallGravity": 8,
+        "maxFallSpeed": 24,
+        "boostMultiplier": 1.4,
+        "boostChannel": "boost"
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.62,
+            "softRadius": 45,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0.18,
+            "turnWave": 0,
+            "upWave": 0.1,
+            "pitchWave": 0.14,
+            "rollTurn": 0.32,
+            "pressThreshold": 0,
+            "altitudeBase": 4.5,
+            "altitudeRange": 3
+          },
+          "channels": {
+          }
+        }
+      },
+      "actions": {
+        "dash": {
+          "state": [
+            {
+              "name": "dashCooldown",
+              "kind": "Timer",
+              "initial": 0
+            }
+          ],
+          "onPress": {
+            "gate": {
+              "$type": "timerElapsed",
+              "state": "dashCooldown"
+            },
+            "latchSeconds": 0.05,
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "speed": 14,
+                "durationSeconds": 0.35
+              },
+              {
+                "$type": "startTimer",
+                "state": "dashCooldown",
+                "seconds": 2
+              }
+            ]
+          },
+          "onRelease": null
+        }
+      },
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          0.6,
+          0
+        ],
+        "radius": 0.45
+      }
+    }
+  ],
+  "defaultSeatKit": "kart",
+  "assignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 1,
+      "step": 0
+    },
+    "rows": []
+  },
+  "addons": [],
+  "bindingOverlays": [
+    {
+      "id": "vehicle-arena-pads",
+      "document": {
+        "version": "puck.bindings.v1",
+        "modifiers": [],
+        "chords": [
+          {
+            "group": "play",
+            "chord": [],
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "source": "keyboard.arrowUp",
+                  "channel": "pitch",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Climb",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.arrowUp",
+                  "channel": "pitch",
+                  "scale": 1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.arrowDown",
+                  "channel": "pitch",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Dive",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.arrowDown",
+                  "channel": "pitch",
+                  "scale": -1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "boost",
+                  "activateOn": null,
+                  "label": "Boost",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "boost",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "boost",
+                  "activateOn": null,
+                  "label": "Boost",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "boost",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.rightShoulder",
+                  "channel": "drift",
+                  "activateOn": null,
+                  "label": "Drift",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.rightShoulder",
+                  "channel": "drift",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": null,
+                  "label": "Dash",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.rightTrigger",
+                  "channel": "forward",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Throttle",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftTrigger",
+                  "channel": "forward",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Reverse",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.w",
+                  "channel": "forward",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Forward",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.w",
+                  "channel": "forward",
+                  "scale": 1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.s",
+                  "channel": "forward",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Reverse",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.s",
+                  "channel": "forward",
+                  "scale": -1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.a",
+                  "channel": "turn",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Turn Left",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.a",
+                  "channel": "turn",
+                  "scale": 1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.d",
+                  "channel": "turn",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Turn Right",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.d",
+                  "channel": "turn",
+                  "scale": -1,
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                }
+              ],
+              "label": null,
+              "icon": null
+            },
+            "command": null
+          }
+        ],
+        "wheels": [
+          {
+            "group": "play",
+            "holdPage": "play-wheel",
+            "rings": [
+              {
+                "id": "play-wheel-act",
+                "entries": [
+                  { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
+                  { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
+                  { "source": null, "command": "world.console", "label": "Console", "icon": "edit.op" },
+                  { "source": null, "command": "player.bindings", "label": "Bindings", "icon": "edit.link" },
+                  { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
+                  { "source": null, "command": "world.addons", "label": "Addons", "icon": "edit.link" }
+                ],
+                "label": "Act",
+                "icon": null
+              },
+              {
+                "id": "play-wheel-world",
+                "entries": [
+                  { "source": null, "command": "world.status", "label": "Status", "icon": "action.target" },
+                  { "source": null, "command": "world.state", "label": "State", "icon": "edit.style" },
+                  { "source": null, "command": "world.portals", "label": "Portals", "icon": "edit.link" },
+                  { "source": null, "command": "world.players", "label": "Players", "icon": "action.target" },
+                  { "source": null, "command": "world.kits", "label": "Kits", "icon": "edit.duplicate" },
+                  { "source": null, "command": "world.refusals", "label": "Refusals", "icon": "edit.delete" }
+                ],
+                "label": "World",
+                "icon": null
+              },
+              {
+                "id": "play-wheel-view",
+                "entries": [
+                  { "source": null, "command": "world.view.state", "label": "Layout", "icon": "edit.style" },
+                  { "source": null, "command": "world.view.pointer", "label": "Pointer", "icon": "action.target" },
+                  { "source": null, "command": "world.view.orbit", "label": "Orbit", "icon": "edit.op" },
+                  { "source": null, "command": "world.hud", "label": "HUD", "icon": "edit.link" },
+                  { "source": null, "command": "world.fps", "label": "FPS", "icon": "edit.next" },
+                  { "source": null, "command": "world.gpu", "label": "GPU", "icon": "edit.record" }
+                ],
+                "label": "View",
+                "icon": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "endpoint": null,
+    "userId": null,
+    "discoveryEndpoint": null
+  },
+  "creations": [
+    {
+      "id": "ground",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ground",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.33,
+              "y": 0.52,
+              "z": 0.24
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "ground",
+            "type": "Plane",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+    },
+    {
+      "id": "wall",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "wall",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.55
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "wall",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0.6,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 10,
+              "y": 1.2,
+              "z": 0.5
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "d16d027caf934f1b8adb6ba22d22bee870288d24c471cf48445fa0d2e15c10bb"
+    },
+    {
+      "id": "pylon",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "pylon",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.85,
+              "y": 0.5,
+              "z": 0.15
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "pylon",
+            "type": "Cylinder",
+            "position": {
+              "x": 0,
+              "y": 0.8,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 0.4,
+              "y": 1.6,
+              "z": 0.4
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "64ada3e500baa94e1e6eb1d21d7d29de8c2da928fae7772012a02930bee2ecb2"
+    },
+    {
+      "id": "ramp-shallow",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ramp-shallow",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.6,
+              "y": 0.45,
+              "z": 0.3
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "ramp-shallow",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0.3,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": false,
+              "x": 0.087156,
+              "y": 0,
+              "z": 0,
+              "w": 0.996195
+            },
+            "scale": {
+              "x": 5,
+              "y": 0.5,
+              "z": 8
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "bbe92dcb98eccb6feb16978d0f154605700e1e21511b41c8fc6c8d7019e705f8"
+    },
+    {
+      "id": "ramp-steep",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ramp-steep",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.65,
+              "y": 0.4,
+              "z": 0.25
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "ramp-steep",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0.3,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": false,
+              "x": 0.21644,
+              "y": 0,
+              "z": 0,
+              "w": 0.976296
+            },
+            "scale": {
+              "x": 5,
+              "y": 0.5,
+              "z": 8
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "7ecd4a4fd58bfef83aed20d69b292c0803694378a359a9f179dff7b444b4298f"
+    },
+    {
+      "id": "bank",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "bank",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.55,
+              "y": 0.4,
+              "z": 0.5
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "bank",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0.6,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": false,
+              "x": 0.21644,
+              "y": 0,
+              "z": 0,
+              "w": 0.976296
+            },
+            "scale": {
+              "x": 6,
+              "y": 0.5,
+              "z": 3
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "b01626d6c269a7521bce4ba51f74c53fd874c95db55ea41f863d0d6a0c8b941d"
+    },
+    {
+      "id": "gate",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "gate",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.2,
+              "y": 0.8,
+              "z": 0.85
+            },
+            "emissive": 0.6,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "gate",
+            "type": "Torus",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": false,
+              "x": 0.707107,
+              "y": 0,
+              "z": 0,
+              "w": 0.707107
+            },
+            "scale": {
+              "x": 3,
+              "y": 3,
+              "z": 3
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "6bcca78ec57c6679eda71f86b357d9f1f6efc31d51a3c8962a9a73106cd56cb1"
+    },
+    {
+      "id": "water-pad",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "water-pad",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.2,
+              "y": 0.4,
+              "z": 0.8
+            },
+            "emissive": 0.1,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "water-pad",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0.1,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 14,
+              "y": 0.2,
+              "z": 14
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "3bb2b0b99d6e62fca7e4386ccf5ec74ee136788b2ffe9fa8c4acedca3977d41b"
+    }
+  ],
+  "placements": [
+    {
+      "id": "ground",
+      "creationId": "ground",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-l1",
+      "creationId": "wall",
+      "position": [
+        -50,
+        0,
+        -20
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-l2",
+      "creationId": "wall",
+      "position": [
+        -50,
+        0,
+        -60
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-l3",
+      "creationId": "wall",
+      "position": [
+        -50,
+        0,
+        -100
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-r1",
+      "creationId": "wall",
+      "position": [
+        -30,
+        0,
+        -20
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-r2",
+      "creationId": "wall",
+      "position": [
+        -30,
+        0,
+        -60
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "straight-wall-r3",
+      "creationId": "wall",
+      "position": [
+        -30,
+        0,
+        -100
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "hairpin-end",
+      "creationId": "wall",
+      "position": [
+        -40,
+        0,
+        -125
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "hairpin-inner",
+      "creationId": "wall",
+      "position": [
+        -30,
+        0,
+        -112
+      ],
+      "yawDegrees": 0,
+      "scale": 0.5,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-1",
+      "creationId": "pylon",
+      "position": [
+        -2,
+        0,
+        -20
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-2",
+      "creationId": "pylon",
+      "position": [
+        2,
+        0,
+        -32
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-3",
+      "creationId": "pylon",
+      "position": [
+        -2,
+        0,
+        -44
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-4",
+      "creationId": "pylon",
+      "position": [
+        2,
+        0,
+        -56
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-5",
+      "creationId": "pylon",
+      "position": [
+        -2,
+        0,
+        -68
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-6",
+      "creationId": "pylon",
+      "position": [
+        2,
+        0,
+        -80
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-7",
+      "creationId": "pylon",
+      "position": [
+        -2,
+        0,
+        -92
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "slalom-8",
+      "creationId": "pylon",
+      "position": [
+        2,
+        0,
+        -104
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "ramp-a",
+      "creationId": "ramp-shallow",
+      "position": [
+        25,
+        0,
+        -30
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "ramp-b",
+      "creationId": "ramp-steep",
+      "position": [
+        25,
+        0,
+        -60
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "ramp-gap-launch",
+      "creationId": "ramp-steep",
+      "position": [
+        25,
+        0,
+        -90
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "ramp-gap-land",
+      "creationId": "ramp-steep",
+      "position": [
+        25,
+        0,
+        -106
+      ],
+      "yawDegrees": 180,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-1",
+      "creationId": "bank",
+      "position": [
+        85,
+        0,
+        -60
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-2",
+      "creationId": "bank",
+      "position": [
+        75,
+        0,
+        -42.68
+      ],
+      "yawDegrees": 30,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-3",
+      "creationId": "bank",
+      "position": [
+        55,
+        0,
+        -42.68
+      ],
+      "yawDegrees": -30,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-4",
+      "creationId": "bank",
+      "position": [
+        45,
+        0,
+        -60
+      ],
+      "yawDegrees": -90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-5",
+      "creationId": "bank",
+      "position": [
+        55,
+        0,
+        -77.32
+      ],
+      "yawDegrees": -150,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "bank-6",
+      "creationId": "bank",
+      "position": [
+        75,
+        0,
+        -77.32
+      ],
+      "yawDegrees": 150,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "water",
+      "creationId": "water-pad",
+      "position": [
+        0,
+        0,
+        40
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null
+    },
+    {
+      "id": "gate-1",
+      "creationId": "gate",
+      "position": [
+        -20,
+        5,
+        30
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null
+    },
+    {
+      "id": "gate-2",
+      "creationId": "gate",
+      "position": [
+        0,
+        9,
+        55
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null
+    },
+    {
+      "id": "gate-3",
+      "creationId": "gate",
+      "position": [
+        20,
+        14,
+        80
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null
+    }
+  ],
+  "authoring": {
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 0
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  },
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "presentation": "Windowed",
+    "backend": "auto",
+    "width": 1280,
+    "height": 800,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "views": {
+    "seatRig": {
+      "motion": {
+        "$type": "orbit",
+        "distance": 6.5,
+        "yaw": 0,
+        "pitch": 0.3947911,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 1.0471976
+      },
+      "smoothRate": 6
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 129,
+      "step": 0
+    },
+    "rows": []
+  },
+  "links": [],
+  "grants": [],
+  "hud": {
+    "defaults": {
+      "enabled": true,
+      "cursor": {
+        "hoverRadius": 96,
+        "sizePx": 7,
+        "role": "TextPrimary"
+      }
+    },
+    "panels": []
+  },
+  "state": [],
+  "schema": "puck.world.def.v1",
+  "documentId": "kart",
+  "playerDefaults": {
+    "identities": [
+      {
+        "id": "amber",
+        "name": "amber",
+        "color": "#ED8530"
+      },
+      {
+        "id": "cobalt",
+        "name": "cobalt",
+        "color": "#3373D9"
+      },
+      {
+        "id": "moss",
+        "name": "moss",
+        "color": "#4CBD52"
+      },
+      {
+        "id": "violet",
+        "name": "violet",
+        "color": "#A359D6"
+      }
+    ],
+    "neutralColor": "#8C8C8C",
+    "colorSequence": {
+      "name": "additive",
+      "offset": 0,
+      "step": 0.618034
+    },
+    "saturation": 0.65,
+    "value": 0.85,
+    "colorSearchLimit": 64,
+    "noseFactor": 0.35,
+    "pickerThreshold": 0.6,
+    "pickerNeutralColor": "#8C8C8C",
+    "pickerNeutralBlend": 0.5,
+    "seatLook": {
+      "yawSensitivity": 0.001,
+      "pitchSensitivity": 0.001,
+      "invertYaw": false,
+      "invertPitch": false,
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "arming": "RightButton",
+      "worldAxes": false
+    }
+  }
+}

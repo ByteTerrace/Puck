@@ -1,0 +1,23 @@
+{
+  "skill_name": "content-search",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find every repository file containing the literal console verb world.row.set, including occurrences after the normal result cap.",
+      "expected_output": "Runs the Puck search verb from the repository root with -F, -l, and -M 0; quotes the dotted literal for the active shell; and reports the complete file list without silently using a capped search.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Who references WorldServer.Step, what overrides it, and would renaming it be safe?",
+      "expected_output": "Routes the request to symbol-analysis and semantic Puck references/declarations instead of treating text occurrences as evidence for references, overrides, or rename safety.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The published Puck CLI assembly and tracked project both fail to run. Search for lines containing Grant but not Refusal under src, case-insensitively, and explain any limitation.",
+      "expected_output": "Uses the host search facility only after both documented Puck commands fail, explicitly reports the degraded fallback, preserves the requested path and case semantics, avoids claiming Puck-only complement behavior, and verifies the negative condition through an equivalent safe procedure.",
+      "files": []
+    }
+  ]
+}

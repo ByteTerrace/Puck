@@ -17,9 +17,9 @@ Diagnostics.BiosImage = biosImage;
 if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
     return diagnosticExitCode;
 }
-var artifactsDirectory = (ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "agb-post"));
-var tierFilter = ArgValue(args: args, name: "--tier");
-var nameFilter = ArgValue(args: args, name: "--filter");
+var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "agb-post"));
+var tierFilter = CommandLineArguments.Value(args: args, name: "--tier");
+var nameFilter = CommandLineArguments.Value(args: args, name: "--filter");
 var testRomRoot = ResolveRoot(args: args, flag: "--roms", variable: "PUCK_AGB_TESTROMS");
 var gamesRoot = ResolveRoot(args: args, flag: "--games", variable: "PUCK_AGB_GAMES");
 var stages = PostStages.Create()
@@ -54,20 +54,10 @@ static ReadOnlyMemory<byte> LoadBios() {
 
     return new byte[ReplacementBios.ImageSize];
 }
-static string? ArgValue(string[] args, string name) {
-    for (var index = 0; (index < (args.Length - 1)); ++index) {
-        if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return args[(index + 1)];
-        }
-    }
-
-    return null;
-}
-
 // A directory root: the CLI flag wins, else the environment variable (when it names an existing directory), else null
 // (the stages that need it skip when it is absent).
 static string? ResolveRoot(string[] args, string flag, string variable) {
-    var explicitRoot = ArgValue(args: args, name: flag);
+    var explicitRoot = CommandLineArguments.Value(args: args, name: flag);
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;

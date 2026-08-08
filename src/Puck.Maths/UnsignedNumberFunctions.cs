@@ -5,8 +5,8 @@ using System.Runtime.Intrinsics.X86;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides extension methods for unsigned binary integers, covering pairing functions, prime factorization, modular
-/// inverses, and integer roots.
+/// Provides extension methods for unsigned binary integers, covering pairing functions, prime factorization, the Jacobi
+/// symbol, modular inverses, and integer roots.
 /// </summary>
 /// <remarks>
 /// Like the rest of <c>Puck.Maths</c>, these routines are generic over <see cref="IBinaryInteger{TSelf}"/> (further
@@ -79,133 +79,112 @@ public static class UnsignedNumberFunctions {
     /// <typeparam name="T">The unsigned binary integer type.</typeparam>
     /// <param name="value">The value to factor.</param>
     /// <returns>
-    /// A lazily evaluated sequence of the prime factors of <paramref name="value"/>, each repeated according to its
-    /// multiplicity (for example, <c>360</c> yields <c>2, 2, 2, 3, 3, 5</c>). The sequence is empty when
-    /// <paramref name="value"/> is prime or less than two, since neither case has a proper factorization to report.
+    /// The prime factors of <paramref name="value"/>, each repeated according to its multiplicity — for example,
+    /// <c>360</c> yields <c>2, 2, 2, 3, 3, 5</c>. A prime yields ITSELF, so the length is always Ω, and the sequence is
+    /// empty only for a <paramref name="value"/> below two, which has no factorization at all.
     /// </returns>
     /// <remarks>
-    /// The small prime factors are removed first, after which trial division advances over a modulo-30 wheel that
-    /// visits only the eight residues coprime to 30 and stops once the trial factor exceeds the square root of the
-    /// remaining cofactor.
+    /// <para>
+    /// Carriage only: the factorization is <see cref="PrimeKernels.Factorize(ulong, Span{ulong})"/> for a
+    /// <typeparamref name="T"/> that fits a machine word, and
+    /// <see cref="BigIntegerFunctions.EnumeratePrimeFactors(BigInteger)"/> for one that does not. Neither branch is a
+    /// second factoring algorithm — the split is the carrier's, since the word-sized kernel reduces through a Montgomery
+    /// ring and precomputed reciprocals that a wider operand cannot use.
+    /// </para>
+    /// <para>
+    /// The output order is non-decreasing by contract — equal factors are always adjacent — so a caller may deduplicate
+    /// by comparing each factor against its predecessor alone.
+    /// </para>
     /// </remarks>
     public static IEnumerable<T> EnumeratePrimeFactors<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        if (T.CreateChecked(value: 4) > value) { yield break; }
-        if (T.CreateChecked(value: 5) == value) { yield break; }
-        if (T.CreateChecked(value: 7) == value) { yield break; }
-        if (T.CreateChecked(value: 11) == value) { yield break; }
-        if (T.CreateChecked(value: 13) == value) { yield break; }
+        if (T.CreateChecked(value: 2) > value) { return []; }
 
-        var index = value;
+        return ((value <= T.CreateTruncating(value: ulong.MaxValue))
+            ? WordFactors(value: value)
+            : WideFactors(value: value));
+    }
 
-        while (T.Zero == (index & T.One)/* enumerate factors of 2 */) {
-            yield return T.CreateChecked(value: 2);
+    /// <summary>Factors a value that fits a machine word through the shared word-sized kernel.</summary>
+    /// <typeparam name="T">The unsigned binary integer type.</typeparam>
+    /// <param name="value">The value to factor, which must be at least two and at most <see cref="ulong.MaxValue"/>.</param>
+    /// <returns>The prime factors, ascending and with multiplicity.</returns>
+    private static IEnumerable<T> WordFactors<T>(T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+        var factors = new ulong[64];
+        var count = PrimeKernels.Factorize(
+            value: ulong.CreateTruncating(value: value),
+            destination: factors
+        );
 
-            index >>= 1;
+        for (var i = 0; (i < count); ++i) { yield return T.CreateTruncating(value: factors[i]); }
+    }
+    /// <summary>Factors a value too wide for a machine word through the arbitrary-width kernel.</summary>
+    /// <typeparam name="T">The unsigned binary integer type.</typeparam>
+    /// <param name="value">The value to factor, which must exceed <see cref="ulong.MaxValue"/>.</param>
+    /// <returns>The prime factors, ascending and with multiplicity.</returns>
+    private static IEnumerable<T> WideFactors<T>(T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+        foreach (var factor in BigIntegerFunctions.EnumeratePrimeFactors(value: BigInteger.CreateChecked(value: value))) {
+            yield return T.CreateChecked(value: factor);
         }
-        while (T.Zero == (index % T.CreateChecked(value: 3))/* enumerate factors of 3 */) {
-            yield return T.CreateChecked(value: 3);
-
-            index /= T.CreateChecked(value: 3);
-        }
-        while (T.Zero == (index % T.CreateChecked(value: 5))/* enumerate factors of 5 */) {
-            yield return T.CreateChecked(value: 5);
-
-            index /= T.CreateChecked(value: 5);
-        }
-        while (T.Zero == (index % T.CreateChecked(value: 7))/* enumerate factors of 7 */) {
-            yield return T.CreateChecked(value: 7);
-
-            index /= T.CreateChecked(value: 7);
-        }
-        while (T.Zero == (index % T.CreateChecked(value: 11))/* enumerate factors of 11 */) {
-            yield return T.CreateChecked(value: 11);
-
-            index /= T.CreateChecked(value: 11);
-        }
-        while (T.Zero == (index % T.CreateChecked(value: 13))/* enumerate factors of 13 */) {
-            yield return T.CreateChecked(value: 13);
-
-            index /= T.CreateChecked(value: 13);
-        }
-
-        var factor = T.CreateChecked(value: 17);
-        var limit = index.SquareRoot();
-
-        if (factor <= limit) {
-            do {
-                while (T.Zero == (index % factor)/* enumerate factors of (30k - 13) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 2);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k - 11) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 4);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k - 7) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 6);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k - 1) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 2);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k + 1) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 6);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k + 7) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 4);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k + 11) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 2);
-
-                while (T.Zero == (index % factor)/* enumerate factors of (30k + 13) */) {
-                    yield return factor;
-
-                    index /= factor;
-                }
-
-                factor += T.CreateChecked(value: 4);
-                limit = index.SquareRoot();
-            } while (factor <= limit);
+    }
+    /// <summary>Computes the Jacobi symbol of <paramref name="value"/> over an odd <paramref name="modulus"/>.</summary>
+    /// <typeparam name="T">The unsigned binary integer type.</typeparam>
+    /// <param name="value">The upper argument. Every value is legal — it is reduced modulo <paramref name="modulus"/> before the descent begins.</param>
+    /// <param name="modulus">The lower argument, which must be odd.</param>
+    /// <returns><c>0</c> when the two arguments share a factor, otherwise <c>1</c> or <c>-1</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// When <paramref name="modulus"/> is an odd prime this is the Legendre symbol — the quadratic character — but unlike
+    /// Euler's criterion (<see cref="PrimeField64.LegendreCharacter(ulong)"/>) it never presumes the modulus prime, which is
+    /// what makes it admissible as an input to a primality test rather than only a consequence of one.
+    /// </para>
+    /// <para>
+    /// The binary — shift-and-flip — algorithm. Each round strips the trailing factors of two out of the upper argument,
+    /// flipping the sign once per factor when the lower argument is congruent to three or five modulo eight, then swaps the
+    /// pair under quadratic reciprocity, flipping again when both arguments are congruent to three modulo four, and reduces.
+    /// The descent is Euclid's, so it bottoms out at the greatest common divisor and the shared-factor case falls out of the
+    /// same loop instead of needing a test of its own. Neither factorization nor exponentiation is involved, the cost is
+    /// logarithmic in <paramref name="modulus"/>, and nothing is allocated.
+    /// </para>
+    /// <para>
+    /// Both sign rules are read as single bit tests rather than residue comparisons — <c>((n &gt;&gt; 1) ^ n)</c> carries the
+    /// "congruent to three or five modulo eight" indicator for the lower argument in bit one, and <c>(a &amp; n)</c> carries
+    /// "both are congruent to three modulo four" in that same position — so the two flips accumulate into one parity bit. The
+    /// whole trailing-zero run leaves in a single shift, so a round spends one trailing-zero count instead of a halving loop.
+    /// </para>
+    /// <para>
+    /// This is the fixed-width counterpart to <see cref="NumberTheoryFunctions.JacobiSymbol(BigInteger, BigInteger)"/>; the
+    /// <see cref="IUnsignedNumber{TSelf}"/> constraint is what keeps the two from colliding, since <see cref="BigInteger"/>
+    /// is signed.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is even, zero included; the symbol is defined only over an odd modulus.</exception>
+    public static int JacobiSymbol<T>(this T value, T modulus) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+        if (!T.IsOddInteger(value: modulus)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(modulus), message: "The Jacobi symbol requires an odd modulus.");
         }
 
-        if (
-            (index != T.One) &&
-            (index != value)
-        ) {
-            yield return index;
+        var lower = modulus;
+        var parity = T.Zero; // the accumulated exponent of -1, carried in bit zero
+        var upper = value.FloorModulo(modulus: modulus);
+
+        while (T.Zero != upper) {
+            var twoExponent = T.TrailingZeroCount(value: upper);
+
+            upper >>>= int.CreateTruncating(value: twoExponent);
+
+            // (2/lower) is -1 exactly for lower ≡ ±3 (mod 8), which bit one of ((lower >> 1) ^ lower) reports; only the
+            // parity of the trailing-zero run can flip the sign, so both indicators meet in bit zero.
+            parity ^= twoExponent & (((lower >>> 1) ^ lower) >>> 1) & T.One;
+            // Reciprocity flips the sign exactly when both arguments are ≡ 3 (mod 4). Both are odd here, so their AND
+            // carries that in bit one.
+            parity ^= ((upper & lower) >>> 1) & T.One;
+            (lower, upper) = (upper, (lower % upper));
         }
+
+        // A descent that ends anywhere but one found a shared factor, and the symbol is zero however the parity landed.
+        return ((T.One == lower)
+            ? (1 - (int.CreateTruncating(value: parity) << 1))
+            : 0);
     }
     /// <summary>Computes the multiplicative inverse of an odd <paramref name="value"/> modulo <c>2^w</c>, where <c>w</c> is the bit width of <typeparamref name="T"/>.</summary>
     /// <typeparam name="T">The unsigned binary integer type.</typeparam>
@@ -301,7 +280,7 @@ public static class UnsignedNumberFunctions {
             8 => T.CreateTruncating(value: ((uint)MathF.Sqrt(x: uint.CreateTruncating(value: value)))),
             16 => T.CreateTruncating(value: ((uint)MathF.Sqrt(x: uint.CreateTruncating(value: value)))),
             32 => T.CreateTruncating(value: ((uint)Math.Sqrt(d: uint.CreateTruncating(value: value)))),
-            64 => T.CreateTruncating(value: Sqrt(value: ulong.CreateTruncating(value: value))),
+            64 => T.CreateTruncating(value: Sqrt64(value: ulong.CreateTruncating(value: value))),
             128 => T.CreateTruncating(value: Sqrt128(value: UInt128.CreateTruncating(value: value))),
 #endif
             _ => SoftwareImplementation(value: value),
@@ -329,7 +308,7 @@ public static class UnsignedNumberFunctions {
             return result;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ulong Sqrt(ulong value) {
+        static ulong Sqrt64(ulong value) {
             var x = ((ulong)Math.Sqrt(d: value)); // ulong -> double is the correct unsigned conversion (a signed cast would go negative for inputs >= 2^63)
 
             x -= unchecked(((x > 4294967295UL).As<ulong>() * (x - 4294967295UL))); // clamp to uint.MaxValue so (x * x) cannot overflow
@@ -340,7 +319,7 @@ public static class UnsignedNumberFunctions {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static UInt128 Sqrt128(UInt128 value) {
-            if (value <= ((UInt128)ulong.MaxValue)) { return Sqrt(value: ((ulong)value)); }
+            if (value <= ((UInt128)ulong.MaxValue)) { return Sqrt64(value: ((ulong)value)); }
 
             var maximumRoot = ((UInt128)ulong.MaxValue);
             var seed = ((ulong)Math.Sqrt(d: ((double)value))); // within 2^13 of the true root; the cast saturates at ulong.MaxValue, which the true root never exceeds

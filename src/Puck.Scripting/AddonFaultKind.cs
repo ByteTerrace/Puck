@@ -14,6 +14,9 @@ public enum AddonFaultKind {
     /// <summary>A returned command record violated the fixed-stride decode guards.</summary>
     DecodeError,
 
+    /// <summary>The loaded module's content hash does not match the descriptor's declared <c>moduleHash</c> pin.</summary>
+    HashMismatch,
+
     /// <summary>The tick exhausted its fuel budget and trapped deterministically.</summary>
     OutOfFuel,
 

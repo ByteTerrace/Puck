@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -10,9 +11,6 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// <c>--render-hash</c> diagnostic uses.
 /// </summary>
 internal static class RenderHashProbe {
-    private const ulong FnvOffsetBasis = 0xCBF29CE484222325ul;
-    private const ulong FnvPrime = 0x100000001B3ul;
-
     /// <summary>Runs a ROM and hashes its framebuffer.</summary>
     /// <param name="romPath">The ROM path.</param>
     /// <param name="steps">The number of instructions to step before hashing.</param>
@@ -30,11 +28,7 @@ internal static class RenderHashProbe {
         }
 
         var bytes = MemoryMarshal.AsBytes(span: machine.Machine.Framebuffer);
-        var hash = FnvOffsetBasis;
-
-        foreach (var value in bytes) {
-            hash = ((hash ^ value) * FnvPrime);
-        }
+        var hash = Fnv1aHash.Compute(values: bytes);
 
         if (expected == 0ul) {
             return (null, hash, $"0x{hash:X16} (capture)");

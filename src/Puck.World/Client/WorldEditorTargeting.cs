@@ -23,12 +23,13 @@ internal readonly record struct EditorSelection(WorldSection Section, string Id,
 /// stale id never dangles.
 /// </summary>
 /// <remarks>Single-threaded, like every editor type here: the verb/chord mutators run during the command pump's apply
-/// window and the render-path reads (<see cref="IsSceneRowSelected"/>, the HUD feed) run during frame produce, all on
+/// window and the render-path reads (<see cref="IsPlacementSelected"/>, the HUD feed) run during frame produce, all on
 /// the launcher's window-pump thread.</remarks>
 internal sealed class WorldEditorTargeting {
     private readonly WorldClient m_client;
     private readonly WorldEditorPicker m_picker;
     private readonly WorldEditorSession m_session;
+    private readonly WorldStampPool m_stamps;
     private readonly EditorSelection?[] m_selected = new EditorSelection?[PlayerRoster.MaxSlots];
     // Reused candidate-sort scratch (an act-driven path; the array is sized to the pick table on demand).
     private (float DistanceSquared, int Target)[] m_sortScratch = [];
@@ -38,15 +39,18 @@ internal sealed class WorldEditorTargeting {
     /// <param name="client">The client view whose delivered definition selections resolve against.</param>
     /// <param name="picker">The look-ray picking program (also the proximity candidate pool).</param>
     /// <param name="session">The editor session supplying each seat's camera focus and look ray.</param>
+    /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldEditorTargeting(WorldClient client, WorldEditorPicker picker, WorldEditorSession session) {
+    public WorldEditorTargeting(WorldClient client, WorldEditorPicker picker, WorldEditorSession session, WorldStampPool stamps) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: picker);
         ArgumentNullException.ThrowIfNull(argument: session);
+        ArgumentNullException.ThrowIfNull(argument: stamps);
 
         m_client = client;
         m_picker = picker;
         m_session = session;
+        m_stamps = stamps;
     }
 
     /// <summary>The monotonic selection revision — bumped on every selection change, folded into the frame source's
@@ -56,7 +60,7 @@ internal sealed class WorldEditorTargeting {
     /// <summary>LIVE-CONSUMED: the proximity-candidate radius around a seat's editor focus point, world units — the
     /// explicit candidate policy: cycling never walks the whole world. Rows beyond this reach are selected
     /// by pick or by the <c>editor.select</c> console twin. Read fresh from the delivered definition's
-    /// <see cref="WorldAuthoringDefaults.CandidateRadius"/> at every gather — a <c>world.authoring.set</c> mutation
+    /// <see cref="WorldAuthoringDefaults.CandidateRadius"/> at every gather — a <c>world.row.set authoring</c> mutation
     /// takes effect at the very next cycle, no restart.</summary>
     public float CandidateRadius => m_client.Definition.Authoring.CandidateRadius;
 
@@ -83,24 +87,11 @@ internal sealed class WorldEditorTargeting {
         return selection;
     }
 
-    /// <summary>Whether any editing seat currently selects the scene row with this id — the render highlight query.</summary>
-    /// <param name="id">The scene-row id.</param>
-    public bool IsSceneRowSelected(string id) {
-        foreach (var selection in m_selected) {
-            if (selection is { Section: WorldSection.Scene } selected && string.Equals(a: selected.Id, b: id, comparisonType: StringComparison.Ordinal)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Whether any editing seat currently selects the placement with this id — the render-tint query
-    /// (the placement twin of <see cref="IsSceneRowSelected"/>).</summary>
+    /// <summary>Whether any editing seat currently selects the placement with this id — the render-tint query.</summary>
     /// <param name="id">The placement id.</param>
     public bool IsPlacementSelected(string id) {
         foreach (var selection in m_selected) {
-            if (selection is { Section: WorldSection.Placements } selected && string.Equals(a: selected.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+            if ((selection is { Section: WorldSection.Placements } selected) && string.Equals(a: selected.Id, b: id, comparisonType: StringComparison.Ordinal)) {
                 return true;
             }
         }
@@ -263,26 +254,17 @@ internal sealed class WorldEditorTargeting {
             return;
         }
 
-        if (m_selected[slot] is { } previous && (previous == selection)) {
+        if ((m_selected[slot] is { } previous) && (previous == selection)) {
             return;
         }
 
         m_selected[slot] = selection;
         m_revision++;
     }
-
     private Vector3? ResolvePosition(in EditorSelection selection) {
         var definition = m_client.Definition;
 
         switch (selection.Section) {
-            case WorldSection.Scene:
-                foreach (var row in definition.Scene.Rows) {
-                    if (string.Equals(a: row.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
-                        return row.Center;
-                    }
-                }
-
-                return null;
             case WorldSection.Screens:
                 foreach (var screen in definition.Screens) {
                     if (screen.Index == selection.Index) {
@@ -310,12 +292,14 @@ internal sealed class WorldEditorTargeting {
             case WorldSection.Cameras:
                 foreach (var camera in definition.Cameras) {
                     if (string.Equals(a: camera.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        var motionPosition = WorldCameraRigCompiler.AuthoredPosition(motion: camera.Rig.Motion);
+
                         return (camera.Anchor switch {
-                            null => camera.Offset,
-                            WorldAnchor.Entity entity => (m_client.Position(index: entity.Index) + camera.Offset),
-                            WorldAnchor.EntityLeaf leaf when WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role) =>
-                                (m_client.Position(index: leaf.Index) + WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role) + camera.Offset),
-                            WorldAnchor.Placement placement => (WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placement.PlacementId, shapeId: placement.ShapeId) + camera.Offset),
+                            null => motionPosition,
+                            WorldAnchor.Entity entity => (m_client.Position(index: entity.Index) + motionPosition),
+                            WorldAnchor.EntityPart part when WorldEntityPartResolver.TryAuthoredPose(client: m_client, stamps: m_stamps, entityIndex: part.Index, partId: part.PartId, pose: out var pose) =>
+                                (pose.Position + Vector3.Transform(value: motionPosition, rotation: pose.Orientation)),
+                            WorldAnchor.Placement placement => (WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placement.PlacementId, shapeId: placement.ShapeId) + motionPosition),
                             _ => (Vector3?)null,
                         });
                     }
@@ -332,8 +316,8 @@ internal sealed class WorldEditorTargeting {
                             WorldSpeaker.Fixed fixedSpeaker => fixedSpeaker.Position,
                             WorldSpeaker.Bed bed => bed.Center,
                             WorldSpeaker.Anchored { Anchor: WorldAnchor.Entity entity } anchored => (m_client.Position(index: entity.Index) + anchored.Offset),
-                            WorldSpeaker.Anchored { Anchor: WorldAnchor.EntityLeaf leaf } anchored when WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role) =>
-                                (m_client.Position(index: leaf.Index) + WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role) + anchored.Offset),
+                            WorldSpeaker.Anchored { Anchor: WorldAnchor.EntityPart part } anchored when WorldEntityPartResolver.TryAuthoredPose(client: m_client, stamps: m_stamps, entityIndex: part.Index, partId: part.PartId, pose: out var pose) =>
+                                (pose.Position + Vector3.Transform(value: anchored.Offset, rotation: pose.Orientation)),
                             WorldSpeaker.Anchored { Anchor: WorldAnchor.Placement placementAnchor } anchored => AnchoredPlacementPosition(definition: definition, placementId: placementAnchor.PlacementId, offset: anchored.Offset),
                             _ => (Vector3?)null,
                         });
@@ -357,10 +341,8 @@ internal sealed class WorldEditorTargeting {
 
         return null;
     }
-
     private static EditorSelection ToSelection(in EditorPickTarget target) =>
         new(Section: target.Section, Id: target.Id, Index: target.Index);
-
     private static bool Matches(in EditorPickTarget target, in EditorSelection selection) =>
         ((target.Section == selection.Section) &&
             (target.Index == selection.Index) &&

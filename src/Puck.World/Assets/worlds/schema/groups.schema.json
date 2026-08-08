@@ -1,0 +1,224 @@
+{
+  "description": "The groups section (default null = none) \u2014 the group\u002Bmembership binding substrate: the group-kind policy catalog and the group roster (see WorldGroupsSection). OPTIONAL, for the SAME reason Rules is: a new REQUIRED section would refuse every existing document at boot for declaring nothing.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "kinds": {
+      "description": "The declared kind catalog.",
+      "type": "array",
+      "items": {
+        "description": "A group KIND \u2014 a POLICY BUNDLE, never a size label. Every field here must be BEHAVIOR-bearing: a kind that differs from another ONLY in Capacity is a capacity VALUE, not a kind, and WorldDefinitionValidator refuses that pair by name.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The kind\u0027s stable name, unique within Kinds \u2014 the vocabulary a KindName reference is validated against (unknown-by-name, the same shape as the state-row cell-existence refusal).",
+            "type": "string"
+          },
+          "roles": {
+            "description": "The role\u2192capability map (see WorldGroupRole). May be empty \u2014 a kind with no roles reaches no capability at all through its group principal, so any grant naming it is refused as unreachable.",
+            "type": "array",
+            "items": {
+              "description": "One named role a WorldGroupKind declares \u2014 the role\u2192capability half of the kind\u0027s policy bundle. A role names nothing about MEMBERSHIP (this head keeps a membership row role-less; see Members); it exists so world.grant can refuse, at the door, a hold over a group principal that no role of its kind could ever exercise (the addon-reachability-honesty analog: an admitted-but- unreachable grant is a grant that lies).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The role\u0027s stable name, unique within its kind.",
+                  "type": "string"
+                },
+                "capabilities": {
+                  "description": "The capabilities a member acting under this role may be granted through the group principal. Never empty \u2014 a role reaching nothing is a role that could not exist without lying about what it is for.",
+                  "type": "array",
+                  "items": {
+                    "description": "The coarse capability verbs a WorldGrant confers \u2014 the closed set the server checks a submission\u0027s WorldPrincipal against at each write boundary. A genre world arrives as different DATA (new subjects, new sections), never a new capability.",
+                    "enum": [
+                      "Drive",
+                      "Observe",
+                      "Control",
+                      "Mutate",
+                      "Edit"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "capabilities"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ownershipPolicy": {
+            "description": "The loot/ownership-distribution policy slot (see WorldGroupOwnershipPolicy).",
+            "enum": [
+              "None",
+              "LeaderDecides",
+              "RoundRobin",
+              "FreeForAll"
+            ]
+          },
+          "lifetime": {
+            "description": "The lifetime/persistence policy (see WorldGroupLifetime) \u2014 RUNTIME groups only.",
+            "enum": [
+              "Ephemeral",
+              "Persistent"
+            ]
+          },
+          "evictionPolicy": {
+            "description": "What a kick does to the kicked member\u0027s row \u2014 and, under Disband, to the whole group (see WorldGroupEvictionPolicy).",
+            "enum": [
+              "Remove",
+              "Disband"
+            ]
+          },
+          "capacity": {
+            "description": "The maximum concurrent members a group of this kind admits \u2014 one minor authored field within MaxMembersPerGroup, the population ceiling this substrate is bounded against.",
+            "type": "integer"
+          },
+          "sharedStateScope": {
+            "description": "The name of a declared state row this kind\u0027s groups share, or null for none. Validated to reference an EXISTING row (refused by name otherwise, the same cell-existence discipline the world-rules operand walk enforces) \u2014 the deeper \u0022every member reads/writes this row together\u0022 semantic belongs to a later lane; this head only pins the reference honest.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "roles",
+          "ownershipPolicy",
+          "lifetime",
+          "evictionPolicy",
+          "capacity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "groups": {
+      "description": "The group roster \u2014 authored and runtime rows in ONE list (see WorldGroup).",
+      "type": "array",
+      "items": {
+        "description": "One group ROW \u2014 a roster of principals under a kind. ONE shape whether the row was boot-authored (present in the server\u0027s own base document \u2014 re-seeded on every world.reset/.load/.reload) or formed live by FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward \u2014 the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal.",
+            "type": "string"
+          },
+          "kindName": {
+            "description": "The owning kind\u0027s name \u2014 validated to reference a declared WorldGroupKind (unknown-by-name).",
+            "type": "string"
+          },
+          "members": {
+            "description": "The current membership \u2014 FLAT ONLY: every entry is a PRINCIPAL, never a group (a Group entry is refused by name \u2014 a member holding another group\u0027s memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind\u0027s own Capacity.",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kindName",
+          "members"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "ownership": {
+      "description": "The ownership bindings (see WorldOwnership). May be empty.",
+      "type": "array",
+      "items": {
+        "description": "One ownership BINDING \u2014 subject \u2192 principal-or-group-or-escrow, the second kind of the group\u002Bbinding substrate. A row is document-authored (boot/reset/load-seeded, like every other row in this section), but its Owner moves LIVE through OfferOwnership (owner -\u003E escrow) and SettleOwnership (escrow -\u003E recipient, or escrow -\u003E offerer on timeout) \u2014 the escrow/transfer lane, riding this exact row shape. There is still no mutation kind that CREATES a row from nothing (only a document may declare a subject\u0027s first owner) or that widens Kind past Group \u2014 a later lane adding item/instance subjects is expected to add whatever mints their first row, riding this same shape.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "subject": {
+            "description": "The owned thing.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "The subject flavor.",
+                "enum": [
+                  "Group"
+                ]
+              },
+              "id": {
+                "description": "The subject\u0027s stable id \u2014 a group id for Group.",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "owner": {
+            "description": "Who owns it.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "Whether the owner is a bare principal, a group, or an escrow row.",
+                "enum": [
+                  "Principal",
+                  "Group",
+                  "Escrow"
+                ]
+              },
+              "principal": {
+                "description": "The owning principal for Principal; null otherwise. Never Group \u2014 a group owner is spelled through GroupId, not this field, so the two branches never overlap."
+              },
+              "groupId": {
+                "description": "The owning group\u0027s id for Group; null otherwise.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "escrow": {
+                "description": "The escrow payload for Escrow; null otherwise.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "offerer": {
+                    "description": "The principal that placed the subject into escrow \u2014 the sole reclaim beneficiary."
+                  },
+                  "recipient": {
+                    "description": "The principal named to accept the subject \u2014 the sole accept beneficiary. Never equal to Offerer (refused by name \u2014 an offer to oneself is not a trade)."
+                  },
+                  "deadlineTick": {
+                    "description": "The server tick at or after which SettleOwnership\u0027s reclaim admits \u2014 the SAME tick unit EpochTick already rides. Before this tick, only an accept by Recipient can resolve the escrow.",
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "subject",
+          "owner"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "kinds",
+    "groups",
+    "ownership"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

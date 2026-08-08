@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        PROTOTYPE — deliberately outside Puck.sln and the root build. Implements the "Signed carriage"
+        section of docs/world-model.md so the deferred serialisation choice (fixed layout vs CBOR) can be
+        measured before the owner homes this permanently. Do not wire this into the architecture gate or
+        any Post battery; it carries no per-project PuckKind/PuckLayer declaration for that reason.
+        BCL only: System.Formats.Cbor and System.Security.Cryptography ship inbox, so no PackageReference
+        is needed. The project name is provisional — flagged for the owner in the accompanying report.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <RootNamespace>Puck.Carriage</RootNamespace>
+        <AssemblyName>Puck.Carriage</AssemblyName>
+        <!--
+            The architecture gate analyzer (Puck.Analyzers, PUCKARCH005) runs at compile time on every
+            project under this tree via Directory.Build.props's automatic analyzer reference — regardless
+            of Puck.sln or root-build membership — so a <PuckKind> is required just to build. "Tool" is a
+            terminal kind (no <PuckLayer>): this harness is a standalone console proof, not a layered
+            production dependency, and staying terminal keeps it out of the ranked graph the gate polices.
+            This declaration does not add the project to Puck.sln or the root build.
+        -->
+        <PuckKind>Tool</PuckKind>
+    </PropertyGroup>
+    <ItemGroup>
+        <!--
+            System.Formats.Cbor is a Microsoft-authored BCL-adjacent assembly (not a third-party
+            dependency), but for a plain console app it only arrives inbox through the
+            Microsoft.AspNetCore.App shared framework — a FrameworkReference to all of ASP.NET Core would
+            be a strange way to get one CBOR type. The standalone NuGet package is the correct way to
+            reference it without that, and matches the repository's floating-lock convention.
+        -->
+        <PackageReference Include="System.Formats.Cbor" Version="[9.*, )" />
+    </ItemGroup>
+</Project>

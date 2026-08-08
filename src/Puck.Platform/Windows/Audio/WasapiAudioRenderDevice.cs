@@ -149,7 +149,6 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
 
         CoUninitialize();
     }
-
     private (IAudioClient AudioClient, IAudioRenderClient RenderClient) Initialize() {
         var enumeratorClsid = Wasapi.CLSID_MMDeviceEnumerator;
         var enumeratorIid = Wasapi.IID_IMMDeviceEnumerator;
@@ -173,13 +172,13 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         Wasapi.CoTaskMemFree(pv: mixFormatPointer);
 
         var format = new Wasapi.WaveFormatEx {
-            wFormatTag = Wasapi.WaveFormatPcm,
-            nChannels = 2,
-            nSamplesPerSec = (uint)SampleRate,
+            cbSize = 0,
             nAvgBytesPerSec = (uint)(SampleRate * 4),
             nBlockAlign = 4,
+            nChannels = 2,
+            nSamplesPerSec = (uint)SampleRate,
             wBitsPerSample = 16,
-            cbSize = 0,
+            wFormatTag = Wasapi.WaveFormatPcm,
         };
         var formatPointer = Marshal.AllocHGlobal(cb: Marshal.SizeOf<Wasapi.WaveFormatEx>());
 
@@ -189,7 +188,7 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             // inside the plan's 25-35 ms end-to-end budget with the snapshot pipeline on top; no IAudioClient3 heroics.
             Wasapi.Check(hr: audioClient.Initialize(
                 shareMode: Wasapi.ShareModeShared,
-                streamFlags: (Wasapi.StreamFlagsEventCallback | Wasapi.StreamFlagsAutoConvertPcm | Wasapi.StreamFlagsSrcDefaultQuality),
+                streamFlags: Wasapi.StreamFlagsEventCallback | Wasapi.StreamFlagsAutoConvertPcm | Wasapi.StreamFlagsSrcDefaultQuality,
                 hnsBufferDuration: 0,
                 hnsPeriodicity: 0,
                 pFormat: formatPointer,
@@ -217,7 +216,6 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
 
         return (audioClient, (IAudioRenderClient)renderClientObject);
     }
-
     private void RunRenderLoop(IAudioClient audioClient, IAudioRenderClient renderClient) {
         // Prime the whole buffer with silence before Start so the stream's first period never underruns while the
         // first event is still in flight.
@@ -297,12 +295,9 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
 
         return true;
     }
-
     private void Park(int hr, string where) =>
         Volatile.Write(location: ref m_fault, value: $"{where} failed: 0x{hr:X8}{((hr == Wasapi.AudclntEDeviceInvalidated) ? " (device invalidated)" : "")}");
-
-    private static unsafe Span<short> SampleSpan(nint data, int samples) => new((void*)data, samples);
-
+    private static unsafe Span<short> SampleSpan(nint data, int samples) => new(length: samples, pointer: (void*)data);
     [DllImport("Ole32.dll")]
     private static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
     [DllImport("Ole32.dll")]

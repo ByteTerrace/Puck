@@ -1,8 +1,8 @@
 # Rejected and conditional SDF techniques
 
 This page records current non-goals and the evidence required to reconsider
-them. It is not a chronology. Open implementation work belongs in
-[the SDF backlog](../sdf-backlog.md).
+them. It is not a chronology and it is not a work list — nothing tracks open
+SDF implementation work today.
 
 ## Global voxel representation
 

@@ -1,0 +1,209 @@
+[
+  {
+    "Id": "contribution-fold.formula-vs-big-integer-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedContributionFold.Evaluate, including its poolClamped output, over a small exact cross-grid with pool absent/present (including radius zero), continuous/thresholded, followed by full-width edge, deterministic random and rolling-frontier configurations",
+        "Against": "Oracles.FixedContributionFold, which forms every intermediate in BigInteger, clamps by independent BigInteger comparisons, and quantizes by a direct integer comparison without calling a subject type, helper, fixed-point operator or fixed-width accumulator",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.no-pool-specialization",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedContributionFold.Evaluate at baseline zero with poolRadius null, over a small exact grid and a separate full-width edge/random/frontier stream; poolClamped must remain false",
+        "Against": "Oracles.FixedContributionFoldNoPool, the direct BigInteger specialization clamp(poolDeltaRaw + outsidePoolDeltaRaw, minimum, maximum) followed by its own optional integer threshold comparison, deliberately not routed through the general fold oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.raw-sum-order-independent",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "plain raw accumulation gives the same completed sum, fold result and poolClamped bit for all 120 permutations of five distinct modest contributions, then for four orderings of every sixteen-term list supplied by an independent edge/random/frontier domain; the fixed three-term [+0.5,+0.5,-0.5] witness also lands at +0.5 under raw-once accumulation while a pool-saturating per-add lands at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.analog-pool-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "for a continuous fold with zero outside-pool sum, a non-negative radius and a baseline inside the full carrier range, BigInteger abs(resultRaw - baselineRaw) never exceeds radiusRaw across the full-width edge/random/frontier stream; the full carrier range keeps any final clamp movement on the same side and within the pool radius",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.binary-flip-bound-sharp",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "binary specialization at both base bits and every threshold raw T in [1, One], driven with an arbitrarily large adverse delta at radius c = min(T - 1, One - T)",
+        "Against": "the two exact integer arms: from zero, c must be at most T - 1 because >= crosses; from One, c must be at most One - T; the minimum is therefore sufficient for both directions",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "sharpness at every threshold: radius c + 1 flips the direction whose arm attained the minimum, including both extreme thresholds where the exact bound is zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.binary-composition-induction",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "induction over eight composition sites for both base bits and every threshold raw in [1, One]: the induction hypothesis is that the prefix output equals the original base bit, and each next site uses radius 0, the exact flip bound, or half that bound with zero outside-pool sum; every prefix preserves the hypothesis under alternating carrier-edge and threshold-neighborhood deltas",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.terminal-quantization-idempotent",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "terminal threshold quantization is idempotent over valid full-width ranges and thresholds mapped from an independent edge/random/frontier stream: applying the same zero-delta no-pool terminal fold to its first minimum-or-maximum output returns that output bit-for-bit, including threshold equal to minimum or maximum",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.overflow-boundary-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the documented raw accumulator and widened-intermediate boundaries, plus four carrier-extreme Evaluate configurations",
+        "Against": "exact BigInteger arithmetic: (2^47 - 1)*2^16 = 2^63 - 2^16 leaves 2^16 - 1 below long.MaxValue, 2^47 positive terms first overflow while 2^47 negative terms land exactly on long.MinValue and the next underflows, and the widest public three-term interval [-3*2^63, 3*(2^63 - 1)] lies strictly inside Int128; the extreme calls also agree with Oracles.FixedContributionFold",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.configuration-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an inverted range refuses with ArgumentException naming minimum, a negative radius refuses with ArgumentOutOfRangeException naming poolRadius, and thresholds one raw below and above [Zero,One] refuse naming threshold; a zero radius is admitted and clamps a one-raw request back to the baseline while setting poolClamped",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.discriminating-examples",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "three hand-derived non-saturating controls, each compared with a local expansion of the pre-existing narrow raw-once rule: pooled [+0.5,+0.5,-0.5] at radius 0.5 returns +0.5 under both folds while a pool-saturating per-add returns zero; baseline +0.25 with pooled -0.5 and outside -0.25 returns -0.5 inside [-One,One] under both folds; pooled +0.25 plus outside +0.25 at threshold 0.5 returns One under both folds because equality crosses under >=, while a strict-greater alternative returns zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "contribution-fold.site-composition-distribution-known-false",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedContributionFold", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the known-false equality Q(Q(a) + b) = Q(a + b) at the concrete continuous clamp Q(x)=clamp(x,0,One), a=1.5 and b=-0.5: the first site discards 0.5, so the left side is 0.5 while the right side is One",
+        "Against": "the distributive equality, which must NOT be asserted as a law because a site's clamp or threshold is information-losing",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "contribution-fold.formula-vs-big-integer-oracle — the absolute sibling pinning Q itself against shared-nothing BigInteger arithmetic"
+      }
+    ]
+  }
+]

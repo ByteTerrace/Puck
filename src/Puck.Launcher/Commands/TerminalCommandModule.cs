@@ -12,7 +12,9 @@ internal sealed class TerminalCommandModule(
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
             aliases: ["exit"],
-            description: "Exits the terminal. Bound to Escape.",
+            // Bindable: leaving is UI navigation, not authority. No engine-default page names it today.
+            bindability: CommandBindability.Bindable,
+            description: "Exits the terminal.",
             handler: _ => {
                 terminal.RequestExit();
                 return new CommandResult("Exiting…");

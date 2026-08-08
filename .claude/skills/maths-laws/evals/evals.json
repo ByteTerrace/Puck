@@ -1,0 +1,23 @@
+{
+  "skill_name": "maths-laws",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a public FixedQ4816 helper and a Default-tier law proving it agrees with an exact independently authored oracle.",
+      "expected_output": "Authors one declaration row in the appropriate laws family and one matching Case binding, uses an existing Laws combinator and shared Domain, places exact reference arithmetic in Oracles rather than calling Puck.Maths, declares an honest classical leg, classifies the new public member, and runs the unfiltered Release Default tier to regenerate owned artifacts.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "A proposed twin law compares two APIs that both delegate to the same exact kernel. How should its evidence and declaration be represented?",
+      "expected_output": "Rejects a classical or independent classification, uses the shared-exact or delegation leg appropriate to the call relationship, names the shared kernel precisely, cites the independent envelope that pins it, supplies a witness only when genuinely independent, and records any uncovered regime with the required marker.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Prove that a newly added rounding law actually detects the defect it claims to prevent without polluting the working tree.",
+      "expected_output": "First reasons through a plausible one-line mutation and operand observability, then performs the mutation probe in an isolated worktree, runs the law's declared tier, confirms the intended law turns red, notes collateral failures, restores or discards the worktree, reruns green, and never commits generated probe artifacts.",
+      "files": []
+    }
+  ]
+}

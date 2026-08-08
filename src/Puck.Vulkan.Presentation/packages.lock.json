@@ -32,6 +32,12 @@
           "Microsoft.Extensions.Options": "10.0.10"
         }
       },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "f5VCIE7AJpd5YvzNTeMGVzQIgyE9tX+AreTYwQF+REbu+DZo/2Ae+jNSwhPEYrVz6RRkd7y8ubXjk6Nn6Ka+Cg=="
+      },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -304,14 +310,8 @@
       "puck.commands": {
         "type": "Project",
         "dependencies": {
+          "Puck.Maths": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
-        }
-      },
-      "puck.compositing": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.hosting": {
@@ -320,6 +320,9 @@
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Commands": "[1.0.0, )"
         }
+      },
+      "puck.maths": {
+        "type": "Project"
       },
       "puck.shaders": {
         "type": "Project",

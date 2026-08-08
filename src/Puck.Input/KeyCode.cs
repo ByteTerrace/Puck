@@ -5,7 +5,9 @@ namespace Puck.Input;
 /// (Win32 virtual keys, X11/evdev keycodes) into these, and <see cref="WindowInputMapper"/> maps each to its
 /// <see cref="InputSources.Keyboard"/> vocabulary entry — the single place a key is named. Named keys only:
 /// letter keys ride <see cref="WindowInputEvent.Character"/>, and typed text rides
-/// <see cref="WindowInputEvent.Text"/>.
+/// <see cref="WindowInputEvent.Text"/>. Control/Shift/Alt/Super each carry distinct left/right members rather
+/// than one unified key — "either side" is an authoring choice a chord group expresses by declaring both, not a
+/// distinction the vocabulary collapses for them.
 /// </summary>
 public enum KeyCode {
     /// <summary>No key; the default, used by non-key events.</summary>
@@ -81,4 +83,28 @@ public enum KeyCode {
 
     /// <summary>The F12 function key.</summary>
     F12,
+
+    /// <summary>The left Control key.</summary>
+    ControlLeft,
+
+    /// <summary>The right Control key.</summary>
+    ControlRight,
+
+    /// <summary>The left Shift key.</summary>
+    ShiftLeft,
+
+    /// <summary>The right Shift key.</summary>
+    ShiftRight,
+
+    /// <summary>The left Alt key.</summary>
+    AltLeft,
+
+    /// <summary>The right Alt key.</summary>
+    AltRight,
+
+    /// <summary>The left Super (Windows / Command) key.</summary>
+    SuperLeft,
+
+    /// <summary>The right Super (Windows / Command) key.</summary>
+    SuperRight,
 }

@@ -1,0 +1,145 @@
+{
+  "description": "The local/network census active from the first built-in scene frame.",
+  "type": "object",
+  "properties": {
+    "seatActivation": {
+      "description": "The per-seat boot-activation policy, exactly LocalSeatCount entries in seat order. Seat 0 (player 1) MUST be Eager (refused otherwise \u2014 the session always needs a first player); the remaining seats are ordinarily authored OnDemand so a friend\u0027s controller or an explicit player.join claims one only when someone actually shows up, rather than every local seat standing in the world unowned from tick 1.",
+      "type": "array",
+      "items": {
+        "description": "Whether a local seat activates automatically at boot (Eager) or waits for a claim (OnDemand) \u2014 the per-seat authored policy SeatActivation declares. Both doors converge on the identical Server.WorldPopulation.ActivateSeat call through the same SessionRequest.Join/WorldServer.ApplySession session-join seam regardless of which policy admitted the seat \u2014 a seat activated on demand (player.join, or a controller\u0027s own hot-plug first touch via Client.PlayerRoster.ResolveDeviceSlot) is indistinguishable from one activated at boot the instant it is active.",
+        "enum": [
+          "Eager",
+          "OnDemand"
+        ]
+      }
+    },
+    "networkPlayers": {
+      "description": "The number of active network-human stand-ins at boot.",
+      "type": "integer"
+    },
+    "defaultPeerSource": {
+      "description": "The boot intent-source template every network stand-in wakes on (Producer in the built-in world)."
+    },
+    "seatSpawns": {
+      "description": "The spawn-point name selected by each local seat ordinal.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "distribution": {
+      "description": "How simulated peers are distributed at spawn. A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT for bodies already standing (a change re-clusters only peers spawned after it), narrated in the accept echo.",
+      "type": "object",
+      "properties": {
+        "region": {
+          "$ref": "./common.schema.json#/$defs/WorldDistributionRegion"
+        },
+        "fill": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence"
+        }
+      },
+      "required": [
+        "region",
+        "fill"
+      ],
+      "additionalProperties": false
+    },
+    "peerVariation": {
+      "description": "The independently authored producer-state sequences for peer bodies.",
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence2"
+        },
+        "weave": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence3"
+        },
+        "activity": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence4"
+        }
+      },
+      "required": [
+        "phase",
+        "weave",
+        "activity"
+      ],
+      "additionalProperties": false
+    },
+    "seatVariation": {
+      "description": "The independently authored producer-state sequences for local-seat bodies.",
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence2"
+        },
+        "weave": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence3"
+        },
+        "activity": {
+          "$ref": "./common.schema.json#/$defs/WorldSequence4"
+        }
+      },
+      "required": [
+        "phase",
+        "weave",
+        "activity"
+      ],
+      "additionalProperties": false
+    },
+    "peerColors": {
+      "description": "The stand-in color sequence, independent of producer-state variation.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "capacity": {
+      "description": "The total authoritative body capacity, including reserved local seats.",
+      "type": "integer"
+    },
+    "reconnectGraceTicks": {
+      "description": "How many simulation ticks a disconnected body stays PARKED \u2014 retained in the sim/collider set at its last pose, still counted IsHumanOccupied \u2014 before the deferred teardown (body drop, and for a peer, its generation\u0027s grants) actually fires. 0 disables the grace window outright: a disconnect tears the body down immediately, the pre-park behavior. Read once at construction/rebuild, like the rest of this section (SetPopulationDefaults\u0027s own timing class) \u2014 a live edit takes effect on the NEXT disconnect, never retroactively on an already-parked body. See Server.WorldPopulation\u0027s park-with-grace remarks and the $parked:\u003CbodyRef\u003E reserved rule channel (ParkedPrefix) that reads a parked body\u0027s remaining count. Default 720 ticks \u2014 3 seconds at the fixed 240 Hz simulation rate.",
+      "type": "integer"
+    },
+    "capacityDraw": {
+      "description": "The census\u0027s authored-randomness facet, or null for an ordinary literal Capacity. A BOOT-ONLY site (PopulationCapacity): settled into Capacity, cleared, and narrated exactly like BackendDraw. The census coherence rule. The site\u0027s admissible domain is not the capacity ceiling alone \u2014 NetworkPlayers is validated against capacity MINUS the local seats, so a drawn capacity below that sum is a document this same validator would refuse once resolved. The domain is narrowed STATICALLY at authoring instead, so the roll can never decide whether the world boots. Not an XOR. Unlike BackendDraw, this site cannot refuse both-declared: WorldPopulationDefaults is a STRUCT, so an authored capacity: 128 and the C# default 128 are indistinguishable once parsed. When both are present the draw simply wins \u2014 a stated limitation, not a silent guess.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "default": null
+        },
+        "generator": {
+          "$ref": "./common.schema.json#/$defs/WorldGenerator"
+        },
+        "timing": {
+          "$ref": "./common.schema.json#/$defs/WorldDrawTiming"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

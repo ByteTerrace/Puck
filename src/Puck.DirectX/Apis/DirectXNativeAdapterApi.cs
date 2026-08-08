@@ -38,8 +38,8 @@ public sealed unsafe class DirectXNativeAdapterApi : IDirectXAdapterApi {
             for (var index = 0U; ; index++) {
                 IDXGIAdapter1* adapter = null;
                 var result = factory->EnumAdapters1(
-                    index,
-                    &adapter
+                    Adapter: index,
+                    ppAdapter: &adapter
                 );
 
                 if (HRESULT.DXGI_ERROR_NOT_FOUND == result) {

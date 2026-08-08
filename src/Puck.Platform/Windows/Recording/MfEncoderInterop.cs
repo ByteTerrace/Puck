@@ -18,37 +18,35 @@ internal static class MfEncoder {
 
     // IMFTransform stream flags and messages.
     public const uint MftOutputStreamProvidesSamples = 0x00000100;
-    public const uint MftMessageNotifyBeginStreaming = 0x10000000;
-    public const uint MftMessageNotifyEndStreaming = 0x10000001;
-    public const uint MftMessageNotifyEndOfStream = 0x10000002;
-    public const uint MftMessageNotifyStartOfStream = 0x10000003;
     public const uint MftMessageCommandDrain = 0x00000001;
     public const uint MftMessageCommandFlush = 0x00000000;
+    public const uint MftMessageNotifyBeginStreaming = 0x10000000;
+    public const uint MftMessageNotifyEndOfStream = 0x10000002;
+    public const uint MftMessageNotifyEndStreaming = 0x10000001;
+    public const uint MftMessageNotifyStartOfStream = 0x10000003;
 
     // IMFMediaEventGenerator / async-MFT event types.
     public const uint MfEventFlagNoWait = 0x00000001;
-    public const uint MeTransformNeedInput = 601;
-    public const uint MeTransformHaveOutput = 602;
     public const uint MeTransformDrainComplete = 603;
+    public const uint MeTransformHaveOutput = 602;
+    public const uint MeTransformNeedInput = 601;
 
     // Well-known Media Foundation HRESULTs (as unchecked int).
     public const int MfENoEventsAvailable = unchecked((int)0xC00D3E80);
+    public const int EAccessDenied = unchecked((int)0x80070005);
+    public const int MfEAttributeNotFound = unchecked((int)0xC00D36E6);
     public const int MfETransformNeedMoreInput = unchecked((int)0xC00D6D72);
     public const int MfETransformStreamChange = unchecked((int)0xC00D6D61);
-    public const int MfEAttributeNotFound = unchecked((int)0xC00D36E6);
-    public const int EAccessDenied = unchecked((int)0x80070005);
 
     // Interface / category / attribute / format GUIDs.
     public static Guid IID_IMFTransform = new(g: "bf94c121-5b05-4e6f-8000-ba598961414d");
     public static Guid MFT_CATEGORY_VIDEO_ENCODER = new(g: "f79eac7d-e545-4387-bdee-d647d7bde42a");
     public static Guid MFT_FRIENDLY_NAME_Attribute = new(g: "314ffbae-5b41-4c95-9c19-4e7d586face3");
     public static Guid MF_TRANSFORM_ASYNC_UNLOCK = new(g: "e5666d6b-3422-4eb6-a421-da7db1f8e207");
-
     public static Guid MFMediaType_Video = new(g: "73646976-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_NV12 = new(g: "3231564e-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_H264 = new(g: "34363248-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_AV1 = new(g: "31305641-0000-0010-8000-00aa00389b71");
-
     public static Guid MF_MT_MAJOR_TYPE = new(g: "48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
     public static Guid MF_MT_SUBTYPE = new(g: "f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
     public static Guid MF_MT_FRAME_SIZE = new(g: "1652c33d-d6b2-4012-b834-72030849a37d");

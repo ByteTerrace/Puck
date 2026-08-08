@@ -1,0 +1,29 @@
+{
+  "description": "The references section (default null = names nothing) \u2014 rows naming another world by document path (see WorldReference), echoed by world.references. No boot-time file-existence check; resolution is a consumer\u0027s job. OPTIONAL, for the SAME reason Rules is.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One row of the references section \u2014 a world NAMING another world by document path, the primitive a wall-mounted portal placement (or any future consumer) resolves against. Authored data only: a row asserts nothing about the named document\u0027s existence or shape at boot \u2014 resolution is a consumer\u0027s job, not this section\u0027s (no boot-time file-existence check).",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The reference\u0027s own name \u2014 WorldSafeName-shaped, unique within the section."
+      },
+      "document": {
+        "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "document"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

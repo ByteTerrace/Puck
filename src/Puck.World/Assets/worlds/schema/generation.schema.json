@@ -1,0 +1,16 @@
+{
+  "description": "The generation section (default null = Default, world seed 0) \u2014 the draw seed ladder\u0027s WORLD rung (see ComputeSeedState). OPTIONAL, for the SAME reason Rules is.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "worldSeed": {
+      "description": "Folded into every site\u0027s Pcg32XshRr starting state. Defaults to 0.",
+      "type": "integer",
+      "default": 0
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

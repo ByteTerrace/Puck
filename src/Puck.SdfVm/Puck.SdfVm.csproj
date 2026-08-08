@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
     <!--
         The signed-distance-function engine: the instruction ISA, the program representation, the fluent
         authoring builder, the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
@@ -18,14 +22,13 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
-        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
-        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <!-- Puck.SdfVm.Queries (Queries/) is fixed-point-only by contract — no float, no GPU — so it leans on the
              shared fixed-point math types directly rather than re-deriving them. Puck.Maths has zero dependencies of
              its own, so this edge only ever points one way. -->
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- PngEncoder for the debug-capture readback (SdfEngineNode.RequestCapture). -->
+        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <!-- The font-atlas model + em-space layout (render-agnostic, same engine-services layer): the SdfProgramBuilder
              Text() helper lays a string out against a FontAtlas and emits one SDF_SHAPE_GLYPH cell per character. -->
@@ -38,7 +41,6 @@
              deriving Content from it, so a new bytecode glob can never be shipped without also being guarded. -->
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
-        <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
@@ -53,11 +55,24 @@
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
 
+    <!-- Derive the SHIPPED content list from disk INSIDE a target rather than at evaluation. MSBuild expands item
+         globs once, before any target runs, so an evaluation-time Content glob cannot see bytecode that CompileShaders
+         emits later in the SAME build: on a from-clean build the newest kernels were simply missing from Puck.SdfVm's
+         content list, Puck.World's transitive copy shipped an incomplete Assets/Shaders/Sdf, and the host threw
+         FileNotFoundException out of SdfWorldKernels.Load. AssignTargetPaths is the gate for BOTH the normal build and
+         a referencing project's GetCopyToOutputDirectoryItems call, so re-globbing ahead of it is current in either
+         path. The ShaderBytecode item is still the ONE declaration ValidateShaderBytecodeSources guards. -->
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
+        <ItemGroup>
+            <ShaderBytecode Remove="@(ShaderBytecode)" />
+            <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
+            <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+            <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
+        </ItemGroup>
+    </Target>
+
     <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
-        <Error
-            Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')"
-            Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source."
-        />
+        <Error Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')" Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source." />
     </Target>
 
     <!-- Compile each *.vert.hlsl / *.frag.hlsl to BOTH SPIR-V (Vulkan 1.3 / SPIR-V 1.6, entry renamed to "main")
@@ -66,28 +81,11 @@
          invocation pins the capability floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6),
          explicit -O3, and -enable-16bit-types (inert until a kernel adopts fp16 — no min16float appears today, so it
          changes no semantics; it raises the toolchain floor so the four supported GPUs' 2×-rate fp16 is reachable). -->
-    <Target
-        BeforeTargets="PrepareForBuild"
-        Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
-        Name="CompileShaders"
-        Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')"
-    >
-        <Exec
-            Command="&quot;$(DxcCommand)&quot; --version"
-            ConsoleToMSBuild="true"
-            IgnoreExitCode="true"
-            StandardErrorImportance="High"
-            StandardOutputImportance="Low"
-        >
-            <Output
-                PropertyName="DxcProbeExitCode"
-                TaskParameter="ExitCode"
-            />
+    <Target BeforeTargets="PrepareForBuild" Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+        <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
+            <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
-        <Error
-            Condition="'$(DxcProbeExitCode)' != '0'"
-            Text="Puck.SdfVm shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;."
-        />
+        <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.SdfVm shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
         <!-- The per-item-type Condition guards (FullPath != '') keep a partial incremental build robust: when
              only one shader stage changed, MSBuild runs the target with the other stage's batch empty, and an
              unguarded Exec would invoke dxc with no input file. -->

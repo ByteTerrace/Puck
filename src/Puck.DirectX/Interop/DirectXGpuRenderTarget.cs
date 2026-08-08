@@ -3,7 +3,6 @@ using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
@@ -111,23 +110,6 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
     /// <inheritdoc/>
     public uint Width { get; }
 
-    private static void Release(ref nint pointer) {
-        if (0 != pointer) {
-            _ = ((IUnknown*)pointer)->Release();
-            pointer = 0;
-        }
-    }
-    // The optimized clear value (black, opaque) the render-target texture is created with, matching the recorder's
-    // per-frame ClearRenderTargetView so the fast-clear path is taken instead of a slow generic clear.
-    private static D3D12_CLEAR_VALUE BlackClearValue(DXGI_FORMAT format) {
-        var clearValue = new D3D12_CLEAR_VALUE {
-            Format = format,
-        };
-
-        clearValue.Anonymous.Color[3] = 1f;
-
-        return clearValue;
-    }
     private void CreateRenderTarget(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
@@ -151,13 +133,13 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         var clearValue = BlackClearValue(format: format);
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
-            clearValue,
-            in resourceIid,
-            &renderTarget
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
+            pDesc: in textureDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: clearValue,
+            ppvResource: &renderTarget,
+            riidResource: in resourceIid
         );
         m_renderTarget = (nint)renderTarget;
 

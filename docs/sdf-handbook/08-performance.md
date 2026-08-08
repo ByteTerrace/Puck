@@ -120,13 +120,24 @@ flag.
 
 ## The benchmark is the instrument
 
+> **You cannot run it today.** `Puck.Bench` was quarantined on 2026-08-02 and still contains
+> everything described below, but **nothing composes it**: no project references
+> the library, nothing implements `IBenchSceneController` to register a scene,
+> and no host registers `BenchCommandModule`, so the verbs are unreachable. Its
+> composition root was the `Puck.Demo` launcher, which is quarantined. Re-hosting
+> it in `Puck.World` is small, well-shaped work that **nobody has done and
+> nothing plans.** Until then every number in this chapter is a historical
+> reading that cannot be re-taken, and a performance regression has no
+> instrument that would catch it. Read the rest of this section as a description
+> of the harness that exists in code, not of a workflow you can follow.
+
 You do not reason about any of this from first principles — you *measure* it,
 with the engine benchmark. It's a 3DMark-style suite that lives at the launcher
 tier: named scenes run in sequence, each producing hard per-pass numbers,
 aggregated into one overall score, so you can pinpoint how the engine performs
 and how each feature switch moves it.
 
-Three verbs, reachable in the running session over stdin:
+Three verbs, exposed over stdin by whatever session composes the runtime:
 
 - **`bench.run [suite]`** runs a suite once and prints per-scene tables plus an
   overall score. The harness arms GPU timing itself, selects automatic display
@@ -150,9 +161,13 @@ frozen constants produce a reference score of 9947; the checked-in constants
 are the source of truth.
 
 The full design — the timing seams, the switch registry, the scoring math, the
-scene roster, the measurement-hygiene machinery — is
-[../engine-bench-plan.md](../engine-bench-plan.md). This chapter is the *why*;
-that document is the *what and how*.
+scene roster, the measurement-hygiene machinery — was written down in a bench
+plan that was deleted on 2026-08-02. What survives is the code:
+`experimental/Puck.Bench` (quarantined, off limits) and its XML documentation are now the
+only statement of the design, and the scene roster is not among them — the
+roster lived with the host that registered the scenes, which is gone. This
+chapter is the *why*; there is no longer a *what and how* document to pair it
+with.
 
 ## The diagnosis method
 
@@ -248,10 +263,12 @@ the same discipline applies whenever you hand-measure anything.
 ## Related resources
 
 - The per-pass ladders, the beam-slope `O(n)` measurement, and the carve-bill
-  discovery in full: [../sdf-bench-notes.md](../sdf-bench-notes.md).
-- The benchmark's design — timing seams, switch registry, scoring math, scene
-  roster, hygiene machinery, the frozen reference constants:
-  [../engine-bench-plan.md](../engine-bench-plan.md).
+  discovery in full: no longer recorded anywhere. The bench notes holding them
+  were deleted on 2026-08-02; this chapter's summaries are all that is left.
+- The benchmark's design — timing seams, switch registry, scoring math, hygiene
+  machinery, the frozen reference constants: read
+  `experimental/Puck.Bench` (quarantined, off limits) directly. The plan document is gone
+  and the scene roster went with the host that registered the scenes.
 - The shading terms these numbers isolate, and the switches the sweeps drive:
   [04-lighting-and-shading.md](04-lighting-and-shading.md).
 - The instance grid cull that flattened the beam wall, and the occupancy tax of

@@ -73,44 +73,43 @@ internal sealed class TextModule {
     /// <param name="text">The string table (<c>0xFF</c>-terminated tile ids).</param>
     /// <param name="row">The map row.</param>
     /// <param name="column">The map column of the first character.</param>
-    public void EmitPrintQueued(RomTable text, int row, int column) {
-        m_emitter.LoadImmediate(pair: Reg16.Hl, value: text.Address);
-        m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(row: row, column: column));
-        m_emitter.Call(label: m_printQueuedLabel);
-    }
+    public void EmitPrintQueued(RomTable text, int row, int column) =>
+        EmitPrint(text: text, row: row, column: column, label: m_printQueuedLabel);
 
     /// <summary>Emits a direct print of a baked string at a map cell (LCD off / VBlank only).</summary>
     /// <param name="text">The string table.</param>
     /// <param name="row">The map row.</param>
     /// <param name="column">The map column of the first character.</param>
-    public void EmitPrintDirect(RomTable text, int row, int column) {
-        m_emitter.LoadImmediate(pair: Reg16.Hl, value: text.Address);
-        m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(row: row, column: column));
-        m_emitter.Call(label: m_printDirectLabel);
-    }
+    public void EmitPrintDirect(RomTable text, int row, int column) =>
+        EmitPrint(text: text, row: row, column: column, label: m_printDirectLabel);
 
     /// <summary>Emits a queued print of a packed-BCD number (two digits per byte, most-significant byte first).</summary>
     /// <param name="bcdAddress">The number's first (most significant) byte in work RAM.</param>
     /// <param name="byteCount">The number of BCD bytes (digits = 2 × this).</param>
     /// <param name="row">The map row.</param>
     /// <param name="column">The map column of the first digit.</param>
-    public void EmitPrintBcdQueued(ushort bcdAddress, int byteCount, int row, int column) {
-        m_emitter.LoadImmediate(pair: Reg16.Hl, value: bcdAddress);
-        m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(row: row, column: column));
-        m_emitter.LoadImmediate(destination: Reg8.B, value: (byte)byteCount);
-        m_emitter.Call(label: m_printBcdQueuedLabel);
-    }
+    public void EmitPrintBcdQueued(ushort bcdAddress, int byteCount, int row, int column) =>
+        EmitPrintBcd(bcdAddress: bcdAddress, byteCount: byteCount, row: row, column: column, label: m_printBcdQueuedLabel);
 
     /// <summary>Emits a direct print of a packed-BCD number (LCD off / VBlank only).</summary>
     /// <param name="bcdAddress">The number's first (most significant) byte in work RAM.</param>
     /// <param name="byteCount">The number of BCD bytes.</param>
     /// <param name="row">The map row.</param>
     /// <param name="column">The map column of the first digit.</param>
-    public void EmitPrintBcdDirect(ushort bcdAddress, int byteCount, int row, int column) {
+    public void EmitPrintBcdDirect(ushort bcdAddress, int byteCount, int row, int column) =>
+        EmitPrintBcd(bcdAddress: bcdAddress, byteCount: byteCount, row: row, column: column, label: m_printBcdDirectLabel);
+
+    private void EmitPrint(RomTable text, int row, int column, int label) {
+        m_emitter.LoadImmediate(pair: Reg16.Hl, value: text.Address);
+        m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(row: row, column: column));
+        m_emitter.Call(label: label);
+    }
+
+    private void EmitPrintBcd(ushort bcdAddress, int byteCount, int row, int column, int label) {
         m_emitter.LoadImmediate(pair: Reg16.Hl, value: bcdAddress);
         m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(row: row, column: column));
         m_emitter.LoadImmediate(destination: Reg8.B, value: (byte)byteCount);
-        m_emitter.Call(label: m_printBcdDirectLabel);
+        m_emitter.Call(label: label);
     }
 
     /// <summary>Emits the module's library subroutines (the four printers). Called once by the framework facade.</summary>

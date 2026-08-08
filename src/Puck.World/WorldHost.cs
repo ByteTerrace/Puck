@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Pacing;
 using Puck.DirectX.Presentation;
 using Puck.Launcher;
 using Puck.Memory;
 using Puck.Platform;
+using Puck.Platform.Windows;
 using Puck.Vulkan.Presentation;
 
 namespace Puck.World;
@@ -12,8 +14,7 @@ namespace Puck.World;
 /// <summary>
 /// The GPU-host registration for Puck.World: the launcher terminal, platform windowing, the unmanaged allocator, and
 /// the launch-selected Vulkan or Direct3D 12 presenter. Registers the GPU-host block (windowing, allocator, one
-/// launch-selected backend) directly; Puck.World must not depend on Puck.Demo, and this omits the demo-only
-/// camera-capture concern.
+/// launch-selected backend) directly, and omits the camera-capture concern this game has no use for.
 /// </summary>
 internal static class WorldHost {
     /// <summary>Registers the shared GPU-host block: launcher terminal, windowing, allocator, and the selected
@@ -61,5 +62,24 @@ internal static class WorldHost {
         // presenter seam and backend query command. Switching is a no-op because changing compute APIs requires a
         // render-graph rebuild; Puck.World exposes that categorical choice at launch via --backend instead.
         services.AddBackendSwitcher(preferredBackend: (hostsOnDirectX ? "directx" : "vulkan"));
+    }
+
+    /// <summary>Registers the headless boot shape's host block: the launcher terminal's headless twin (command pump +
+    /// <see cref="HeadlessTickHostedService"/>) and, on Windows, a standalone high-resolution precision waiter for its
+    /// pacing loop. NO window, NO GPU device, NO swapchain, NO allocator, NO backend presenter — the direct headless
+    /// counterpart to <see cref="AddWorldGpuHost"/>, and the two are never called together.</summary>
+    /// <param name="services">The service collection.</param>
+    public static void AddWorldHeadlessHost(IServiceCollection services) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+
+        services.AddLauncherHeadlessTerminal();
+
+        // A standalone Win32 high-resolution waitable timer (the same mechanism a native window exposes for the
+        // windowed pacer) — optional: absent on non-Windows or an unsupported OS version, where
+        // HeadlessTickHostedService falls back to a coarse Thread.Sleep(1) wait, exactly like the windowed pacer's
+        // own fallback.
+        if (Win32PrecisionWaiter.TryCreate() is { } waiter) {
+            services.AddSingleton<IPrecisionWaiter>(implementationInstance: waiter);
+        }
     }
 }

@@ -1,4 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
+        <!-- The Azure Blob and Identity SDKs are not annotated for trimming. -->
+        <IsAotCompatible>false</IsAotCompatible>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*, )" />
         <PackageReference Include="Azure.Storage.Blobs" Version="[12.*, )" />

@@ -25,4 +25,13 @@ public interface IInputBindings {
     IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
         return Resolve(slot: slot, source: signal.Source);
     }
+
+    /// <summary>
+    /// Releases every slot's held chord/modifier and press-latch state a stateful implementation tracks
+    /// (<see cref="PagedInputBindings"/>) — wire to OS window focus loss, where a modifier's own release can be
+    /// delivered to whatever window stole focus and never reach this process at all, permanently stranding a
+    /// slot mid-chord. Default no-op: a stateless resolver (a flat table) has nothing to release.
+    /// </summary>
+    void ResetAll() {
+    }
 }

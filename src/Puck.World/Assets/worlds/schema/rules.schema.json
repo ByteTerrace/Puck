@@ -1,0 +1,68 @@
+{
+  "description": "The rules section (default null = none) \u2014 world-scoped rules, the SAME ActionPredicate/ActionEffect/ActionTriggerMode primitive a kit\u0027s per-body actions already use, widened one level up (see WorldRule). OPTIONAL, deliberately: a new REQUIRED section would refuse every existing document at boot for declaring nothing.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One world-scoped rule: a condition over world facts and the effects that follow \u2014 the SAME primitive a kit\u0027s per-body actions already run on (ActionPredicate, ActionEffect, ActionTriggerMode), widened to the world\u0027s own scope rather than a sibling engine with its own vocabulary. There is no scheduler and no trigger taxonomy beside this: time is just another fact.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The rule\u0027s stable name \u2014 unique within the section, the UpsertWorldRule/RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the SAME validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused BY NAME (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state ROW name, and for the same reason: $ marks what the ENGINE mints, and nothing mints a rule."
+      },
+      "effects": {
+        "description": "The effects applied in order when the rule fires.",
+        "type": "array",
+        "items": {
+          "$ref": "./common.schema.json#/$defs/ActionEffect"
+        }
+      },
+      "gate": {
+        "description": "The predicate that must hold, or null for always.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "$ref": "./common.schema.json#/$defs/Now"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Recently"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CompareState"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/TimerElapsed"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/All2"
+          }
+        ],
+        "default": null
+      },
+      "mode": {
+        "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState is what wrote 503 journal entries in 500 ticks.",
+        "enum": [
+          "Level",
+          "Edge"
+        ],
+        "default": "Level"
+      }
+    },
+    "required": [
+      "name",
+      "effects"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

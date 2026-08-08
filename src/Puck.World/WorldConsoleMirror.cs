@@ -13,10 +13,12 @@ namespace Puck.World;
 /// <see cref="SetVisible"/> inside a verb handler — both on the window-pump thread. Only the published immutable
 /// snapshot crosses to the render thread (through the store's lock-free buffer).</remarks>
 internal sealed class WorldConsoleMirror : ICommandObserver {
-    private const int MaxLines = 64;
     private const string EchoPrefix = "> ";
+    private const int MaxLines = 64;
 
+    private string m_input = string.Empty;
     private readonly ConsolePanelLine[] m_ring = new ConsolePanelLine[MaxLines];
+    private bool m_selected;
     private readonly ConsolePanelStore m_store;
     private int m_count;
     private int m_head;
@@ -35,6 +37,13 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
 
     /// <summary>Whether the panel is currently shown.</summary>
     public bool Visible => m_visible;
+
+    /// <summary>Gets or sets the callback invoked once each time the panel's visibility CHANGES, carrying the new
+    /// state — wired in <see cref="WorldBootComposition"/> to <see cref="Puck.Hosting.IInputFocus.Release"/>/
+    /// <see cref="Puck.Hosting.IInputFocus.Claim"/> for the keyboard device (so typing suppresses gameplay input for
+    /// exactly as long as the panel is on screen) and, on the hide edge, to the line editor's reset so a reopened
+    /// console never resurrects a half-typed line.</summary>
+    public Action<bool>? VisibilityChanged { get; set; }
 
     /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
     /// output line, each carrying the result's verdict so the panel paints a refusal as a refusal.</summary>
@@ -87,10 +96,36 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
         Publish();
     }
 
-    /// <summary>Shows or hides the panel (the <c>world.console</c> verb's seam).</summary>
+    /// <summary>Shows or hides the panel (the <c>world.console</c> verb's seam and <c>Escape</c>'s close).</summary>
     /// <param name="visible">Whether the panel is shown.</param>
     public void SetVisible(bool visible) {
+        var wasVisible = m_visible;
+
         m_visible = visible;
+
+        if (!visible) {
+            // A reopened console starts clean rather than showing a half-typed line from before it closed.
+            m_input = string.Empty;
+            m_selected = false;
+        }
+
+        Publish();
+
+        // Fire on a real transition only (never a same-state SetVisible(true) while already shown) — the mirror
+        // only clears its own display echo above; the line editor holds the authoritative buffer/caret and is reset
+        // through its own home on the hide edge (see the VisibilityChanged hook).
+        if (wasVisible != visible) {
+            VisibilityChanged?.Invoke(visible);
+        }
+    }
+
+    /// <summary>Sets the prompt row's live input echo — <see cref="WorldConsoleInput"/>'s republish seam.</summary>
+    /// <param name="input">The input line to display: caret marker included when <paramref name="selected"/> is
+    /// <see langword="false"/>, the raw line otherwise (the highlight rect stands in for the caret).</param>
+    /// <param name="selected">Whether the whole input line is selected (Ctrl+A).</param>
+    public void SetInput(string input, bool selected) {
+        m_input = (input ?? string.Empty);
+        m_selected = selected;
         Publish();
     }
 
@@ -113,6 +148,6 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
             lines[index] = m_ring[((m_head + index) % MaxLines)];
         }
 
-        m_store.Publish(frame: new ConsolePanelFrame(Input: string.Empty, Lines: lines, Visible: m_visible));
+        m_store.Publish(frame: new ConsolePanelFrame(Input: m_input, Lines: lines, Selected: m_selected, Visible: m_visible));
     }
 }

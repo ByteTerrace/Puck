@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Numerics;
-using Puck.Authoring;
+using Puck.Forge.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -31,13 +31,11 @@ internal sealed class WorldEditorDrag {
         public bool IsGhost;
         public int FreezeRevision;
         public int FreezeFrames;
-        public WorldSceneRow? SceneRow;
         public WorldScreen? Screen;
         public WorldPlacement? Placement;
         public WorldSpeaker? Speaker;
         // The whole row the release-edge mutation submitted — the frozen preview's retirement correlator: an apply
         // delivers exactly this row (record equality); a rejection names it through NoteRejected.
-        public WorldSceneRow? ExpectedRow;
         public WorldScreen? ExpectedScreen;
         public WorldPlacement? ExpectedPlacement;
         public WorldSpeaker? ExpectedSpeaker;
@@ -158,7 +156,7 @@ internal sealed class WorldEditorDrag {
     }
 
     /// <summary>Begins a drag from the seat's selection: copies the row out of the live definition into the pending
-    /// slot. Scene rows, screens, placements, and Fixed/Bed speakers drag; spawns, cameras, and anchored speakers
+    /// slot. Screens, placements, and Fixed/Bed speakers drag; spawns, cameras, and anchored speakers
     /// move over the numeric verbs instead.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="selection">The seat's live selection.</param>
@@ -177,22 +175,10 @@ internal sealed class WorldEditorDrag {
         var definition = m_client.Definition;
 
         switch (selection.Section) {
-            case WorldSection.Scene:
-                foreach (var row in definition.Scene.Rows) {
-                    if (string.Equals(a: row.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
-                        Begin(channel: channel, sceneRow: row, screen: null, placement: null, origin: row.Center, isGhost: false);
-
-                        return true;
-                    }
-                }
-
-                error = $"no scene row '{selection.Id}' to grab";
-
-                return false;
             case WorldSection.Screens:
                 foreach (var screen in definition.Screens) {
                     if (screen.Index == selection.Index) {
-                        Begin(channel: channel, sceneRow: null, screen: screen, placement: null, origin: screen.Origin, isGhost: false);
+                        Begin(channel: channel, screen: screen, placement: null, origin: screen.Origin, isGhost: false);
 
                         return true;
                     }
@@ -204,7 +190,7 @@ internal sealed class WorldEditorDrag {
             case WorldSection.Placements:
                 foreach (var placement in definition.Placements) {
                     if (string.Equals(a: placement.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
-                        Begin(channel: channel, sceneRow: null, screen: null, placement: placement, origin: placement.Position, isGhost: false);
+                        Begin(channel: channel, screen: null, placement: placement, origin: placement.Position, isGhost: false);
 
                         return true;
                     }
@@ -215,19 +201,19 @@ internal sealed class WorldEditorDrag {
                 return false;
             case WorldSection.Speakers:
                 // Fixed and Bed rows drag their authored point; an Anchored row's pose is its anchor's — edit its
-                // Offset via the numeric verbs instead (editor.move/editor.speaker.move).
+                // Offset via the numeric verbs instead (editor.move, or world.row.set speakers for the whole row).
                 foreach (var speaker in definition.Speakers) {
                     if (!string.Equals(a: speaker.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
                         continue;
                     }
 
                     if (speaker is WorldSpeaker.Anchored) {
-                        error = $"speaker '{speaker.Name}' is anchored — edit its offset with editor.move/editor.nudge";
+                        error = $"speaker '{speaker.Name}' is anchored — edit its offset with editor.move, or the whole row with world.row.set speakers";
 
                         return false;
                     }
 
-                    Begin(channel: channel, sceneRow: null, screen: null, placement: null, speaker: speaker, origin: ((speaker is WorldSpeaker.Bed bed) ? bed.Center : ((WorldSpeaker.Fixed)speaker).Position), isGhost: false);
+                    Begin(channel: channel, screen: null, placement: null, speaker: speaker, origin: ((speaker is WorldSpeaker.Bed bed) ? bed.Center : ((WorldSpeaker.Fixed)speaker).Position), isGhost: false);
 
                     return true;
                 }
@@ -236,7 +222,7 @@ internal sealed class WorldEditorDrag {
 
                 return false;
             default:
-                error = $"{selection.Describe()} does not drag — move it with editor.move/editor.nudge";
+                error = $"{selection.Describe()} does not drag — move it with editor.move";
 
                 return false;
         }
@@ -271,37 +257,7 @@ internal sealed class WorldEditorDrag {
             return false;
         }
 
-        Begin(channel: channel, sceneRow: null, screen: null, placement: placement, origin: placement.Position, isGhost: true);
-
-        return true;
-    }
-
-    /// <summary>Begins a GHOST drag for a brand-new scene row (the spawn act): the row previews through the overlay
-    /// and enters the document only on release. Headroom is verified here, so a ghost never renders past the probed
-    /// envelope.</summary>
-    /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="row">The new row (its id must be free; see <see cref="NextFreeSceneRowId"/>).</param>
-    /// <param name="error">The loud reason, when the method returns <see langword="false"/>.</param>
-    public bool TrySpawnGhost(int slot, WorldSceneRow row, out string error) {
-        error = string.Empty;
-
-        var channel = m_channels[SlotOrFirst(slot: slot)];
-
-        if (channel.Active) {
-            error = "a drag is already live — release or cancel it first";
-
-            return false;
-        }
-
-        var definition = m_client.Definition;
-
-        if (!TryFitComposed(candidate: (definition with { Scene = WithRow(scene: definition.Scene, row: row) }), reason: out var capacityReason)) {
-            error = capacityReason;
-
-            return false;
-        }
-
-        Begin(channel: channel, sceneRow: row, screen: null, placement: null, origin: row.Center, isGhost: true);
+        Begin(channel: channel, screen: null, placement: placement, origin: placement.Position, isGhost: true);
 
         return true;
     }
@@ -324,6 +280,27 @@ internal sealed class WorldEditorDrag {
         ApplySnap(channel: channel);
     }
 
+    /// <summary>Moves the pending row's pre-snap intent to an ABSOLUTE world-space position — the cursor drag's
+    /// position-space twin of <see cref="Move"/>: an absolute follow never accumulates, so a re-mapped cursor
+    /// (a window resize mid-drag) lands the row exactly where the cursor points, with no banked error. The snap
+    /// stays this channel's job, exactly as it is for a delta move. Client-local only — nothing crosses the
+    /// wire.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="intent">The world-space pre-snap position (finite).</param>
+    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="intent"/> is not finite.</exception>
+    public void MoveTo(int slot, Vector3 intent) {
+        FiniteGuard.ThrowIfNonFinite(value: intent);
+
+        if (!IsDragging(slot: slot)) {
+            return;
+        }
+
+        var channel = m_channels[slot];
+
+        channel.Intent = intent;
+        ApplySnap(channel: channel);
+    }
+
     /// <summary>Integrates one frame of stick motion into the pending row (the latched-stick path the editor session
     /// routes while a drag is live): the move stick translates in the camera's yaw frame, the shoulder verticals
     /// lift/sink.</summary>
@@ -339,7 +316,7 @@ internal sealed class WorldEditorDrag {
             return;
         }
 
-        var velocity = ((planarForward * move.Y) + (planarRight * move.X) + (Vector3.UnitY * vertical));
+        var velocity = (((planarForward * move.Y) + (planarRight * move.X)) + (Vector3.UnitY * vertical));
 
         if (velocity == Vector3.Zero) {
             return;
@@ -364,13 +341,7 @@ internal sealed class WorldEditorDrag {
         var channel = m_channels[slot];
         string subject;
 
-        if (channel.SceneRow is { } row) {
-            var moved = row.WithCenter(center: channel.Snapped);
-
-            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSceneRow(Principal: principal, Row: moved));
-            channel.ExpectedRow = moved;
-            subject = $"scene '{row.Id}'";
-        } else if (channel.Speaker is { } speaker) {
+        if (channel.Speaker is { } speaker) {
             var moved = MovedSpeaker(speaker: speaker, position: channel.Snapped);
 
             m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSpeaker(Principal: principal, Speaker: moved));
@@ -464,7 +435,7 @@ internal sealed class WorldEditorDrag {
             }
 
             // LIVE-CONSUMED: WorldAuthoringDefaults.PreviewDeadlineFrames, read fresh every tick — a
-            // world.authoring.set mutation of the deadline takes effect on the very next frame, mid-freeze included.
+            // world.row.set authoring mutation of the deadline takes effect on the very next frame, mid-freeze included.
             if (++channel.FreezeFrames > m_client.Definition.Authoring.PreviewDeadlineFrames) {
                 Retire(slot: slot, channel: channel, reason: "deadline (no response)");
             }
@@ -474,6 +445,14 @@ internal sealed class WorldEditorDrag {
     /// <summary>Correlates a server-rejected mutation back to the frozen preview that submitted it (the
     /// <c>WorldServer.EchoTap</c> wiring calls this beside the rejection toast): the matched seat's overlay retires
     /// and the row snaps honestly back to the unedited document. A rejection of anything else is ignored.</summary>
+    /// <remarks>This is client-side UI-state correlation, not an authority decision — it never mints or attributes a
+    /// principal, only reads one an ingress door already stamped on whichever dispatch submitted the mutation (see
+    /// <see cref="Puck.World.Protocol.WorldPrincipalMapping"/>). The <see cref="PrincipalKind.Seat"/> filter is
+    /// load-bearing,
+    /// not incidental: <see cref="WorldPrincipal.Index"/> is only a slot for Seat/Peer kinds — an
+    /// <see cref="PrincipalKind.Addon"/> principal's Index is always 0, which would alias slot 0's channel if this
+    /// matched on any kind. A claimed slot's rejected mutation (an addon has no grants by default) is simply not
+    /// correlated here; its frozen preview still retires via the frame-deadline fallback in <see cref="Reconcile"/>.</remarks>
     /// <param name="mutation">The rejected mutation.</param>
     public void NoteRejected(WorldMutation mutation) {
         if (mutation is not { Principal.Kind: PrincipalKind.Seat }) {
@@ -493,7 +472,6 @@ internal sealed class WorldEditorDrag {
         }
 
         var matches = (mutation switch {
-            WorldMutation.UpsertSceneRow upsert => ((channel.ExpectedRow is { } expected) && expected.Equals(other: upsert.Row)),
             WorldMutation.UpsertScreen upsert => ((channel.ExpectedScreen is { } expected) && expected.Equals(other: upsert.Screen)),
             WorldMutation.UpsertPlacement upsert => ((channel.ExpectedPlacement is { } expected) && expected.Equals(other: upsert.Placement)),
             WorldMutation.UpsertSpeaker upsert => ((channel.ExpectedSpeaker is { } expected) && expected.Equals(other: upsert.Speaker)),
@@ -508,16 +486,6 @@ internal sealed class WorldEditorDrag {
     // Whether the client's live definition carries the frozen channel's expected row verbatim — the apply witness.
     private bool DeliveredExpected(Channel channel) {
         var definition = m_client.Definition;
-
-        if (channel.ExpectedRow is { } expectedRow) {
-            foreach (var row in definition.Scene.Rows) {
-                if (row.Equals(other: expectedRow)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
         if (channel.ExpectedPlacement is { } expectedPlacement) {
             foreach (var placement in definition.Placements) {
@@ -550,12 +518,10 @@ internal sealed class WorldEditorDrag {
         return false;
     }
 
-    // The channel's console-echo subject: the scene row, placement, speaker, or screen it carries.
-    private static string Subject(Channel channel) => ((channel.SceneRow is { } row)
-        ? $"scene '{row.Id}'"
-        : ((channel.Placement is { } placement)
+    // The channel's console-echo subject: the placement, speaker, or screen it carries.
+    private static string Subject(Channel channel) => ((channel.Placement is { } placement)
             ? $"placement '{placement.Id}'"
-            : ((channel.Speaker is { } speaker) ? $"speaker '{speaker.Name}'" : $"screen {channel.Screen!.Index}")));
+            : ((channel.Speaker is { } speaker) ? $"speaker '{speaker.Name}'" : $"screen {channel.Screen!.Index}"));
 
     // Retire a frozen overlay with its honest reason narrated once (act-scale, never per frame) — the proof's
     // observable retire edge.
@@ -564,40 +530,7 @@ internal sealed class WorldEditorDrag {
         Clear(channel: channel);
     }
 
-    /// <summary>Composes the pending scene rows over the live scene — the frame source's rebuild read. Returns the
-    /// live scene unchanged when nothing is pending (the reference-equal fast path).</summary>
-    /// <param name="live">The delivered definition's scene.</param>
-    public WorldScene ComposeScene(WorldScene live) {
-        List<WorldSceneRow>? rows = null;
-
-        foreach (var channel in m_channels) {
-            if ((!channel.Active && !channel.Frozen) || (channel.SceneRow is not { } pending)) {
-                continue;
-            }
-
-            rows ??= [.. live.Rows];
-
-            var moved = pending.WithCenter(center: channel.Snapped);
-            var replaced = false;
-
-            for (var index = 0; (index < rows.Count); index++) {
-                if (string.Equals(a: rows[index].Id, b: moved.Id, comparisonType: StringComparison.Ordinal)) {
-                    rows[index] = moved;
-                    replaced = true;
-
-                    break;
-                }
-            }
-
-            if (!replaced) {
-                rows.Add(item: moved);
-            }
-        }
-
-        return ((rows is null) ? live : (live with { Rows = rows }));
-    }
-
-    /// <summary>Composes the pending screen rows over the live screens (see <see cref="ComposeScene"/>).</summary>
+    /// <summary>Composes the pending screen rows over the live screens.</summary>
     /// <param name="live">The delivered definition's screens.</param>
     public IReadOnlyList<WorldScreen> ComposeScreens(IReadOnlyList<WorldScreen> live) {
         List<WorldScreen>? screens = null;
@@ -623,7 +556,7 @@ internal sealed class WorldEditorDrag {
         return (screens ?? live);
     }
 
-    /// <summary>Composes the pending placement rows over the live placements (see <see cref="ComposeScene"/>).</summary>
+    /// <summary>Composes the pending placement rows over the live placements.</summary>
     /// <param name="live">The delivered definition's placements.</param>
     public IReadOnlyList<WorldPlacement> ComposePlacements(IReadOnlyList<WorldPlacement> live) {
         List<WorldPlacement>? rows = null;
@@ -655,7 +588,7 @@ internal sealed class WorldEditorDrag {
         return (rows ?? live);
     }
 
-    /// <summary>Composes the pending speaker rows over the live speakers (see <see cref="ComposeScene"/>). Speakers
+    /// <summary>Composes the pending speaker rows over the live speakers. Speakers
     /// have no render geometry — the GIZMO feed reads this, so a dragged speaker's chip tracks the pending position
     /// live.</summary>
     /// <param name="live">The delivered definition's speakers.</param>
@@ -691,7 +624,7 @@ internal sealed class WorldEditorDrag {
     };
 
     /// <summary>The next free placement id (the <c>place-</c> prefix), scanning the live rows, every pending ghost,
-    /// and the session's issuance watermark — the placement twin of <see cref="NextFreeSceneRowId"/>.</summary>
+    /// and the session's issuance watermark.</summary>
     public string NextFreePlacementId() {
         const string prefix = "place-";
         var next = 1;
@@ -715,32 +648,6 @@ internal sealed class WorldEditorDrag {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{prefix}{next}");
     }
 
-    /// <summary>The next free scene-row id under a kind prefix (<c>boulder-</c>/<c>slab-</c>), scanning the live rows,
-    /// every pending ghost, and the session's issuance watermark (so placements buffered into the same tick window
-    /// never collide).</summary>
-    /// <param name="prefix">The kind prefix, including the trailing dash.</param>
-    public string NextFreeSceneRowId(string prefix) {
-        var next = 1;
-
-        foreach (var row in m_client.Definition.Scene.Rows) {
-            BumpPast(id: row.Id, prefix: prefix, next: ref next);
-        }
-
-        foreach (var channel in m_channels) {
-            if ((channel.Active || channel.Frozen) && (channel.SceneRow is { } pending)) {
-                BumpPast(id: pending.Id, prefix: prefix, next: ref next);
-            }
-        }
-
-        if (m_idWatermarks.TryGetValue(key: prefix, value: out var issued) && (issued >= next)) {
-            next = (issued + 1);
-        }
-
-        m_idWatermarks[prefix] = next;
-
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{prefix}{next}");
-    }
-
     private static void BumpPast(string id, string prefix, ref int next) {
         if (id.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) &&
             int.TryParse(s: id.AsSpan(start: prefix.Length), provider: CultureInfo.InvariantCulture, result: out var number) &&
@@ -748,16 +655,13 @@ internal sealed class WorldEditorDrag {
             next = (number + 1);
         }
     }
-
-    private void Begin(Channel channel, WorldSceneRow? sceneRow, WorldScreen? screen, WorldPlacement? placement, Vector3 origin, bool isGhost, WorldSpeaker? speaker = null) {
+    private void Begin(Channel channel, WorldScreen? screen, WorldPlacement? placement, Vector3 origin, bool isGhost, WorldSpeaker? speaker = null) {
         channel.Active = true;
         channel.Frozen = false;
         channel.IsGhost = isGhost;
-        channel.SceneRow = sceneRow;
         channel.Screen = screen;
         channel.Placement = placement;
         channel.Speaker = speaker;
-        channel.ExpectedRow = null;
         channel.ExpectedScreen = null;
         channel.ExpectedPlacement = null;
         channel.ExpectedSpeaker = null;
@@ -766,16 +670,13 @@ internal sealed class WorldEditorDrag {
         channel.Snapped = origin;
         m_revision++;
     }
-
     private void Clear(Channel channel) {
         channel.Active = false;
         channel.Frozen = false;
         channel.IsGhost = false;
-        channel.SceneRow = null;
         channel.Screen = null;
         channel.Placement = null;
         channel.Speaker = null;
-        channel.ExpectedRow = null;
         channel.ExpectedScreen = null;
         channel.ExpectedPlacement = null;
         channel.ExpectedSpeaker = null;
@@ -792,15 +693,5 @@ internal sealed class WorldEditorDrag {
             m_revision++;
         }
     }
-
-    private static WorldScene WithRow(WorldScene scene, WorldSceneRow row) {
-        var rows = new List<WorldSceneRow>(capacity: (scene.Rows.Count + 1));
-
-        rows.AddRange(collection: scene.Rows);
-        rows.Add(item: row);
-
-        return (scene with { Rows = rows });
-    }
-
     private int SlotOrFirst(int slot) => (((uint)slot < (uint)m_channels.Length) ? slot : 0);
 }

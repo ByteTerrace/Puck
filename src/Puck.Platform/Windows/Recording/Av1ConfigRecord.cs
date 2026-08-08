@@ -16,7 +16,7 @@ internal static class Av1ConfigRecord {
         }
 
         var fields = ParseSequenceHeader(payload: payload);
-        var record = new byte[4 + sequenceHeaderObu.Length];
+        var record = new byte[(4 + sequenceHeaderObu.Length)];
 
         record[0] = 0x81; // marker(1)=1, version(7)=1
         record[1] = (byte)((fields.SeqProfile << 5) | (fields.SeqLevelIdx0 & 0x1F));
@@ -42,9 +42,9 @@ internal static class Av1ConfigRecord {
 
         while (index < temporalUnit.Length) {
             var headerByte = temporalUnit[index];
-            var obuType = ((headerByte >> 3) & 0xF);
-            var extensionFlag = ((headerByte >> 2) & 0x1);
-            var hasSizeField = ((headerByte >> 1) & 0x1);
+            var obuType = (headerByte >> 3) & 0xF;
+            var extensionFlag = (headerByte >> 2) & 0x1;
+            var hasSizeField = (headerByte >> 1) & 0x1;
             var headerLength = (1 + extensionFlag);
             var cursor = (index + headerLength);
             int payloadLength;
@@ -78,7 +78,6 @@ internal static class Av1ConfigRecord {
 
         return false;
     }
-
     private static bool TryReadLeb128(ReadOnlySpan<byte> data, ref int offset, out ulong value) {
         value = 0;
 
@@ -99,7 +98,6 @@ internal static class Av1ConfigRecord {
 
         return false;
     }
-
     private static SequenceHeaderFields ParseSequenceHeader(ReadOnlySpan<byte> payload) {
         var reader = new BitReader(data: payload);
         var fields = default(SequenceHeaderFields);
@@ -233,7 +231,6 @@ internal static class Av1ConfigRecord {
 
         return fields;
     }
-
     private static void ParseColorConfig(ref BitReader reader, int seqProfile, ref SequenceHeaderFields fields) {
         var highBitdepth = reader.Read(bits: 1);
         var twelveBit = 0;
@@ -338,16 +335,15 @@ internal static class Av1ConfigRecord {
                 if (byteIndex < m_data.Length) {
                     var shift = (7 - (m_bitPosition & 7));
 
-                    bit = ((m_data[byteIndex] >> shift) & 1);
+                    bit = (m_data[byteIndex] >> shift) & 1;
                 }
 
-                value = ((value << 1) | bit);
+                value = (value << 1) | bit;
                 m_bitPosition++;
             }
 
             return value;
         }
-
         public void SkipUvlc() {
             var leadingZeros = 0;
 

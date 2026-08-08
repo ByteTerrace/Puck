@@ -1,0 +1,462 @@
+[
+  {
+    "Id": "closed-unit.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.Multiply(x, y) \u2014 branchless ties-to-even at the 2\u207B\u00B3\u00B2 grid",
+        "Against": "Oracles.ClosedUnitProduct \u2192 Oracles.RoundDyadic at shift 32 over BigInteger. ENVELOPE: the shared operand fold Subjects.ClosedUnitRaw saturates at Math.Min(raw \u0026 (2\u00B3\u00B3\u22121), 2\u00B3\u00B2), so half of every operand lane lands on the upper endpoint",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "closed-unit.unit-and-zero-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.One is a two-sided multiplicative identity and UnitInterval32.Zero a two-sided annihilator for Multiply at every swept raw including both endpoints, with no rounding anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the both-endpoints corner one \u00D7 one == one \u2014 the only product that fills the full sixty-four bits, and the case the thirty-third bit exists for",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "closed-unit.bounded-ops-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "AddSaturating"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Complement"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "SumExcess"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "op_LessThanOrEqual"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.AddSaturating",
+        "Against": "BigInteger.Min(exactA \u002B exactB, 2\u00B3\u00B2), computed inline in Subjects.ClosedUnitBoundedOpsExact \u2014 EXACT on both sides, (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.SumExcess",
+        "Against": "BigInteger.Max(exactSum \u2212 2\u00B3\u00B2, 0), inline in Subjects.ClosedUnitBoundedOpsExact \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.Max and UnitInterval32.Min",
+        "Against": "BigInteger.Max/BigInteger.Min over the same raws, inline in Subjects.ClosedUnitBoundedOpsExact \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.Complement",
+        "Against": "(2\u00B3\u00B2 \u2212 exactA) in BigInteger, inline in Subjects.ClosedUnitBoundedOpsExact \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Complement is an involution at every swept raw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero is neutral for AddSaturating and One is neutral for SumExcess \u2014 the two bounded operations\u0027 identity elements",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the De Morgan pair holds between Complement and the two order selections: complement(max) == min(complements) and complement(min) == max(complements), pinned at the carrier so a material built on it inherits the fact",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.CompareTo(UnitInterval32)",
+        "Against": "the sign of BigInteger.Compare over the same raws \u2014 exact both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32\u0027s four relational operators",
+        "Against": "the same BigInteger.Compare order, inline in Subjects.ClosedUnitBoundedOpsExact",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "closed-unit.kinship-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "FromFixedQ4816"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "FromUnitFraction32"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "ToFixedQ4816"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "TryToUnitFraction32"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.FromUnitFraction32 embeds a UnitFraction32 raw with NO representation event \u2014 the output raw equals the input raw at every sampled low word",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryToUnitFraction32 narrows the embedding back exactly, its refusal predicate is exactly raw == 2\u00B3\u00B2, and a refused narrowing leaves default behind",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.ToFixedQ4816 \u2014 the inline ties-to-even narrowing that discards sixteen bits",
+        "Against": "Oracles.ClosedUnitNarrow \u2192 Oracles.RoundDyadic at shift 16 over BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.FromFixedQ4816",
+        "Against": "an inline BigInteger clamp-and-shift expectation in Subjects.ClosedUnitKinshipExact (zero below, 2\u00B3\u00B2 at or above one, otherwise raw \u003C\u003C 16) \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "on the coarse 2\u207B\u00B9\u2076 grid the FixedQ4816 seam is a round trip in both directions, which separates the narrowing\u0027s documented non-injectivity from an error",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "closed-unit.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "FractionBitCount"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "TryCreate"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared grid is one fact: One.Value == 2^FractionBitCount, Zero.Value == 0, and default(UnitInterval32) == Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sixteen-raw construction ladder \u2014 both endpoints, both neighbourhoods, the exact half, and the sixteen-bit seam either side \u2014 is admitted by TryCreate and by Create and preserved bit-for-bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.ToString \u2014 the digit-at-a-time renderer that never routes through double",
+        "Against": "Oracles.ExactDyadicDecimal (Oracles.cs:85-98), which derives the digits from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger \u2014 a deliberately different derivation, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "three out-of-range raws are REFUSED by both construction routes: TryCreate returns false and leaves Zero, Create throws ArgumentOutOfRangeException naming the \u0027value\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the boxed comparison contract: a null comparand sorts first, self compares zero, and a foreign type throws ArgumentException naming the \u0027obj\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.FromDouble over the sixteen-row double ladder \u2014 both saturations, NaN, both infinities, the exactly-representable interior points, three half-ULP ties, and the one inexact input",
+        "Against": "Subjects.ClosedUnitDoubleLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the IEEE-754 binary64 layout and the 2\u207B\u00B3\u00B2 grid, sharing no code and no substrate with the subject",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "closed-unit.triple-product-one-rounding",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UnitInterval32",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "UnitInterval32.Multiply(x, y, z) \u2014 one ties-to-even rounding of the exact 2\u207B\u2079\u2076 product at shift 64",
+        "Against": "Oracles.ClosedUnitTripleProduct \u2192 Oracles.RoundDyadic at shift 64 over BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "UnitInterval32.Multiply(x, y, One)",
+        "Against": "UnitInterval32.Multiply(x, y)",
+        "Shared": "the two sibling ties-to-even correction blocks in UnitInterval32.cs:203-216 (shift 32) and 228-241 (shift 64) \u2014 one rounding shape written twice at two scales. UNCERTAIN (sweep): this one-factor leg also reads as an identity-element statement, which would make it structural; it is kept shared-substrate because both sides genuinely round",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "UnitInterval32.Multiply(One, y, z)",
+        "Against": "UnitInterval32.Multiply(y, z)",
+        "Shared": "the same two sibling correction blocks, UnitInterval32.cs:203-216 and 228-241. UNCERTAIN (sweep): same identity-element reading as the leg above",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Zero in the middle position annihilates the triple product",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the triple product is invariant under the cyclic permutation (x, y, z) \u2192 (z, x, y), because the exact UInt128 product is formed before the single rounding",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

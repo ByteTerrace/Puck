@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "puck.world.def.v1",
+  "title": "Puck world definition (puck.world.def.v1)",
+  "description": "The definition of this world \u2014 the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "motion": {
+      "$ref": "./schema/motion.schema.json"
+    },
+    "spawnPoints": {
+      "$ref": "./schema/spawnPoints.schema.json"
+    },
+    "render": {
+      "$ref": "./schema/render.schema.json"
+    },
+    "screens": {
+      "$ref": "./schema/screens.schema.json"
+    },
+    "cameras": {
+      "$ref": "./schema/cameras.schema.json"
+    },
+    "population": {
+      "$ref": "./schema/population.schema.json"
+    },
+    "playerDefaults": {
+      "$ref": "./schema/playerDefaults.schema.json"
+    },
+    "channels": {
+      "$ref": "./schema/channels.schema.json"
+    },
+    "targetRegisters": {
+      "$ref": "./schema/targetRegisters.schema.json"
+    },
+    "bodyMotionPrograms": {
+      "$ref": "./schema/bodyMotionPrograms.schema.json"
+    },
+    "kits": {
+      "$ref": "./schema/kits.schema.json"
+    },
+    "defaultSeatKit": {
+      "$ref": "./schema/defaultSeatKit.schema.json"
+    },
+    "assignment": {
+      "$ref": "./schema/assignment.schema.json"
+    },
+    "addons": {
+      "$ref": "./schema/addons.schema.json"
+    },
+    "bindingOverlays": {
+      "$ref": "./schema/bindingOverlays.schema.json"
+    },
+    "storage": {
+      "$ref": "./schema/storage.schema.json"
+    },
+    "creations": {
+      "$ref": "./schema/creations.schema.json"
+    },
+    "placements": {
+      "$ref": "./schema/placements.schema.json"
+    },
+    "authoring": {
+      "$ref": "./schema/authoring.schema.json"
+    },
+    "speakers": {
+      "$ref": "./schema/speakers.schema.json"
+    },
+    "tunes": {
+      "$ref": "./schema/tunes.schema.json"
+    },
+    "patches": {
+      "$ref": "./schema/patches.schema.json"
+    },
+    "audio": {
+      "$ref": "./schema/audio.schema.json"
+    },
+    "collision": {
+      "$ref": "./schema/collision.schema.json"
+    },
+    "host": {
+      "$ref": "./schema/host.schema.json"
+    },
+    "views": {
+      "$ref": "./schema/views.schema.json"
+    },
+    "looks": {
+      "$ref": "./schema/looks.schema.json"
+    },
+    "lookAssignment": {
+      "$ref": "./schema/lookAssignment.schema.json"
+    },
+    "links": {
+      "$ref": "./schema/links.schema.json"
+    },
+    "grants": {
+      "$ref": "./schema/grants.schema.json"
+    },
+    "hud": {
+      "$ref": "./schema/hud.schema.json"
+    },
+    "state": {
+      "$ref": "./schema/state.schema.json"
+    },
+    "inputHold": {
+      "$ref": "./schema/inputHold.schema.json"
+    },
+    "rules": {
+      "$ref": "./schema/rules.schema.json"
+    },
+    "identity": {
+      "$ref": "./schema/identity.schema.json"
+    },
+    "groups": {
+      "$ref": "./schema/groups.schema.json"
+    },
+    "properties": {
+      "$ref": "./schema/properties.schema.json"
+    },
+    "interactions": {
+      "$ref": "./schema/interactions.schema.json"
+    },
+    "generation": {
+      "$ref": "./schema/generation.schema.json"
+    },
+    "generators": {
+      "$ref": "./schema/generators.schema.json"
+    },
+    "water": {
+      "$ref": "./schema/water.schema.json"
+    },
+    "references": {
+      "$ref": "./schema/references.schema.json"
+    },
+    "portals": {
+      "$ref": "./schema/portals.schema.json"
+    },
+    "documentId": {
+      "$ref": "./schema/documentId.schema.json"
+    },
+    "schema": {
+      "$ref": "./schema/schema.schema.json"
+    }
+  },
+  "required": [
+    "motion",
+    "spawnPoints",
+    "render",
+    "screens",
+    "cameras",
+    "population",
+    "playerDefaults",
+    "channels",
+    "targetRegisters",
+    "bodyMotionPrograms",
+    "kits",
+    "defaultSeatKit",
+    "assignment",
+    "addons",
+    "bindingOverlays",
+    "storage",
+    "creations",
+    "placements",
+    "authoring",
+    "speakers",
+    "tunes",
+    "patches",
+    "audio",
+    "collision",
+    "host",
+    "views",
+    "looks",
+    "lookAssignment",
+    "links",
+    "grants",
+    "hud",
+    "state",
+    "inputHold"
+  ],
+  "additionalProperties": false,
+  "patternProperties": {
+    "^[$_]": true
+  }
+}

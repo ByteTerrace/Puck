@@ -11,6 +11,8 @@ internal sealed class BackendCommandModule(BackendSwitcher backendSwitcher) : IC
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
+            // Unbindable: swapping the graphics backend is a host operation, not a player-facing control.
+            bindability: CommandBindability.Unbindable,
             description: "Toggles between the available graphics backends.",
             handler: _ => {
                 var from = backendSwitcher.ActiveBackendName;

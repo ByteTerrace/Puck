@@ -1,0 +1,67 @@
+{
+  "description": "The identity carried when this is an owned world.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "id": {
+      "description": "The stable owned-world id."
+    },
+    "name": {
+      "description": "The display name.",
+      "type": "string"
+    },
+    "color": {
+      "description": "The body color as #RRGGBB.",
+      "type": "string"
+    },
+    "moveSpeedState": {
+      "description": "The fixed state row supplying locomotion speed."
+    },
+    "turnSpeedState": {
+      "description": "The fixed state row supplying turn speed."
+    },
+    "invertLookState": {
+      "description": "The bool state row supplying look inversion."
+    },
+    "controllers": {
+      "description": "Machine/device state-slot references used for controller pre-selection.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Two text state rows that identify one reconnect-stable controller.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "machineState": {
+            "description": "The row containing the machine id."
+          },
+          "deviceState": {
+            "description": "The row containing the device id."
+          }
+        },
+        "required": [
+          "machineState",
+          "deviceState"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "color",
+    "moveSpeedState",
+    "turnSpeedState",
+    "invertLookState"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

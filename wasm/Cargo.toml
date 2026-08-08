@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["puck-stdlib", "puck-addon-default", "puck-addon-queryspam", "puck-addon-channelwalk", "puck-addon-stalekind", "puck-addon-hudbuilder", "puck-addon-eventwatch"]
+
+# Every author-facing addon ships as the smallest, most deterministic binary possible: no LTO
+# inlining surprises across builds, no panic-unwind machinery (a trap is a trap — the host treats
+# any panic as Unreachable and faults the addon deterministically either way), size over speed
+# because a typical puck_on_tick is a handful of loads/adds/stores, not a hot numeric kernel. Set
+# once here at the workspace level so puck-stdlib and every addon crate that joins this workspace
+# share the same release profile without repeating it.
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"

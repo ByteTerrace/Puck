@@ -1,0 +1,83 @@
+{
+  "description": "The placeable cameras a View screen renders the world from (the jumbotron recursion) \u2014 pure data the binder resolves View screens against at wiring.",
+  "type": "array",
+  "items": {
+    "description": "One placeable camera composed from a reference frame, local motion, framing policy, lens, and render target.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The camera\u0027s stable name \u2014 the handle a View screen / layout slot samples by.",
+        "type": "string"
+      },
+      "anchor": {
+        "description": "What the camera rides, or null for the world reference frame.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "$ref": "./common.schema.json#/$defs/Entity"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/EntityPart"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Placement"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Group"
+          }
+        ]
+      },
+      "rig": {
+        "description": "The independent local motion, aim, and lens axes.",
+        "type": "object",
+        "properties": {
+          "motion": {
+            "$ref": "./common.schema.json#/$defs/WorldCameraMotion"
+          },
+          "aim": {
+            "$ref": "./common.schema.json#/$defs/WorldCameraAim"
+          },
+          "lens": {
+            "$ref": "./common.schema.json#/$defs/WorldCameraLens"
+          },
+          "smoothRate": {
+            "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
+            "type": "number",
+            "default": 0
+          }
+        },
+        "required": [
+          "motion",
+          "aim",
+          "lens"
+        ],
+        "additionalProperties": false
+      },
+      "renderWidth": {
+        "description": "The offscreen render width in pixels.",
+        "type": "integer"
+      },
+      "renderHeight": {
+        "description": "The offscreen render height in pixels.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "name",
+      "anchor",
+      "rig",
+      "renderWidth",
+      "renderHeight"
+    ],
+    "additionalProperties": false
+  }
+}

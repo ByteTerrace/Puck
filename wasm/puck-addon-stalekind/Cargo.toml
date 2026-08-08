@@ -1,0 +1,14 @@
+[package]
+name = "puck-addon-stalekind"
+version = "0.1.0"
+edition = "2021"
+description = "BATTERY-ONLY guest — never shipped, no shipped world pins it. Declares a channel descriptor whose Kind byte is a RETIRED ordinal (4, formerly Geometry) so the docs/verification/lane-present-deletion battery can prove the host refuses it by name at handshake, naming the unknown kind, rather than special-casing the retired value."
+publish = false
+
+# cdylib, not rlib — see puck-addon-queryspam/src/lib.rs's module doc for why the frozen puck_* ABI
+# exports live in the crate that actually produces the .wasm.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+puck-stdlib = { path = "../puck-stdlib" }

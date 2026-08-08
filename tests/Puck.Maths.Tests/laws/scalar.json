@@ -1,0 +1,1849 @@
+[
+  {
+    "Id": "scalar.cyclic-rotation-closes-its-loop",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "At"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "Rotate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CyclicRotation.Step over all four planes at every tick in [-90, 90], including the negative ticks its FloorModulo exists to absorb",
+        "Against": "a BigInteger reduction written here \u2014 ((tick mod 30) \u002B 30) mod 30 scaled by the plane\u0027s own one-tick step \u2014 which shares no line with the subject\u0027s PlaneSpeeds lookup and FloorModulo call",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the loop CLOSES bit-exactly: At and Step at tick t equal At and Step at t \u002B 30 for every plane over the whole swept band, every multiple of the period returns the identity rotor, and each plane\u0027s speed is coprime to thirty so its orbit visits all thirty steps \u2014 which is what makes the speeds {1, 7, 11, 13} a choice rather than an accident. Rotate is pinned as At composed with FixedComplex.Rotate and nothing else, over six vectors at every plane and tick",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CyclicRotation.At(plane: 0, tick: step) for every step in [0, 30) \u2014 the NUMERIC values of the baked rotor table, entry k against the correctly quantized 30th root of unity",
+        "Against": "Oracles.EncloseSinCos at a raw independently rounded from the Machin-derived circle constant (Oracles.Pi(384), the same working scale as the production SinCos reduction and the same constant scalar.sincos-vs-series cross-checks against the published expansion) \u2014 idealRaw = round(2\u03C0\u00B72\u00B9\u2076\u00B7step/30), computed by BigInteger interval arithmetic and directed rounding, never by recomputing BuildRotors\u0027 own TurnRawQ16-and-integer-division formula. Widened by two raw ULP: 3/4 for the kernel\u0027s own committed SinCos envelope at |raw| within one turn, plus a PROVEN strictly-less-than-two-raw-unit bound on the gap between BuildRotors\u0027 internal raw and this independently rounded one (both quantize the same real angle from two different roundings of round(2\u03C0\u00B72\u00B9\u2076); sine and cosine are 1-Lipschitz in raw units, so the gap carries through the trig call with no widening). Neither term is fitted to any observed output",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "PlaneCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CyclicRotation.PlaneCount, and each declared plane's speed read off the PUBLIC CyclicRotation.Step(plane, tick: 1) (phase one, so the step IS the plane's own one-tick speed, no table lookup involved)",
+        "Against": "the count of conjugate pairs {m, Period - m} in the reduced residue system of CyclicRotation.Period, found by a from-scratch Euclidean gcd over every candidate in [1, Period) that calls no Puck.Maths member and shares no line with CyclicRotation's PlaneSpeeds table or its Step/FloorModulo path -- for Period = 30 that system is the eight-element set {1,7,11,13,17,19,23,29}, splitting into exactly four pairs. This is the same reduced-residue-system structure the E8 Coxeter element's eigenvalues realize on its Coxeter plane (see SymmetryLattice's remarks): a complex eigenvalue and its conjugate collapse to one REAL rotation plane, one pair per plane",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the PlaneCount declared planes name DISTINCT conjugate pairs that jointly account for every residue coprime to the period, with none left over and none repeated -- so the count is pinned as a COUNT rather than merely looped up to. A PlaneCount of three would leave a pair unaccounted for and fail; a PlaneCount of five would index past the private four-entry speed table and throw. This closes the gap scalar.cyclic-rotation-closes-its-loop's own waiver named: a law that merely loops planes up to the constant cannot catch either mutation, because a wrong count only shortens or lengthens its own sweep",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Multiply \u2014 the inline sign-magnitude ties-to-even rounder at FixedQ4816.cs:396-421",
+        "Against": "Oracles.RoundDyadic at shift 16 over BigInteger, wrapped by Oracles.WrapToRaw; the oracle side calls no Puck.Maths kernel",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.add-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Addition"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Addition",
+        "Against": "Oracles.WrapToRaw over an exact BigInteger sum \u2014 EXACT on both sides, so condition (B) drops out entirely and the statement is purely the two\u0027s-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits. Laws.cs states the scope out loud \u2014 it observes hidden mutable state or an operand-independent result and nothing else, and is NOT the cross-run/cross-machine determinism contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.grid-and-construction",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromInteger"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Epsilon"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FractionBitCount"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IntegerBitCount"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MinValue"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "NegativeOne"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Radix"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TotalBitCount"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Zero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the declared grid is one fact: FractionBitCount == 16, IntegerBitCount == 48, TotalBitCount == 64, Radix == 2, One.Value == 1 \u003C\u003C FractionBitCount, Epsilon.Value == 1, NegativeOne == \u2212One, Zero.Value == 0, default(FixedQ4816) == Zero, MaxValue.Value == long.MaxValue, MinValue.Value == long.MinValue, and the two INumberBase identities AdditiveIdentity == Zero and MultiplicativeIdentity == One",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the raw is carried verbatim by all three construction routes: new FixedQ4816(raw).Value, FixedQ4816.FromRawBits(raw).Value and the record\u0027s Value accessor agree at every rung of the eighteen-raw construction ladder, both carrier extremes included",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.FromInteger over the whole-number ladder",
+        "Against": "an inline BigInteger expectation (value \u003C\u003C 16) in Subjects.FixedGridAndConstruction \u2014 exact on both sides, so condition (B) does not arise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromInteger REFUSES exactly outside [\u22122\u2074\u2077, 2\u2074\u2077 \u2212 1]: both boundary values are admitted and scale exactly, and both first values beyond throw ArgumentOutOfRangeException naming the \u0027value\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.FromDouble over the twenty-two-row double ladder \u2014 both saturations, not-a-number, both infinities, the exactly-representable interior points, the four half-ULP ties on both signs, the 2\u2074\u2077 seam either side, and the one inexact input",
+        "Against": "Subjects.FixedDoubleLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "hand-derived from the IEEE-754 binary64 layout and the 2\u207B\u00B9\u2076 grid, sharing no code and no substrate with the subject. ENVELOPE: the ladder is the only place FromDouble is exercised \u2014 no swept law can reach it, because a law body that computed the expectation in double would put float in law logic",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.double-projection-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Explicit"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromDouble"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromRawBits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816\u0027s explicit conversion to double at every swept raw, read as its exact IEEE-754 bit pattern through BitConverter.DoubleToUInt64Bits",
+        "Against": "Oracles.NearestBinary64Bits \u2014 the encoding assembled from the FORMAT in BigInteger: the magnitude rounded to fifty-three significant bits by exact integer division with the tie decided on twice the remainder against the divisor, the one carry out of an all-ones significand absorbed into the exponent, then sign bit, exponent field 1023 \u002B 52 \u002B excess \u2212 16 and the significand less its implicit leading one laid out by hand. No floating-point arithmetic on the oracle side and none in the law. The subject\u0027s route is the opposite one \u2014 a hardware long-to-double conversion followed by a multiply by the constant 2\u207B\u00B9\u2076 \u2014 and the two agree because that scale is a pure exponent shift with no underflow at this carrier",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same conversion over the seventeen-row raw ladder \u2014 zero, both units, both single-raw quanta, both halves and both one-and-a-halves, 2\u2075\u00B3 \u2212 1 either side, the two half-ULP ties either side, and both carrier extremes",
+        "Against": "Subjects.FixedToDoubleLadder, a constant expectation table compared on exact bit patterns",
+        "Shared": "",
+        "Citation": "hand-derived from the definition raw\u00B72\u207B\u00B9\u2076: below 2\u2075\u00B3 the conversion is exact; 2\u2075\u00B3 \u002B 1 is a tie resolved DOWN to 2\u2075\u00B3 and 2\u2075\u00B3 \u002B 3 a tie resolved UP to 2\u2075\u00B3 \u002B 4, on both signs; MinValue is exact because \u22122\u2076\u00B3 is a power of two, while MaxValue rounds UP across the 2048-wide double gap below 2\u2076\u00B3 \u2014 so the two extremes reach \u00B12\u2074\u2077 by different routes. Every expectation is a compile-time constant, so no floating-point arithmetic runs inside the law",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the map is ODD at every swept raw whose negation names another raw: the projection of \u2212x is the projection of x with the sign bit flipped, bit for bit. Zero has one representation on this carrier and two in binary64, and MinValue\u0027s negation is its own fixed point, so those two are excluded rather than asserted",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seam is a ROUND TRIP below 2\u2075\u00B3: FromDouble of the projected double returns the original raw at every swept raw inside that bound, which is what separates the documented precision loss at large magnitudes from an error",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.additive-ops-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Decrement"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Increment"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_UnaryPlus"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromRawBits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Subtraction",
+        "Against": "Oracles.WrapToRaw over an exact BigInteger difference \u2014 EXACT on both sides, so condition (B) drops out and the statement is purely the two\u0027s-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_UnaryNegation, op_Increment and op_Decrement",
+        "Against": "Oracles.WrapToRaw over the exact BigInteger \u2212a, a \u002B 2\u00B9\u2076 and a \u2212 2\u00B9\u2076 \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "unary plus is the identity at every swept raw, and negation is an involution over the full raw range including MinValue, where the two\u0027s-complement negation is its own fixed point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the increment and decrement operators are mutually inverse at every swept raw, and each equals the corresponding addition of One \u2014 the wrapping ring\u0027s translation, stated once at the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.checked-ops-refuse",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedAddition"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedDecrement"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedDivision"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedIncrement"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedMultiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedSubtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_CheckedUnaryNegation"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all seven checked operators \u2014 addition, subtraction, unary negation, increment, decrement, multiplication and division \u2014 over every swept operand pair",
+        "Against": "the exact BigInteger value of each operation, which decides BOTH halves of the statement: the operator must return that value when it lands inside [\u22122\u2076\u00B3, 2\u2076\u00B3 \u2212 1] and must throw OverflowException when it does not. The multiplication\u0027s expected value is Oracles.ExactRoundedProduct and the division\u0027s Oracles.ExactRoundedRatio, both UNWRAPPED, so the checked contract is decided by the exact rounded value rather than by the unchecked sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seven checked operators agree BIT-FOR-BIT with their unchecked siblings on every operand pair whose exact value is representable \u2014 a wrapping operator and its checked twin differ only in the refusal, never in the answer",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two documented division refusals are distinct and both reachable: a zero divisor throws DivideByZeroException from BOTH the checked and the unchecked operator, and MinValue over NegativeOne throws OverflowException from the checked operator while the unchecked one wraps to MinValue",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Division \u2014 the hardware 128-by-64 quotient under the raw_x \u003E\u003E 48 \u003C raw_y gate, its UInt128 fallback, the r versus d \u2212 r tie test, and the magnitude-wrap-then-negate sign policy (FixedQ4816.cs:450-493)",
+        "Against": "Oracles.RoundDyadicRatio at shift 16 \u2014 ONE ties-to-even rounding of the exact rational (raw_x\u00B72\u00B9\u2076)/raw_y in BigInteger, wrapped once at the end by Oracles.WrapToRaw. The tie is decided by 2r versus d, the formulation the subject cannot use because 2r would overflow its carrier; the quotient comes from BigInteger.DivRem, not from a 128-by-64 divide. ENVELOPE: Subjects.NonZeroDivisor substitutes Epsilon for a zero divisor, so the value statement runs over every OTHER operand pair and the refusal at zero is stated in scalar.checked-ops-refuse",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.modulus-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Modulus"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.op_Modulus",
+        "Against": "the exact BigInteger truncated remainder raw_x \u2212 \u230Araw_x/raw_y\u230B_toward_zero\u00B7raw_y, computed inline in Subjects.FixedModulusExact \u2014 arbitrary width, so the signed minimum over minus one is an ordinary case here rather than the trap the carrier\u0027s own remainder would take; exact on both sides, condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two divisor magnitudes the operator short-circuits, \u00B1Epsilon, return exactly Zero \u2014 which the oracle independently confirms is the right answer, every integer being divisible by \u00B11, so the short circuit is a trap dodge and not a special case in the contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the division identity holds at every swept pair: (x \u2212 x % y) is an exact multiple of y, and |x % y| \u003C |y|",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MinValue over the negative epsilon returns Zero rather than raising the platform\u0027s signed-remainder overflow, and a zero divisor still throws DivideByZeroException",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.order-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sign"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_LessThanOrEqual"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.CompareTo(FixedQ4816) and the four relational operators",
+        "Against": "the sign of BigInteger.Compare over the same raws, inline in Subjects.FixedOrderExact \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Min, FixedQ4816.Max and FixedQ4816.Clamp",
+        "Against": "BigInteger.Min / BigInteger.Max, and the three-way clamp expressed as Min(Max(value, minimum), maximum) \u2014 a different formulation from Math.Clamp\u0027s two ordered branches; exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Sign",
+        "Against": "BigInteger.Sign of the same raw \u2014 exact both sides, and the statement that the 2\u00B9\u2076 scale is order-preserving is exactly what makes the raw sign the value\u0027s sign",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the order is a total order the whole family agrees on: the four operators, CompareTo and the two selections give one consistent verdict at every swept pair, the two selections coincide at an equal pair, and Clamp is the identity inside its own bounds",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the boxed comparison contract: a null comparand sorts first, self compares zero, and a foreign type throws ArgumentException naming the \u0027obj\u0027 parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Clamp REFUSES an inverted range with ArgumentException rather than answering. The refusal names NO parameter at all, because it is the platform\u0027s own Math.Clamp diagnosis surfacing through the forward, which is what the member\u0027s \u003Cexception\u003E tag states",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.magnitude-selection-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "CopySign"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MaxMagnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MaxMagnitudeNumber"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MinMagnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MinMagnitudeNumber"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.MaxMagnitude and FixedQ4816.MinMagnitude, whose magnitudes come from FusedArithmetic.RawMagnitude",
+        "Against": "the IEEE-754 maximumMagnitude/minimumMagnitude rule re-derived over BigInteger.Abs in Subjects.FixedMagnitudeSelectionExact \u2014 greater (lesser) magnitude wins, and an equal-magnitude pair falls back to the greater (lesser) VALUE. Exact on both sides. This is one of only TWO public windows onto FusedArithmetic.RawMagnitude, and the asymmetric corner (MinValue, MaxValue) \u2014 magnitudes 2\u2076\u00B3 and 2\u2076\u00B3 \u2212 1 \u2014 is where its unsigned magnitude is load-bearing",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Abs",
+        "Against": "BigInteger.Abs of the same raw, inline \u2014 exact on both sides, with the refusal at MinValue stated separately below",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.CopySign",
+        "Against": "the sign-and-magnitude recomposition BigInteger.Abs(value)\u00B7(sign \u003C 0 ? \u22121 : \u002B1), inline \u2014 exact on both sides. ENVELOPE: at value == MinValue the recomposition is unrepresentable for a non-negative sign, which is the documented refusal below; for a negative sign both sides land on MinValue",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedQ4816.MaxMagnitudeNumber and MinMagnitudeNumber",
+        "Against": "MaxMagnitude and MinMagnitude",
+        "Shared": "the entire body \u2014 each *Number member is a one-line forward (FixedQ4816.GenericMath.cs:52, 61), so agreement proves the wiring and never the rule",
+        "Citation": "the rule is pinned in this same case by leg 1, against the IEEE magnitude selection re-derived over BigInteger. The *Number distinction exists for not-a-number, which this carrier does not have, so identity is the correct contract and not an accident",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Abs REFUSES at MinValue with OverflowException, whose positive magnitude 2\u2076\u00B3 is unrepresentable; CopySign refuses the same corner \u2014 MinValue with a non-negative sign \u2014 with OverflowException, and a zero sign counts as non-negative, so CopySign(MinValue, Zero) refuses",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two selections partition every pair: MaxMagnitude and MinMagnitude between them always return the two operands, in some order, at every swept pair",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.integral-parts-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Truncate"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Fractional"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Floor",
+        "Against": "Oracles.FloorQuotient(raw, 2\u00B9\u2076) scaled back by 2\u00B9\u2076 \u2014 the floor derived by exact BigInteger division with a sign correction, not by clearing sixteen bits; exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Truncate",
+        "Against": "the exact BigInteger quotient toward zero, BigInteger.Divide(raw, 2\u00B9\u2076)\u00B72\u00B9\u2076 \u2014 a different rounding rule reached by a different route from the subject\u0027s floor-plus-conditional-step; exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Ceiling",
+        "Against": "\u2212(exact floor of \u2212raw), scaled \u2014 the ceiling derived by REFLECTION through the floor rather than by adding a unit to it, inline in Subjects.FixedIntegralPartsAt; exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Round",
+        "Against": "the ties-to-even step re-derived from the FLOOR\u0027s parity in BigInteger \u2014 round up when the fraction exceeds a half, or equals it and the floor\u0027s whole-unit count is odd; a different formulation from Oracles.RoundDyadic\u0027s round-the-magnitude route, and exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Fractional",
+        "Against": "the exact BigInteger raw \u2212 floor, inline \u2014 exact on both sides, which is the statement that the fractional part is NON-NEGATIVE for both signs",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the five integral parts are mutually consistent at every swept raw: Floor \u002B Fractional reconstructs the value, the fraction lies in [0, 1), Ceiling \u2212 Floor is Zero or One according to whether the fraction vanishes, Truncate equals Floor for a non-negative value and Ceiling for a negative one, and Round lands on Floor or Ceiling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Ceiling and Round REFUSE with OverflowException exactly where the exact answer leaves the carrier \u2014 a fixed ladder pins the last ceiling and the last rounding that fit inside the top integer bucket, and the first of each that does not \u2014 while Floor(MinValue) is MinValue and Truncate is total, so neither of those ever throws",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.predicates-classify",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsCanonical"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsComplexNumber"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsEvenInteger"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsFinite"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsImaginaryNumber"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsInfinity"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsInteger"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsNaN"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsNegative"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsNegativeInfinity"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsNormal"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsOddInteger"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsPositive"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsPositiveInfinity"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsRealNumber"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsSubnormal"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "IsZero"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.IsInteger, IsEvenInteger and IsOddInteger",
+        "Against": "the exact BigInteger predicates raw mod 2\u00B9\u2076 == 0 and then the parity of Oracles.FloorQuotient(raw, 2\u00B9\u2076) \u2014 derived from the value\u0027s integrality rather than from a bit mask; exact on both sides, and correct for negatives because the two\u0027s-complement low sixteen bits ARE the fraction above the floor on both signs",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.IsZero, IsNegative, IsPositive and IsNormal",
+        "Against": "the sign of the exact BigInteger raw, inline \u2014 exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seven always-false classifiers (IsComplexNumber, IsImaginaryNumber, IsInfinity, IsNaN, IsNegativeInfinity, IsPositiveInfinity, IsSubnormal) and the three always-true ones (IsCanonical, IsFinite, IsRealNumber) hold that value at EVERY swept raw, both carrier extremes included \u2014 the carrier has one representation per value, no non-finite state and no subnormal region, which is what makes the deterministic contract expressible at all",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the classifiers partition consistently: IsPositive and IsNegative are exact complements (so zero is positive and not negative, the integer convention), IsEvenInteger and IsOddInteger are disjoint and their union is exactly IsInteger, IsZero and IsNormal are exact complements, and IsZero holds exactly at the additive identity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.lerp-endpoints-and-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Lerp"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Lerp \u2014 from \u002B ((to \u2212 from)\u00B7amount), whose one rounding lives inside the multiply",
+        "Against": "Oracles.WrapToRaw(from \u002B Oracles.RoundDyadic(WrapToRaw(to \u2212 from)\u00B7amount, 16)) in BigInteger. ENVELOPE: the subject wraps the difference to the carrier BEFORE multiplying, so an oracle that took the difference at arbitrary width would disagree wherever it leaves the carrier \u2014 the product\u0027s shift-16 rounding of a k\u00B72\u2076\u2074 difference moves the result by k\u00B72\u2074\u2078, which the final wrap does NOT erase. The oracle therefore reproduces the subject\u0027s WRAP ORDER explicitly; what it does not share is the rounding, which it re-derives in arbitrary width",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two endpoints are EXACT at every swept pair: Lerp(from, to, Zero) is from and Lerp(from, to, One) is to, with no rounding anywhere \u2014 multiplying by the raw 2\u00B9\u2076 shifts left sixteen and the product\u0027s shift-16 rounding has no residue to decide",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the degenerate segment is a fixed point: Lerp(x, x, t) is x at every swept amount, including the amounts outside [0, 1] that extrapolate",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.text-round-trip",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.ToString and FixedQ4816.TryFormat \u2014 the sign-magnitude digit-at-a-time renderer that never routes through double (FixedQ4816.GenericMath.cs:525-583)",
+        "Against": "Oracles.ExactDyadicDecimalSigned, whose magnitude digits come from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger \u2014 a deliberately different derivation, exact on both sides. The MinValue rung is where the renderer\u0027s unsigned magnitude 2\u2076\u00B3 is load-bearing, and is the second of only two public windows onto FusedArithmetic.RawMagnitude",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all four FixedQ4816.Parse overloads and all four TryParse overloads, on the exact text the renderer produced",
+        "Against": "Oracles.DecimalToRaw \u2014 ONE ties-to-even rounding of the exact rational n\u00B72\u00B9\u2076/10\u1D49 in BigInteger. A deliberately different route from the subject\u0027s parser, which never forms the rational: it keeps a seventeen-digit fraction prefix, divides by the reduced denominator 2\u00B75\u00B9\u2077, and repairs the tie with a sticky flag for the digits it discarded",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the rendering round-trips: parsing what ToString produced returns the identical raw at every swept value, through all eight entry points, which is what makes the exact expansion a lossless serialization of the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat\u0027s contract at the boundary: it succeeds into a destination of exactly the required length, returns false with charsWritten zero into any shorter one AND leaves that shorter destination byte-for-byte untouched \u2014 the all-or-nothing promise, held on the invariant fast path by an up-front exact-length check rather than by writing as it goes \u2014 accepts the empty format and \u0027G\u0027, and throws FormatException for any other format specifier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.text-ladder-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryFormat"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the eight parse entry points on the hand-authored text ladder \u2014 the negative zero, the three exact half-ULP ties, a literal with more fraction digits than the seventeen-digit prefix keeps, a long decimal that must not double-round, and the two range boundaries",
+        "Against": "Subjects.FixedParseLadder, a constant expectation table",
+        "Shared": "",
+        "Citation": "each expectation hand-derived from the exact decimal value and the ties-to-even rule, sharing no code with either side",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same ladder read as rationals",
+        "Against": "Oracles.DecimalToRaw, which must agree with the hand-derived column on BOTH the value and the range verdict \u2014 so a mistake in the table fails against the quantizer and a mistake in the quantizer fails against the table",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the asymmetric negative extreme \u2212140737488355328 is ADMITTED \u2014 magnitude 2\u2076\u00B3 is the one raw the negative half has and the positive half does not \u2014 while one epsilon beyond it and the mirrored positive value are both refused with OverflowException, leaving the default behind on the trying route",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder: nine malformed spellings throw FormatException from both throwing routes and return false leaving default from the trying one, and a null string throws ArgumentNullException naming \u0027s\u0027 from Parse while TryParse returns false under a VALID style \u2014 an invalid style throws the platform\u0027s ArgumentException naming \u0027style\u0027 even for the null string, argument validation before data, the BCL\u0027s own order, which a null short-circuit used to swallow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BOTH provider tokens are SPLICED rather than re-rendered, over six provider shapes crossing a one- and a two-character decimal separator with a one-, a two- and a five-character negative sign: the rendering is the invariant text with exactly those two positions replaced, ToString and TryFormat agree character for character, and all eight parse entry points read the result back under the SAME provider \u2014 which is the round trip a hardcoded \u0027-\u0027 cannot close, since a provider that renders one sign token and parses another has no fixed point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat sizes itself from each token\u0027s OWN width rather than from the invariant length, at all three destinations: an exactly sized span succeeds and reports that length, an oversized one writes the same prefix and reports the same length, and one character short returns false reporting ZERO written \u2014 the all-or-nothing contract, which a multi-character sign is the way to break",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.styled-exponent-compensation",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "TryParse"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "all four styled Parse and all four styled TryParse overloads on BOTH carriers, over an eight-row exponent ladder whose leading fractional zeros compensate an exponent of a million and one",
+        "Against": "the value System.Decimal\u0027s own parser accepted for the same text, decomposed EXACTLY from decimal.GetBits \u2014 ninety-six-bit mantissa and scale byte \u2014 and quantized by Oracles.DecimalToRaw (and its unsigned face Subjects.UnsignedDecimalToRaw) in BigInteger. What is proved is the review\u0027s invariant itself: a successful parse names the number the validation pass accepted, never a different one",
+        "Shared": "System.Decimal\u0027s parser \u2014 the subject calls it to decide SYNTAX and the oracle calls it to obtain the reference VALUE. The shared step is the syntax verdict only; the two sides part company immediately after it, the subject rescanning the original digits into a seventeen-digit fraction prefix and the oracle rounding the exact rational once in arbitrary width. That is exactly the seam this law exists to police, so sharing the validator is the point rather than a weakness",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same eight rungs read against a hand-derived expectation column, so a fault common to the validator and the quantizer cannot pass",
+        "Against": "the ladder inside Subjects.StyledExponentCompensation, a constant (signed raw, unsigned raw, admitted) table",
+        "Shared": "",
+        "Citation": "hand-derived from the compensated arithmetic: 10\u207B\u00B9\u2070\u2070\u2070\u2070\u2070\u00B9\u00B710\u00B9\u2070\u2070\u2070\u2070\u2070\u00B9 is exactly one, so the raw is 2\u00B9\u2076; the half rung is 2\u00B9\u2075; the 10\u00B9\u2075 rung is past 2\u2074\u2078 \u2212 2\u207B\u00B9\u2076 and out of range on both carriers; and the negative mirror is admitted signed and refused unsigned. No expectation is captured from the subject",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the exponent saturation bound is VALUE-PRESERVING, and both directions are witnessed: FindExponent saturates at s.Length \u002B fractionBitCount \u002B 21, and the two uncompensated rungs prove the saturated verdict is the unsaturated one \u2014 1e1000001 overflows because the bound still leaves more than twenty integer digits, and 1e-1000001 and an exponent of twenty-five digits both quantize to Zero because the bound still pushes every stored digit past the fraction prefix. RULED, and the correction is the point: a fixed cap of one million answered 0.100006103515625 for a literal the validator read as exactly one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal shape is uniform across both carriers: every out-of-range rung throws OverflowException from the throwing string and span routes and returns false leaving default behind on both trying ones, and no rung the platform validator rejects is accepted by either carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.generic-conversion-modes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "FromRawBits"
+      },
+      {
+        "Type": "Puck.Maths.UFixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "INumberBase\u0027s three conversion modes on BOTH fixed-point carriers, reached through constrained generic helpers because the hooks are explicit static interface implementations no direct call can name \u2014 the source ladder crossing the signed/unsigned peer, long/ulong, Int128/UInt128, BigInteger and decimal, each in range and each past a carrier\u0027s end, plus in-range decimal witnesses ON BOTH CARRIERS whose exact scaled product exceeds decimal\u0027s ninety-six-bit mantissa \u2014 the shape on which a decimal multiply rescales and ROUNDS first, landing the intermediate exactly on a half that a second rounding then resolves by parity, off the true value\u0027s side; the checked and saturating decimal lanes of BOTH carriers read the decimal\u0027s own bits through FixedPointConvert.ScaleDecimal and round once, and one witness\u0027s raw per carrier is additionally pinned by hand so the oracle cannot agree wrong. RULED twice, and the corrections are the point: the signed lanes first, then the unsigned twins \u2014 UFixedQ4816\u0027s checked and saturating lanes computed decimal.Round(value * 65536m) and answered one raw high at both unsigned witnesses",
+        "Against": "the source\u0027s exact value at Q16 formed in BigInteger and then read three ways: clamped to the carrier\u0027s ends for saturating, reduced modulo the carrier\u0027s width by Oracles.WrapToRaw / WrapToUnsignedRaw for truncating, and required to fit for checked. That is the .NET contract restated arithmetically rather than the local documentation restated \u2014 the review\u0027s own warning was that a structural law which agrees with the local README can preserve an incompatible design decision. RULED, and the correction is the point: all four peer truncating branches were copies of the saturating clamp, so CreateTruncating(UFixedQ4816.MaxValue) answered MaxValue where the identical width and identical Q16 scale make it exactly \u22121",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the three modes are three DIFFERENT operations, and the law measures that rather than assuming it: every in-range source must make checked, saturating and truncating agree exactly, and at least eight of the out-of-range sources must make saturating and truncating DIFFER \u2014 a count the case asserts, so a re-collapse of truncation into saturation cannot pass by agreeing everywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the TO hooks at BCL integer targets \u2014 byte, sbyte, ulong, long, Int128 and BigInteger",
+        "Against": "the BCL\u0027s own CreateTruncating on the same integer (byte.CreateTruncating(300), sbyte.CreateTruncating(200), ulong.CreateTruncating(-1L)), which is the contract being conformed to rather than a restatement of the subject. The saturating siblings are asserted to still clamp, so the fix did not simply widen everything",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the peer pair\u0027s TryConvertTo hooks are UNREACHABLE through CreateChecked/Saturating/Truncating, because .NET tries the target\u0027s TryConvertFrom first and the two carriers each recognize the other \u2014 so the to-side peer branches are kept mirrored by construction and by reading, not by this law. What the law does reach is every from-side branch and every BCL target\u0027s to-side branch",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: for the SATURATING and TRUNCATING hooks the fractional sources exercised above are decimal only -- a double, float or Half source bypasses that three-mode ladder entirely on those two hooks, routing directly to FromDouble with no saturating-vs-truncating distinction to measure; that seam is pinned by scalar.double-projection-vs-oracle and unsigned-scalar.double-seam rather than here. The CHECKED hook is different and is no longer an envelope: a double source routes through FromDoubleChecked instead, which the fused-substrate leg below now pins directly against FromDouble",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "the CHECKED hook's floating-point route on both carriers: FixedQ4816/UFixedQ4816.CreateChecked<double>, reached through the SAME ConvertChecked helper this case uses for every other source, over in-range doubles, out-of-range doubles, both infinities and NaN",
+        "Against": "FixedQ4816/UFixedQ4816.FromDouble directly",
+        "Shared": "double.Round(value * 2^16, MidpointRounding.ToEven) -- two sibling copies of one rounding rule, at FixedQ4816.GenericMath.cs's FromDoubleChecked and FixedQ4816.cs's FromDouble (and the UFixedQ4816 mirrors); they differ only in out-of-range policy: FromDoubleChecked throws an OverflowException (and refuses NaN too) where FromDouble saturates to the carrier's extreme (and maps NaN to Zero)",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CreateChecked<double> and FromDouble are two DIFFERENT operations and this sub-probe measures that: every in-range double must make the two agree exactly (rounding rule and all), while every out-of-range double -- huge magnitude, both infinities, and NaN -- must make CreateChecked<double> refuse with an OverflowException while FromDouble still returns a value, saturated at the carrier's extreme or zeroed for NaN, on BOTH carriers",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the outbound float seam on BOTH carriers: CreateChecked, CreateSaturating and CreateTruncating to a float target over committed bit-pattern ladders \u2014 one, epsilon, the exact float midpoint 2\u2074\u2076 + 2\u00B2\u00B2 (a true tie, resolved to the even mantissa), one raw above it on both signs, both carrier extremes, and on the unsigned carrier the two witness raws 2\u2075\u00B3 + 2\u00B2\u2079 + 1 and 2\u2075\u00B3 + 2\u00B3\u2070 + 2\u00B2\u2079 \u2212 1 that straddle a float midpoint by exactly 2\u207B\u00B9\u2076 \u2014 with all three modes required to agree bit for bit",
+        "Against": "the constant bit-pattern ladders Subjects.FixedToSingleLadder and Subjects.UnsignedFixedToSingleLadder",
+        "Shared": "",
+        "Citation": "each expectation hand-derived from the binary32 format \u2014 exponent fields 111, 127, 173 and 174 shifted twenty-three bits, mantissa zero or one; at magnitude 2\u2074\u2076 a float ULP is 2\u00B2\u00B3, so the midpoint above it is raw 2\u2076\u00B2 + 2\u00B3\u2078 and one raw above that midpoint must round UP. No floating-point arithmetic runs inside the law. RULED, and the correction is the point: a float target used to route through a double intermediate, which absorbed the raw\u0027s sub-double-ULP tail onto the midpoint and let ties-to-even answer one full ULP off the true value\u0027s side; the raw now rounds ONCE \u2014 the integer-to-float conversion, then an exact power-of-two scale",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.culture-token-ambiguity-refused",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Parse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "TryParse"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Value"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "all four styled entry points at NumberStyles.Any over twelve hand-built providers whose enabled tokens alias or straddle one another \u2014 the negative sign spelled as the currency symbol with the separator families split, the positive sign spelled as it, a negative sign the currency symbol is a prefix of, a currency symbol the negative sign is a prefix of, disjoint tokens over split separator families, a decimal separator aliasing an enabled sign token (spelled from either token, sign and separator, on both sign polarities), a currency symbol CONTAINING the active decimal separator, a decimal separator whose text is parser white space under a white-space-admitting style, and separator tokens carrying the exponent marker in both the decimal and the group position under an exponent-admitting style",
+        "Against": "decimal.TryParse under the SAME provider and style, asserted to SUCCEED on every row before the row states anything. That is what makes each row a divergence rather than a rejection of garbage: the validator admits the text, so a subject that returned a value would be returning a value for a shape it classifies differently",
+        "Shared": "System.Decimal\u0027s parser, which the subject calls to validate the same text. The statement is about the DISAGREEMENT between the two classifications, so the shared call is the instrument",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the disjoint control rows, which carry the same custom sign and currency tokens with the two separator families agreeing",
+        "Against": "the last two rows of Subjects.CultureTokenLadder",
+        "Shared": "",
+        "Citation": "1.5\u00B72\u00B9\u2076 = 98304 by hand, negated for the \u0027~\u0027 sign row. The control is what keeps the refusal from being a blanket rejection of every custom provider",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal is total and shaped: on every aliased row both trying routes return false leaving default behind and both throwing routes raise FormatException, string and span alike \u2014 quantization never runs, so no wrong raw can escape",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the refusal is deliberately COARSER than the platform\u0027s own rule. The platform classifies a separator by position \u2014 the currency family once a currency symbol has been consumed, either family before one \u2014 while UsesCurrencySeparators picks one family for the whole input. Rather than reproduce that positional rule, split separator families are refused wholesale under a currency-admitting style, which the fifth row witnesses on an input the platform reads unambiguously. Refusal over guessing is the chosen policy; no input is quantized under a configuration the scanner cannot classify",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.sqrt-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sqrt"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Sqrt \u2014 both lanes, the 64-bit hardware-seeded integer root below raw \u003C 2\u2074\u2078 and the double-seeded UInt128 estimate settled by exact comparison above it",
+        "Against": "Oracles.IntegerSquareRoot(raw \u003C\u003C 16) \u2014 the exact \u230A\u221A\u230B by a bit-length seed and Newton descent in BigInteger, settled by the exact predicate r\u00B2 \u2264 v \u003C (r\u002B1)\u00B2. BIT-EXACT on both sides: the documented contract is the exact floor, not a rounded approximation, so this is the one transcendental with no envelope at all. Puck.Maths\u0027 own BigIntegerFunctions.SquareRoot is deliberately NOT used",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the defining predicate holds directly on the returned raw: result\u00B2 \u2264 raw\u00B72\u00B9\u2076 \u003C (result \u002B 1)\u00B2, checked in BigInteger, which pins the answer without reference to how either side computed it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented non-positive policy: every raw at or below zero returns Zero, MinValue included, and Sqrt never throws",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two lanes agree across their own seam: the raws 2\u2074\u2078 \u2212 1 and 2\u2074\u2078, which take different code paths, both satisfy the exact-floor predicate, so the double seed\u0027s only role is confirmed to be a seed",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.log2-vs-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Log2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Log2 \u2014 the bit-length integer part plus Log2FractionQ61\u0027s 128-entry reciprocal table and quartic residual, narrowed Q61 \u2192 Q16 by round-half-UP",
+        "Against": "Oracles.EncloseLog2, which produces the fraction by REPEATED SQUARING of the exact mantissa with directed truncation \u2014 no table, no polynomial, no fixed-width intermediate. The statement is that the subject lies inside the enclosure widened by 0.75 raw ULP, the committed empirical envelope for log2; the doc\u0027s own claim (0.50 ULP max observed) is strictly tighter. ENVELOPE: Subjects.PositiveRaw clears the sign bit of every sampled raw, so the negative half of the space reaches this leg only as its mirror image, and the refusal there is stated structurally below",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Log2 at every power of two \u2014 the sixty-three raws 2^(16\u002Bj) for j from \u221216 through 46",
+        "Against": "the exact integer j\u00B72\u00B9\u2076, computed as a BigInteger shift. BIT-EXACT on both sides: at a power of two the mantissa is exactly 2\u2076\u00B2, the reciprocal-table entry is exactly 2\u2076\u00B2, the residual vanishes and the polynomial contributes nothing, so an exact pole is a real statement about the table\u0027s zeroth entry and about the narrowing",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented refusal: every raw at or below zero returns MinValue, and Log2 never throws",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented CLOSED range [\u221216, 47] is reached at BOTH ends: Log2(Epsilon) is exactly \u221216\u00B7One and Log2(MaxValue) is exactly 47\u00B7One",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Log2 is monotone non-decreasing across the interval-table seams: at the boundary the draw selects, the raws either side produce non-decreasing results, which is where a mis-transcribed table entry would show as a step in the wrong direction",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.exp2-vs-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Exp2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Exp2 \u2014 a 128-entry mantissa table indexed by the exponent\u0027s top seven fraction bits, a quartic in the residual at Q62, and a round-half-UP right shift by 46 \u2212 \u230Aexponent\u230B",
+        "Against": "Oracles.EncloseExp2, which forms 2^u as the product of the ladder factors 2^(2\u207B\u2071) over the fraction\u0027s set bits, the ladder built by REPEATED INTEGER SQUARE ROOTS of two with directed rounding \u2014 no table, no polynomial. The envelope is DERIVED from the kernel\u0027s own two error terms rather than declared as a step: half a raw ULP for the closing round-half-UP narrowing, plus the mantissa\u0027s relative error carried up to the result\u0027s scale, bounded by 2\u207B\u2074\u2074. That second bound is the quartic\u0027s truncation of the exponential series \u2014 the omitted tail \u03A3_{n\u22655} (ln2\u00B7r)\u207F/n! is at most 3.85\u00B710\u207B\u00B9\u2074 at the largest residual r = 511/2\u00B9\u2076, and the six Q62 truncations with the table\u0027s own rounding add under 10\u207B\u00B9\u2078 to it. The absolute arm is ATTAINED, not slack: the \u221217 tie sits exactly half a ULP above its true value, because this is the family\u0027s one round-half-UP kernel. ENVELOPE: Subjects.Exp2ExponentRaw folds every sampled raw onto [\u221220, 47), the whole NON-saturating interior \u2014 above 47 the kernel deliberately answers MaxValue, which no envelope around the true value could contain, so that half-open tail is stated by the gate leg instead. RULED, and the correction is the point: this leg used to state a two-regime STEP \u2014 0.75 raw ULP absolute below a true result of 2\u00B2\u2077, 2\u207B\u2074\u2070 relative above it \u2014 which is discontinuous by a factor of ten at the switch and which the kernel breaches over the octave below it, where its own shape crosses three quarters of a ULP at about 2\u00B2\u2076\u00B7\u2078. The kernel is not defective there (0.816 raw ULP observed at the worst operand, a relative 9\u00B710\u207B\u00B9\u2074); the envelope was mis-stated, and the derived form above is strictly tighter than the step it replaces everywhere below 2\u00B2\u2076 and sixteen times tighter above 2\u00B2\u2077",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Exp2 at every whole exponent \u2014 the sixty-three values j\u00B7One for j from \u221216 through 46",
+        "Against": "the exact 2^(16\u002Bj), computed as a BigInteger shift. BIT-EXACT on both sides: at a whole exponent the residual vanishes, the table\u0027s zeroth entry is exactly 2\u2076\u00B2, and the half-up narrowing of 2\u2076\u00B2 by 62 \u2212 (16\u002Bj) has no residue to decide",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the saturation gate: every exponent at or above 47 returns MaxValue exactly, MaxValue itself included, and the exponent one epsilon below 47 does not",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented underflow gate is at \u221217: Exp2(\u221217\u00B7One) is exactly Epsilon \u2014 the true 2\u207B\u00B9\u2077 is half a ULP and this kernel rounds half UP, unlike the multiply, the divide, Round, FromDouble and Parse, which all round half to even \u2014 while every exponent strictly below \u221217, including \u221217 minus one epsilon, \u221218, \u221219, \u22122\u00B3\u00B9 and MinValue, returns Zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the shift \u003C 0 arm of the final narrowing is UNREACHABLE, because the \u230Aexponent\u230B \u2265 47 case is taken by the saturation gate above it; nothing in this suite or the tools reaches it, and nothing can",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.sincos-vs-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Cos"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.SinCos \u2014 turn-domain reduction by the single Q64 reciprocal constant round(2\u2076\u2074/2\u03C0), a half-turn fold, and seven- and eight-term odd/even Taylor polynomials at Q60, narrowed round-half-UP and clamped",
+        "Against": "Oracles.EncloseSinCos, which reduces IN RADIANS against a \u03C0 derived from Machin\u0027s formula by this module\u0027s own alternating arctangent series, at 384 working bits so a full-range angle\u0027s forty-five bits of cancellation are absorbed, then sums the alternating sine and cosine series with a factorial remainder bound. Neither the reduction domain, the constant, nor the polynomial is shared. The envelope is stated per regime: 0.75 raw ULP for |raw| \u2264 411775 (|\u03B8| \u2264 2\u03C0), 1.0 for |raw| \u003C 2\u2074\u2078, 2.5 over the full range. Those bands are not arbitrary \u2014 the reduction constant carries |C \u2212 2\u2076\u2074/2\u03C0| \u2264 \u00BD, which admits up to 2\u03C0\u00B7|raw|/2\u2076\u2075 \u2248 1.57 raw ULP of argument error at |raw| = 2\u2076\u00B3, on top of the kernel\u0027s own \u2264 0.5",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Oracles\u0027 Machin-derived circle constant at 128 working bits",
+        "Against": "the published forty-digit decimal expansion of \u03C0, quoted in Subjects.FixedSinCosWithinEnvelope",
+        "Shared": "",
+        "Citation": "the published expansion, used ONLY to cross-check the derivation \u2014 the oracle\u0027s value comes from its own series, so a transposed Machin formula fails loudly here rather than shifting every angle by a constant",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedQ4816.Sin and FixedQ4816.Cos",
+        "Against": "the two components of FixedQ4816.SinCos",
+        "Shared": "the entire body \u2014 each is a one-line projection of SinCos (FixedQ4816.cs:1020, 1024), so agreement proves the projection and never the arithmetic",
+        "Citation": "the arithmetic is pinned in this same case by leg 1, against the radian-domain series enclosure. What this leg adds is that the two projections are not swapped, which is the one way a one-line forward can be wrong",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "both outputs are CLAMPED into [\u2212One, One] at every swept angle, both carrier extremes included \u2014 the clamp is what makes SinCos safe to feed straight back into the carrier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Pythagorean identity holds within the regime\u0027s own error budget: |sin\u00B2 \u002B cos\u00B2 \u2212 2\u00B3\u00B2| stays under 4\u00B72\u00B9\u2076\u00B7u \u002B 4u\u00B2 in BigInteger, where u is the same per-regime ULP bound leg 1 uses \u2014 a cross-component statement neither the enclosure nor the clamp implies",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the origin is exact: SinCos(Zero) is (Zero, One) with no rounding anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.atan2-vs-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Atan2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Atan2 \u2014 a min/max octant fold to z \u2208 [0,1] at Q62 by one 128-by-64 division, a per-interval cubic over 128 intervals at Q61, then the \u03C0/2 and \u03C0 reflections and the sign flip",
+        "Against": "Oracles.EncloseAtan2, whose VALUE comes from the alternating arctangent series under the exact reductions atan(z) = \u03C0/2 \u2212 atan(1/z) and atan(z) = \u03C0/4 \u002B atan((z\u22121)/(z\u002B1)) \u2014 no table, no cubic, no fixed-width intermediate \u2014 and whose quadrant split is the textbook definition by the signs of x and y rather than the subject\u0027s fold. The statement is that the subject lies inside the enclosure widened by 0.75 raw ULP, the committed empirical envelope for atan2; the doc\u0027s own claim (0.51 ULP max observed) is strictly tighter. What the two sides DO share is the mathematical case analysis \u2014 there is only one atan2 \u2014 so what this leg proves independently is the VALUE, not the quadrant classification",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two exact poles: Atan2(Zero, Zero) is exactly Zero, and Atan2(Zero, NegativeOne) is exactly round(\u03C0\u00B72\u00B9\u2076) = 205887 \u2014 the upper endpoint of the documented half-open range (\u2212\u03C0, \u03C0]",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the range is respected at every swept pair: |result| \u2264 205887. The doc\u0027s half-open (\u2212\u03C0, \u03C0] is a statement about VALUES, and in raw terms both endpoints are \u00B1205887 \u2014 round(\u03C0\u00B72\u00B9\u2076) names an angle strictly below \u03C0, so the negative endpoint is attained as a raw (at y = \u2212Epsilon, x = MinValue) while the value it names is still greater than \u2212\u03C0",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the symmetries the fold is built from hold at every swept pair: Atan2(\u2212y, x) == \u2212Atan2(y, x) exactly wherever the negation names a different ordinate \u2014 not at the zero ordinate, where this carrier has ONE zero rather than the two an IEEE atan2 splits the negative real axis with, so the whole axis maps to \u002B\u03C0; and not at the signed minimum, whose negation is its own fixed point \u2014 and the quarter-turn corner Atan2(y, 0) is exactly \u00B1102944 for every non-zero y",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "no operand pair reaches a division by zero: the folded denominator is the LARGER magnitude, non-zero whenever the both-zero gate did not fire, and the index clamp at 127 is what admits the equal-magnitude corner z == 2\u2076\u00B2 into the top interval at h == 2\u207B\u2077",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.pow-exact-lattice",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Pow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pow over the power-of-two lattice \u2014 every base 2^j and whole exponent n whose product j\u00B7n lands in [\u221216, 46], which is exactly the square-and-multiply path INCLUDING the negative-exponent branch that squares the correctly-rounded inverse base",
+        "Against": "the exact 2^(16 \u002B j\u00B7n) as a BigInteger shift. BIT-EXACT on both sides: every intermediate in the schedule is an exactly representable power of two, so nothing rounds anywhere in the chain and an error in the schedule, in the inverse branch or in either range gate cannot hide. This lattice CONTAINS the tree\u0027s two named Pow regressions, 0.5^\u221217 and 0.5^\u221218",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pow over the small whole-exponent ladder \u2014 nine integer bases of magnitude at most 100 raised to exponents 0 through 4",
+        "Against": "the exact BigInteger.Pow, scaled \u2014 the ascending-bit square-and-multiply schedule reproduced by a plain sequential fold in arbitrary width, which is a DIFFERENT schedule reaching the same value because every intermediate is exact. Bit-exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the documented zero-base policies, all three: Pow(Zero, Zero) is One, Pow(Zero, positive) is Zero, Pow(Zero, negative) is MaxValue",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the negative-base surface over a twenty-six-row table, reached BOTH by the static call and by a constrained generic call through IPowerFunctions\u003CFixedQ4816\u003E",
+        "Against": "Subjects.FixedNegativeBasePowers, a constant (base raw, exponent raw, result raw) table",
+        "Shared": "",
+        "Citation": "each row hand-derived from x^y and the 2\u207B\u00B9\u2076 grid \u2014 (\u22122)^0 through (\u22122)^4 and the reciprocal exponents, the odd and even powers of \u22121, both parities past the \u00B132 squaring band on the exponential path, both underflows, and MinValue at exponents 0, 1, 2, 3 and \u22121. No expectation is captured from the subject. RULED, and the correction is the point: this leg used to pin \u0027every negative base yields Zero\u0027, which is the shape .NET\u0027s IPowerFunctions\u003CTSelf\u003E.Pow contract does not have \u2014 the interface returns x raised to y, and an integral exponent has a perfectly representable answer whose sign is the exponent\u0027s parity. The refusal survives only where it is real: a NON-whole exponent at a negative base, whose real power is not a real number and which this carrier has no not-a-number to report",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the sign survives every saturation verdict, which is what makes the parity rule total rather than interior: the odd overflow (\u22122\u2074\u2070)\u00B3 answers MinValue where the even (\u22122\u2074\u2070)\u00B2 answers MaxValue, and MinValue \u2014 the one base whose magnitude 2\u2074\u2077 is a raw past the carrier and so never enters the squaring loop \u2014 answers itself at exponent one, MaxValue at two, MinValue at three and Zero at minus one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "overflow on the whole-exponent path is the LADDER'S own verdict \u2014 the loop saturates exactly when a step's rounded magnitude leaves the carrier, never from a log-derived estimate \u2014 so the exponent-one identity holds through the very top raw on both signs (the first raw the retired constant-slack gate wrongly answered MaxValue for, 9220202148413599469, now answers itself), a true overflow still saturates with its sign, and the log-derived shortcut still answers Zero below an exponent product of \u221218. RULED, and the correction is the point: a constant 32-raw slack sized for the worst exponent saturated 3.17\u00B710\u00B9\u2075 representable raws at exponent one alone",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the near-top squares either side of the exact exponent-two saturation threshold floor(\u221A(2\u2077\u2079 \u2212 2\u00B9\u2075)) \u2014 raws 777336460312, 777472127993 and 777472127994 at exponent two, where the ladder is the single rounded squaring",
+        "Against": "an independent BigInteger ties-to-even rounding of the exact square (Oracles.RoundRationalTiesToEven), saturated to MaxValue where it exceeds the carrier: the representable side must be BIT-EXACT \u2014 the answer the multiply operator itself gives \u2014 and the far side must saturate",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the exponent product on the fractional path is formed at Int128 width BEFORE the gates, so an exponent that would wrap the public multiplication \u2014 the raw 2\u2074\u2076 against the base four \u2014 still saturates rather than returning an arbitrary value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.pow-envelope",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Pow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pow on the FRACTIONAL path \u2014 Exp2 of the Q16-rounded product y\u00B7Log2(x), which the operand fold reaches by forcing a non-zero exponent fraction",
+        "Against": "Oracles.EncloseExp2 applied to the interval product of the sampled exponent with Oracles.EncloseLog2\u0027s enclosure of log\u2082(x), widened by the DERIVED envelope: with L\u0302 the subject\u0027s logarithm (within 0.75 ULP by scalar.log2-vs-series) and e the Q16 rounding of y\u00B7L\u0302, the exponent error is \u03B5 \u2264 (3\u00B7|yRaw| \u002B 2\u00B9\u2077)/2\u00B3\u2074, so the result carries at most x^y\u00B7\u03B5 \u2014 using 2^\u03B5 \u2212 1 \u2264 \u03B5, valid because the operand fold keeps \u03B5 far below one \u2014 plus Exp2\u0027s own documented envelope. ENVELOPE: Subjects.FixedPowWithinEnvelope bounds the sampled exponent so that |y\u00B7log\u2082 x| stays under sixteen, which is the band where neither saturation gate fires; the gates themselves are pinned by scalar.pow-exact-lattice",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.jacobi-symbol-fixed-width-vs-exact-descent",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "JacobiSymbol"
+      },
+      {
+        "Type": "Puck.Maths.NumberTheoryFunctions",
+        "Name": "JacobiSymbol"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "FloorModulo"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the fixed-width JacobiSymbol at uint, ulong and UInt128, and the BigInteger overload, over a 30000-draw cross-carrier sweep, 20000-draw full-width sweeps, and fifteen carrier-edge vectors",
+        "Against": "a freshly transcribed BigInteger recursive descent that counts every trailing factor of two BEFORE one combined sign flip, where every subject strips factors one at a time and flips per factor: the same reciprocity LAW re-derived independently in different code, not the same code read twice. Exact throughout, so there is no rounding substrate to share. ENVELOPE: this is a re-derivation of one law rather than an algorithmically different route \u2014 there is none short of factoring the modulus \u2014 so the oracle-free legs below carry the independence",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "multiplicativity and periodicity hold at 20000 random triples per carrier at all three unsigned widths, and separately at BigInteger with every third numerator negated so the negative-numerator reduction is exercised \u2014 self-contained statements leaning on no oracle, so they would catch a defect the reference descent shared with the subject",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "the fixed-width symbol at uint against ulong and UInt128 at the same abstract pair",
+        "Against": "the BigInteger overload at the same pair",
+        "Shared": "the SAME generic method body instantiated at three widths rather than three separately authored implementations",
+        "Citation": "the Classical leg above, on the identical sweep, is what independently pins the shared method; this leg only adds that the three instantiations cannot have drifted apart",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an even or zero modulus is refused naming the modulus at all three unsigned carriers, and the BigInteger overload refuses a non-positive or even denominator naming the denominator \u2014 the wider refusal surface a signed carrier admits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.binary-integer-wide-carrier-vs-oracle",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReverseBits"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwisePair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUnpair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "Exponentiate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ReverseBits at UInt128 and Int128, the 128-bit pair and unpair, and Exponentiate at UInt128, over a 30000-draw sweep plus boundary vectors",
+        "Against": "bit-by-bit reference definitions computed one bit at a time over the full 128-bit width, and BigInteger.ModPow for the exponentiation; none shares a line with the subject\u0027s width-agnostic butterfly, its interleave, or its square-and-multiply loop",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the 128-bit unpair inverts the pair at every drawn operand, a round trip the classical leg does not by itself require",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the zero- and one-exponent identities are checked directly rather than only where the random exponent stream happens to land on them",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this case is the 128-bit-wide COMPLEMENT to core.binary-integer-contracts, which already credits these four members by name but exercises them only up to 32-bit operand widths; this case is what actually reaches the 128-bit instantiation",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.conversion-seams-do-not-depend-on-the-host",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.UnitFraction16", "Name": "FromDouble" },
+      { "Type": "Puck.Maths.UnitFraction32", "Name": "FromDouble" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "not-a-number folds to zero in both unit-fraction conversions, and the clamping neighbours either side still reach zero and the maximum so the fold is a fold rather than a swallow. The CLI specifies NO portable result for a NaN-to-unsigned conversion, and NaN survived both Round and Clamp to reach one: the documented clamp-into-range behaviour was resting on x64's choice, which the tests then pinned",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "QuadraticSurd.ToString renders identically under a host culture whose negative sign is U+2212 as it does invariantly, checked by switching CurrentCulture around the call and restoring it. Formatting BigInteger components with the ambient provider let a host culture inject U+200E, U+061C or U+2212 into text that reaches logs, snapshots and golden files, against this library's stated contract that nothing in it reads the current culture. The probe proves its own teeth in the same breath, by requiring that ambient formatting of the SAME component really does differ -- otherwise a host that changed nothing would green it vacuously. ENVELOPE: the member cannot be named in Members because the coverage surface excludes ToString, so this law gates it without crediting it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

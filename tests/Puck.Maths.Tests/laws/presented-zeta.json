@@ -1,0 +1,62 @@
+[
+  {
+    "Id": "presented.unit-interval-power-of-two-envelope-boundary",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PresentedAlgebra`2", "Name": "Create" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2", "Name": "FromSupport" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2", "Name": "TruncatedSum" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2", "Name": "TrySumOverAllLengths" },
+      { "Type": "Puck.Maths.Presentations", "Name": "Quiver" },
+      { "Type": "Puck.Maths.PresentedAlgebra`2+Element", "Name": "Item" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "Add" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "FusedChargedLinear" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "FusedChargedSum" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "IsZero" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "Multiply" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "One" },
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "Zero" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "Add" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "FusedChargedLinear" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "FusedChargedSum" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "IsZero" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "Multiply" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "One" },
+      { "Type": "Puck.Maths.TropicalMaterial", "Name": "Zero" },
+      { "Type": "Puck.Maths.UnitInterval32", "Name": "Create" },
+      { "Type": "Puck.Maths.UnitInterval32", "Name": "Zero" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "FromInteger" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the power-of-two twin's envelope far side, recorded rather than papered over: on a five-object simple path 0->1->2->3->4 with every arc at exponent nine, the four-hop tropical cost reads exactly 36 while the most-likely-path likelihood underflows to the impossible outcome at that hop count, and the three-hop cost of 27 stays inside the carrier's 2^-32 grid and does not underflow. MostLikelyPathMaterial carries no exact-semiring licence, so it is read through the explicit finite TruncatedSum schedule (bound = order minus one) rather than TrySumOverAllLengths; TropicalMaterial is exact and idempotent and is read through TrySumOverAllLengths directly. Closes the gap presented.unit-interval-power-of-two-twin names in its own ENVELOPE leg: that case is silent about its own far boundary and defers here for it.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "presented.unit-interval-fused-competing-terms-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MostLikelyPathMaterial", "Name": "FusedChargedSum" },
+      { "Type": "Puck.Maths.UnitInterval32", "Name": "Create" },
+      { "Type": "Puck.Maths.UnitInterval32", "Name": "Value" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MostLikelyPathMaterial.FusedChargedSum at THREE COMPETING terms under ChargeLane.General, over 4096 draws derived from a pure SplitMix64 mix of a running counter (never System.Random, never wall-clock) -- the shipped kernel rounds EACH term once via UnitInterval32.Multiply(charge, left, right) and takes the max of the three rounded terms (MaterialOps.cs:865-873)",
+        "Against": "one independently re-derived ties-to-even rounding (this file's own RoundTiesToEvenLocal, sharing no code with either the subject or Oracles.cs) of the single winning exact BigInteger triple product, the max of the three EXACT charge*left*right products taken before any rounding at all. The two formulations agree only because ties-to-even rounding is a non-decreasing function of its input, so max(round(a), round(b)) == round(max(a, b)) -- the maximum commutes with a monotone rounding, and this claim checks that directly. THE SUITE'S ONLY MULTI-TERM ABSOLUTE LEG for this fold: presented.unit-interval-semirings-vs-oracle's absolute leg is single-term, and presented.unit-interval-fused-vs-per-term-diverges proves disagreement with an alternative discipline rather than agreement with an independent oracle.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

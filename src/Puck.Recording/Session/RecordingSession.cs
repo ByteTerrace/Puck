@@ -52,11 +52,21 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         }
 
         var docTypeWebm = ((videoEncoder is not null) && string.Equals(a: videoEncoder.CodecId, b: "V_AV1", comparisonType: StringComparison.Ordinal));
-        var outputPath = ResolveOutputPath(options: options, hasVideo: (videoEncoder is not null), webm: docTypeWebm);
 
-        _ = Directory.CreateDirectory(path: (Path.GetDirectoryName(path: outputPath) ?? "."));
+        if (!TryOpenOutput(
+            options: options,
+            hasVideo: (videoEncoder is not null),
+            webm: docTypeWebm,
+            outputPath: out var outputPath,
+            output: out var output,
+            reason: out reason
+        )) {
+            videoEncoder?.Dispose();
+            audioLane?.Dispose();
 
-        var output = new FileStream(path: outputPath, mode: FileMode.Create, access: FileAccess.ReadWrite, share: FileShare.Read);
+            return false;
+        }
+
         var muxer = new MatroskaMuxer(output: output, webmDocType: docTypeWebm);
 
         if (audioLane is not null) {
@@ -87,6 +97,47 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         return true;
     }
 
+    private static bool TryOpenOutput(
+        RecordingSessionOptions options,
+        bool hasVideo,
+        bool webm,
+        out string outputPath,
+        out FileStream output,
+        out string reason
+    ) {
+        outputPath = string.Empty;
+        output = null!;
+
+        if ((options.Document.Output is not null) && string.IsNullOrWhiteSpace(value: options.Document.Output)) {
+            reason = "output path is empty or whitespace.";
+
+            return false;
+        }
+
+        var candidate = options.Document.Output;
+
+        try {
+            candidate ??= ResolveOutputPath(options: options, hasVideo: hasVideo, webm: webm);
+            outputPath = Path.GetFullPath(path: candidate);
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: outputPath)!);
+            output = new FileStream(path: outputPath, mode: FileMode.Create, access: FileAccess.ReadWrite, share: FileShare.Read);
+            reason = string.Empty;
+
+            return true;
+        } catch (Exception exception) when (
+            ((exception is ArgumentException)
+            || (exception is IOException)
+            || (exception is NotSupportedException)
+            || (exception is UnauthorizedAccessException)
+            || (exception is System.Security.SecurityException))
+        ) {
+            var displayPath = (candidate ?? $"directory '{(options.OutputDirectory ?? "(null)")}', prefix '{(options.FileNamePrefix ?? "(null)")}'");
+
+            reason = $"output path '{displayPath.Replace(oldValue: "\0", newValue: "\\0", comparisonType: StringComparison.Ordinal)}' is unusable: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+    }
     private static IVideoEncoder? ResolveVideoEncoder(RecordingSessionOptions options, List<string> notes) {
         if ((options.VideoEncoderFactory is null) || (options.Document.Video is not { } video)) {
             return null;
@@ -109,7 +160,6 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         return encoder;
     }
-
     private static OpusAudioLane? ResolveAudioLane(RecordingSessionOptions options, List<string> notes) {
         if ((options.AudioSourceFactory is null) || (options.Document.Audio is not { Count: > 0 } rows)) {
             return null;
@@ -135,9 +185,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
             ? null
             : new OpusAudioLane(bitrateBitsPerSecond: AudioBitrateBitsPerSecond, sources: bindings));
     }
-
     private static string ResolveOutputPath(RecordingSessionOptions options, bool hasVideo, bool webm) {
-        if (!string.IsNullOrWhiteSpace(value: options.Document.Output)) {
+        if (options.Document.Output is not null) {
             return options.Document.Output!;
         }
 
@@ -210,7 +259,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         if (videoEncoder is not null) {
             m_frameQueue = new FrameSlotQueue(
                 capacity: options.EncodeQueueCapacity,
-                slotBytes: checked(options.SourceWidth * options.SourceHeight * 4)
+                slotBytes: checked(((options.SourceWidth * options.SourceHeight) * 4))
             );
         } else {
             // Audio only: no frames arrive, so the muxer can start immediately (the OpusHead is already known).
@@ -348,7 +397,6 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         return (sessionNs, simNs);
     }
-
     private void RunEncode() {
         while (true) {
             var slot = m_frameQueue!.TryTake();
@@ -391,7 +439,6 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         m_muxer.WriteBlock(data: data, isKeyframe: packet.IsKeyframe, timestampNanoseconds: packet.TimestampNanoseconds, trackNumber: m_videoTrackNumber);
     }
-
     private void ProcessSlot(FrameSlotQueue.Slot slot) {
         var pixels = slot.Pixels.AsSpan(start: 0, length: slot.Length);
 
@@ -426,7 +473,6 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         _ = Interlocked.Increment(location: ref m_framesCaptured);
     }
-
     private void RegisterVideoTrack() {
         m_videoTrackNumber = m_muxer.AddVideoTrack(
             codecId: m_videoEncoder!.CodecId,
@@ -438,7 +484,6 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         m_videoTrackRegistered = true;
         m_muxerStarted = true;
     }
-
     private void RunAudio() {
         while (m_running) {
             if (!m_muxerStarted) {

@@ -58,7 +58,7 @@ public sealed record BindingSessionResult(
         var rows = new List<BindingChordDefinition>(capacity: document.Chords.Count);
 
         foreach (var row in document.Chords) {
-            if (row.Page is not { } page || !string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal)) {
+            if ((row.Page is not { } page) || !string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal)) {
                 rows.Add(item: row);
 
                 continue;
@@ -68,13 +68,15 @@ public sealed record BindingSessionResult(
             var appliedCommands = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var entry in page.Entries) {
+                var effectiveCommand = ((entry.Channel is { } channel) ? BindingProfile.ChannelCommandName(channel: channel) : entry.Command!);
+
                 if (captureByCommand.TryGetValue(
-                    key: entry.Command,
+                    key: effectiveCommand,
                     value: out var capture
                 )) {
                     entries.Add(item: entry with { Source = capture.Source, });
-                    _ = appliedCommands.Add(item: entry.Command);
-                } else if (capturedSources.Contains(item: entry.Source)) {
+                    _ = appliedCommands.Add(item: effectiveCommand);
+                } else if ((entry.Source is { } entrySource) && capturedSources.Contains(item: entrySource)) {
                     displacedEntries.Add(item: entry);
                 } else {
                     entries.Add(item: entry);

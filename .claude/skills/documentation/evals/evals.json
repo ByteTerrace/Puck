@@ -1,0 +1,23 @@
+{
+  "skill_name": "documentation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Move the configuration contract from docs/old-setup.md into docs/setup.md, rename the destination heading, and retire the old file.",
+      "expected_output": "Identifies the authoritative home, inventories every moved factual claim, performs the move before rewriting, searches for incoming filename and anchor references, updates affected indexes and routing text, records each removed claim as surviving or stale with evidence, and verifies the new links and anchors.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Document a new public C# method that accepts a byte count and nullable owner, returns a native handle, and throws for a zero size, null owner, or disposed instance.",
+      "expected_output": "Writes third-person XML documentation with a complete summary, noun-phrase param tags including units and validity constraints, an explicit returns tag, caller-triggerable exception conditions without 'Thrown when', appropriate cref or c tags, and runs a Release build to validate structural XML diagnostics.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Create a repository skill for reviewing database migrations, with detailed provider notes and links to adjacent deployment work.",
+      "expected_output": "Uses a matching lowercase kebab-case name, third-person description containing what and when plus boundaries, keeps the main SKILL.md concise and imperative, places provider detail in directly linked references with contents indexes when long, routes adjacent work from the main file, avoids extraneous README files, and validates the completed skill.",
+      "files": []
+    }
+  ]
+}

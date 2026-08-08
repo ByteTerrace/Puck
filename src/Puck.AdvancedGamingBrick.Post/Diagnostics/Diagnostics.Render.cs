@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using Puck.Capture;
+using Puck.Recording.Capture;
 
 namespace Puck.AdvancedGamingBrick.Post;
 

@@ -198,10 +198,12 @@ pure fine-march number.
 ## Related resources
 
 - The five passes, the mask-first reorder, and the fused-cull occupancy tax:
-  [`.agents/skills/sdf-world/SKILL.md`](../../.agents/skills/sdf-world/SKILL.md)
+  [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md)
   ("The MASK-FIRST pass order") and `SdfWorldEngine.PassLabels`.
-- The beam-slope sweep, the mask-first before/after table, and the carve ladders:
-  [`docs/sdf-bench-notes.md`](../sdf-bench-notes.md).
+- The beam-slope sweep, the mask-first before/after table, and the carve
+  ladders: the bench notes that held those tables were deleted on 2026-08-02
+  and nothing replaced them. [08-performance.md](08-performance.md) keeps the
+  headline shape of each; the underlying tables are gone.
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:
   [`docs/sdf-wiki/hierarchical-and-instance-acceleration.md`](../sdf-wiki/hierarchical-and-instance-acceleration.md).
 - The two-deep frame ring, its per-slot fences, and the cross-frame scratch

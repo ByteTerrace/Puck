@@ -1,0 +1,16 @@
+# The authored identity seeds, before any mint.
+identity.list
+# Deny: strip Console's Drive grant. Minting an owned world stays open ON PURPOSE —
+# an identity is the owner's own document, not shared state (the profile catalog and
+# its Edit gate were deleted, not ported) — but SEATING the mint is the Drive-gated
+# ingress (SessionRequest.SetIdentity), and that is what must consult the ACTOR.
+world.revoke console drive all
+world.why console drive body:0
+identity.create teal
+identity.list
+player.identity teal 1
+identity.show 1
+world.grant console drive all
+player.identity teal 1
+identity.show 1
+wire.errors

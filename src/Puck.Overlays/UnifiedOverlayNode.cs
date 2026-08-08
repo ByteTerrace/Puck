@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Capture;
+using Puck.Recording.Capture;
 using Puck.Hosting;
 
 namespace Puck.Overlays;
@@ -16,13 +16,23 @@ namespace Puck.Overlays;
 /// <param name="EditorHud">The per-seat editor-HUD source, or <see langword="null"/>.</param>
 /// <param name="Gizmos">The per-seat editor-gizmo source (projected chips for geometry-less rows), or
 /// <see langword="null"/>.</param>
+/// <param name="Hud">The authored world-scope AND player-scope (per-seat) HUD structure source, or
+/// <see langword="null"/>.</param>
+/// <param name="HudBindings">The authored HUD's live binding resolver — required alongside <paramref name="Hud"/>
+/// for either scope to draw anything (a <see langword="null"/> pairing on either side draws nothing).</param>
+/// <param name="Cursor">The per-seat drawn-cursor source, or <see langword="null"/>.</param>
+/// <param name="Wheel">The per-seat radial-action-menu source, or <see langword="null"/>.</param>
 public sealed record UnifiedOverlaySources(
     IConsolePanelSource? Console,
     IBindingBarSource? BindingBar,
     IOverlayToastSource? Toast,
     Action? FeedTick,
     IEditorHudSource? EditorHud = null,
-    IEditorGizmoSource? Gizmos = null
+    IEditorGizmoSource? Gizmos = null,
+    IHudSource? Hud = null,
+    IHudBindingResolver? HudBindings = null,
+    ICursorSource? Cursor = null,
+    IWheelSource? Wheel = null
 );
 
 /// <summary>
@@ -45,17 +55,20 @@ public sealed record UnifiedOverlaySources(
 public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
-    // The toast's tail reservation: its worst-case record shape (1 panel + rail/icon rects + the [OK]/[ER] label
-    // + every wrapped message line) held back from the earlier writers so the transient echo always lands whole.
-    private const int ToastReservedPanels = 1;
-    private const int ToastReservedElements = (3 + ToastWriter.MaxMessageLines);
-    private const int ToastReservedTextWords = (2 + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
     // The glyph outline halo width, in encoded signed-distance units — the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;
     private const uint SamplerBinding = 0;
     private const uint VertexCount = 3;
     private const uint VertexStrideBytes = (sizeof(float) * 2);
+    // The FIVE first-party writers' draw-order table size — Console..Toast (OverlayChannel 0..4). OverlayChannel.Hud
+    // (5) is DELIBERATELY excluded from this table: it is not a single fixed-position writer but the banded
+    // pipeline's under/base/over sequence PLUS the unbanded player-scope seat-panel pass (see ProduceFrame), opened
+    // as its own channel scope up to four times a frame rather than once through this table.
+    // OverlayChannel.Cursor (6) and OverlayChannel.Wheel (7) are excluded too: they are the frame's LAST two
+    // channel scopes (wheel, then cursor on top), drawn over everything and outside the replace-band suppression
+    // (see ProduceFrame's tail).
+    private const int FirstPartyChannelCount = 5;
 
     // The one overlay pass's timestamp pair (a begin/end bracket around the fullscreen draw).
     private const uint TimingQueryCount = 2;
@@ -65,14 +78,26 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
     private readonly OverlayFrameBuilder m_builder;
     private readonly BindingBarWriter? m_bindingBarWriter;
+    // THE DRAW-ORDER TABLE for the five FIRST-PARTY writers: indexed by (int)OverlayChannel, built once in the
+    // constructor. ProduceFrame walks 0..FirstPartyChannelCount-1 and dispatches through this table — the enum's
+    // declared order IS the draw order mechanically, never a hand-ordered if-chain a future reorder could silently
+    // diverge from. A null entry is a source this instance simply has none of. Toast's extra renderTicks argument
+    // rides m_currentFrameRenderTicks (set once per ProduceFrame) rather than widening this delegate's shape for one
+    // caller. OverlayChannel.Hud is NOT in this table — see FirstPartyChannelCount's remarks.
+    private readonly Action<OverlayFrameBuilder>?[] m_channelWriters;
     private readonly IGpuCommandRecorder m_commandRecorder;
     private readonly ConsolePanelWriter? m_consoleWriter;
+    private readonly CursorWriter? m_cursorWriter;
+    private readonly WheelWriter? m_wheelWriter;
     private readonly Func<uint, uint, IGpuRenderTarget> m_createRenderTarget;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly EditorHudWriter? m_editorHudWriter;
     private readonly EditorGizmoWriter? m_gizmoWriter;
+    // The authored world-scope HUD's banded writer, or null when the host wired no Hud/HudBindings source pair (see
+    // UnifiedOverlaySources' remarks) — draws nothing rather than throwing.
+    private readonly HudWriter? m_hudWriter;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     private readonly uint m_height;
     private readonly IRenderNode m_inner;
@@ -98,10 +123,21 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // The per-frame submission fence (frame-ring discipline): this node's single command buffer / host-visible data
     // buffer / descriptor set may only be rewritten once its PREVIOUS submission retired. This pass is queued ahead
     // of the frame's heavy world submit, so by the next frame it has long retired and the wait is ~free.
+    private bool m_captureUnavailable;
+    // This frame's continuous content clock, latched once per ProduceFrame — the Toast writer's channel-writer
+    // delegate reads it (Emit needs renderTicks; the other writers don't) so the draw-order table's delegate shape
+    // stays the same one param for every channel.
+    private ulong m_currentFrameRenderTicks;
     private IGpuSubmissionFence? m_frameFence;
     private IGpuShaderModule? m_fragmentShader;
     private nint m_lastImageViewHandle;
-    private bool m_overflowNarrated;
+    // Per-channel RESERVATION-overflow episode latches: set when a channel starts losing records at its own
+    // reservation, cleared the frame it renders clean again, so each EPISODE narrates exactly once.
+    private readonly bool[] m_overflowEpisodeOpen = new bool[OverlayChannelLeases.Count];
+    // Per-channel OWN-CAP-refusal episode latches — the parallel, independent latch for NoteRefused/maxChars
+    // truncation narration (see OverlayFrameBuilder.Refused): a channel can open/close this episode with no
+    // reservation overflow ever happening, so it cannot share state with m_overflowEpisodeOpen.
+    private readonly bool[] m_refusalEpisodeOpen = new bool[OverlayChannelLeases.Count];
     private string? m_pendingCapturePath;
     private IGpuPipeline? m_pipeline;
     // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout).
@@ -147,12 +183,17 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar) ? new BindingBarWriter(source: bindingBar) : null);
         m_commandRecorder = services.CommandRecorder;
         m_consoleWriter = ((sources.Console is { } console) ? new ConsolePanelWriter(source: console) : null);
+        m_cursorWriter = ((sources.Cursor is { } cursor) ? new CursorWriter(source: cursor) : null);
+        m_wheelWriter = ((sources.Wheel is { } wheel) ? new WheelWriter(source: wheel) : null);
         m_createRenderTarget = services.CreateRenderTarget;
         m_descriptor = new NodeDescriptor(Name: "unified-overlay", SurfaceId: SurfaceId.New());
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
         m_editorHudWriter = ((sources.EditorHud is { } editorHud) ? new EditorHudWriter(source: editorHud) : null);
         m_gizmoWriter = ((sources.Gizmos is { } gizmos) ? new EditorGizmoWriter(source: gizmos) : null);
+        m_hudWriter = ((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings)
+            ? new HudWriter(source: hudSource, bindings: hudBindings)
+            : null);
         m_fragmentBytecode = fragmentBytecode;
         m_height = height;
         m_inner = inner;
@@ -169,10 +210,24 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_vertexBufferFactory = services.VertexBufferFactory;
         m_vertexBytecode = vertexBytecode;
         m_width = width;
+
+        // Built ONCE, after every writer field above is assigned: OverlayChannel's declared values are the array
+        // index, so the enum order IS the draw order — see ProduceFrame's dispatch loop. Sized to the five
+        // FIRST-PARTY channels only (FirstPartyChannelCount) — OverlayChannel.Hud is drawn through m_hudWriter's
+        // own under/base/over calls, never through this table.
+        m_channelWriters = new Action<OverlayFrameBuilder>?[FirstPartyChannelCount];
+        m_channelWriters[(int)OverlayChannel.Console] = ((m_consoleWriter is { } consoleForTable) ? (builder => consoleForTable.Emit(builder: builder)) : null);
+        m_channelWriters[(int)OverlayChannel.BindingBar] = ((m_bindingBarWriter is { } bindingBarForTable) ? (builder => bindingBarForTable.Emit(builder: builder)) : null);
+        m_channelWriters[(int)OverlayChannel.Gizmos] = ((m_gizmoWriter is { } gizmosForTable) ? (builder => gizmosForTable.Emit(builder: builder)) : null);
+        m_channelWriters[(int)OverlayChannel.EditorHud] = ((m_editorHudWriter is { } editorHudForTable) ? (builder => editorHudForTable.Emit(builder: builder)) : null);
+        m_channelWriters[(int)OverlayChannel.Toast] = ((m_toastWriter is { } toastForTable) ? (builder => toastForTable.Emit(builder: builder, renderTicks: m_currentFrameRenderTicks)) : null);
     }
 
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+
+    /// <inheritdoc/>
+    public string? PendingCapturePath => m_pendingCapturePath;
 
     /// <inheritdoc/>
     public void RequestCapture(string path) => m_pendingCapturePath = path;
@@ -194,24 +249,79 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         // Freshen the pull-model feeds, then let each present writer pack this frame's records CPU-side. Nothing
-        // visible = pass the frame through untouched (no extra pass). Writer order is DRAW order (console under
-        // bars under HUD under toast); the tail reservation keeps the last, most urgent surface (the toast) from
-        // being starved by the earlier ones — the declared capacity/priority policy.
+        // visible = pass the frame through untouched (no extra pass). Each writer still emits inside its own
+        // channel scope, so it writes against its own reservation and can never reach another channel's — no writer
+        // here carries an ordering-sensitive side effect beyond its own emission.
         m_sources.FeedTick?.Invoke();
         m_builder.BeginFrame();
+        m_currentFrameRenderTicks = context.RenderTicks;
+        m_hudWriter?.RefreshFrame();
 
-        if (m_toastWriter is not null) {
-            m_builder.ReserveTail(panels: ToastReservedPanels, elements: ToastReservedElements, textWords: ToastReservedTextWords);
+        // THE BANDED PIPELINE (draw order, bottom to top): UNDER (document order) -> BASE -> OVER (document order).
+        // BASE is the five FIRST-PARTY writers, MECHANICALLY drawn in OverlayChannel order (console at the bottom,
+        // toast on top; gizmos sit under the HUD text so a chip near the panel never occludes a line) — UNLESS at
+        // least one live authored panel declares the replace band, in which case the replace panels themselves
+        // (document order) take the base slot instead and the five first-party writers do not run this frame.
+        // Removing the last replace panel restores them on the very next produced frame (HasReplace is recomputed
+        // from the fresh snapshot every RefreshFrame call above). Console mirror note: the on-screen console panel is
+        // one of the five suppressed writers under replace, but the underlying stdin/stdout control plane
+        // (Program.cs / WorldConsoleMirror) is untouched — console verbs keep working exactly as before regardless
+        // of what is drawn.
+        if (m_hudWriter is { } hudUnder) {
+            m_builder.BeginChannel(channel: OverlayChannel.Hud);
+            hudUnder.EmitUnder(builder: m_builder);
+            m_builder.EndChannel();
         }
 
-        m_consoleWriter?.Emit(builder: m_builder);
-        m_bindingBarWriter?.Emit(builder: m_builder);
-        // Gizmos sit UNDER the HUD text (draw order is writer order): a chip near the panel never occludes a line.
-        m_gizmoWriter?.Emit(builder: m_builder);
-        m_editorHudWriter?.Emit(builder: m_builder);
-        m_builder.ReleaseTail();
-        m_toastWriter?.Emit(builder: m_builder, renderTicks: context.RenderTicks);
-        NarrateOverflowOnce();
+        if (m_hudWriter is { HasReplace: true } replacingWriter) {
+            m_builder.BeginChannel(channel: OverlayChannel.Hud);
+            replacingWriter.EmitReplace(builder: m_builder);
+            m_builder.EndChannel();
+        } else {
+            for (var index = 0; (index < m_channelWriters.Length); index++) {
+                if (m_channelWriters[index] is not { } writer) {
+                    continue;
+                }
+
+                m_builder.BeginChannel(channel: (OverlayChannel)index);
+                writer(m_builder);
+                m_builder.EndChannel();
+            }
+        }
+
+        if (m_hudWriter is { } hudOver) {
+            m_builder.BeginChannel(channel: OverlayChannel.Hud);
+            hudOver.EmitOver(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        // PLAYER-scope per-seat panels: unbanded (a seat panel has no base slot to take over, so under/base/over
+        // ordering is meaningless for it) — drawn last, topmost, so a seat's private panel is never occluded by a
+        // world-scope OVER panel or a first-party writer. Charged against the SAME Hud reservation as the three
+        // world-scope passes above (OverlayChannelLeases' combined reservation covers all four).
+        if (m_hudWriter is { } hudSeats) {
+            m_builder.BeginChannel(channel: OverlayChannel.Hud);
+            hudSeats.EmitSeatPanels(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        // The radial action menu, then the drawn cursor on top of it — the frame's last two scopes, both
+        // deliberately OUTSIDE the replace-band suppression above: the wheel is the pointer's radial action menu
+        // and the cursor its on-screen echo, neither of them content, and a fullscreen replace panel is exactly
+        // what a pointer must still be able to point (and commit) at.
+        if (m_wheelWriter is { } wheelWriter) {
+            m_builder.BeginChannel(channel: OverlayChannel.Wheel);
+            wheelWriter.Emit(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        if (m_cursorWriter is { } cursorWriter) {
+            m_builder.BeginChannel(channel: OverlayChannel.Cursor);
+            cursorWriter.Emit(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        NarrateOverflow();
 
         if (!m_builder.HasContent) {
             ForwardPendingCapture();
@@ -240,13 +350,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         FillPushConstants();
-
-        // Only the dynamic region changed this frame; the static token+glyph prefix was uploaded once in
-        // EnsureResources — write just the panel/element/text slice at its byte offset.
-        m_dataBuffer!.Write<uint>(
-            data: m_builder.Scratch[m_builder.PanelBaseWords..],
-            destinationOffsetBytes: (ulong)(m_builder.PanelBaseWords * sizeof(uint))
-        );
+        UploadFrameRegions();
 
         var timed = (GpuTimingControl.Shared.Armed && EnsureTimingPool());
         var commandBufferHandle = RecordOverlayPass(timed: timed);
@@ -389,15 +493,92 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
     }
 
-    // Loud ONCE per node lifetime (never per-frame spam): the first frame any record drops at a capacity, narrate
-    // the shape on stderr; the per-frame counters keep counting silently after.
-    private void NarrateOverflowOnce() {
-        if (m_overflowNarrated || !m_builder.HasOverflow) {
+    // Loud once per EPISODE, PER CHANNEL, PER CAUSE: the two loss causes OverlayFrameBuilder tracks — a channel
+    // exceeding its own hard RESERVATION (OverlayFrameBuilder.Dropped) vs a writer refusing its own excess at a
+    // self-declared cap (OverlayFrameBuilder.Refused, fed by NoteRefused and WriteText's maxChars clamp) — are
+    // DIFFERENT FACTS and get DIFFERENT MESSAGES: a reservation overflow means the channel asked for more than its
+    // lease and lost it; an own-cap refusal means the writer authored a smaller limit and never asked at all. The
+    // landed bug conflated them into one "exceeded its own reservation" sentence that lied whenever the true cause
+    // was a self-declared cap (e.g. the binding bar's hint-line cap: refused content while nowhere near its
+    // reservation). Each cause narrates once per episode, independently, per channel — a channel can open one
+    // episode, both, or neither in a given frame.
+    private void NarrateOverflow() {
+        if (!m_builder.HasOverflow) {
+            Array.Clear(array: m_overflowEpisodeOpen);
+            Array.Clear(array: m_refusalEpisodeOpen);
+
             return;
         }
 
-        m_overflowNarrated = true;
-        Console.Error.WriteLine(value: $"[unified-overlay] record overflow: dropped panels {m_builder.DroppedPanels}, elements {m_builder.DroppedElements}, text words {m_builder.DroppedTextWords}, clips {m_builder.DroppedClips} this frame (capacities: {OverlayFrameBuilder.MaxPanels} panels, {OverlayFrameBuilder.MaxElements} elements, {OverlayFrameBuilder.TextWordCapacity} text words, {OverlayFrameBuilder.MaxClips} clips; toast tail reserved). Later records dropped; further overflows stay silent.");
+        for (var index = 0; (index < OverlayChannelLeases.Count); index++) {
+            var channel = (OverlayChannel)index;
+            var reservation = m_builder.ReservationOf(channel: channel);
+            var written = m_builder.Written(channel: channel);
+
+            NarrateReservationOverflow(channel: channel, index: index, dropped: m_builder.Dropped(channel: channel), reservation: in reservation, written: in written);
+            NarrateOwnCapRefusal(channel: channel, index: index, refused: m_builder.Refused(channel: channel), reservation: in reservation, written: in written);
+        }
+    }
+
+    // CAUSE 1: the channel asked the builder for more than OverlayChannelLeases reserved it and the excess clipped —
+    // a capacity failure, attributed, never touching another channel.
+    private void NarrateReservationOverflow(OverlayChannel channel, int index, in OverlayChannelUsage dropped, in OverlayChannelReservation reservation, in OverlayChannelUsage written) {
+        if (dropped.IsEmpty) {
+            m_overflowEpisodeOpen[index] = false;
+
+            return;
+        }
+
+        if (m_overflowEpisodeOpen[index]) {
+            return;
+        }
+
+        m_overflowEpisodeOpen[index] = true;
+
+        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" exceeded its own reservation and clipped: {Describe(verb: "dropped", counts: dropped, reservation: reservation, written: written)}. No other channel lost capacity; silent until this channel renders clean and overflows again.");
+    }
+
+    // CAUSE 2: the writer itself refused content before ever offering it to the builder (NoteRefused), or a
+    // WriteText run was truncated by its own caller's maxChars — a deliberate, pinned limit the writer authored,
+    // NOT a reservation overflow. The written/reserved figures below prove the distinction: the channel is fine.
+    private void NarrateOwnCapRefusal(OverlayChannel channel, int index, in OverlayChannelUsage refused, in OverlayChannelReservation reservation, in OverlayChannelUsage written) {
+        if (refused.IsEmpty) {
+            m_refusalEpisodeOpen[index] = false;
+
+            return;
+        }
+
+        if (m_refusalEpisodeOpen[index]) {
+            return;
+        }
+
+        m_refusalEpisodeOpen[index] = true;
+
+        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" refused its own excess at a writer-declared cap (NOT a reservation overflow — its reservation is fine): {Describe(verb: "refused", counts: refused, reservation: reservation, written: written)}. A deliberate, pinned truncation the writer authored; silent until this channel renders clean and refuses again.");
+    }
+
+    // The resources a channel actually lost this frame, each as {verb} ({written} of {reserved} written) — shared by
+    // both narrations so a reservation-overflow "dropped" and an own-cap "refused" read in the same shape.
+    private static string Describe(string verb, in OverlayChannelUsage counts, in OverlayChannelUsage written, in OverlayChannelReservation reservation) {
+        var parts = new List<string>(capacity: 4);
+
+        if (counts.Elements > 0) {
+            parts.Add(item: $"{counts.Elements} elements {verb} ({written.Elements} of {reservation.Elements} written)");
+        }
+
+        if (counts.TextWords > 0) {
+            parts.Add(item: $"{counts.TextWords} text words {verb} ({written.TextWords} of {reservation.TextWords} written)");
+        }
+
+        if (counts.Panels > 0) {
+            parts.Add(item: $"{counts.Panels} panels {verb} ({written.Panels} of {reservation.Panels} written)");
+        }
+
+        if (counts.Clips > 0) {
+            parts.Add(item: $"{counts.Clips} clips {verb} ({written.Clips} of {reservation.Clips} written)");
+        }
+
+        return string.Join(separator: ", ", values: parts);
     }
 
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
@@ -422,6 +603,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         m_pendingCapturePath = null;
+
+        if (m_captureUnavailable) {
+            // The latch spares a doomed assembly load per frame, but a request dropped for it still has to be said
+            // out loud: the requester was told a path and no file is coming.
+            Console.Error.WriteLine(value: $"[capture] skipped, Puck.Recording is unavailable — no file written to {path}");
+
+            return;
+        }
+
         m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
 
         var pixels = m_readback.Read(
@@ -433,8 +623,38 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             width: m_width
         );
 
-        PngEncoder.Write(height: (int)m_height, path: path, rgba: pixels.Span, width: (int)m_width);
-        Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
+        if (TryWriteCapturePng(path: path, rgba: pixels.Span, width: (int)m_width, height: (int)m_height)) {
+            Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
+        } else {
+            m_captureUnavailable = true;
+        }
+    }
+
+    // Puck.Recording is an optional subsystem (screenshots/recording): an environment that blocks or cannot load its
+    // assembly (an Application Control / code-integrity policy, a missing deployment file) must not take the render
+    // loop down with it. WriteCapturePngCore is the ONLY member touching the Puck.Recording-typed PngEncoder.Write
+    // call, kept non-inlined so the CLR only needs to resolve and load Puck.Recording.dll when this exact method is
+    // JITted — i.e. lazily, on the first actual capture request, not on every produced frame (CaptureIfPending runs
+    // every frame; without this split, merely JITting it once would force the load). TryWriteCapturePng's try/catch
+    // sits at the CALL SITE one frame up: a failure to load the assembly surfaces as an exception thrown BY that
+    // call (the callee never got to run), which is exactly where a surrounding try/catch can observe and report it.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void WriteCapturePngCore(string path, ReadOnlySpan<byte> rgba, int width, int height) {
+        PngEncoder.Write(height: height, path: path, rgba: rgba, width: width);
+    }
+
+    // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Recording.
+    // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
+    private static bool TryWriteCapturePng(string path, ReadOnlySpan<byte> rgba, int width, int height) {
+        try {
+            WriteCapturePngCore(path: path, rgba: rgba, width: width, height: height);
+
+            return true;
+        } catch (Exception exception) when (exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException) {
+            Console.Error.WriteLine(value: $"[capture] WARNING: Puck.Recording is unavailable ({exception.GetType().Name}: {exception.Message}) — frame capture skipped, render continues without it.");
+
+            return false;
+        }
     }
 
     private void FillPushConstants() {
@@ -453,6 +673,41 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         floats[9] = OverlayTokenBlock.WordCount;   // the glyph pack's base word (the atlas sits after the token slab)
         floats[10] = m_builder.ClipBaseWords;
         floats[11] = 0f;
+    }
+    // Uploads only what THIS frame actually wrote, per region — never the capacity-sized region behind it. The
+    // shader's loops are bounded by these same counts (delivered above as push constants), so a region's untouched
+    // tail holds nothing it will ever read; uploading it would be pure waste. The four regions are NOT contiguous at
+    // their used prefixes (each sits at a fixed capacity-sized offset regardless of how much of it this frame used),
+    // so this is four small partial writes rather than one big one — cheap: IGpuStorageBuffer.Write is a memcpy into
+    // an already-mapped upload buffer on both backends, no command-buffer recording.
+    private void UploadFrameRegions() {
+        if (m_builder.PanelCount > 0) {
+            m_dataBuffer!.Write<uint>(
+                data: m_builder.Scratch.Slice(start: m_builder.PanelBaseWords, length: (m_builder.PanelCount * OverlayFrameBuilder.PanelWords)),
+                destinationOffsetBytes: (ulong)(m_builder.PanelBaseWords * sizeof(uint))
+            );
+        }
+
+        if (m_builder.ElementCount > 0) {
+            m_dataBuffer!.Write<uint>(
+                data: m_builder.Scratch.Slice(start: m_builder.ElementBaseWords, length: (m_builder.ElementCount * OverlayFrameBuilder.ElementWords)),
+                destinationOffsetBytes: (ulong)(m_builder.ElementBaseWords * sizeof(uint))
+            );
+        }
+
+        if (m_builder.TextWordCount > 0) {
+            m_dataBuffer!.Write<uint>(
+                data: m_builder.Scratch.Slice(start: m_builder.TextBaseWords, length: m_builder.TextWordCount),
+                destinationOffsetBytes: (ulong)(m_builder.TextBaseWords * sizeof(uint))
+            );
+        }
+
+        if (m_builder.ClipCount > 0) {
+            m_dataBuffer!.Write<uint>(
+                data: m_builder.Scratch.Slice(start: m_builder.ClipBaseWords, length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords)),
+                destinationOffsetBytes: (ulong)(m_builder.ClipBaseWords * sizeof(uint))
+            );
+        }
     }
     private void EnsureResources() {
         if (m_resourcesReady) {

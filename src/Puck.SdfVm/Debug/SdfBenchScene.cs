@@ -8,8 +8,10 @@ namespace Puck.SdfVm.Debug;
 /// <summary>The workload family a bench run measures — <see cref="Shapes"/> (each debuggable primitive fullscreen),
 /// <see cref="Ops"/> (a fixed torus + one modifier, marginal-cost vs the bare subject), <see cref="Instances"/>
 /// (a 3D grid of N real instances of one shape), <see cref="Carves"/> (a fixed subject + N subtraction carves in a
-/// placement family — the runtime-carving cost profile), and <see cref="Storm"/> (the motion/churn ladder — every
-/// instance moves, or the whole program rebuilds, each produced frame; see <see cref="SdfBenchStormMode"/>).</summary>
+/// placement family — the runtime-carving cost profile), <see cref="Storm"/> (the motion/churn ladder — every
+/// instance moves, or the whole program rebuilds, each produced frame; see <see cref="SdfBenchStormMode"/>), and
+/// <see cref="DynamicMatrix"/> (the contributed dynamic-geometry ceiling matrix — N instances in a
+/// <see cref="SdfBenchPlacement"/> family, either baked STATIC or per-frame MOVING; see <see cref="SdfBenchConfig.Moving"/>).</summary>
 public enum SdfBenchWorkload {
     Shapes,
     Ops,
@@ -17,6 +19,20 @@ public enum SdfBenchWorkload {
     Rigs,
     Carves,
     Storm,
+    DynamicMatrix,
+}
+
+/// <summary>The world-space placement family a <see cref="SdfBenchWorkload.DynamicMatrix"/> run tests —
+/// <see cref="Clustered"/> (every instance packed into ONE fixed-size cluster near the origin regardless of N, so the
+/// whole set lands in the smallest possible span of screen tiles from a fixed framing camera: the worst-TILE GPU
+/// bound), <see cref="Uniform"/> (the existing 3D-grid spread — one instance per cell, the general/expected case), and
+/// <see cref="FarCorners"/> (N instances split across eight widely separated corner clusters: many small, far-apart
+/// tile groups instead of one dense one — the CSR grid's opposite stress from <see cref="Clustered"/>). The family is
+/// baked into each config's label so the table reads it back (e.g. <c>matrix clustered moving x4096</c>).</summary>
+public enum SdfBenchPlacement {
+    Clustered,
+    Uniform,
+    FarCorners,
 }
 
 /// <summary>The churn axis a <see cref="SdfBenchWorkload.Storm"/> config exercises. <see cref="Motion"/> — N DYNAMIC
@@ -31,7 +47,7 @@ public enum SdfBenchWorkload {
 /// (<c>storm x1024</c>, <c>storm rebuild x1024</c>, <c>storm camera x1024</c>).
 /// <para>A future <c>monitors</c> rung may measure N small viewports refreshing round-robin; viewport
 /// right-sizing does not exist yet (naive 32-slot scaling is a 262 MB mask buffer at the instance cap), so the honest
-/// aggregate-of-per-viewport-fixed-costs measurement waits on that work (docs/sdf-backlog.md §the many-eyes arc).</para></summary>
+/// aggregate-of-per-viewport-fixed-costs measurement waits on that work (the many-eyes arc).</para></summary>
 public enum SdfBenchStormMode {
     Motion,
     Rebuild,
@@ -75,14 +91,18 @@ public enum SdfBenchOp {
 
 /// <summary>One measurable configuration in a bench run: a label for its table row plus the union of parameters the
 /// workloads need (each reads only its own — Shapes reads <see cref="Shape"/>, Ops reads <see cref="Op"/>, Instances/
-/// Carves read <see cref="InstanceCount"/>, Carves also reads <see cref="CarveFamily"/>). A run is an ordered list of
-/// these; the runner emits, warms, and samples each in turn. <see cref="CarveFamily"/> defaults so the non-carve call
-/// sites stay unchanged.</summary>
-public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount, SdfBenchCarveFamily CarveFamily = SdfBenchCarveFamily.Clustered, SdfBenchStormMode StormMode = SdfBenchStormMode.Motion);
+/// Carves read <see cref="InstanceCount"/>, Carves also reads <see cref="CarveFamily"/>, DynamicMatrix reads
+/// <see cref="InstanceCount"/>/<see cref="Placement"/>/<see cref="Moving"/>). A run is an ordered list of these; the
+/// runner emits, warms, and samples each in turn. <see cref="CarveFamily"/>/<see cref="Placement"/>/<see cref="Moving"/>
+/// default so the non-carve/non-matrix call sites stay unchanged.</summary>
+public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount, SdfBenchCarveFamily CarveFamily = SdfBenchCarveFamily.Clustered, SdfBenchStormMode StormMode = SdfBenchStormMode.Motion, SdfBenchPlacement Placement = SdfBenchPlacement.Uniform, bool Moving = false);
 
 /// <summary>One configuration's measured timing: the median plus min/max of each per-pass GPU-ms channel over the
 /// sample window. <see cref="HasTimings"/> is false when the window collected no timing samples (GPU timing not armed,
-/// or no timestamps) — the report says so loudly instead of printing zeros.</summary>
+/// or no timestamps) — the report says so loudly instead of printing zeros. <see cref="RebuildMs"/> is the CPU-side
+/// per-frame instance-grid rebuild cost's median (<see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>) —
+/// 0 when no sampled frame rebuilt (a static config), regardless of <see cref="HasTimings"/> (CPU timing needs no GPU
+/// timestamps).</summary>
 public readonly record struct SdfBenchResult(
     string Label,
     int InstanceCount,
@@ -90,7 +110,8 @@ public readonly record struct SdfBenchResult(
     double FrameMed, double FrameMin, double FrameMax,
     double BeamMed, double BeamMin, double BeamMax,
     double ViewsMed, double ViewsMin, double ViewsMax,
-    double CompositeMed, double CompositeMin, double CompositeMax
+    double CompositeMed, double CompositeMin, double CompositeMax,
+    double RebuildMs = 0.0
 );
 
 /// <summary>
@@ -129,7 +150,7 @@ public sealed class SdfBenchScene {
 
     // The STORM ladder (the motion/churn family). Tops out at 4096 = the dynamic-transform capacity floor the render
     // assembly reserves for the mode (SdfDebugMode.WorstCaseDynamicTransformCapacity), so a storm run can never ask
-    // for more moving slots than the engine was constructed with. Public: SdfDebugMode (Puck.Demo) reads it to size
+    // for more moving slots than the engine was constructed with. Public: SdfDebugMode reads it to size
     // that reservation. (The ladder's rung counts + camera rung now live in SdfBenchWorkloads, which builds the
     // battery; this cap stays here — SdfDebugRenderer/SdfDebugMode read it directly.)
     public const int MaxStormInstances = 4096;
@@ -139,10 +160,11 @@ public sealed class SdfBenchScene {
     // the existing 4096-slot debug reservation. This is deliberately NOT a shared-body instancing model: every avatar
     // owns its own authored instruction ranges and per-leaf cull records.
     public const int MinRigBoneCount = 12;
-    public const int MaxRigBoneCount = 36;
     public const int MaxRigAvatars = 128;
-    internal const float RigBoundRadius = 1.35f;
+    public const int MaxRigBoneCount = 36;
+
     internal const float RigBoneBoundRadius = 0.35f;
+    internal const float RigBoundRadius = 1.35f;
     internal const float RigSpacing = 2.25f;
     // The deterministic storm motion (all phases are pure functions of the instance index + the produced-frame counter;
     // no wall clock, no RNG). Amplitudes stay under half the InstanceSpacing so orbiting neighbours never overlap and
@@ -160,6 +182,25 @@ public sealed class SdfBenchScene {
     internal const float StormInstanceRadius = 0.28f;
     internal const float StormBoundRadius = (StormInstanceRadius + 0.05f);
 
+    // The DYNAMIC MATRIX ladder's placement geometry (Phase 3 L1 ceiling-measurement arc, 2026-08-02). Clustered packs
+    // the WHOLE instance count into this fixed footprint regardless of N — the point is that the span stays small (and
+    // so keeps landing in the fewest possible screen tiles from the fixed framing camera) as N climbs, unlike Uniform
+    // (InstanceSpacing above), whose grid grows with N. FarCorners spreads N across eight widely separated local
+    // clusters (each sized like a scaled-down Clustered cluster) — the CSR grid's opposite stress.
+    internal const float DynamicMatrixClusterExtent = 2.2f;
+    // Kept well under half of sdf-world.hlsli's MaxDistance (60 world units) march budget: the bench camera frames a
+    // placement's WHOLE radius (ComputeDistance below), so a far corner's camera-to-surface reach is up to
+    // distance + radius — an 8-unit reach keeps that sum (~40 at the 16384 rung) comfortably inside 60 even for the
+    // farthest-placed corner cluster, so no instance silently drops out of the march (which would UNDER-measure cost).
+    internal const float DynamicMatrixCornerReach = 8f;
+    internal const float DynamicMatrixCornerSpacing = 0.55f;
+    // The eight octant directions (NOT normalized here — DynamicMatrixBasePosition normalizes once per call); order is
+    // immaterial (instances are unordered), only that all eight corners are used evenly via index % 8.
+    private static readonly Vector3[] DynamicMatrixCornerDirections = [
+        new(x: 1f, y: 1f, z: 1f), new(x: 1f, y: 1f, z: -1f), new(x: 1f, y: -1f, z: 1f), new(x: 1f, y: -1f, z: -1f),
+        new(x: -1f, y: 1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: -1f, z: -1f),
+    ];
+
     // The carve-bake settle planner for the sdf.carves workload (carve-bake plan §4), settle 0 (IMMEDIATE): a carves
     // config bakes its cluster on the first frame it emits, so the warm window absorbs the bake and the sampled window
     // measures the baked steady state. Shares the process-wide SdfCarveBakePlanner.Enabled gate with the debug pool —
@@ -171,6 +212,7 @@ public sealed class SdfBenchScene {
     private readonly List<double> m_beamSamples = [];
     private readonly List<double> m_viewsSamples = [];
     private readonly List<double> m_compositeSamples = [];
+    private readonly List<double> m_rebuildSamples = [];
     private Phase m_phase = Phase.Idle;
     private int m_index;
     private int m_framesLeft;
@@ -372,11 +414,36 @@ public sealed class SdfBenchScene {
         return Begin(label: "storm", configs: configs);
     }
 
-    /// <summary>Whether the active configuration is a storm MOTION rung, and if so packs this produced frame's dynamic
-    /// transforms (grown to the config's instance count) into <paramref name="transforms"/> — the frame source supplies
-    /// them as the frame's <c>DynamicTransforms</c> so the moving instances ride the per-frame buffer without a program
-    /// rebuild. Every non-motion state (idle, the rebuild/camera rungs, every other workload) returns false, so the room's
-    /// own dynamic-transform buffer is used unchanged.</summary>
+    /// <summary>Starts the DYNAMIC MATRIX run — the contributed dynamic-geometry ceiling matrix (Phase 3 L1,
+    /// 2026-08-02): N ∈ {0, 256, 1024, 4096, 16384} spheres × <see cref="SdfBenchPlacement"/> {Clustered, Uniform,
+    /// FarCorners} × {static, MOVING} (moving forces the per-frame instance-grid rebuild this bench's
+    /// <see cref="SdfBenchResult.RebuildMs"/> column reports). The N=0 rung in every (placement, moving) row is the
+    /// baseline control. Battery from <see cref="SdfBenchWorkloads.BuildDynamicMatrixLadder"/>.</summary>
+    public string StartDynamicMatrix() {
+        var configs = SdfBenchWorkloads.BuildDynamicMatrixLadder();
+
+        return Begin(label: "matrix", configs: configs);
+    }
+
+    /// <summary>Starts a single DYNAMIC MATRIX rung — the bisection-point counterpart to
+    /// <see cref="StartDynamicMatrix"/>'s full ladder, for a harness that already has the ladder's coarse curve and
+    /// wants ONE additional N pinned near a budget-crossing knee without re-running the whole (expensive) battery.
+    /// Config from <see cref="SdfBenchWorkloads.DynamicMatrixRung"/>.</summary>
+    public string StartDynamicMatrixRung(SdfBenchPlacement placement, bool moving, int count) {
+        var config = SdfBenchWorkloads.DynamicMatrixRung(placement: placement, moving: moving, count: count);
+
+        return Begin(label: $"matrix {config.Label}", configs: [config]);
+    }
+
+    /// <summary>Whether the active configuration is a storm MOTION rung OR a MOVING <see cref="SdfBenchWorkload.DynamicMatrix"/>
+    /// rung, and if so packs this produced frame's dynamic transforms (grown to the config's instance count) into
+    /// <paramref name="transforms"/> — the frame source supplies them as the frame's <c>DynamicTransforms</c> so the
+    /// moving instances ride the per-frame buffer without a program rebuild. Every other state (idle, storm's
+    /// rebuild/camera rungs, a STATIC matrix rung, every other workload) returns false, so the room's own
+    /// dynamic-transform buffer is used unchanged. A moving matrix rung's positions come from
+    /// <see cref="DynamicMatrixBasePosition"/> (the config's <see cref="SdfBenchConfig.Placement"/>) displaced by the
+    /// SAME deterministic orbit+bob+spin storm motion uses — the placement sets WHERE the set sits, the orbit is what
+    /// forces the per-frame instance-grid rebuild either way.</summary>
     public bool TryPackStormTransforms(out Puck.SdfVm.DynamicTransform[] transforms) {
         transforms = [];
 
@@ -388,13 +455,18 @@ public sealed class SdfBenchScene {
 
         var isStorm = ((config.Workload == SdfBenchWorkload.Storm) && (config.StormMode == SdfBenchStormMode.Motion));
         var isRig = (config.Workload == SdfBenchWorkload.Rigs);
+        var isMatrix = ((config.Workload == SdfBenchWorkload.DynamicMatrix) && config.Moving);
 
-        if (!isStorm && !isRig) {
+        if (!isStorm && !isRig && !isMatrix) {
             return false;
         }
 
         var avatarCount = Math.Clamp(value: config.InstanceCount, min: 1, max: MaxRigAvatars);
-        var n = (isRig ? RigTransformCount(avatarCount: avatarCount) : Math.Clamp(value: config.InstanceCount, min: 1, max: MaxStormInstances));
+        var n = (isRig
+            ? RigTransformCount(avatarCount: avatarCount)
+            : (isMatrix
+                ? Math.Clamp(value: config.InstanceCount, min: 0, max: SdfVm.SdfProgramBuilder.MaxInstances)
+                : Math.Clamp(value: config.InstanceCount, min: 1, max: MaxStormInstances)));
 
         if (m_stormTransforms.Length != n) {
             m_stormTransforms = new Puck.SdfVm.DynamicTransform[n];
@@ -418,10 +490,10 @@ public sealed class SdfBenchScene {
                 var bodyOrientation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (phase + (frame * StormSpinSpeed)));
 
                 for (var bone = 0; (bone < boneCount); bone++, slot++) {
-                    var gait = MathF.Sin(x: ((frame * 0.18f) + phase + ((bone & 1) * MathF.PI)));
+                    var gait = MathF.Sin(x: (((frame * 0.18f) + phase) + ((bone & 1) * MathF.PI)));
                     var column = (bone % 6);
                     var limb = ((column <= 1) || (column >= 4));
-                    var boneSwing = (0.45f * gait * (limb ? 1f : 0.25f));
+                    var boneSwing = ((0.45f * gait) * (limb ? 1f : 0.25f));
                     var orientation = Quaternion.Normalize(value: (Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: boneSwing) * bodyOrientation));
                     var position = (displaced + Vector3.Transform(value: RigBoneOffset(avatar: avatar, bone: bone), rotation: bodyOrientation));
 
@@ -434,19 +506,11 @@ public sealed class SdfBenchScene {
             return true;
         }
 
-        var grid = GridDimension(count: n);
-        var half = (((grid - 1) * InstanceSpacing) * 0.5f);
-
         for (var index = 0; (index < n); index++) {
             var avatar = index;
-            var ix = (avatar % grid);
-            var iy = ((avatar / grid) % grid);
-            var iz = (avatar / (grid * grid));
-            var basePosition = new Vector3(
-                x: ((ix * InstanceSpacing) - half),
-                y: ((iy * InstanceSpacing) - half),
-                z: ((iz * InstanceSpacing) - half)
-            );
+            var basePosition = (isMatrix
+                ? DynamicMatrixBasePosition(placement: config.Placement, index: avatar, count: n)
+                : GridCell(index: avatar, grid: GridDimension(count: n), spacing: InstanceSpacing));
             var phase = (avatar * StormGoldenAngle);
             var orbit = (phase + (frame * StormOrbitSpeed));
             var displaced = new Vector3(
@@ -470,8 +534,11 @@ public sealed class SdfBenchScene {
 
     /// <summary>Advances the run one produced frame. Called from the render node's produce loop BEFORE this frame's
     /// CaptureFrame, with the PREVIOUS frame's per-pass GPU ms (<paramref name="hasTimings"/> false when timing is off
-    /// or no timestamp landed). No-op when idle/finished.</summary>
-    public void Advance(bool hasTimings, double beam, double views, double composite, double frame, uint width, uint height, bool backendIsDirectX) {
+    /// or no timestamp landed) and, independently, the previous frame's CPU instance-grid-rebuild ms
+    /// (<paramref name="instanceGridRebuildMs"/>, null when that frame's live program did not rebuild — see
+    /// <see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>; sampled regardless of <paramref name="hasTimings"/>,
+    /// since CPU wall-clock timing needs no GPU timestamp support). No-op when idle/finished.</summary>
+    public void Advance(bool hasTimings, double beam, double views, double composite, double frame, uint width, uint height, bool backendIsDirectX, double? instanceGridRebuildMs = null) {
         if (!Running) {
             return;
         }
@@ -501,6 +568,7 @@ public sealed class SdfBenchScene {
                 m_beamSamples.Clear();
                 m_viewsSamples.Clear();
                 m_compositeSamples.Clear();
+                m_rebuildSamples.Clear();
             }
 
             return;
@@ -514,6 +582,12 @@ public sealed class SdfBenchScene {
             m_beamSamples.Add(item: beam);
             m_viewsSamples.Add(item: views);
             m_compositeSamples.Add(item: composite);
+        }
+
+        // The CPU rebuild sample is independent of GPU timing (a plain Stopwatch span) — sampled whenever the engine
+        // reports one, even on a run where GPU timestamps are unavailable.
+        if (instanceGridRebuildMs is { } rebuildMs) {
+            m_rebuildSamples.Add(item: rebuildMs);
         }
 
         if (--m_framesLeft > 0) {
@@ -590,7 +664,8 @@ public sealed class SdfBenchScene {
             FrameMed: Median(values: m_frameSamples), FrameMin: Min(values: m_frameSamples), FrameMax: Max(values: m_frameSamples),
             BeamMed: Median(values: m_beamSamples), BeamMin: Min(values: m_beamSamples), BeamMax: Max(values: m_beamSamples),
             ViewsMed: Median(values: m_viewsSamples), ViewsMin: Min(values: m_viewsSamples), ViewsMax: Max(values: m_viewsSamples),
-            CompositeMed: Median(values: m_compositeSamples), CompositeMin: Min(values: m_compositeSamples), CompositeMax: Max(values: m_compositeSamples)
+            CompositeMed: Median(values: m_compositeSamples), CompositeMin: Min(values: m_compositeSamples), CompositeMax: Max(values: m_compositeSamples),
+            RebuildMs: Median(values: m_rebuildSamples)
         ));
     }
     private void Finish() {
@@ -612,12 +687,14 @@ public sealed class SdfBenchScene {
             .Append(value: backend).Append(value: "  |  warm=").Append(value: m_warmFrames)
             .Append(value: " samples=").Append(value: m_sampleFrames).Append(value: "  |  all times ms").Append(value: '\n');
 
-        builder.Append(value: Row(config: "config", frame: "frame med (min-max)", beam: "beam", views: "views", composite: "composite")).Append(value: '\n');
-        builder.Append(value: new string(c: '-', count: 82)).Append(value: '\n');
+        builder.Append(value: Row(config: "config", frame: "frame med (min-max)", beam: "beam", views: "views", composite: "composite", rebuild: "rebuild")).Append(value: '\n');
+        builder.Append(value: new string(c: '-', count: 94)).Append(value: '\n');
 
         foreach (var result in m_results) {
+            var rebuild = ((result.RebuildMs > 0.0) ? result.RebuildMs.ToString(format: "F3", provider: CultureInfo.InvariantCulture) : "-");
+
             if (!result.HasTimings) {
-                builder.Append(value: Row(config: result.Label, frame: "(no timings — GPU timing not armed?)", beam: "-", views: "-", composite: "-")).Append(value: '\n');
+                builder.Append(value: Row(config: result.Label, frame: "(no timings — GPU timing not armed?)", beam: "-", views: "-", composite: "-", rebuild: rebuild)).Append(value: '\n');
 
                 continue;
             }
@@ -629,23 +706,24 @@ public sealed class SdfBenchScene {
                 frame: frame,
                 beam: result.BeamMed.ToString(format: "F3", provider: CultureInfo.InvariantCulture),
                 views: result.ViewsMed.ToString(format: "F3", provider: CultureInfo.InvariantCulture),
-                composite: result.CompositeMed.ToString(format: "F3", provider: CultureInfo.InvariantCulture)
+                composite: result.CompositeMed.ToString(format: "F3", provider: CultureInfo.InvariantCulture),
+                rebuild: rebuild
             )).Append(value: '\n');
         }
 
         return builder.ToString();
     }
 
-    private static string Row(string config, string frame, string beam, string views, string composite) =>
-        string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {config,-18} | {frame,-26} | {beam,9} | {views,9} | {composite,9}");
+    private static string Row(string config, string frame, string beam, string views, string composite, string rebuild) =>
+        string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {config,-24} | {frame,-26} | {beam,9} | {views,9} | {composite,9} | {rebuild,9}");
 
     // The orbit distance that frames the config's whole workload inside the FOV, with slack and a floor. For a single
     // fullscreen shape (shapes/ops) a fixed distance keeps the camera still; for an instance grid it scales with the
     // grid's half-extent so every copy stays in frame and inside the march budget.
     private static float ComputeDistance(SdfBenchConfig config) {
-        // The instance-grid workloads (Instances + every Storm rung) frame the whole grid; a single fullscreen subject
-        // (shapes/ops/carves) holds a fixed distance so the camera never reframes across the run.
-        if ((config.Workload != SdfBenchWorkload.Instances) && (config.Workload != SdfBenchWorkload.Rigs) && (config.Workload != SdfBenchWorkload.Storm)) {
+        // The instance-grid workloads (Instances + every Storm rung + DynamicMatrix) frame the whole grid; a single
+        // fullscreen subject (shapes/ops/carves) holds a fixed distance so the camera never reframes across the run.
+        if ((config.Workload != SdfBenchWorkload.Instances) && (config.Workload != SdfBenchWorkload.Rigs) && (config.Workload != SdfBenchWorkload.Storm) && (config.Workload != SdfBenchWorkload.DynamicMatrix)) {
             return SingleShapeDistance;
         }
 
@@ -656,6 +734,8 @@ public sealed class SdfBenchScene {
             var ring = LayerSequence.CenteredHexagonal.LayerOf(index: lastAvatar);
 
             workloadRadius = ((ring * RigSpacing) + RigBoundRadius);
+        } else if (config.Workload == SdfBenchWorkload.DynamicMatrix) {
+            workloadRadius = DynamicMatrixWorkloadRadius(placement: config.Placement, count: config.InstanceCount);
         } else {
             var grid = GridDimension(count: config.InstanceCount);
             var halfExtent = (((grid - 1) * InstanceSpacing) * 0.5f);
@@ -668,9 +748,83 @@ public sealed class SdfBenchScene {
         return MathF.Max(x: MinCameraDistance, y: distance);
     }
 
+    // The world-space radius (from the origin) a DynamicMatrix placement's InstanceCount instances span — the camera
+    // framing input (mirrors the Instances/Storm branch above, generalized over SdfBenchPlacement). Clustered's radius
+    // stays CONSTANT past N=1 (the fixed-footprint design — see DynamicMatrixClusterExtent); Uniform matches the
+    // ordinary grid; FarCorners is the corner reach plus one local cluster's own half-extent.
+    internal static float DynamicMatrixWorkloadRadius(SdfBenchPlacement placement, int count) {
+        switch (placement) {
+            case SdfBenchPlacement.Clustered: {
+                    var grid = GridDimension(count: count);
+                    var spacing = ((grid > 1) ? (DynamicMatrixClusterExtent / (grid - 1)) : 0f);
+
+                    return ((((grid - 1) * spacing) * 0.5f) + StormBoundRadius);
+                }
+            case SdfBenchPlacement.FarCorners: {
+                    var cornerCount = DynamicMatrixCornerDirections.Length;
+                    var localCount = Math.Max(val1: 1, val2: (((count + cornerCount) - 1) / cornerCount));
+                    var localGrid = GridDimension(count: localCount);
+                    var localHalf = (((localGrid - 1) * DynamicMatrixCornerSpacing) * 0.5f);
+
+                    return ((DynamicMatrixCornerReach + localHalf) + StormBoundRadius);
+                }
+            default: { // Uniform
+                    var grid = GridDimension(count: count);
+
+                    return ((((grid - 1) * InstanceSpacing) * 0.5f) + InstanceBoundRadius);
+                }
+        }
+    }
+
     /// <summary>The per-axis cell count of the smallest cube grid holding <paramref name="count"/> instances
     /// (⌈∛count⌉).</summary>
     internal static int GridDimension(int count) => Math.Max(val1: 1, val2: (int)MathF.Ceiling(x: MathF.Cbrt(x: MathF.Max(x: 1f, y: count))));
+
+    /// <summary>The <paramref name="index"/>-th of <paramref name="count"/> instances' BASE position (the static
+    /// placement, and — for a MOVING config — the anchor the per-frame orbit in <see cref="TryPackStormTransforms"/>
+    /// displaces from) under <paramref name="placement"/>: <see cref="SdfBenchPlacement.Uniform"/> is the existing
+    /// centered cube grid (spacing <see cref="InstanceSpacing"/>, grows with N); <see cref="SdfBenchPlacement.Clustered"/>
+    /// packs the WHOLE count into the fixed <see cref="DynamicMatrixClusterExtent"/> footprint (spacing SHRINKS as N
+    /// grows, so the span stays constant — the worst-tile GPU case); <see cref="SdfBenchPlacement.FarCorners"/> splits
+    /// the count across eight local clusters centered <see cref="DynamicMatrixCornerReach"/> from the origin (each
+    /// packed at the fixed <see cref="DynamicMatrixCornerSpacing"/>).</summary>
+    internal static Vector3 DynamicMatrixBasePosition(SdfBenchPlacement placement, int index, int count) {
+        switch (placement) {
+            case SdfBenchPlacement.Clustered: {
+                    var grid = GridDimension(count: count);
+                    var spacing = ((grid > 1) ? (DynamicMatrixClusterExtent / (grid - 1)) : 0f);
+
+                    return GridCell(index: index, grid: grid, spacing: spacing);
+                }
+            case SdfBenchPlacement.FarCorners: {
+                    var cornerCount = DynamicMatrixCornerDirections.Length;
+                    var corner = (index % cornerCount);
+                    var localIndex = (index / cornerCount);
+                    var localCount = Math.Max(val1: 1, val2: (((count + cornerCount) - 1) / cornerCount));
+                    var localGrid = GridDimension(count: localCount);
+                    var local = GridCell(index: localIndex, grid: localGrid, spacing: DynamicMatrixCornerSpacing);
+                    var direction = Vector3.Normalize(value: DynamicMatrixCornerDirections[corner]);
+
+                    return ((direction * DynamicMatrixCornerReach) + local);
+                }
+            default: { // Uniform
+                    var grid = GridDimension(count: count);
+
+                    return GridCell(index: index, grid: grid, spacing: InstanceSpacing);
+                }
+        }
+    }
+
+    // One cell of a centered cube grid at the given per-axis spacing — the shared math EmitInstances/TryPackStormTransforms
+    // already inline for the Uniform case, factored out so Clustered/FarCorners reuse it at their own spacing.
+    private static Vector3 GridCell(int index, int grid, float spacing) {
+        var half = (((grid - 1) * spacing) * 0.5f);
+        var ix = (index % grid);
+        var iy = ((index / grid) % grid);
+        var iz = (index / (grid * grid));
+
+        return new Vector3(x: ((ix * spacing) - half), y: ((iy * spacing) - half), z: ((iz * spacing) - half));
+    }
 
     internal static int RigBoneCountForAvatar(int avatar) {
         var fraction = LowDiscrepancy.R1(index: (ulong)Math.Max(val1: 0, val2: avatar));
@@ -678,7 +832,6 @@ public sealed class SdfBenchScene {
 
         return (MinRigBoneCount + (int)(((ulong)fraction.Value * (uint)span) >> 32));
     }
-
     internal static int RigTransformCount(int avatarCount) {
         var total = 0;
 
@@ -713,10 +866,9 @@ public sealed class SdfBenchScene {
         return new Vector3(
             x: (RigSpacing * (axial.Q + (0.5f * axial.R))),
             y: 0f,
-            z: (RigSpacing * 0.8660254f * axial.R)
+            z: ((RigSpacing * 0.8660254f) * axial.R)
         );
     }
-
     internal static Vector3 RigBoneOffset(int avatar, int bone) {
         var column = (bone % 6);
         var band = (bone / 6);

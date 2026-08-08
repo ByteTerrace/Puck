@@ -11,25 +11,30 @@ namespace Puck.World.Client;
 /// <param name="Section">The world-document section the row lives in.</param>
 /// <param name="Id">The row's stable string id (empty for a screen — screens key by <paramref name="Index"/>).</param>
 /// <param name="Index">The engine screen index (<c>-1</c> for every non-screen row).</param>
-/// <param name="Focus">The row's authored position (a scene row's center, a screen's face origin, a spawn/camera point).</param>
+/// <param name="Focus">The row's authored position (a screen's face origin, a placement, or a spawn/camera point).</param>
 internal readonly record struct EditorPickTarget(WorldSection Section, string Id, int Index, Vector3 Focus);
 
 /// <summary>
 /// The editor's look-ray picking program: a fixed-point SDF program derived from the DOCUMENT (never the live render
 /// program, whose <c>TransformDynamic</c> avatar leaves <see cref="SdfFieldEvaluator"/> rejects by contract) with ONE
 /// MATERIAL PER SELECTABLE ROW, so a <see cref="RayHit.Material"/> IS the row's index into the parallel
-/// <see cref="Targets"/> table. Scene rows and screens march their real geometry; spawn points and fixed cameras march
+/// <see cref="Targets"/> table. Screens march their real geometry; spawn points and fixed cameras march
 /// small proxy spheres (they have no authored volume); anchored cameras carry no proxy (their live pose is not document
 /// data — select them by name over the console twin). Material 0 is the non-selectable ground sentinel, so a ray that
 /// falls to grass terminates fast and picks nothing. Rebuilt lazily when <see cref="WorldClient.DefinitionRevision"/>
 /// moves; a cast costs microseconds against these row counts.
 /// </summary>
 internal sealed class WorldEditorPicker {
-    private const float SpawnProxyRadius = 0.4f;
     private const float CameraProxyRadius = 0.3f;
+    private const float SpawnProxyRadius = 0.4f;
     private const float SpeakerProxyRadius = 0.3f;
-    private static readonly FixedQ4816 MaxPickDistance = FixedQ4816.FromInteger(value: 256L);
 
+    /// <summary>The editor's full pick reach, world units — the range a look-ray cast covers when the caller passes
+    /// no authored reach, and the ceiling the mouse drag's cursor-plane follow accepts an intersection within (a
+    /// near-horizon ray otherwise slings the pending row toward infinity).</summary>
+    internal const int MaxPickReach = 256;
+
+    private static readonly FixedQ4816 MaxPickDistance = FixedQ4816.FromInteger(value: MaxPickReach);
     private readonly WorldClient m_client;
     private EditorPickTarget[] m_targets = [];
     private SdfFieldEvaluator? m_evaluator;
@@ -53,12 +58,14 @@ internal sealed class WorldEditorPicker {
         }
     }
 
-    /// <summary>Casts the editor camera's look ray against the picking program and resolves the nearest selectable row.</summary>
-    /// <param name="eye">The ray origin (the editor camera's eye), world space.</param>
+    /// <summary>Casts a look ray against the picking program and resolves the nearest selectable row.</summary>
+    /// <param name="eye">The ray origin (the caster's camera eye), world space.</param>
     /// <param name="direction">The look direction (need not be unit length).</param>
     /// <param name="target">The picked row, when the method returns <see langword="true"/>.</param>
+    /// <param name="maxDistance">The pick reach in world units, or <see langword="null"/> for the editor's full
+    /// range — the cursor's hover pass casts the same program with the world-authored hover reach instead.</param>
     /// <returns><see langword="true"/> when the ray hit a selectable row within the pick range.</returns>
-    public bool TryPick(Vector3 eye, Vector3 direction, out EditorPickTarget target) {
+    public bool TryPick(Vector3 eye, Vector3 direction, out EditorPickTarget target, float? maxDistance = null) {
         target = default;
         EnsureBuilt();
 
@@ -66,12 +73,13 @@ internal sealed class WorldEditorPicker {
             return false;
         }
 
-        if (!evaluator.Raycast(origin: WorldCoord3.FromLocal(local: ToFixed(value: eye)), dir: ToFixed(value: direction), maxDist: MaxPickDistance, hit: out var hit)) {
+        var reach = ((maxDistance is { } authored) ? FixedQ4816.FromDouble(value: authored) : MaxPickDistance);
+
+        if (!evaluator.Raycast(origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: eye)), dir: FixedVector3.FromVector3(value: direction), maxDist: reach, hit: out var hit)) {
             return false;
         }
 
-        // Material 0 is the ground sentinel; every selectable row's material is its table index + 1.
-        var index = (hit.Material - 1);
+        var index = hit.Material;
 
         if ((uint)index >= (uint)m_targets.Length) {
             return false;
@@ -100,21 +108,6 @@ internal sealed class WorldEditorPicker {
         var definition = m_client.Definition;
         var builder = new SdfProgramBuilder();
         var targets = new List<EditorPickTarget>();
-        // Material 0: the ground sentinel (AddMaterial returns sequential indices, so row material == targets.Count + 1).
-        _ = builder.Plane(normal: Vector3.UnitY, offset: 0f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)));
-
-        foreach (var row in definition.Scene.Rows) {
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-            _ = builder.Translate(offset: row.Center);
-            _ = (row switch {
-                WorldSceneRow.Boulder boulder => builder.Sphere(radius: boulder.Radius, material: material),
-                WorldSceneRow.Slab slab => builder.Box(halfExtents: slab.HalfExtents, round: slab.Round, material: material),
-                _ => builder,
-            });
-            _ = builder.ResetPoint();
-            targets.Add(item: new EditorPickTarget(Section: WorldSection.Scene, Id: row.Id, Index: -1, Focus: row.Center));
-        }
 
         foreach (var screen in definition.Screens) {
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -134,11 +127,11 @@ internal sealed class WorldEditorPicker {
         // Placements pick by a reach-sized proxy sphere at the stamp's position — the creation's own geometry would
         // demand a per-shape replay in fixed point for little gain; the proxy covers the stamp's core mass.
         foreach (var placement in definition.Placements) {
-            if (WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
+            if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
                 continue;
             }
 
-            var radius = MathF.Max(x: (Puck.Authoring.CreationGeometry.Reach(document: creation.Document) * (placement.Scale * 0.5f)), y: 0.35f);
+            var radius = MathF.Max(x: (Puck.Forge.Authoring.CreationGeometry.Reach(document: creation.Document) * (placement.Scale * 0.5f)), y: 0.35f);
 
             AddProxy(
                 builder: builder,
@@ -158,7 +151,9 @@ internal sealed class WorldEditorPicker {
             // there, the same proxy approach fixed speakers use. An anchored camera has no static geometry; select it by
             // name over the console twin (editor.select cameras <name>).
             if (camera.Anchor is null) {
-                AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Cameras, Id: camera.Name, Index: -1, Focus: camera.Offset), center: camera.Offset, radius: CameraProxyRadius);
+                var eye = WorldCameraRigCompiler.AuthoredPosition(motion: camera.Rig.Motion);
+
+                AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Cameras, Id: camera.Name, Index: -1, Focus: eye), center: eye, radius: CameraProxyRadius);
             }
         }
 
@@ -181,7 +176,6 @@ internal sealed class WorldEditorPicker {
         m_evaluator = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
         m_targets = [.. targets];
     }
-
     private static void AddProxy(SdfProgramBuilder builder, List<EditorPickTarget> targets, in EditorPickTarget target, Vector3 center, float radius) {
         _ = builder
             .Translate(offset: center)
@@ -189,10 +183,4 @@ internal sealed class WorldEditorPicker {
             .ResetPoint();
         targets.Add(item: target);
     }
-
-    private static FixedVector3 ToFixed(Vector3 value) => new(
-        X: FixedQ4816.FromDouble(value: value.X),
-        Y: FixedQ4816.FromDouble(value: value.Y),
-        Z: FixedQ4816.FromDouble(value: value.Z)
-    );
 }

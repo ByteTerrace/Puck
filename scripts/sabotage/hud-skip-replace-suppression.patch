@@ -1,0 +1,25 @@
+diff --git a/src/Puck.Overlays/UnifiedOverlayNode.cs b/src/Puck.Overlays/UnifiedOverlayNode.cs
+index 8f11adae..90911fb0 100644
+--- a/src/Puck.Overlays/UnifiedOverlayNode.cs
++++ b/src/Puck.Overlays/UnifiedOverlayNode.cs
+@@ -64,6 +64,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
+ 
+     // The one overlay pass's timestamp pair (a begin/end bracket around the fullscreen draw).
+     private const uint TimingQueryCount = 2;
++    // SABOTAGE-INJECTED: forces the replace band to never suppress the five first-party writers for
++    // docs/verification/hud-document (temporary — never present outside that runner's sabotage patch). A static
++    // readonly (not a literal) so the compiler cannot prove the guard at its read site unreachable and refuse the
++    // build over it.
++    private static readonly bool s_sabotageNeverReplace = true;
+ 
+     private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
+     private static readonly string[] s_passLabels = ["overlay"];
+@@ -258,7 +263,7 @@ public Surface ProduceFrame(in FrameContext context) {
+             m_builder.EndChannel();
+         }
+ 
+-        if (m_hudWriter is { HasReplace: true } replacingWriter) {
++        if ((m_hudWriter is { HasReplace: true } replacingWriter) && !s_sabotageNeverReplace) {
+             m_builder.BeginChannel(channel: OverlayChannel.Hud);
+             replacingWriter.EmitReplace(builder: m_builder);
+             m_builder.EndChannel();

@@ -9,9 +9,10 @@ namespace Puck.DirectX.Presentation;
 /// <summary>
 /// The Direct3D 12 <see cref="ISurfacePresenter"/>: a thin facade over <see cref="DirectXSurfaceCompositor"/>
 /// (the DXGI swap chain and fullscreen blit), routed through the shared <see cref="DirectXDeviceContext"/>. The
-/// host loop drives <see cref="Present(Surface)"/> through the backend-neutral seam; multi-draw compositing is
-/// done backend-neutrally through <c>Puck.Compositing.GpuCompositor</c>, which composes into an offscreen
-/// render target that this presenter then blits.
+/// host loop drives <see cref="Present(Surface)"/> through the backend-neutral seam, and that is the whole of
+/// what this presenter records: one fullscreen blit of the surface handed to it. Compositing happens BEFORE the
+/// surface arrives — the SDF compute kernel composites its views into a single image — so the presenter never
+/// sees more than one draw. The compositor's multi-draw overload exists for that case and nothing drives it.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
@@ -20,7 +21,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingF
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfacePresenter"/> class.</summary>
     /// <param name="deviceContext">The shared device and command queue.</param>
-    /// <param name="compositor">The DXGI swap chain and multi-draw compositor.</param>
+    /// <param name="compositor">The DXGI swap chain and blit pipeline.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> or <paramref name="compositor"/> is <see langword="null"/>.</exception>
     public DirectXSurfacePresenter(DirectXDeviceContext deviceContext, DirectXSurfaceCompositor compositor) {
         ArgumentNullException.ThrowIfNull(compositor);

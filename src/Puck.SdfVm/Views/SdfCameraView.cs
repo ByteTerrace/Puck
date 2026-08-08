@@ -1,7 +1,7 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
-using Puck.Cameras;
-using Puck.Compositing;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.SdfVm.Views;
 
@@ -25,7 +25,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <summary>The view's fixed render height.</summary>
     public const uint DefaultHeight = 144;
 
-    private readonly IServiceProvider m_services;
+    private readonly SdfViewGpuServices m_services;
     private readonly bool m_hostsOnDirectX;
     private readonly int m_programWordCapacity;
     private readonly int m_instanceCapacity;
@@ -40,14 +40,15 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <summary>Initializes a camera view against the host's worst-case capacity envelope, so this view's own program
     /// upload never throws when the shared program grows within that ceiling (same contract as
     /// <c>CameraFeedPool</c>'s constructor).</summary>
-    /// <param name="services">The application services (resolves the neutral GPU compute factories).</param>
+    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this view forwards
+    /// to its offscreen engine — resolved once at the composition root and stashed unchanged.</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="programWordCapacity">The main engine's probed program-word floor.</param>
     /// <param name="instanceCapacity">The main engine's probed instance floor.</param>
     /// <param name="dynamicTransformCapacity">The main engine's dynamic-transform slot count.</param>
     /// <param name="width">The render width (default the native panel size).</param>
     /// <param name="height">The render height (default the native panel size).</param>
-    public SdfCameraView(IServiceProvider services, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, uint width = DefaultWidth, uint height = DefaultHeight) {
+    public SdfCameraView(SdfViewGpuServices services, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, uint width = DefaultWidth, uint height = DefaultHeight) {
         ArgumentNullException.ThrowIfNull(services);
 
         m_services = services;
@@ -95,7 +96,6 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public nint Resolve(in ViewRenderContext context) {
         if (
             (Rig is not { } rig) ||
-            (m_services.GetService(serviceType: typeof(IGpuComputeServices)) is not IGpuComputeServices gpu) ||
             !context.Host.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
         ) {
             return 0;
@@ -114,10 +114,12 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             }
         }
 
-        EnsureEngine(device: device, gpu: gpu, program: context.Program);
+        EnsureEngine(device: device, gpu: m_services.Gpu, program: context.Program);
         Rebuild(program: context.Program, revision: context.ProgramRevision);
 
-        var (eye, target, fovRadians) = rig.Resolve(anchor: in anchor, time: context.Time);
+        var clock = new SdfCameraClock(PresentationSeconds: context.Time, AuthoritativeTick: context.AuthoritativeTick);
+
+        var (eye, target, fovRadians) = rig.Resolve(anchor: in anchor, clock: in clock);
 
         for (var screenIndex = 0; (screenIndex < SdfProgramBuilder.MaxScreenSurfaces); screenIndex++) {
             m_engine!.SetScreenSource(screenIndex: screenIndex, imageViewHandle: context.ResolveScreenSource(arg: screenIndex));
@@ -137,9 +139,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
             WarpAmount: 0f
         ) {
-            DynamicTransforms = context.DynamicTransforms,
             DisableAmbientOcclusion = DisableAmbientOcclusion,
             DisableSoftShadows = DisableSoftShadows,
+            DynamicTransforms = context.DynamicTransforms,
         };
 
         m_engine!.SubmitFrame(frame: frame);
@@ -158,13 +160,13 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine — GpuTimingControl.Shared, gated on
         // the backend having registered the timing seam. A [view-timing]-tagged offscreen engine, so its own per-pass GPU ms are
         // distinguishable from the host world's [world-timing] in a mixed log.
-        IGpuTimingPoolFactory? timingFactory = null;
-        IGpuTimingRecorder? timingRecorder = null;
-
-        if (ViewTiming.Enabled) {
-            timingFactory = (m_services.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory);
-            timingRecorder = (m_services.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder);
-        }
+        // WART PRESERVED BY NAME (unit 6b constructor-chain round): the timing bundle is resolved EAGERLY at the
+        // composition root regardless of arming state, but this engine only picks it up when ViewTiming.Enabled is
+        // true at THIS EnsureEngine call (once per engine lifetime) — a view whose engine builds with timing off
+        // never gains it until a device-lost rebuild re-runs EnsureEngine. Fixing this here would smuggle a behavior
+        // change into a pure restructuring; carried over unchanged from the retired IServiceProvider path.
+        var timingFactory = (ViewTiming.Enabled ? m_services.TimingFactory : null);
+        var timingRecorder = (ViewTiming.Enabled ? m_services.TimingRecorder : null);
 
         m_engine = new SdfWorldEngine(
             device: device,

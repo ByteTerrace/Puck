@@ -221,7 +221,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                     )) {
                         errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
                     } else {
-                        devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(ref deviceInterfaceDetail->DevicePath.e0))));
+                        devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(value: ref deviceInterfaceDetail->DevicePath.e0))));
                         errorCode = WIN32_ERROR.NO_ERROR;
                     }
                 }

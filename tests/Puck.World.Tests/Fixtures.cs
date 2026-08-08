@@ -1,0 +1,524 @@
+using System.Numerics;
+using System.Text;
+using System.Text.Json.Nodes;
+
+using Puck.Commands;
+using Puck.Forge.Authoring;
+using Puck.Hosting;
+using Puck.SdfVm;
+using Puck.World.Protocol;
+using Puck.World.Server;
+
+namespace Puck.World.Tests;
+
+/// <summary>
+/// Fixture construction — the Domains-module equivalent for this suite: where a law's raw material (a base
+/// document, a fresh in-process <see cref="WorldServer"/>) comes from, kept out of the law bodies themselves.
+/// The base document is COMPILER-MAINTAINED: <see cref="BuildDocument"/> constructs a minimal, valid
+/// <see cref="WorldDefinition"/> directly in code (never read from <c>src/Puck.World/Assets/worlds</c> — Puck.World,
+/// the composition root, is out of scope; see README.md, and CLAUDE.md's greenfield/scope rules). A change to
+/// <see cref="WorldDefinition"/>'s required member set breaks this file at COMPILE time rather than at a runtime
+/// parse of a JSON fixture nobody is watching — the whole point of the shape.
+/// </summary>
+internal static class Fixtures {
+    /// <summary>The repository's fixed simulation rate (CLAUDE.md, the puck-world skill: "the fixed simulation rate
+    /// is 240 Hz").</summary>
+    private const uint SimulationRateHz = 240U;
+
+    /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target
+    /// <see cref="EngageAuthorityLawTests"/> routes against. <see cref="Puck.SdfVm.SdfProgramBuilder"/> is out of
+    /// reach here (Puck.SdfVm is not referenced by this project), so this simply names index 0, comfortably below
+    /// any reserved derived-face band.</summary>
+    public const int TestPatternScreenIndex = 0;
+
+    /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
+    /// section (see <c>WorldDefinitionValidator.RequireSections</c>), each populated with the smallest value shape
+    /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the
+    /// bare-minimum skeleton:
+    /// <list type="bullet">
+    /// <item><description>an <c>addons</c> row (<see cref="StrictParseLawTests"/> injects an unknown member into
+    /// its serialized form);</description></item>
+    /// <item><description>an empty <c>state</c> section — <see cref="MutationAllOrNothingLawTests"/> targets it by
+    /// ADDING a row through <c>UpsertStateRow</c>, so no row needs to pre-exist;</description></item>
+    /// <item><description>the default 4-seat population (<see cref="AuthorityAdministrationLawTests"/> needs
+    /// Seat(1)/Seat(2), body indices 0 and 1 — bodies 1 and 2 in this 0-based scheme);</description></item>
+    /// <item><description>a <see cref="WorldScreen"/> carrying a <see cref="WorldScreenSource.TestPattern"/> source
+    /// (the simplest engageable-shaped source that needs no booted machine) at
+    /// <see cref="TestPatternScreenIndex"/> — <see cref="EngageAuthorityLawTests"/>'s target.</description></item>
+    /// </list>
+    /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
+    /// ("traveler", a bare-bones grounded model with an empty response table — "the empty table snaps planar
+    /// velocity instantly"), the three channels its body motion program's selected operations require
+    /// (<c>MoveForward</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
+    /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO
+    /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
+    /// <see cref="BuildGradientUpDocument"/> extends with the ONE collider-bearing arm
+    /// <see cref="GradientUpContactLawTests"/> needs, without duplicating this whole literal.
+    /// </summary>
+    public static WorldDefinition BuildDocument() => BuildDocumentCore(
+        spawnPoints: BuildSpawnPoints(),
+        collision: new WorldCollision(Requirements: [], ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f),
+        seatCollider: null,
+        creations: [],
+        placements: []
+    );
+
+    /// <summary>The default 4-corner spawn layout every <see cref="BuildDocumentCore"/> call starts from — a fresh
+    /// array per call, since <see cref="BuildGradientUpDocument"/> overwrites one entry's position without disturbing
+    /// <see cref="BuildDocument"/>'s own copy.</summary>
+    private static WorldSpawnPoint[] BuildSpawnPoints() => [
+        new(Id: "seat-1", Position: new Vector3(x: 0f, y: 0f, z: 0f)),
+        new(Id: "seat-2", Position: new Vector3(x: 2f, y: 0f, z: 0f)),
+        new(Id: "seat-3", Position: new Vector3(x: 0f, y: 0f, z: 2f)),
+        new(Id: "seat-4", Position: new Vector3(x: 2f, y: 0f, z: 2f)),
+    ];
+
+    /// <summary>The one locomotion kit every fixture document declares — <see cref="BuildDocument"/> passes
+    /// <see langword="null"/> (no law here needs a body collider); <see cref="BuildGradientUpDocument"/> is the
+    /// ONE caller that supplies one, so every other law's compiled kit table is untouched byte-for-byte.</summary>
+    /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
+    private static WorldKit[] BuildKits(WorldCollider? seatCollider) => [
+        new(
+            Name: "traveler",
+            BodyMotionProgram: "grounded",
+            Motion: new WorldMotionModel.Grounded(
+                MoveSpeed: 4f,
+                TurnSpeed: 2.5f,
+                RiseGravity: 14f,
+                FallGravity: 23f,
+                MaxFallSpeed: 20f,
+                // The empty response table snaps planar velocity instantly — a legitimate, minimal table
+                // (WorldDefinitionValidator.ValidateResponse loops zero times over it).
+                Response: [],
+                SprintMultiplier: 1f
+            ),
+            // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"
+            // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
+            // shipped worlds' own "traveler"-style kit; none of them is exercised by this suite's laws.
+            Producers: new Dictionary<string, BodyProgramParameters> {
+                ["wander"] = new BodyProgramParameters(
+                    Scalars: new Dictionary<string, float> {
+                        ["forward"] = 0.375f,
+                        ["softRadius"] = 45f,
+                        ["weaveAmplitude"] = 0.5f,
+                        ["inwardGain"] = 1.6f,
+                        ["turnScale"] = 2.5f,
+                        ["weaveFrequencyBase"] = 0.3f,
+                        ["weaveFrequencyRange"] = 0.2f,
+                        ["altitudeGain"] = 0.32f,
+                        ["activityRateBase"] = 2.2f,
+                        ["activityRateRange"] = 1.3f,
+                        ["strafeWave"] = 0f,
+                        ["turnWave"] = 0f,
+                        ["upWave"] = 0f,
+                        ["pitchWave"] = 0f,
+                        ["rollTurn"] = 0f,
+                        ["pressThreshold"] = 0f,
+                        ["altitudeBase"] = 0f,
+                        ["altitudeRange"] = 0f,
+                    },
+                    Channels: new Dictionary<string, string>()
+                ),
+            },
+            Actions: new Dictionary<string, ActionSpec>(),
+            Collider: seatCollider
+        ),
+    ];
+
+    /// <summary>The parameterized core every <see cref="WorldDefinition"/> fixture in this suite builds from — the
+    /// pieces that vary across the two callers (<see cref="BuildDocument"/>, <see cref="BuildGradientUpDocument"/>)
+    /// are parameters; everything else is the one shared literal, never forked.</summary>
+    /// <param name="spawnPoints">The seat spawn layout.</param>
+    /// <param name="collision">The contact tuning and requirements.</param>
+    /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
+    /// <param name="creations">The document's creation rows.</param>
+    /// <param name="placements">The document's placement rows.</param>
+    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldCreation[] creations, WorldPlacement[] placements) {
+        var channels = new WorldChannel[] {
+            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward),
+            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
+            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
+        };
+
+        var bodyMotionPrograms = new BodyMotionProgram[] {
+            new(
+                Name: "grounded",
+                Version: "puck.body-motion.v1",
+                Kind: BodyProgramKind.Motion,
+                Operations: [
+                    BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                    BodyMotionOp.ComputePlanarTargetVelocity,
+                    BodyMotionOp.ShapePlanarVelocity,
+                    BodyMotionOp.SnapYawToPlanarIntent,
+                    BodyMotionOp.RunActionTriggers,
+                    BodyMotionOp.ApplyVerticalGravity,
+                    BodyMotionOp.IntegratePlanarAndVerticalVelocity,
+                    BodyMotionOp.CommitPose,
+                ]
+            ),
+            // WorldPopulation.SeedSeatWander/SeedSimulated unconditionally look up a "ProduceWanderIntent" producer
+            // on the assigned kit's row (WorldPopulation.SeedProducer) to seed per-index wander phase/altitude —
+            // even for a body whose IntentSource is Idle and that never actually wanders. EngageAuthorityLawTests
+            // joins a seat (Server.WorldPopulation.ActivateSeat, reached through the ordinary session door) to get
+            // a LIVE body to route, which walks this exact path, so the producer must exist even though nothing in
+            // this suite drives it.
+            new(
+                Name: "wander",
+                Version: "puck.body-motion.v1",
+                Kind: BodyProgramKind.Producer,
+                Operations: [BodyMotionOp.ProduceWanderIntent]
+            ),
+        };
+
+        var population = new WorldPopulationDefaults(
+            SeatActivation: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
+            NetworkPlayers: 0,
+            // Idle, not Producer("wander") — this fixture declares no producer program at all; nothing simulated
+            // ever needs to resolve a producer name.
+            DefaultPeerSource: IntentSource.Idle,
+            SeatSpawns: ["seat-1", "seat-2", "seat-3", "seat-4"],
+            Distribution: new WorldDistribution(
+                Region: new WorldDistributionRegion.Disc(Radius: 40f, SampleCount: 124),
+                Fill: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.38196602f)
+            ),
+            PeerVariation: new WorldPopulationVariation(
+                Phase: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.38196602f),
+                Weave: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
+                Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
+            ),
+            SeatVariation: new WorldPopulationVariation(
+                Phase: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.38196602f),
+                Weave: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
+                Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
+            ),
+            PeerColors: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
+            // Capacity == LocalSeatCount (the validator's own floor) deliberately: WorldPopulation seeds every
+            // entry from LocalSeatCount..Capacity as a "simulated" crowd stand-in (WorldPopulation.SeedSimulated),
+            // which unconditionally requires a "wander" producer program on the assigned kit REGARDLESS of
+            // DefaultPeerSource — a requirement this minimal fixture has no reason to carry, since none of this
+            // suite's laws exercise simulated/peer bodies. Pinning capacity to the seat count makes that loop empty
+            // (LocalSeatCount..Capacity is 4..4) rather than declaring an unused producer just to satisfy it.
+            Capacity: WorldPopulationLimits.LocalSeatCount,
+            ReconnectGraceTicks: 720
+        );
+
+        var playerDefaults = new WorldPlayerDefaults(
+            Identities: [
+                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
+            ],
+            NeutralColor: "#8C8C8C",
+            ColorSequence: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
+            Saturation: 0.65f,
+            Value: 0.85f,
+            ColorSearchLimit: 64,
+            NoseFactor: 0.35f,
+            PickerThreshold: 0.6f,
+            PickerNeutralColor: "#8C8C8C",
+            PickerNeutralBlend: 0.5f,
+            // Control feel is REQUIRED — there is no engine default to fall back on, so even a compiler-maintained
+            // fixture must state what its seats feel like. These are the numbers the shipped worlds author.
+            SeatLook: new WorldSeatLook(
+                YawSensitivity: 0.001f,
+                PitchSensitivity: 0.001f,
+                InvertYaw: false,
+                InvertPitch: false,
+                MinPitch: -0.35f,
+                MaxPitch: 1.2f,
+                Arming: WorldSeatLookArming.RightButton,
+                WorldAxes: false
+            )
+        );
+
+        var addons = new WorldAddonRow[] {
+            // The strict-parse sabotage target (StrictParseLawTests / Fixtures.SabotagedAddonBytes) — the exact row
+            // kind docs/verification/strict-definition-parse (now ported in-process) was originally named against.
+            // Enabled:false — this suite never mounts an addon runtime, so the row is inert furniture, never a
+            // live-mount attempt against a WASM module that does not exist on disk.
+            new(Name: "probe", ModulePath: "probe.wasm", Hash: "sha256-64/0123456789abcdef", Fuel: 1_000_000UL, Enabled: false),
+        };
+
+        var testPatternScreen = new WorldScreen(
+            Index: TestPatternScreenIndex,
+            Origin: new Vector3(x: 0f, y: 1f, z: 0f),
+            Right: new Vector3(x: 1f, y: 0f, z: 0f),
+            Up: new Vector3(x: 0f, y: 1f, z: 0f),
+            HalfWidth: 1f,
+            HalfHeight: 1f,
+            HalfDepth: 0.1f,
+            Round: 0f,
+            Source: new WorldScreenSource.TestPattern(Width: 320, Height: 240),
+            // Passive: EngageAuthorityLawTests calls Server.Engagement.Engage directly (the authority door itself),
+            // never the screen-policy precheck (proximity/auto-insert/machine-presence) WorldServer.ApplyCommand
+            // layers on top — so the route policy fields are inert for this suite's purposes.
+            Route: WorldScreenRoute.Passive
+        );
+
+        return new WorldDefinition(
+            Motion: new WorldMotionDefaults(MoveSpeed: 4f, TurnSpeed: 2.5f, MaxSmoothError: 3f),
+            SpawnPoints: spawnPoints,
+            Render: WorldRenderDefaults.Default,
+            Screens: [testPatternScreen],
+            Cameras: [],
+            Population: population,
+            PlayerDefaults: playerDefaults,
+            Channels: channels,
+            TargetRegisters: [],
+            BodyMotionPrograms: bodyMotionPrograms,
+            Kits: BuildKits(seatCollider: seatCollider),
+            DefaultSeatKit: "traveler",
+            Assignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 1, Step: 0f), Rows: []),
+            Addons: addons,
+            BindingOverlays: [],
+            Storage: WorldStorageDefaults.None,
+            Creations: creations,
+            Placements: placements,
+            Authoring: WorldAuthoringDefaults.Default,
+            Speakers: [],
+            Tunes: [],
+            Patches: [],
+            Audio: WorldAudioDefaults.Default,
+            Collision: collision,
+            Host: WorldHostDefaults.Default,
+            Views: WorldViewDefaults.Default,
+            Looks: [],
+            LookAssignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
+            Links: [],
+            Grants: [],
+            Hud: WorldHudSection.Default,
+            State: [],
+            InputHold: new WorldInputHoldSettings(CeilingTicks: 120, LowerAfterTicks: 60, DefaultTicks: 0, EqualizeByDefault: true, Participants: [])
+        );
+    }
+
+    /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
+    /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
+    public const float BallSurfaceRadius = 3f;
+
+    /// <summary>The seat slot <see cref="GradientUpContactLawTests"/> joins and repositions onto the ball's flank —
+    /// slot 0 maps directly to body index 0 (the 0-based seat/body correspondence
+    /// <see cref="EngageAuthorityLawTests"/> also relies on), and is the ONE spawn point
+    /// <see cref="BuildGradientUpDocument"/> relocates.</summary>
+    public const int GradientUpSeatSlot = 0;
+
+    /// <summary><c>Puck.Forge.Authoring.CreationGeometry</c>'s own canonical <c>AvatarPrimitive.Sphere</c> local
+    /// radius — that table's constant is private, so this mirrors its grepped value rather than referencing it, to
+    /// size <see cref="BuildBallCreation"/>'s shape <c>Scale</c> against a known local unit. A change to the
+    /// upstream table's value is exactly the kind of drift <see cref="BuildBallCreation"/>'s canonicalize-at-build
+    /// hash pin cannot silently accept: only the RESULTING surface radius matters here, so a mismatch just resizes
+    /// the ball, never breaks the fixture.</summary>
+    private const float SphereLocalRadius = 0.38f;
+
+    /// <summary>How far off vertical (as a fraction of <see cref="BallSurfaceRadius"/>) the flank point
+    /// <see cref="GradientUpContactLawTests"/> grounds on sits — 0.9 puts the surface normal at
+    /// <c>acos(sqrt(1-0.9^2))</c> ~= 64 degrees off world +Y, comfortably past the fixture's 60-degree
+    /// <c>maxSlopeDegrees</c> (the brief's own sizing).</summary>
+    private const float FlankHorizontalRatio = 0.9f;
+
+    /// <summary>How far above the ball's surface, along the flank ray, the seat spawns — small enough that the
+    /// FLAT-UP control arm's straight vertical fall still lands on the same steep face (proving the control's push
+    /// is real contact, not a body that free-falls past the ball entirely) rather than missing the sphere outright.</summary>
+    private const float FlankSpawnClearance = 0.3f;
+
+    /// <summary>The unit direction from the ball's center to its flank contact point — <see cref="FlankHorizontalRatio"/>
+    /// out along world X, the rest along +Y (already unit-length by construction: the two components are
+    /// <c>sin</c>/<c>cos</c> of the same angle). Radial gravity under <see cref="WorldContactRequirement.GradientDerivedUp"/>
+    /// falls exactly along this ray toward the origin (no tangential velocity is ever introduced — see
+    /// <see cref="BuildGradientUpDocument"/>'s remarks), so a body spawned anywhere on it lands on the SAME flank
+    /// point every time.</summary>
+    private static Vector3 FlankDirection { get; } = new(x: FlankHorizontalRatio, y: MathF.Sqrt(1f - (FlankHorizontalRatio * FlankHorizontalRatio)), z: 0f);
+
+    /// <summary>The seat spawn position <see cref="GradientUpContactLawTests"/> relocates <c>seat-1</c> to — on the
+    /// flank ray, <see cref="FlankSpawnClearance"/> world units above the ball's surface.</summary>
+    private static Vector3 GradientUpSpawnPosition { get; } = (FlankDirection * (BallSurfaceRadius + FlankSpawnClearance));
+
+    /// <summary>Builds the ONE code-built creation <see cref="GradientUpContactLawTests"/> needs: a single Sphere
+    /// shape scaled so the placed ball's surface radius is exactly <see cref="BallSurfaceRadius"/>. The hash is
+    /// COMPILER-MAINTAINED — computed through the same pipeline <c>WorldDefinitionValidator.ValidateCreations</c>
+    /// re-derives and compares against, never hand-pinned (this suite's whole point).</summary>
+    private static WorldCreation BuildBallCreation() {
+        var shape = new ShapeDocument(
+            Id: 0,
+            Name: null,
+            Type: AvatarPrimitive.Sphere,
+            Position: Vector3.Zero,
+            Rotation: Quaternion.Identity,
+            Scale: new Vector3(value: (BallSurfaceRadius / SphereLocalRadius)),
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: 0
+        );
+        var document = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: "ball",
+            Intent: CreatorIntent.Object,
+            BakeStyle: null,
+            Palette: null,
+            Shapes: [shape],
+            Frames: null
+        );
+        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ball");
+
+        return new WorldCreation(Id: "ball", Document: canonical.Document, Hash: canonical.Hash);
+    }
+
+    /// <summary>Extends <see cref="BuildDocumentCore"/> with the ONE fixture <see cref="GradientUpContactLawTests"/>
+    /// needs: <see cref="BuildBallCreation"/> placed at the origin with <c>solid.margin</c> 0, a capsule collider on
+    /// the seat kit (the shipped shape: endpoint (0,1,0), radius 0.35 — no other law in this suite needs a
+    /// collider, so <see cref="BuildDocument"/>'s own kit stays colliderless), and <c>seat-1</c>'s spawn point
+    /// relocated to <see cref="GradientUpSpawnPosition"/>, on the ball's steep flank. <paramref name="gradientUp"/>
+    /// selects the ONE discriminating fact — <see cref="WorldContactRequirement.GradientDerivedUp"/> alongside
+    /// <see cref="WorldContactRequirement.SmoothUnionContact"/>, or the latter alone (the control arm) — the
+    /// geometry, collider, and spawn position are byte-identical between the two calls.</summary>
+    /// <param name="gradientUp">Whether the compiled collision authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</param>
+    public static WorldDefinition BuildGradientUpDocument(bool gradientUp) {
+        var creation = BuildBallCreation();
+        var spawnPoints = BuildSpawnPoints();
+
+        spawnPoints[0] = (spawnPoints[0] with { Position = GradientUpSpawnPosition });
+
+        var requirements = (gradientUp
+            ? new[] { WorldContactRequirement.SmoothUnionContact, WorldContactRequirement.GradientDerivedUp }
+            : new[] { WorldContactRequirement.SmoothUnionContact });
+
+        return BuildDocumentCore(
+            spawnPoints: spawnPoints,
+            collision: new WorldCollision(Requirements: requirements, ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f),
+            seatCollider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f),
+            creations: [creation],
+            placements: [
+                new WorldPlacement(Id: "ball", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f)),
+            ]
+        );
+    }
+
+    /// <summary>The code-built document's canonical UTF-8 bytes — <see cref="WorldDefinitionSerialization.Serialize"/>
+    /// over <see cref="BuildDocument"/>, freshly built and serialized on every call (cheap, and it keeps a caller
+    /// free to mutate its own copy without a shared-buffer hazard). This is also the round-trip proof: the fixture
+    /// is only trustworthy if <c>Deserialize(Serialize(BuildDocument()))</c> both succeeds AND validates, which
+    /// every consumer of this method exercises simply by using it (<see cref="FreshServer"/> deserializes these
+    /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <see cref="WorldServer"/> from
+    /// the result).</summary>
+    public static byte[] DefaultWorldBytes() => WorldDefinitionSerialization.Serialize(definition: BuildDocument());
+
+    /// <summary>Serializes the code-built document, injects <c>bogusField: true</c> into the first row of
+    /// <c>addons</c> (mirroring <c>docs/verification/strict-definition-parse</c>'s own choice of a
+    /// <see cref="WorldAddonRow"/> as the target — the row the strict-parse gap was originally named against), and
+    /// returns the re-serialized bytes. Starts from the canonical writer's own output
+    /// (<see cref="DefaultWorldBytes"/>), so the ONLY thing that could make deserialization refuse is the injected
+    /// member.</summary>
+    public static byte[] SabotagedAddonBytes() {
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
+        var addons = node["addons"]!.AsArray();
+
+        addons[0]!.AsObject()["bogusField"] = true;
+
+        return node.ToJsonBytes();
+    }
+
+    /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
+    /// re-serialized bytes. A seat's control feel is a required member with no engine fallback, and a non-nullable
+    /// record parameter does not by itself PROVE that: only a document actually missing the member, actually
+    /// refused, shows the requirement is enforced rather than merely declared. Starts from the canonical writer's own
+    /// output (<see cref="DefaultWorldBytes"/>), so the removal is the only thing that could make it refuse.</summary>
+    public static byte[] MissingSeatLookBytes() {
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
+
+        _ = node["playerDefaults"]!.AsObject().Remove(propertyName: "seatLook");
+
+        return node.ToJsonBytes();
+    }
+
+    /// <summary>Serializes the code-built document and REMOVES <c>host.presentation</c>, returning the re-serialized
+    /// bytes. The member has no C# default, so the source-generated context requires it of a document — but a
+    /// generated schema marking a member <c>required</c> proves nothing about the LOADER, which is exactly the
+    /// disagreement this fixture exists to pin: before
+    /// <see cref="Puck.World.WorldJsonContext"/> respected required constructor parameters, an absent
+    /// <c>presentation</c> was silently filled with enum 0 and the document lost the argument. Starts from the
+    /// canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only thing that could
+    /// make it refuse.</summary>
+    public static byte[] MissingHostPresentationBytes() {
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
+
+        _ = node["host"]!.AsObject().Remove(propertyName: "presentation");
+
+        return node.ToJsonBytes();
+    }
+
+    private static byte[] ToJsonBytes(this JsonNode node) => Encoding.UTF8.GetBytes(s: node.ToJsonString());
+
+    /// <summary>Builds a FRESH, isolated, in-process <see cref="WorldServer"/> over <paramref name="definition"/>
+    /// (<see cref="BuildDocument"/>'s own output when omitted) — the same construction shape
+    /// <see cref="Puck.World.WorldReplaySnapshot.Drive"/> uses to rehydrate an authoritative world for offline
+    /// replay verification (no GPU, no window, no client): a fresh <see cref="WorldPopulation"/>, an unconfigured
+    /// <see cref="WorldRenderEnvelope"/> (reads as "fits" — no render-growing edit is exercised here), a
+    /// <see cref="WorldMachineHost"/> with no registered engines (no screen ever boots a machine), and a
+    /// scratch-directory <see cref="WorldOwnedWorlds"/> catalog seeded from the same document. Every caller —
+    /// including one passing its own document — crosses the SAME serialize/deserialize round-trip
+    /// <see cref="DefaultWorldBytes"/>'s own doc names as the fixture's trustworthiness proof. Callers own disposal
+    /// via <see cref="WorldFixture.Dispose"/>.</summary>
+    /// <param name="definition">The document to boot the server from, or <see langword="null"/> for <see cref="BuildDocument"/>.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null) {
+        var bytes = WorldDefinitionSerialization.Serialize(definition: (definition ?? BuildDocument()));
+
+        definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+
+        var population = new WorldPopulation(definition: definition);
+        var machines = new WorldMachineHost(screens: definition.Screens, engines: []);
+        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
+        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
+        var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
+
+        return new WorldFixture(server: server, machines: machines, stateDirectory: stateDirectory);
+    }
+
+    /// <summary>The tick duration every fixture step advances by — <see cref="EngineTicks.PerRate"/> at the fixed
+    /// 240 Hz simulation rate, computed once and reused so every <see cref="WorldFixture.Step"/> call advances by
+    /// the identical amount.</summary>
+    public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+}
+
+/// <summary>A fresh, disposable <see cref="WorldServer"/> plus the resources its construction owns
+/// (<see cref="WorldMachineHost"/>, the scratch profile-catalog directory) — bundled so a law body drives the
+/// server without having to know what else a fresh boot required.</summary>
+internal sealed class WorldFixture : IDisposable {
+    private readonly WorldMachineHost m_machines;
+    private readonly string m_stateDirectory;
+    private ulong m_tick;
+
+    internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory) {
+        Server = server;
+        m_machines = machines;
+        m_stateDirectory = stateDirectory;
+    }
+
+    /// <summary>The live server under test.</summary>
+    public WorldServer Server { get; }
+
+    /// <summary>Drains one tick — enqueues nothing itself; a law body enqueues a mutation/grant/undo first, then
+    /// calls this to reach the tick boundary where it applies (the mutation substrate's one pipeline: buffer,
+    /// drain FIFO at the tick boundary, compose, revalidate, swap). Mirrors the composition root's own
+    /// <c>WorldInstanceHost</c>'s per-instance tick counter (out of reach here — <c>Puck.World</c> is not
+    /// referenced by this project).</summary>
+    public void Step() {
+        var context = new FixedStepContext(Tick: m_tick, ElapsedTicks: ((m_tick + 1UL) * Fixtures.StepTicks), StepTicks: Fixtures.StepTicks);
+
+        Server.Step(context: in context);
+        m_tick++;
+    }
+
+    /// <summary>The live document's current bytes — the byte-identity probe the all-or-nothing law compares
+    /// before/after an apply attempt.</summary>
+    public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.Definition);
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        m_machines.Dispose();
+
+        try {
+            Directory.Delete(path: m_stateDirectory, recursive: true);
+        } catch (IOException) {
+            // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
+        }
+    }
+}

@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="System.CommandLine" Version="[2.*,)" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

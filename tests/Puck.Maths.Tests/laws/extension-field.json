@@ -1,0 +1,731 @@
+[
+  {
+    "Id": "extension-field.ring-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Subtract"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Negate"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "FromBase"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Multiply \u2014 five reduced base-field products with the square of the root folded back to the non-square (QuadraticExtensionField64.cs:148-157), at the three lean ladder primes 7, 1_000_003 and 2^61 \u2212 1",
+        "Against": "Oracles.PrimeFieldPolynomialProduct at tail [p \u2212 d, 0] \u2014 SCHOOLBOOK multiplication into a three-coefficient wide array followed by top-down reduction against the monic tail, in BigInteger. No closed pair formula anywhere on the reference side, and its own remark states no Montgomery form, no Barrett reduction, no field descriptor (Oracles.cs:1618-1619). Both sides EXACT, so condition (B) drops out entirely \u2014 there is no rounding substrate to share \u2014 and what agreement pins is purely the reduction policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Add, Subtract and Negate \u2014 coordinate-wise through PrimeField64\u0027s three conditional folds",
+        "Against": "the unbounded BigInteger sum, difference and negation reduced ONCE by ((x % p) \u002B p) % p, inline in Subjects.ExtensionRingExact. The reference never branches where the subject\u0027s carrier forces it to: PrimeField64.Add tests sum \u003E= Modulus, Subtract tests left \u003E= right, Negate special-cases zero. Exact on both sides, so (B) is vacuous",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.FromBase as the ring embedding of F_p",
+        "Against": "the BigInteger base sum and base product of the two lifted coordinates, inline in the same claim \u2014 the lift of a sum is the sum of the lifts and likewise for products, with both base values re-formed in arbitrary width rather than through PrimeField64",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the Element positional constructor and its two readers round-trip at every swept pair BEFORE anything else reads them, and the product\u0027s two coordinates are compared against the polynomial reference\u0027s coefficient 0 and coefficient 1 SEPARATELY \u2014 the two are computed by different formulas, so a swapped constructor argument or a swapped reader reddens the multiply comparison rather than cancelling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the ring axioms the type declares: Zero is (0, 0) and a two-sided additive identity, One is (1, 0) and a two-sided multiplicative identity, Negate is the additive inverse, and Subtract(x, y) equals Add(x, Negate(y)) at every swept pair",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the operand fold Subjects.ExtensionResidue reduces every sampled raw into [0, p) before it reaches the type, so this law says NOTHING about the unreduced-operand behaviour the members\u0027 docs decline to guard. ENVELOPE: at p = 7 the twenty-four committed edge raws collapse onto seven residues, so the small end of the ladder is degenerate by construction and the 61-bit entry is where the edge battery actually spreads",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.norm-trace-frobenius-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Trace"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Frobenius"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Subtract"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "FromBase"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Norm \u2014 the closed form A\u00B2 \u2212 d\u00B7B\u00B2 as three separate reduced base products and one conditional-fold subtraction (QuadraticExtensionField64.cs:166-170)",
+        "Against": "Oracles.QuadraticExtensionConjugateProduct \u2014 the element times its own conjugate, reduced as a POLYNOMIAL modulo t\u00B2 \u2212 d through Oracles.PrimeFieldPolynomialProduct. A different derivation, not a transcription of the closed form; exact on both sides, so (B) is vacuous",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the conjugate product\u0027s ROOT coordinate vanishes at every swept element of every ladder prime \u2014 the fact that makes the norm a base-field quantity at all, ASSERTED by the claim rather than assumed by the reference, which returns both coefficients",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Norm\u0027s MULTIPLICATIVITY \u2014 N(x\u00B7y) against N(x)\u00B7N(y)",
+        "Against": "the unbounded BigInteger product of the two reference norms reduced once, inline in Subjects.ExtensionNormTraceFrobeniusExact. This is EXACT at every element of every ladder prime with no sublattice fold anywhere \u2014 the deliberate contrast with the fixed-point family, where Laws.NormMultiplicativity needs Domain.SublatticeShift so its products do not round (LawRegistry.cs:40, Domains.cs:299)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Trace",
+        "Against": "(2a) mod p formed unbounded in BigInteger and reduced once, inline in the same claim. The RULE is a single doubling on both sides and there is no second derivation of it; what this leg buys is the reduction policy \u2014 the subject\u0027s conditional fold sum \u003E= Modulus against the reference\u0027s unbounded double and one remainder \u2014 and it says so rather than claiming more",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Frobenius",
+        "Against": "the pair (a, (p \u2212 b) mod p) formed in BigInteger, inline in the same claim \u2014 the conjugate reached without the subject\u0027s PrimeField64.Negate branch",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the CHARACTERISTIC EQUATION: Multiply(x, x) equals Subtract(Multiply(FromBase(Trace(x)), x), FromBase(Norm(x))) at every swept element. Trace and Norm are the coefficients of x\u0027s own quadratic over F_p, which is a statement about the two TOGETHER that neither one\u0027s own reference makes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the defining equations of the conjugation: Multiply(x, Frobenius(x)) equals FromBase(Norm(x)) and Add(x, Frobenius(x)) equals FromBase(Trace(x))",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Frobenius is an INVOLUTION and its fixed set is EXACTLY the base field: Frobenius(Frobenius(x)) == x everywhere, and Frobenius(x) == x if and only if x.B is zero. The \u0027exactly\u0027 half holds because p is odd, so b and \u2212b differ for every non-zero b \u2014 the one place this family\u0027s characteristic enters a statement, and the half that catches a Frobenius that is the identity map",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Frobenius is a ring AUTOMORPHISM on the swept pair: it carries sums to sums and products to products",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: as in extension-field.ring-vs-oracle, the operand fold reduces every raw before it reaches the type and the small ladder primes are degenerate under the edge battery",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.inverse-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Inverse \u2014 the conjugate divided by the norm, whose one base-field inversion is PrimeField64.Inverse = value^(p \u2212 2) run in ScaledResidueRing64\u0027s Montgomery form (QuadraticExtensionField64.cs:136-143, PrimeField64.cs:382-386)",
+        "Against": "Oracles.ModularInverse of the reference norm by the EXTENDED EUCLIDEAN algorithm, lifted to the pair (a\u00B7n\u207B\u00B9 mod p, (p \u2212 b\u00B7n\u207B\u00B9) mod p) in BigInteger. Euclid is a different THEOREM from Fermat and the reference never enters Montgomery form, so neither the algorithm nor the representation is shared. Exact on both sides \u2014 (B) is vacuous",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the round trip: Multiply(x, Inverse(x)) is One at every swept non-zero element of every lean ladder prime, which is the statement a wrong norm and a wrong conjugate cannot both survive",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inverse is an INVOLUTION \u2014 Inverse(Inverse(x)) == x \u2014 and it fixes One",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal: Inverse(Zero) throws DivideByZeroException, raised by PrimeField64.Inverse through the vanishing norm. ENVELOPE: in a genuine field Zero is the ONLY element whose norm vanishes, so the throwing arm is reached by exactly one operand \u2014 which the claim body visits explicitly on every iteration whatever the domain drew, rather than waiting for the sweep to supply it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the operand fold reduces every raw before it reaches the type, and the swept element is replaced by One where the fold lands on Zero, so the VALUE statement runs over every other element and the zero case is the refusal above",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.pow-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Pow"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Pow over the exponent ladder 0, 1, 2, 3, 5, 8, 13, 255 at the SMALLEST lean prime \u2014 square-and-multiply walked LEAST-significant-bit first over a running power (QuadraticExtensionField64.cs:176-189)",
+        "Against": "Oracles.QuadraticExtensionPower \u2014 MOST-significant-bit-first binary exponentiation whose multiplication step is Oracles.PrimeFieldPolynomialProduct. Two independences at once: a different schedule visiting different intermediates in a different order, and a different product step with no closed pair formula in it. Exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Pow at the exponent p itself, at all three lean primes \u2014 sixty-one extension squarings at the top of the ladder, the deepest chain the type reaches in this suite",
+        "Against": "the pair (a, (p \u2212 b) mod p) formed in BigInteger: the p-power map IS the conjugation, because d is a non-square and so d^((p \u2212 1)/2) is \u22121. The reference is the theorem\u0027s value computed in arbitrary width, NOT the subject\u0027s own Frobenius, so a wrong Frobenius cannot move it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Pow at the exponent p \u002B 1, a 62-bit exponent at the top of the ladder",
+        "Against": "the lifted reference norm \u2014 Oracles.QuadraticExtensionConjugateProduct\u0027s first coordinate, with a zero root part \u2014 in BigInteger: x^(p\u002B1) = x\u00B7x^p = x\u00B7conj(x) = N(x). It holds at the zero element too, so this leg needs no exclusion",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the group order: Pow(x, p\u00B2 \u2212 1) is One at every swept non-zero element of every LADDER PRIME BELOW 2\u00B3\u00B2, the order of F_{p\u00B2}\u0027s multiplicative group. ENVELOPE: p\u00B2 \u2212 1 leaves ulong above 2\u00B3\u00B2, so the 61-bit ladder entry is pinned by the p-power and (p \u002B 1)-power legs instead of by this one \u2014 stated rather than left as a silent gap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the exponent poles the doc names: Pow(x, 0) is One for EVERY x including Zero, Pow(x, 1) is x, and Pow(Zero, e) is Zero at a non-zero ladder exponent",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Pow at the exponents 0 through 8",
+        "Against": "the same number of iterated Multiply calls on the same element",
+        "Shared": "QuadraticExtensionField64.Multiply \u2014 the IDENTICAL member on both sides, so this leg pins the SCHEDULE and never the product. Both sides exact, so condition (B) is vacuous: there is no rounding substrate to share",
+        "Citation": "the product itself is pinned classically by extension-field.ring-vs-oracle and extension-field.product-vs-oracle, and by leg 1 of this same case on the same swept operands",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.batch-inverse-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "BatchInverse"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.BatchInverse \u2014 the running-product method, one extension inversion turning the whole product over and a backward pass peeling each element off (QuadraticExtensionField64.cs:87-119)",
+        "Against": "Oracles.ModularInverse of each element\u0027s own reference norm by the extended Euclidean algorithm, lifted to the conjugate-over-norm pair in BigInteger \u2014 element by element, with no running product anywhere. A completely different algorithm, exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the in-place round trip: Multiply(values[i], original[i]) is One for every i of every batch, so a peel-off that mixed two positions is caught POSITIONALLY rather than only in aggregate",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "BatchInverse at length one",
+        "Against": "Inverse of that single element",
+        "Shared": "QuadraticExtensionField64.Inverse \u2014 the IDENTICAL member, which BatchInverse calls once on its running product. Exact on both sides, so (B) is vacuous",
+        "Citation": "Inverse is pinned classically by extension-field.inverse-vs-oracle, and leg 1 of this case pins BatchInverse\u0027s own answers against Euclid at every length",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BOTH scratch paths are reached: the batch-length ladder runs 1, 2, 3, 511 and 512 through the stack-allocated arm and 513 and 600 through the pooled one. ENVELOPE: the pooling itself is not observable through the public surface, so this pins the ANSWERS on both arms and never the rent-and-return",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal is ATOMIC \u2014 a batch carrying Zero throws DivideByZeroException and leaves EVERY element of the span byte-identical to what it held on entry, because the forward pass writes only the private prefix scratch. No XML doc states this; it is new evidence rather than a doc gap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an EMPTY span returns without throwing and without writing, which the early return at QuadraticExtensionField64.cs:90 is the whole of",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this case consumes no operand domain and advances no frontier counter. Its statement is quantified over batch LENGTHS rather than over an operand stream, so the batch contents come from one seeded house Pcg32XshRr \u2014 the same shape Subjects.PrimeExtensionTwinsMonogenic uses. The ELEMENT-level arithmetic is what the swept cases own",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.construction-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "CreateCanonical"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "SmallestNonSquare"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "BaseField"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "NonSquare"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.SmallestNonSquare \u2014 the ascending walk on PrimeField64.LegendreCharacter, which decides the character by exponentiation in ScaledResidueRing64\u0027s Montgomery form (QuadraticExtensionField64.cs:60-66, PrimeField64.cs:391-397)",
+        "Against": "Oracles.SmallestQuadraticNonResidue over Oracles.PrimeFieldCharacter \u2014 Euler\u0027s criterion by BigInteger.ModPow in PLAIN residues, at all thirteen ladder primes, under a declared step budget whose exhaustion is a named failure rather than a spin. Exact on both sides, so (B) is vacuous; what the leg pins is the character decision and the walk together",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SmallestNonSquare at all thirteen ladder primes",
+        "Against": "the Subjects.ExtensionPrime ladder\u0027s own declared second field \u2014 2, 2, 3, 2, 2, 5, 3, 3, 2, 3, 11, 3, 3 at the moduli 3, 5, 7, 11, 13, 97, 257, 65537, 1000003, 998244353, 2013265921, 2147483647 and 2^61 \u2212 1",
+        "Shared": "",
+        "Citation": "hand-derived from quadratic reciprocity and the supplementary law that 2 is a residue exactly at p \u2261 \u00B11 (mod 8); the derivation for every entry is written out in the campaign spec. Deliberately a SECOND reference beside leg 1: the table is what a reference wrong in the same way as the subject would still have to agree with, and a wrong table fails the case rather than passing it. The failure message says which way to correct \u2014 where the Euler-criterion reference agrees with the subject, the TABLE is what is wrong",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the MINIMALITY the member\u0027s name claims",
+        "Against": "Oracles.PrimeFieldCharacter at every candidate strictly between two and the returned value \u2014 each must be a residue, never a non-residue \u2014 and BigInteger.ModPow of the returned value at (p \u2212 1)/2 must be exactly p \u2212 1 rather than merely not one. Without this leg the walk could return any non-residue at all and still pass leg 1, and a composite modulus could reach the character undetected",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CreateCanonical is Create over the smallest non-square: its NonSquare equals the ladder\u0027s declared value, its BaseField equals the field it was handed, and the whole record equals Create(field, that value). CreateCanonical bypasses Create\u0027s guard by calling the private constructor (QuadraticExtensionField64.cs:54-55), so that it lands on the same object is a statement rather than a wiring fact",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Create\u0027s ACCEPT/REFUSE decision, exhaustively over every reduced value in [1, p) at the six ladder primes at or below 97 and over a fixed square ladder plus the declared non-square above them",
+        "Against": "Oracles.PrimeFieldCharacter: Create must throw ArgumentException naming the parameter nonSquare exactly where the character is \u002B1, and must succeed with NonSquare and BaseField reading back verbatim exactly where it is \u22121. The case fails on a wrong REFUSAL as readily as on a wrong acceptance",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Create REFUSES the literal zero with ArgumentException naming nonSquare, at every ladder prime \u2014 the arm LegendreCharacter\u0027s own zero short-circuit is the whole of, and the one value where the folding described in the reduced-generator row below does not apply",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the REDUCED-GENERATOR bound, enforced ahead of the character test and stated at every ladder prime: the modulus itself, twice the modulus, the modulus plus the declared non-square, and ulong.MaxValue are each refused with ArgumentOutOfRangeException naming nonSquare. The modulus row is the one with teeth \u2014 LegendreCharacter folds an unreduced argument through ScaledResidueRing64.Encode and reports the resulting zero power as \u22121 rather than 0 (PrimeField64.cs:391-397), so the character alone would ADMIT p and hand back F_p[t]/(t\u00B2), the dual numbers. The other rows are what keep record equality meaning \u0027the supplied reduced generator agrees\u0027: d and d \u002B p can no longer become two unequal descriptors of one extension. This statement REPLACES the doc gap that pinned the old acceptance",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the DEFINING field invariant, by exhaustion at the ladder primes 3, 5, 7, 11 and 13 and over EVERY generator Create accepts at each: only the zero element has a vanishing Norm, every non-zero element has one, and Multiply(element, Inverse(element)) is One. This is precisely the statement the admitted-modulus quotient failed \u2014 its non-zero surd (0, 1) had norm zero and no inverse \u2014 so it is what the bound above is worth, measured rather than argued. ENVELOPE: quadratic in the modulus and run once per accepted generator, so it stops at 13; the primes above it are covered by the accept/refuse decision and by this family\u0027s arithmetic cases, which never reach a descriptor the bound would have caught",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every factory names the DESCRIPTOR when it was handed one that names no field: Create, CreateCanonical and SmallestNonSquare each refuse a default-initialized baseField with ArgumentException naming \u0027baseField\u0027, ahead of any generator work. Without it the reduced bound would compare against a zero modulus and blame nonSquare for a base-field mistake",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the DEFAULT EXTENSION is its own descriptor rather than a wrapper the base field\u0027s guard happens to cover, and it is stated separately: One, Zero, Add, Subtract, Negate, Multiply, Inverse, Pow, Norm, Trace, Frobenius, FromBase and BatchInverse at length zero and length three all refuse with InvalidOperationException, at \u0060default\u0060 and at an unassigned array element alike, each row named in the failure text. Without the extension\u0027s own guard, coordinate addition and negation would inherit unreduced base-field arithmetic while the product and inverse paths failed incidentally on a zero modulus \u2014 the same split the prime field carried. BaseField and NonSquare stay outside the policy and read the uninitialized state, which is what this case asserts equality against \u2014 and PRINTABILITY is asserted on ToString itself: a hand-written PrintMembers prints the base field and the non-square alone, so a default value formats as its raw state, nested default base field included, instead of throwing from a guarded identity with the failure misattributed to the PRIME field whose One prints first in the synthesized walk",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "extension identity: two extensions are equal exactly when both the base field and the non-square agree \u2014 equal at the same pair, unequal at two distinct non-squares of one prime (3 and 5 over F_7, whose residues are 1, 2 and 4), and unequal at one non-square SHARED by two primes (6, the least value outside the residues of both F_7 and F_11; 3 will not serve, because it is 5\u00B2 modulo eleven and Create rightly refuses it there)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this case consumes no operand domain and advances no frontier counter \u2014 its statement is quantified over the declared prime ladder and, at or below 97, over each field\u0027s whole residue set, which is exhaustion rather than sampling",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "extension-field.product-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "A"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticExtensionField64\u002BElement",
+        "Name": "B"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuadraticExtensionField64.Multiply at the 61-bit ladder prime 2\u2076\u00B9 \u2212 1, over the house FOUR-OPERAND edge battery \u2014 every element component drawn from the committed edge set independently, which the width-2 lane stream in extension-field.ring-vs-oracle does not do",
+        "Against": "Oracles.PrimeFieldPolynomialProduct at tail [p \u2212 d, 0] \u2014 the same shared-nothing schoolbook route. Exact on both sides, so (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the raw carriage is lossless in BOTH directions: every reduced component is below PrimeField64.MaximumModulus = 2\u2076\u00B2, so Subjects.ExtensionResidue lands inside the non-negative longs the BinaryElemOp shape carries and the returned coordinates cast back without wrapping. No sign or width policy sits between the law and the kernel",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this law\u0027s edge battery runs at ONE modulus \u2014 the 61-bit one, where the base products actually fill the UInt128 reduction and where the edge set spreads across the most residues. The other ladder entries are swept by extension-field.ring-vs-oracle instead, on its own key",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

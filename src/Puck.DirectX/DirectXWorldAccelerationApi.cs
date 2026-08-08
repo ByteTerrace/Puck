@@ -70,7 +70,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
             aabbValues[0] = -1.0f; aabbValues[1] = -1.0f; aabbValues[2] = -1.0f; // MinX, MinY, MinZ
             aabbValues[3] = 1.0f; aabbValues[4] = 1.0f; aabbValues[5] = 1.0f;    // MaxX, MaxY, MaxZ
-            ((ID3D12Resource*)aabbBuffer)->Unmap(0, (D3D12_RANGE*)null);
+            ((ID3D12Resource*)aabbBuffer)->Unmap(Subresource: 0, pWrittenRange: (D3D12_RANGE*)null);
 
             var aabbAddress = ((ID3D12Resource*)aabbBuffer)->GetGPUVirtualAddress();
 
@@ -81,7 +81,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasInfo;
 
-            device5->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputs, &blasInfo);
+            device5->GetRaytracingAccelerationStructurePrebuildInfo(pDesc: &blasInputs, pInfo: &blasInfo);
 
             var blasBuffer = CreateBuffer(device: device, sizeBytes: blasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
             var blasScratch = CreateBuffer(device: device, sizeBytes: blasInfo.ScratchDataSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
@@ -101,7 +101,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasInfo;
 
-            device5->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputs, &tlasInfo);
+            device5->GetRaytracingAccelerationStructurePrebuildInfo(pDesc: &tlasInputs, pInfo: &tlasInfo);
 
             var tlasBuffer = CreateBuffer(device: device, sizeBytes: tlasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
             var tlasScratch = CreateBuffer(device: device, sizeBytes: tlasInfo.ScratchDataSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
@@ -264,14 +264,14 @@ public sealed unsafe class DirectXWorldAccelerationApi {
     private static ID3D12Device5* QueryDevice5(ID3D12Device* device) {
         var iid = ID3D12Device5.IID_Guid;
 
-        ((IUnknown*)device)->QueryInterface(in iid, out var device5).ThrowIfFailed(operation: "ID3D12Device->QueryInterface(ID3D12Device5)");
+        ((IUnknown*)device)->QueryInterface(ppvObject: out var device5, riid: in iid).ThrowIfFailed(operation: "ID3D12Device->QueryInterface(ID3D12Device5)");
 
         return (ID3D12Device5*)device5;
     }
     private static ID3D12GraphicsCommandList4* QueryCommandList4(ID3D12GraphicsCommandList* commandList) {
         var iid = ID3D12GraphicsCommandList4.IID_Guid;
 
-        ((IUnknown*)commandList)->QueryInterface(in iid, out var commandList4).ThrowIfFailed(operation: "ID3D12GraphicsCommandList->QueryInterface(ID3D12GraphicsCommandList4)");
+        ((IUnknown*)commandList)->QueryInterface(ppvObject: out var commandList4, riid: in iid).ThrowIfFailed(operation: "ID3D12GraphicsCommandList->QueryInterface(ID3D12GraphicsCommandList4)");
 
         return (ID3D12GraphicsCommandList4*)commandList4;
     }
@@ -293,13 +293,13 @@ public sealed unsafe class DirectXWorldAccelerationApi {
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
-            initialState,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &buffer
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: initialState,
+            pDesc: in bufferDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &buffer,
+            riidResource: in resourceIid
         );
 
         return (nint)buffer;
@@ -307,7 +307,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
     private static nint Map(nint resource) {
         void* mapped;
 
-        ((ID3D12Resource*)resource)->Map(0, (D3D12_RANGE*)null, &mapped);
+        ((ID3D12Resource*)resource)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
 
         return (nint)mapped;
     }
@@ -320,7 +320,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             pResource = (ID3D12Resource*)resource,
         };
 
-        commandList->ResourceBarrier(1, &barrier);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
     }
     private static void Release(nint resource) {
         if (0 != resource) {

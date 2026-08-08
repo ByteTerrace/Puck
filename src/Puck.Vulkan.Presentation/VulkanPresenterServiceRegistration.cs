@@ -82,7 +82,7 @@ public static class VulkanPresenterServiceRegistration {
         services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(
             pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()
         ));
-        services.TryAddSingleton<IGpuQueueSubmitter>(static sp => new VulkanGpuQueueSubmitter(
+        services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static sp => new VulkanGpuQueueSubmitter(
             frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
         ));

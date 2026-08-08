@@ -92,7 +92,9 @@ internal static class FrameworkMemoryMap {
     /// writes it (games own <see cref="GameRam"/> upward). A cabinet with no seeded share leaves it all-zero — the game
     /// then converges the region on zero, which the room XOR never mistakes for a real share group.</summary>
     public const ushort VictoryShareSource = 0xC0F0;
-    /// <summary>The victory-share source slot's width (a 128-bit gate = 16 bytes; matches <c>VictoryGate.RegionByteCount</c>).</summary>
+    /// <summary>The victory-share source slot's width: a 128-bit gate = 16 bytes. This was pinned to a host-side
+    /// <c>VictoryGate.RegionByteCount</c> that no longer exists (see <see cref="VictoryModule"/>), so the width is
+    /// self-standing now and a future reader must match it rather than the reverse.</summary>
     public const int VictoryShareByteCount = 16;
 
     /// <summary>The 160-byte shadow OAM page the HRAM trampoline DMA-copies to the hardware OAM every VBlank.</summary>

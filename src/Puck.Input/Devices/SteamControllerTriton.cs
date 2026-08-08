@@ -52,8 +52,6 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
 
     // A freshly opened receiver slot may not accept a feature write immediately, so each setup command is retried
     // briefly before giving up. Missing a write degrades a feature, never crashes.
-    private const int FeatureWriteAttempts = 50;
-    private const int FeatureWriteRetryDelayMilliseconds = 2;
     private const int HidFeatureReportBytes = 64;       // HID_FEATURE_REPORT_BYTES (the declared feature length)
     private const int HidRumbleOutputReportBytes = 10;  // HID_RUMBLE_OUTPUT_REPORT_BYTES (report id + 9-byte payload)
 
@@ -109,8 +107,6 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
     //   capacitive proximity sensors; and RightTriggerClick (1u<<23), LeftTriggerClick (1u<<27) — the analog
     //   trigger crossing full scale already carries the full-pull click.
 
-    private const float StickRange = 32768f;
-    private const float StickDeadzone = 0.12f;
     private const float TriggerRange = 32768f;          // full pull is ~32768 over the u16 range
     private const int TriggerThreshold = 256;           // ~0.8% of full scale, to reject a resting jitter floor
     private const float PadRange = 65536f;              // normalized pad position = raw / 65536 + 0.5
@@ -127,7 +123,6 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
     // scales across the full 16-bit speed range. Coalesce equal-or-weaker writes to a >=30 ms cadence so a
     // per-tick streamer can't flood the link; stops, the first write, and any intensity increase always go through.
     private const float RumbleSpeedMax = 65535f;
-    private const long RumbleWriteIntervalMilliseconds = 30L;
     // Rumble output-report field offsets (packed MsgHapticRumble: type u8, intensity u16, then {speed u16, gain
     // i8} per side). intensity is 16-bit — this shifts the speeds one byte past a naive u8 reading.
     private const int RumbleTypeOffset = 1;
@@ -143,8 +138,7 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
     private readonly ImuOrientationTracker m_tracker = new();
     private bool m_hasSensorTimestamp;
     private uint m_lastSensorTimestamp;
-    private long m_lastRumbleSendTicks;
-    private float m_lastRumbleIntensity;
+    private RumbleThrottle m_rumbleThrottle;
     private long m_nextLizardWatchdogTicks;
 
     /// <summary>Initializes a new instance of the <see cref="SteamControllerTriton"/> class.</summary>
@@ -195,15 +189,7 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
     private async ValueTask<bool> SendSettingAsync(byte settingNum, ushort value, CancellationToken cancellationToken) {
         BuildSingleSetting(settingNum: settingNum, value: value);
 
-        for (var attempt = 0; (attempt < FeatureWriteAttempts); ++attempt) {
-            if (m_device.TrySetFeatureReport(buffer: m_featureBuffer)) {
-                return true;
-            }
-
-            await Task.Delay(millisecondsDelay: FeatureWriteRetryDelayMilliseconds, cancellationToken: cancellationToken);
-        }
-
-        return false;
+        return await HidFeatureWriteRetry.TryWriteAsync(device: m_device, buffer: m_featureBuffer, cancellationToken: cancellationToken);
     }
     // The synchronous variant used by the watchdog (on the I/O thread, between reads) and by disposal (the async
     // loop has stopped, the handle is still open) to best-effort re-assert / restore a setting without awaiting.
@@ -229,21 +215,10 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
         var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
         var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
         var intensity = MathF.Max(x: low, y: high);
-        var now = Stopwatch.GetTimestamp();
 
-        // Throttle equal-or-weaker updates inside the 30 ms window; stops, the first write, and any intensity
-        // increase always go through (so rumble-off and stronger effects stay instant). The demo's rumble streamer
-        // re-issues each tick, so this <=30 ms cadence also sustains a held effect if the firmware auto-decays.
-        if ((0f < intensity) && (intensity <= m_lastRumbleIntensity) && (0L != m_lastRumbleSendTicks)) {
-            var elapsedMilliseconds = (((now - m_lastRumbleSendTicks) * 1000L) / Stopwatch.Frequency);
-
-            if (elapsedMilliseconds < RumbleWriteIntervalMilliseconds) {
-                return ValueTask.CompletedTask;
-            }
+        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+            return ValueTask.CompletedTask;
         }
-
-        m_lastRumbleIntensity = intensity;
-        m_lastRumbleSendTicks = now;
 
         // Map the low band to the left motor speed and the high band to the right — an all-zero write stops rumble.
         return WriteRumbleAsync(
@@ -316,8 +291,8 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
         if (0u != (raw & ButtonRightPadClick)) { buttons |= GamepadButtons.Touchpad; }
         if (0u != (raw & ButtonLeftPadClick)) { buttons |= GamepadButtons.TouchpadLeft; }
 
-        var accelerometer = ReadVector3Int16(report: report, offset: AccelerometerOffset, scale: AccelerometerGPerLsb);
-        var gyro = ReadVector3Int16(report: report, offset: GyroOffset, scale: GyroRadiansPerSecondPerLsb);
+        var accelerometer = GamepadNormalization.ReadVector3Int16(source: report, offset: AccelerometerOffset, scale: AccelerometerGPerLsb);
+        var gyro = GamepadNormalization.ReadVector3Int16(source: report, offset: GyroOffset, scale: GyroRadiansPerSecondPerLsb);
         var timestamp = BinaryPrimitives.ReadUInt32LittleEndian(source: report[ImuTimestampOffset..]);
         var rightPadTouched = (0u != (raw & ButtonRightPadTouch));
         var leftPadTouched = (0u != (raw & ButtonLeftPadTouch));
@@ -326,11 +301,11 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
-            LeftStick: ReadStick(report: report, offset: LeftStickOffset),
-            LeftTrigger: NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerLeftOffset..])),
+            LeftStick: SteamControllerInput.ReadStick(report: report, offset: LeftStickOffset),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerLeftOffset..]), threshold: TriggerThreshold, range: TriggerRange),
             Orientation: m_tracker.Update(gyroRadiansPerSecond: ToFusionFrame(sensor: gyro), accelerometerG: ToFusionFrame(sensor: accelerometer), deltaSeconds: SensorDeltaSeconds(sensorTimestamp: timestamp)),
-            RightStick: ReadStick(report: report, offset: RightStickOffset),
-            RightTrigger: NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerRightOffset..])),
+            RightStick: SteamControllerInput.ReadStick(report: report, offset: RightStickOffset),
+            RightTrigger: GamepadNormalization.NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerRightOffset..]), threshold: TriggerThreshold, range: TriggerRange),
             SensorTimestamp: timestamp,
             // The two trackpads surface as the shared touch points (right → Touch0, left → Touch1), mirroring the
             // classic pad; pad pressure (unPressureLeft/Right) has no carrier in GamepadState and is not exposed.
@@ -358,30 +333,6 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
     private static Vector3 ToFusionFrame(Vector3 sensor) {
         return new Vector3(x: sensor.X, y: sensor.Z, z: -sensor.Y);
     }
-    private static Vector3 ReadVector3Int16(ReadOnlySpan<byte> report, int offset, float scale) {
-        return new Vector3(
-            x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) * scale),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) * scale),
-            z: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 4)..]) * scale)
-        );
-    }
-    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset) {
-        // Signed int16 axes centered at 0; Y grows up already (the Steam family convention), so no flip. Apply a
-        // radial deadzone then rescale the remainder to the full range.
-        var stick = new Vector2(
-            x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) / StickRange),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) / StickRange)
-        );
-        var magnitude = stick.Length();
-
-        if (magnitude <= StickDeadzone) {
-            return Vector2.Zero;
-        }
-
-        var scaled = ((MathF.Min(x: magnitude, y: 1f) - StickDeadzone) / (1f - StickDeadzone));
-
-        return ((stick / magnitude) * scaled);
-    }
     private static GamepadTouchPoint ReadTouch(ReadOnlySpan<byte> report, int offset, byte id) {
         // Signed int16 X (left→right) and Y (bottom→top); normalized position = raw / 65536 + 0.5. Y is flipped to
         // the shared GamepadTouchPoint top-left origin convention (X right, Y down).
@@ -393,13 +344,6 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
             IsActive: true,
             Position: new Vector2(x: ((x / PadRange) + PadHalf), y: (1f - ((y / PadRange) + PadHalf)))
         );
-    }
-    private static float NormalizeTrigger(ushort raw) {
-        if (raw <= TriggerThreshold) {
-            return 0f;
-        }
-
-        return MathF.Min(x: ((raw - TriggerThreshold) / (TriggerRange - TriggerThreshold)), y: 1f);
     }
 
     /// <summary>

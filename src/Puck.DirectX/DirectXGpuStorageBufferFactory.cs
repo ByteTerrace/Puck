@@ -33,18 +33,18 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            (D3D12_CLEAR_VALUE?)null,
-            in resourceIid,
-            &buffer
+            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            pDesc: in bufferDesc,
+            pHeapProperties: in heapProperties,
+            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            ppvResource: &buffer,
+            riidResource: in resourceIid
         );
 
         void* mapped;
 
-        ((ID3D12Resource*)buffer)->Map(0, (D3D12_RANGE*)null, &mapped);
+        ((ID3D12Resource*)buffer)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
 
         return new DirectXGpuStorageBuffer(
             bufferHandle: (nint)buffer,

@@ -1,0 +1,14 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.targets.
+
+        Its companion Directory.Build.props stops MSBuild's upward Directory.Build.props discovery at this
+        folder; MSBuild searches for Directory.Build.targets SEPARATELY, so this empty file is what stops
+        that second discovery. Without it the quarantined tree would still inherit the engine's
+        Directory.Build.targets — the Windows-capture projection references and the architecture gate — which
+        is precisely the isolation the .props firewall exists to establish. One half of the pair is not a
+        firewall; it is a firewall with a door in it.
+    -->
+
+</Project>
