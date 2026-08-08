@@ -1399,8 +1399,8 @@ under the 2026-08-06 four-world charter; `Puck.World/Assets/worlds` now ships
 only `play`/`dive`/`kart`/`jump`, none of which authors an `addons` row), so
 this trap is dormant until a world author mounts it again.
 
-`wasm/build.ps1` / `build.sh` rebuild, copy to
-`src/Puck.World/Assets/addons/puck-addon-default.wasm`, and print the hash.
+`dotnet run -c Release wasm/build.cs` rebuilds, copies to
+`src/Puck.World/Assets/addons/puck-addon-default.wasm`, and prints the hash.
 
 **The world is document-only.** The run loads the checked-in `--world` path or
 the shipped default (`play.world.json`); a missing or invalid document refuses
@@ -1600,7 +1600,7 @@ deferred one-shot and no reason to leave the tree in a half-regenerated state:
 
 1. `dotnet run --project src/Puck.Cli -c Release -- wasm-stdlib` for the generated
    Rust.
-2. `wasm/build.ps1` or `build.sh` to rebuild the artifact and print its hash.
+2. `dotnet run -c Release wasm/build.cs` to rebuild the artifact and print its hash.
 3. Every world that mounts the addon, together with any baked fallback pin —
    no shipped world mounts `puck-addon-default` today (the `default` world
    that once did was retired under the 2026-08-06 four-world charter), so

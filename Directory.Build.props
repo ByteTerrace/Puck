@@ -48,6 +48,17 @@
              (see the ItemGroups below, which exclude them by this same condition), and two of them hold
              InternalsVisibleTo grants into Puck.World. A terminal kind declares no <PuckLayer>. -->
         <PuckKind Condition="'$(IsFileBasedProgram)' == 'true'">FileApp</PuckKind>
+
+        <!-- A file-based program's synthesized project sits beside the .cs file rather than in its own
+             directory, so restoring one with a lock file drops a packages.lock.json into whatever
+             directory the script lives in — .runs/, docs/verification/<name>/, a scratch folder. The
+             lock would pin the tree-wide IsAotCompatible analyzer packages, which no script references
+             and which every script would pin identically; committing that is litter and NOT committing
+             it means `dotnet run <script>.cs` leaves the working tree dirty every time. Real projects
+             keep their locks (the property above); file-based programs opt out. -->
+        <RestorePackagesWithLockFile
+            Condition="'$(IsFileBasedProgram)' == 'true'"
+        >false</RestorePackagesWithLockFile>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">

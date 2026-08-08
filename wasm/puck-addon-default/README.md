@@ -29,6 +29,6 @@ body — using `puck_stdlib::Inputs` to drain the host's batch and
 `puck_stdlib::Outputs`'s `act_bipolar`/`act_binary`/`act_unipolar` methods
 against your declared channel handles, never a raw byte offset.
 
-Build it from the workspace root (`../build.ps1` / `../build.sh`, or plain
+Build it with `dotnet run -c Release wasm/build.cs` (or plain
 `cargo build --release` run from `wasm/`); the compiled module lands at
 `../target/wasm32-unknown-unknown/release/puck_addon_default.wasm`.

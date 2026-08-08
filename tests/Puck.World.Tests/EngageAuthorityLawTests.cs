@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Ports the ENGAGE/disengage-authority law <c>verification/authority/run.ps1</c> proves out-of-process (its own
+/// Ports the ENGAGE/disengage-authority law <c>verification/authority</c> proved out-of-process before its quarantine (its own
 /// <c>03-assign.txt</c>/<c>05-disengage.txt</c> cases — a denial paired with a control, actor always distinct from
 /// the target) as an in-process substrate law directly against the ENGAGE door:
 /// <see cref="Puck.World.Server.WorldEngagement.CheckEngage"/>, which is nothing more than a

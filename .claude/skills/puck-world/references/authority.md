@@ -401,9 +401,10 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 
 ## Verifying
 
-`verification/authority/run.ps1` is QUARANTINED (2026-08-06) — its cases
+`verification/authority/` is QUARANTINED (2026-08-06) — its cases
 04-06 assumed the retired `default` world's `screen:0` and a mounted addon,
-which no shipped world authors today; the stub exits 3 naming the successor.
+which no shipped world authors today. No runner remains; its README is the
+record, and names the successor.
 The acting-principal/administration contract it proved now lives in
 `tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests` (not yet in
 `Puck.slnx`); an engage-authority law with code-built `testPattern`-screen

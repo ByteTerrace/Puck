@@ -141,7 +141,7 @@ awk 'match($0, /^[a-z][A-Za-z0-9._-]* - /) { print substr($0, 1, RLENGTH-3) }' /
 `.runs/reconcile.sh` does this for both composition tiers and diffs names AND affordance
 metadata — per-verb routing / valueKind / bindable and per-channel shape / consumer, both
 tables of the `world.affordances` payload — against recorded baselines. The metadata pass
-(`.runs/afford-diff.ps1`, invoked by reconcile.sh) exists because a name-only diff silently
+(`.runs/afford-diff.cs`, invoked by reconcile.sh) exists because a name-only diff silently
 missed a `world.console` bindability flip — it FAILS the run on any drift in either table,
 naming each row and field, and a re-record of `.runs/afford-baseline.txt` is the deliberate
 way to accept one.
@@ -193,10 +193,9 @@ deleted 7 verbs it had not, and no build or test flagged it — only booting did
 |---|---|
 | `LEDGER.md` | the classification: totals, per-class counts, kill list, proof tables |
 | `LEDGER-tier3-grammar.md` | the path-addressed `world.row.*` design spec |
-| `ledger.tsv` | per-verb class / routing / bindability / replacement |
-| `classify.py` | regenerates the counts — python, which this machine's stub cannot run; it gates nothing |
+| `ledger.tsv` | per-verb class / routing / bindability / replacement — the durable record; nothing regenerates it |
 | `reconcile.sh` | re-measures the surface; diffs names AND metadata; fails on metadata drift |
-| `afford-diff.ps1` | the verb+channel metadata diff reconcile.sh runs; exits nonzero naming row and field |
+| `afford-diff.cs` | the verb+channel metadata diff reconcile.sh runs; exits nonzero naming row and field. `dotnet run -c Release .runs/afford-diff.cs -- <baseline> <fresh>` |
 | `puck citations` | validates cited verb tokens (skills + `src/` XML docs) against code-swept vocabularies; not a `.runs` artifact — it lives in `Puck.Cli` |
 | `verbs-landed.txt` | the 239 verbs as landed |
 | `verbs-win.txt` | the 355-verb baseline at 7667d991 |

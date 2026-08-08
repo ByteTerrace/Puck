@@ -34,7 +34,7 @@ Three build-time variants (Cargo features — see `Cargo.toml`; exactly one sele
 
 Build: `cargo build --release --target wasm32-unknown-unknown -p puck-addon-channelwalk [--no-default-features
 --features bound64|bound65]`, then copy `target/wasm32-unknown-unknown/release/puck_addon_channelwalk.wasm` to
-`dist/<name>.wasm`. There is no build script (unlike `puck-addon-default`'s `wasm/build.ps1`) — this crate is
+`dist/<name>.wasm`. There is no build script (unlike `puck-addon-default`'s `wasm/build.cs`) — this crate is
 never shipped, so nothing refreshes a committed copy automatically; re-run the three builds by hand after any
 source change and re-learn each hash (see below).
 
@@ -128,7 +128,7 @@ leaves `0` in either run. Contrast `strafe` (a Bipolar ROLE channel), where the 
 `composed=0.2500152587890625(16385)`, both `clamped=yes`).
 
 The prior pass left two candidate explanations open; this pass isolates the answer to (a), confirmed by reading
-both call sites and the accumulation that feeds them (`src/Puck.World/Server/WorldServer.cs`):
+both call sites and the accumulation that feeds them (`src/Puck.World.Server/WorldServer.cs`):
 
 - `StageContribution` (~line 849) reads the addon's act as two SEPARATE halves per ordinal:
   `submission.Intent[ordinal]` (an analog delta) and `submission.HeldChannels[ordinal]` (a composition

@@ -835,6 +835,6 @@ No engine gate. Build (`dotnet build Puck.slnx -c Release` — architecture
 lanes + XML-doc diagnostics) and RUN `Puck.World`, round-tripping the
 affected document over stdin (`world.status`, `world.save`, `world.load`).
 Committed runner: `docs/verification/strict-definition-parse/run.ps1`.
-`docs/verification/hud-document/run.ps1` is QUARANTINED (2026-08-06 — see
+`docs/verification/hud-document/` is QUARANTINED (2026-08-06 — see
 [hud.md](hud.md)'s "Verifying" section); validate HUD document changes by
 running the app.

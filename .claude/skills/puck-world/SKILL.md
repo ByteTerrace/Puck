@@ -190,17 +190,21 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   authors today — `engagement-dissolution` was found broken the same way
   while re-verifying `authority`'s quarantine, its own dependency being
   implicit (`screen.insert 0 …`, no `--world` override) rather than a named
-  file citation a text sweep would catch. Each `run.ps1` is now a stub that
-  exits non-pass with a note; validate those contracts by RUNNING THE APP,
-  not by the runner. `authority`'s successor is `tests/Puck.World.Tests`
+  file citation a text sweep would catch. None of the six keeps a runner —
+  each directory now holds a README recording what it proved and why it was
+  retired; validate those contracts by RUNNING THE APP. `authority`'s
+  successor is `tests/Puck.World.Tests`
   (`AuthorityAdministrationLawTests`, not yet in `Puck.slnx`) for the
   acting-principal/administration contract; an engage-authority law with
   code-built `testPattern`-screen furniture is chartered to follow there and
   is expected to absorb `engagement-dissolution`'s engage/disengage phases
   too (its tape/codec phases have no chartered successor yet — owed work).
   Do NOT create new persisted runner/battery artifacts without asking, and do
-  NOT repair a rotted fixture — quarantine it with a note and move on
-  (validation currency is run-the-app, owner-in-the-loop). Verify
+  NOT repair a rotted fixture — quarantine it and move on (validation currency
+  is run-the-app, owner-in-the-loop). Quarantining means DELETING the runner
+  and leaving a README in its place carrying what it proved, why it was
+  retired, and how to check the contract live; a runner kept alive only to
+  announce it no longer runs is a battery-shaped file that is not a battery. Verify
   thoroughly; ask before committing new permanent verification
   infrastructure.
 

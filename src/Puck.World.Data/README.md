@@ -708,6 +708,6 @@ affected document over stdin (`world.status`, `world.save`, `world.load`;
 see [`Puck.World`'s README](../Puck.World/README.md) for the console). One
 committed runner exercises this project's load-bearing behavior end to
 end: `docs/verification/strict-definition-parse/run.ps1` (the strict-parse
-contract). `docs/verification/hud-document/run.ps1` is QUARANTINED
+contract). `docs/verification/hud-document/` is QUARANTINED
 (2026-08-06) and is not a gate — validate HUD document changes by running
-the app; see that stub's own header for the recipes.
+the app; see that directory's README for the recipes.

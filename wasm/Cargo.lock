@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "puck-addon-arcade"
-version = "0.1.0"
-dependencies = [
- "puck-stdlib",
-]
-
-[[package]]
 name = "puck-addon-channelwalk"
 version = "0.1.0"
 dependencies = [

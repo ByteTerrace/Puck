@@ -1,5 +1,5 @@
 //! **BATTERY-ONLY GUEST.** Never shipped, no shipped world pins it. Exists solely so
-//! `docs/verification/lane-present-deletion/run.ps1` can prove the host refuses a channel
+//! `docs/verification/lane-present-deletion` (now QUARANTINED — see its README) could prove the host refuses a channel
 //! descriptor naming a RETIRED `AddonChannelKind` ordinal (4, formerly `Geometry`; 5, formerly
 //! `Overlay` — both retired permanently with the rest of the lane axis, owner ruling 2026-08-02) —
 //! by the ORDINARY undefined-kind refusal `AddonChannelTableReader.TryDecode` already gives every

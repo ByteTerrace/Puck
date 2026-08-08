@@ -215,8 +215,8 @@ row.
 
 ## Verifying
 
-`docs/verification/ordered-domain/run.ps1` is QUARANTINED (2026-08-06, owner
+`docs/verification/ordered-domain/` is QUARANTINED (2026-08-06, owner
 ruling — its fixture/transcript drifts at the repo's change rate faster than
-repair is worth); it is now a non-pass stub. Verify the ordering contract by
+repair is worth); no runner remains, only its README. Verify the ordering contract by
 RUNNING THE APP: one stdin batch interleaving a grant and the command that
 needs it, plus the reversed order as the discriminating control.

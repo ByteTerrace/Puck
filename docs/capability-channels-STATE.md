@@ -330,9 +330,9 @@ disengage is never misreported as the route-without-latch REPAIR case — only a
 route that was never established through `Engage` (a bare `world.grant`) still
 reads that way. `screen.state`/`world.screens`/`player.channels` echo the
 widened truth (target kind, capture, mask). Verified live: classic screen
-engage/disengage unchanged (`verification/authority/run.ps1` and
-`docs/verification/engagement-dissolution/run.ps1` — BOTH QUARANTINED
-2026-08-06, see each stub — both green at the time, after updating their
+engage/disengage unchanged (`verification/authority/` and
+`docs/verification/engagement-dissolution/` — BOTH QUARANTINED
+2026-08-06, see each directory's README — both green at the time, after updating their
 asserted wording to the new `Describe()`/echo text and the `PKRN` magic);
 possession (route a seat to another body, capture on — the source freezes, the
 target moves under the source's channels, `replay.record`/`replay.stop`/

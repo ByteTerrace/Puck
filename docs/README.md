@@ -51,7 +51,7 @@ that fails when it disagrees with its source.
 | [AGB research wiki](agb-wiki/README.md) | Cited architecture, accuracy, determinism, and performance reference. |
 | [API reference](api/index.md) | Landing page and build instructions for the docfx member reference over the reusable libraries. The site itself (`docs/api/api/`, `docs/api/_site/`) is git-ignored build output of `dotnet docfx docs/api/docfx.json`, regenerated on demand. |
 | [Document examples](examples/) | Reference documents for the live authoring families: `creations/` (`puck.creation.v1`) and `tunes/` (`puck.audio.v1`). Nothing loads them; they are read by hand. |
-| [Verification runners](verification/) | Committed, re-runnable batteries — one directory per contract, each with a self-documenting `run.ps1` that builds what it needs and exits nonzero on a miss. The authority battery lives at the repository root, `verification/authority/`, beside its fixtures — QUARANTINED (2026-08-06; its stub names the successor, `tests/Puck.World.Tests`). |
+| [Verification runners](verification/) | Committed, re-runnable batteries — one directory per contract, each with a self-documenting `run.ps1` that builds what it needs and exits nonzero on a miss. A quarantined battery keeps its directory but loses its runner: what remains is a README recording what it proved, why it was retired, and how to check the contract live. The authority battery lives at the repository root, `verification/authority/`, beside its fixtures — QUARANTINED (2026-08-06; its README names the successor, `tests/Puck.World.Tests`). |
 | [Acknowledgments](ACKNOWLEDGMENTS.md) | Source provenance, licensing notices, and credit. |
 
 The maths research corpus — the polynomial-tail / Beatty / metallic-mean /

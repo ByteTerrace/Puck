@@ -292,9 +292,9 @@ no `EchoTap` tick-later arrival, and a refusal leaves the document untouched.
 
 ## Verifying
 
-`docs/verification/hud-document/run.ps1` is QUARANTINED (2026-08-06 — its
+`docs/verification/hud-document/` is QUARANTINED (2026-08-06 — its
 `hud-skip-writer-emission` sabotage patch's context hunk predates
-`EmitSeatPanels`, so it no longer applies; see the stub's own header).
+`EmitSeatPanels`, so it no longer applies; see that directory's README).
 Validate by RUNNING THE APP; the ad hoc recipes below are the live method.
 Ad hoc, world scope: `world.row.set hud.panels` a panel with a bound gauge,
 `world.wait`, read `world.hud`, screenshot for the pixel assertion, then

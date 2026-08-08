@@ -12,7 +12,7 @@
 # silently diffed against nothing — record a replacement the same way each was recorded
 # (boot the tier, extract() for the name lists or redirect the raw affordances stdout,
 # write the .runs path) and commit it before re-running. The name diffs are informational;
-# the metadata diff FAILS the run (exit 1, via .runs/afford-diff.ps1) on any drift in
+# the metadata diff FAILS the run (exit 1, via .runs/afford-diff.cs) on any drift in
 # either table, naming each row and field.
 #
 # Everything else this script produces is scratch: it lives under a throwaway temp directory
@@ -71,7 +71,7 @@ dotnet run --project src/Puck.World -c Release --no-build -- \
   < "$SCRATCH/afford.txt" > "$SCRATCH/rc-afford.out" 2> "$SCRATCH/rc-afford.err"
 
 echo
-pwsh -NoProfile -File .runs/afford-diff.ps1 .runs/afford-baseline.txt "$SCRATCH/rc-afford.out"
+dotnet run -c Release .runs/afford-diff.cs -- .runs/afford-baseline.txt "$SCRATCH/rc-afford.out"
 afford_status=$?
 if [[ $afford_status -ne 0 ]]; then
   echo "reconcile.sh: affordance metadata differs from .runs/afford-baseline.txt (differences above). If the change is intended, re-record the baseline (see header) in the same change." >&2

@@ -1,15 +1,29 @@
 # Authority defects — the re-runnable battery
 
-**QUARANTINED 2026-08-06 — `run.ps1` is now a stub (exit 3), not a gate.** Cases 04-06
+**QUARANTINED 2026-08-06 — not a gate, and no runner lives here.** Cases 04-06
 (`04-engage.txt`/`05-disengage.txt`/`06-addon-lifecycle.txt`) assumed the retired `default` world's
 `screen:0` and its mounted `default` addon — the four-world charter's shipped roster
 (`play`/`dive`/`kart`/`jump`) authors no `screens` or `addons` row, so those fixtures no longer boot
-into the state they were written against. The rest of this document is kept as the historical record
-of what the battery proved and how; read `run.ps1`'s own header for the quarantine note and the
-successor. The acting-principal/administration contract now lives in `tests/Puck.World.Tests`'s
-`AuthorityAdministrationLawTests` (not yet in `Puck.slnx`); an engage-authority law with code-built
-`testPattern`-screen furniture — replacing cases 04-06's need for a booted machine — is chartered to
-follow there.
+into the state they were written against. Repairing them in place would mean re-authoring
+screen/addon furniture into one of the four shipped worlds for a battery's sake — exactly the kind
+of fixture-chasing this repository's quarantine protocol (see `docs/verification/headless-boot`'s
+own record) declines to do; the fix belongs in a successor that builds its own furniture instead of
+borrowing a shipped world's. The rest of this document is kept as the historical record of what the
+battery proved and how.
+
+**The successor.** The acting-principal/administration contract now lives in
+`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests` (a law-based test project; NOT yet
+wired into `Puck.slnx` or any build gate — see that project's own README). An engage-authority law
+exercising cases 04-06's ground (screen engage/disengage, addon lifecycle) with CODE-BUILT
+`testPattern`-screen furniture — never borrowed from a shipped world's own document — is chartered
+to follow there, closing the gap this quarantine opens.
+
+**Validating it today.** Validation currency is RUN THE APP over stdin/stdout, owner-in-the-loop,
+until the successor lands. Cases 01/02/03/07 (join/leave/confirm/assign/identity-create — no screen
+or addon dependency) still describe live, checkable behavior; drive them by hand against a shipped
+world and read both streams. The full historical runner logic, its two adversarial-review
+discriminator proofs, and the per-case assertion sets remain in git history and in this document for
+anyone who revives cases 04-06 under a rebuilt furniture set.
 
 The "INGRESS CLOSURE IS REFUTED" finding and its two 2026-08-02 adversarial-review follow-ups
 (round 1: confirm/assign/join laundering, the disengage latch/route decision; round 2: the assign
@@ -17,22 +31,15 @@ cascade's source authorization, claim/cycle's handler-constructed principals, th
 stale-reservation strand, the disengage repair's own authorization gap, two misreported
 `SubmitSession` verdicts) named principal-selection defects across the player-facing command
 surface. This directory WAS the durable proof they stay closed: stdin scripts
-with hard-coded expected-output assertions, and `run.ps1`, which built once and exited nonzero the
-moment an assertion missed or a run crashed.
+with hard-coded expected-output assertions, driven by a runner that built once and exited nonzero
+the moment an assertion missed or a run crashed.
 
-**Not a build gate** (was true before the quarantine too). Nothing here is wired into
+**Not a build gate** (was true before the quarantine too). Nothing here was wired into
 `dotnet build`, `dotnet test`, a `puck` verb, or CI. Historically: run it by hand after touching an
 authority check in `PlayerRoster.cs`, `PlayerCommandModule.cs`, `WorldEngagement.cs`,
 `WorldAddonCommandModule.cs`, `WorldCommandModule.cs`, or `WorldServer.cs`'s session-request gates
 (the `Join`/`Leave`/`SetIdentity` family `player.join`/`leave`/`identity` submit) — today, consult
 `tests/Puck.World.Tests` instead.
-
-```powershell
-pwsh -File verification/authority/run.ps1
-```
-
-The runner builds `Puck.World -c Release` itself, once, before any case runs — it never trusts a
-caller's prior build. Pass `-Configuration` to build/run a different configuration.
 
 ## What each script proves
 
@@ -100,8 +107,8 @@ the round-2 finding that the repair direction needs its own gate:
    now reads the ordinary `NotEngaged`, proving the latch is genuinely clear and not merely reported
    clear.
 
-`run.ps1`'s `OrderedContains` assertion (distinct from the order-blind `Contains`/`MinCount` checks)
-exists specifically for combination 4: it proves the grant line, the route's presence in
+The runner's `OrderedContains` assertion (distinct from the order-blind `Contains`/`MinCount`
+checks) existed specifically for combination 4: it proved the grant line, the route's presence in
 `world.grants`, the revoke, the DENIAL, the route's CONTINUED presence, the restore, and the
 eventual repair all happened in that exact sequence — the regression this guards against
 ("`control/screen:4` appears somewhere in the transcript" is true whether the attack succeeded and
@@ -144,12 +151,11 @@ File.WriteAllBytes("authority-test.gb", rom);
 ## The local owned-world catalog side effect
 
 `07-identity-create.txt` calls `identity.create`, which both mints AND PERSISTS an owned world
-into the identity catalog under the process's state root (`WorldOwnedWorlds`). `run.ps1` points
+into the identity catalog under the process's state root (`WorldOwnedWorlds`). The runner pointed
 every child process at a fresh throwaway root via `--state-dir` (created per run, deleted in
-`finally`), so a run never leaves a stray `teal` world in a developer's real catalog and parallel
-runs cannot see each other. Running the scripts individually (bypassing `run.ps1`) does NOT get
-this protection — pass your own `--state-dir`, not a raw `dotnet run < script.txt`, if you care
-about your local catalog.
+`finally`), so a run never left a stray `teal` world in a developer's real catalog and parallel runs
+could not see each other. Driving these scripts by hand gets no such protection — pass your own
+`--state-dir`, not a raw `dotnet run < script.txt`, if you care about your local catalog.
 
 ## Proving the battery discriminates
 

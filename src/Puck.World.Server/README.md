@@ -419,14 +419,14 @@ over stdin and by the committed, re-runnable batteries:
 - `docs/verification/undo-all-or-nothing/run.ps1` — the journal replay's
   all-or-nothing contract.
 
-`docs/verification/ordered-domain/run.ps1` — the envelope's ordering
-contract — is QUARANTINED (owner ruling, 2026-08-06); it prints a pointer
-and exits 3 rather than asserting anything. Verify the ordering contract
+`docs/verification/ordered-domain/` — the envelope's ordering
+contract — is QUARANTINED (owner ruling, 2026-08-06); no runner remains,
+only its README. Verify the ordering contract
 live instead: one stdin batch interleaving a grant and the command that
-needs it, plus the reversed order as the discriminating control (see the
-stub's own header).
+needs it, plus the reversed order as the discriminating control (see that
+directory's README).
 
-`verification/authority/run.ps1` — the principal/grant enforcement battery
+`verification/authority/` — the principal/grant enforcement battery
 (denial/control pairs per player-facing verb) — is likewise QUARANTINED
 (2026-08-06): cases 04-06 assumed the retired `default` world's `screen:0`
 and mounted addon, which no shipped world authors today. Its README

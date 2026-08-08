@@ -17,7 +17,7 @@ hears and everything it says crosses as fixed-size cells in two rings inside its
 wasm/
   Cargo.toml                  [workspace] over both members; the shared release profile
   .cargo/config.toml          pins the default build target to wasm32-unknown-unknown
-  build.ps1 / build.sh        build + refresh the copy Puck.World ships + print its content hash
+  build.cs                    build + refresh the copy Puck.World ships + print its content hash
   puck-stdlib/                crate-type rlib — THE standard library every addon depends on
     src/{lib,abi,abi_generated,fixed,fixed_generated,fixed_vectors,fixed_tests,channels}.rs
   puck-addon-default/         crate-type cdylib — the default addon; ships with the engine
@@ -41,8 +41,8 @@ machinery, the typed cell views, and the fixed-point surface for free.
 An addon author depends on `puck-stdlib` and writes only three things: their own crate's export
 shims, a `puck_stdlib::channels!` table declaring the channel names they emit acts against, and the
 body of their `on_tick` (plus, optionally, `on_init`) — written against the typed `Inputs`/`Outputs`
-views, never a raw byte offset. `puck-addon-default` is that worked example: read its `src/lib.rs`
-top to bottom before writing your own.
+views, never a raw byte offset. `puck-addon-default` is that worked example: read
+`wasm/puck-addon-default/src/lib.rs` top to bottom before writing your own.
 
 ### The `#[no_mangle]`/rlib linkage detail
 
@@ -127,19 +127,13 @@ One-time toolchain setup:
 rustup target add wasm32-unknown-unknown
 ```
 
-Then:
-
-```powershell
-# Windows
-.\build.ps1
-```
+Then, from anywhere in the repository:
 
 ```sh
-# macOS / Linux
-./build.sh
+dotnet run -c Release wasm/build.cs
 ```
 
-Both scripts wrap `cargo build --release`, run from `wasm/`. `.cargo/config.toml` already pins the
+The script wraps `cargo build --release`, run from `wasm/`. `.cargo/config.toml` already pins the
 default target, so no `--target` flag is needed. This builds every workspace member; `puck-stdlib`
 has no standalone artifact (it is an `rlib`), so the interesting output is:
 
@@ -153,20 +147,28 @@ way — see "Drop it into a world document" below.
 ### Refreshing the copy Puck.World ships
 
 `src/Puck.World/Assets/addons/puck-addon-default.wasm` is a **committed binary**, not something
-Puck.World builds from this workspace at its own build time — the world definition's built-in
-`WorldAddonRow` (in `src/Puck.World/WorldDefinition.cs`) points at that committed copy and pins its
-content hash. After the `cargo build`, `build.ps1`/`build.sh` copy the freshly built
-`puck_addon_default.wasm` over that path and print its new `sha256-64/{16 hex}` hash to paste into
-the row's `Hash` field.
+Puck.World builds from this workspace at its own build time. An `addons` row points at that
+committed copy and pins its content hash in the row's own `hash` field. After the `cargo build`,
+`build.cs` copies the freshly built `puck_addon_default.wasm` over that path and prints its new
+`sha256-64/{16 hex}` hash to paste into every such row.
+
+**None of the four shipped worlds declares an `addons` row today** — the `default` world that once
+mounted this module was retired under the four-world charter, so the rows that pin this hash live
+only in hand-authored documents: the fixtures under `docs/verification/`, and
+`puck-addon-hudbuilder/worlds/`. There is no built-in `WorldAddonRow` to update.
 
 **The committed bytes' provenance is not gate-enforced.** No build step proves the `.wasm` sitting
 in `src/Puck.World/Assets/addons/` was actually built from the Rust sitting beside it here — they
 can drift silently if someone edits one without the other. Refreshing the artifact is therefore a
-**deliberate step**: run `build.ps1`/`build.sh` whenever `puck-addon-default`'s (or a `puck-stdlib`
-dependency's) source changes, then update `WorldDefinition.cs`'s `Hash` field to match the printed
-value **in the same change**. An unrefreshed hash after a real source change means the host is
-running stale bytes under a pin that no longer describes them; a refreshed artifact with a stale
-hash means the host refuses to load it at all. Neither is silent, but only the first is wrong.
+**deliberate step**: run `build.cs` whenever `puck-addon-default`'s (or a `puck-stdlib`
+dependency's) source changes, then update every pinning row's `hash` to match the printed value **in
+the same change**. An unrefreshed hash after a real source change means the host is running stale
+bytes under a pin that no longer describes them; a refreshed artifact with a stale hash means the
+host refuses to load it at all. Neither is silent, but only the first is wrong.
+
+Cargo embeds absolute paths, so a rebuild from a different checkout produces different bytes — and
+therefore a different hash — even when the sources are identical. Read a changed hash as "these are
+new bytes", never as "the source changed", and do not refresh the committed copy incidentally.
 
 ### Running the unit tests
 
@@ -230,8 +232,8 @@ Point a `puck.world.def.v1` document's `addons` entry at the built `.wasm` file:
 }
 ```
 
-`Server/WorldAddonRuntime` mounts every declared row at server construction (see
-`src/Puck.World/WorldDefinition.cs`'s `WorldAddonRow`). `modulePath` is resolved the same way a cartridge's `romPath` is — a plain path
+`WorldAddonRuntime` mounts every declared row at server construction (see
+`src/Puck.World.Data/WorldDefinition.cs`'s `WorldAddonRow`). `modulePath` is resolved the same way a cartridge's `romPath` is — a plain path
 read through the host's asset source. `hash` pins the module's content hash; a Simulation-lane row
 without a pin is refused, because the pin has to cover everything the mount consumes. `lane` decides
 where untrusted code runs and has no default: an omitted lane is a document error, never a guess.
