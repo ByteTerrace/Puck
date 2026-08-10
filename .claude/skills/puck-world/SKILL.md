@@ -162,6 +162,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   (`[capture] unified overlay -> …`), so **fence a frame (`world.wait`)
   before reading it**, and a second shot armed before the first composes is
   refused by name.
+  The panel starts hidden; if a script opens it (`world.console [on|off]`,
+  bare toggles), it covers the top half of the frame — close it before
+  judging pixels.
 - **Use the repository's content search.** Run `puck search`, never `grep`;
   the published project tool is the repository's supported search surface.
 - **A verification that cannot fail is a lie.** Pair every denial case with
@@ -195,7 +198,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   each directory now holds a README recording what it proved and why it was
   retired; validate those contracts by RUNNING THE APP. `authority`'s
   successor is `tests/Puck.World.Tests`
-  (`AuthorityAdministrationLawTests`, not yet in `Puck.slnx`) for the
+  (`AuthorityAdministrationLawTests`) for the
   acting-principal/administration contract; an engage-authority law with
   code-built `testPattern`-screen furniture is chartered to follow there and
   is expected to absorb `engagement-dissolution`'s engage/disengage phases

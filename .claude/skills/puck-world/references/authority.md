@@ -401,8 +401,7 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 which no shipped world authors today. No runner remains; its README is the
 record, and names the successor.
 The acting-principal/administration contract it proved now lives in
-`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests` (not yet in
-`Puck.slnx`); an engage-authority law with code-built `testPattern`-screen
+`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests`; an engage-authority law with code-built `testPattern`-screen
 furniture is chartered to follow there. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and

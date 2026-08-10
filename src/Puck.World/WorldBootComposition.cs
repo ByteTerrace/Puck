@@ -651,9 +651,9 @@ internal static class WorldBootComposition {
                 }
             };
 
-            // The mirror starts visible by construction (the console is the control plane) — apply the show-edge
-            // suppression above once here too, so the keyboard starts released rather than driving gameplay
-            // through an already-open panel; VisibilityChanged only fires on a later TRANSITION.
+            // The mirror starts hidden, so this normally does nothing. It stays conditional because
+            // VisibilityChanged fires only on a later TRANSITION: a mirror constructed already-open would otherwise
+            // leave the keyboard driving the avatar into typed text.
             if (mirror.Visible) {
                 focus.Release(deviceId: PlayerRoster.KeyboardDevice);
             }

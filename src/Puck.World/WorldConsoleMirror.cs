@@ -22,10 +22,12 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
     private readonly ConsolePanelStore m_store;
     private int m_count;
     private int m_head;
-    private bool m_visible = true;
+    private bool m_visible;
 
-    /// <summary>Initializes a new instance of the <see cref="WorldConsoleMirror"/> class (visible by default —
-    /// the console is the control plane).</summary>
+    /// <summary>Initializes a new instance of the <see cref="WorldConsoleMirror"/> class — HIDDEN by default.</summary>
+    /// <remarks>The pipe is the control plane and carries it whether or not this panel draws, so drawing it by
+    /// default only covered the top half of the frame. Backtick, <c>world.console</c>, and the play wheel's Console
+    /// sector open it on demand.</remarks>
     /// <param name="store">The console-panel store the overlay reads.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> is <see langword="null"/>.</exception>
     public WorldConsoleMirror(ConsolePanelStore store) {
