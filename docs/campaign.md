@@ -44,7 +44,7 @@ come back.
 | Claim | The check |
 |---|---|
 | Five world documents boot | `dotnet run --project src/Puck.World -c Release -- --world <name> --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success |
-| Play authors ground, four walls, four portals, market stall, dark arcade cabinet | read `src/Puck.World/Assets/worlds/play.world.json`'s `placements` |
+| Play authors ground, four walls, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/play.world.json`'s `placements` |
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects` |
 | **No world authors WORLD-SCOPE rules** — 0 of 10 documents carry a `rules` or `interactions` section | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 

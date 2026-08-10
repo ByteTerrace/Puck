@@ -1288,22 +1288,6 @@
       ]
     },
     {
-      "id": "market-stall",
-      "creationId": "wall",
-      "position": [
-        -6,
-        0,
-        -6
-      ],
-      "yawDegrees": 0,
-      "scale": 0.6,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
       "id": "arcade-cabinet",
       "creationId": "arcade-cabinet",
       "position": [
