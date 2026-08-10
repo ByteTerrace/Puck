@@ -2,7 +2,7 @@
   "description": "The cable-link rows (default empty) \u2014 groups of screens whose machines advance as one interleaved unit (see WorldScreenLink).",
   "type": "array",
   "items": {
-    "description": "A cable-linked group of screens whose machines advance as ONE interleaved unit. The binder steps the link, never its members individually, so the engine\u0027s deterministic interleave \u2014 not the host\u0027s frame order \u2014 decides who runs when. Every member must resolve to a machine from the SAME engine, and that engine must implement IMachineLinkingEngine; a link whose members do not currently satisfy that is reported dormant, never silently dropped.",
+    "description": "A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link, never its members individually, so the engine\u0027s deterministic interleave \u2014 not the host\u0027s frame order \u2014 decides who runs when. Every member must resolve to a machine from the same engine, and that engine must implement IMachineLinkingEngine; a link whose members do not currently satisfy that is reported dormant, never silently dropped.",
     "type": [
       "object",
       "null"

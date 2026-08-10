@@ -1,8 +1,8 @@
 {
-  "description": "The synth-patch ASSET rows (default empty) \u2014 whole puck.synth.v1 documents embedded inline-canonical with pinned hashes (see WorldPatch).",
+  "description": "The synth-patch asset rows (default empty) \u2014 whole puck.synth.v1 documents embedded inline-canonical with pinned hashes (see WorldPatch).",
   "type": "array",
   "items": {
-    "description": "One synth-patch ASSET row \u2014 a whole puck.synth.v1 document embedded INLINE-CANONICAL with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldCreation; see WorldTune for the shared pin/restart semantics.",
+    "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldCreation; see WorldTune for the shared pin/restart semantics.",
     "type": [
       "object",
       "null"

@@ -19,7 +19,7 @@
       "default": null
     },
     "discoveryEndpoint": {
-      "description": "The direct-to-account connection container LIST uses when Endpoint resolves to an edge-shaped target \u2014 the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint\u0027s remarks), so an edge-shaped target with this null refuses discovery BY NAME instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only \u2014 see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).",
+      "description": "The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target \u2014 the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint\u0027s remarks), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only \u2014 see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).",
       "type": [
         "string",
         "null"

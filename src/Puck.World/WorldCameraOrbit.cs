@@ -1,22 +1,22 @@
+using System.Numerics;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 /// <summary>
 /// The local seats' live camera orbit — a small thread-safe holder for each seat's chase-camera yaw/pitch offset
-/// (radians), one slot per <see cref="PlayerRoster.MaxSlots"/> entry: <see cref="WorldCameraOrbitDrag"/> (the
-/// window-pump thread) writes the seat the pointer rides from that seat's drained motion, armed per the authored
-/// <see cref="WorldSeatLook"/> feel (that seat's own <c>playerDefaults.seatLook</c>), while <see cref="Client.WorldFrameSource"/> (the render
-/// thread) reads every slot once per frame to compose that seat's chase camera — never <c>WorldClient.Orientation</c>,
-/// the simulation body orientation, so a body's facing and movement are unaffected. Only the seat whose device
-/// currently owns the mouse ever accumulates a nonzero offset; every other slot stays at rest.
+/// (radians), one slot per <see cref="PlayerRoster.MaxSlots"/> entry. Pointer drag and the per-frame look-stick
+/// integrator both enter through <see cref="Nudge"/>, the one policy door applying the seat's inversion and pitch
+/// clamp; <see cref="Client.WorldFrameSource"/> reads every slot once per frame to compose that seat's chase camera —
+/// never <c>WorldClient.Orientation</c>, the simulation body orientation, so a body's facing and movement are
+/// unaffected.
 /// </summary>
 /// <remarks>Presentation-only: nothing here rides the <c>CommandSnapshot</c> pipeline or feeds the deterministic
 /// simulation, so cross-thread safety is the only contract — plain <see cref="Volatile"/> reads/writes on each slot's
 /// float pair, no lock, since yaw and pitch are independent scalars with no cross-field invariant to protect, and
-/// distinct slots never alias the same array element. Every sensitivity, clamp, and arming choice is the CALLER's
-/// (<see cref="WorldCameraOrbitDrag"/> reads the live <see cref="WorldSeatLook"/>) — this type holds only the
-/// accumulated live offset per seat, no policy of its own.</remarks>
+/// distinct slots never alias the same array element. Every scale is the CALLER's (pointer sensitivity or the
+/// authored stick rate integrated against presentation time); inversion and the clamp are applied here from the
+/// caller's live <see cref="WorldSeatLook"/>, never reimplemented by either input path.</remarks>
 internal sealed class WorldCameraOrbit {
     private readonly float[] m_yaw = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_pitch = new float[PlayerRoster.MaxSlots];
@@ -32,14 +32,34 @@ internal sealed class WorldCameraOrbit {
     /// <param name="slot">The 0-based seat slot.</param>
     public float Pitch(int slot) => Volatile.Read(location: ref m_pitch[slot]);
 
-    /// <summary>Nudges a seat's orbit by a per-frame drag delta: yaw wraps to [-π, π], pitch clamps to
-    /// <paramref name="minPitch"/>/<paramref name="maxPitch"/>.</summary>
+    /// <summary>Nudges a seat's orbit from one input sample. Pointer drag passes pixel motion with its authored
+    /// radians-per-pixel scales; the stick path passes normalized deflection with its authored radians-per-second
+    /// rate already integrated against this frame's presentation delta. Inversion, yaw wrapping, and pitch clamping
+    /// live only behind this door.</summary>
     /// <param name="slot">The 0-based seat slot to nudge.</param>
-    /// <param name="dYaw">The yaw delta in radians (positive swings the camera toward the body's right side).</param>
-    /// <param name="dPitch">The pitch delta in radians (positive raises the camera to look down).</param>
-    /// <param name="minPitch">The authored pitch clamp floor in radians (<see cref="WorldSeatLook.MinPitch"/>).</param>
-    /// <param name="maxPitch">The authored pitch clamp ceiling in radians (<see cref="WorldSeatLook.MaxPitch"/>).</param>
-    public void Nudge(int slot, float dYaw, float dPitch, float minPitch, float maxPitch) {
+    /// <param name="input">The two-axis input sample before sensitivity/rate scaling.</param>
+    /// <param name="yawScale">Radians of yaw per input unit.</param>
+    /// <param name="pitchScale">Radians of pitch per input unit.</param>
+    /// <param name="seatLook">The live authored policy supplying inversion and pitch clamps.</param>
+    public void Nudge(int slot, Vector2 input, float yawScale, float pitchScale, WorldSeatLook seatLook) {
+        ArgumentNullException.ThrowIfNull(argument: seatLook);
+
+        var dYaw = ((input.X * yawScale) * (seatLook.InvertYaw ? -1f : 1f));
+        var dPitch = ((input.Y * pitchScale) * (seatLook.InvertPitch ? -1f : 1f));
+
+        ApplyRadians(slot: slot, dYaw: dYaw, dPitch: dPitch, minPitch: seatLook.MinPitch, maxPitch: seatLook.MaxPitch);
+    }
+
+    /// <summary>Reclamps a carried orbit against a newly active world's authored pitch band without moving it.</summary>
+    /// <param name="slot">The 0-based seat slot to reclamp.</param>
+    /// <param name="seatLook">The newly active authored seat-look structure.</param>
+    public void Reclamp(int slot, WorldSeatLook seatLook) {
+        ArgumentNullException.ThrowIfNull(argument: seatLook);
+
+        ApplyRadians(slot: slot, dYaw: 0f, dPitch: 0f, minPitch: seatLook.MinPitch, maxPitch: seatLook.MaxPitch);
+    }
+
+    private void ApplyRadians(int slot, float dYaw, float dPitch, float minPitch, float maxPitch) {
         if ((uint)slot >= PlayerRoster.MaxSlots) {
             return;
         }

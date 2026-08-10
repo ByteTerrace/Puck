@@ -1,5 +1,5 @@
 {
-  "description": "The portals section (default null = every portal facet falls back to Body) \u2014 the world-scope travel default a placement face\u0027s WorldPlacementPortal facet resolves against when it authors none of its own (see WorldPortalsSection), echoed by world.portals. OPTIONAL, for the SAME reason Rules is; slotted immediately after References \u2014 the two complete the world-topology cluster a portal composes from.",
+  "description": "The portals section (default null = every portal facet falls back to Body) \u2014 the world-scope travel default a placement face\u0027s WorldPlacementPortal facet resolves against when it authors none of its own (see WorldPortalsSection), echoed by world.portals. Optional, for the same reason Rules is; slotted immediately after References \u2014 the two complete the world-topology cluster a portal composes from.",
   "type": [
     "object",
     "null"

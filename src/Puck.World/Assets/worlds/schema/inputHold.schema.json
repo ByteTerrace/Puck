@@ -1,5 +1,5 @@
 {
-  "description": "The simulation-affecting participant input-hold policy, in its AUTHORED shape \u2014 every checked-in world authors the section explicitly, in SECONDS (ceilingSeconds/lowerAfterSeconds/ defaultSeconds, and each participant\u0027s own seconds). CompiledInputHold is the compiled simulation-tick form (WorldInputHoldSettings) Server.WorldInputHoldRuntime actually consumes \u2014 compiled lazily off THIS document\u0027s own SimulationRateHz rather than at parse, since a document\u0027s rate is just another sibling section with no parse-order guarantee ahead of this one (see SimulationRateHz\u0027s remarks). Measured tick counts arrive on tick-stamped intent submissions and never read a clock here.",
+  "description": "The simulation-affecting participant input-hold policy, in its authored shape \u2014 every checked-in world authors the section explicitly, in seconds (ceilingSeconds/lowerAfterSeconds/ defaultSeconds, and each participant\u0027s own seconds). CompiledInputHold is the compiled simulation-tick form (WorldInputHoldSettings) Server.WorldInputHoldRuntime actually consumes \u2014 compiled lazily off this document\u0027s own SimulationRateHz rather than at parse, since a document\u0027s rate is just another sibling section with no parse-order guarantee ahead of this one (see SimulationRateHz\u0027s remarks). Measured tick counts arrive on tick-stamped intent submissions and never read a clock here.",
   "type": "object",
   "properties": {
     "ceilingSeconds": {
@@ -17,7 +17,7 @@
     "participants": {
       "type": "array",
       "items": {
-        "description": "One participant-specific input-hold override, AUTHORED shape \u2014 see WorldInputHoldAuthoring. Mirrors WorldInputHoldParticipant field for field except Seconds in place of the compiled Ticks.",
+        "description": "One participant-specific input-hold override, authored shape \u2014 see WorldInputHoldAuthoring. Mirrors WorldInputHoldParticipant field for field except Seconds in place of the compiled Ticks.",
         "type": [
           "object",
           "null"

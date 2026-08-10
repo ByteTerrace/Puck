@@ -70,7 +70,7 @@ internal sealed class WorldCameraOrbitDrag : IWorldPointerConsumer {
     private void OnLocationChanged(int slot) {
         var structure = ResolveStructure(slot: slot);
 
-        m_orbit.Nudge(slot: slot, dYaw: 0f, dPitch: 0f, minPitch: structure.MinPitch, maxPitch: structure.MaxPitch);
+        m_orbit.Reclamp(slot: slot, seatLook: structure);
     }
 
     // The rig-structure half of the merged seat-look policy (WorldSeatCameraResolver.ResolveSeatLook's own split):
@@ -106,12 +106,15 @@ internal sealed class WorldCameraOrbitDrag : IWorldPointerConsumer {
         }
 
         // Dragging right swings the camera to show the player's right side; dragging down raises the camera to look
-        // down at the player (WoW default) — see WorldCameraOrbit.Nudge's sign doc. The authored invert flags flip
-        // either axis's sign before the nudge.
-        var dYaw = ((motion.X * seatLook.YawSensitivity) * (seatLook.InvertYaw ? -1f : 1f));
-        var dPitch = ((motion.Y * seatLook.PitchSensitivity) * (seatLook.InvertPitch ? -1f : 1f));
-
-        m_orbit.Nudge(slot: slot, dYaw: dYaw, dPitch: dPitch, minPitch: seatLook.MinPitch, maxPitch: seatLook.MaxPitch);
+        // down at the player (WoW default). WorldCameraOrbit.Nudge is the one inversion/clamp door shared with the
+        // stick path; keeping the original motion and sensitivity operands here leaves pointer feel unchanged.
+        m_orbit.Nudge(
+            slot: slot,
+            input: motion,
+            yawScale: seatLook.YawSensitivity,
+            pitchScale: seatLook.PitchSensitivity,
+            seatLook: seatLook
+        );
     }
 
     // Maps an authored button-arming mode to the pointer button index the store keys held state by (0=left,

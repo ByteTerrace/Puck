@@ -4002,9 +4002,10 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // A seat's control feel (PRESENTATION-ONLY, REQUIRED): sensitivities finite and non-negative, the pitch clamp
-    // finite, ordered, and within a half-turn either side of level, and the arming a declared enum value. The member
-    // itself is required — an absent row is refused by the caller before this runs, never silently defaulted.
+    // A seat's control feel (PRESENTATION-ONLY, REQUIRED): pointer sensitivities and the stick look rate finite and
+    // non-negative, the pitch clamp finite, ordered, and within a half-turn either side of level, and the arming a
+    // declared enum value. The member itself is required — an absent row is refused by the caller before this runs,
+    // never silently defaulted.
     private static void ValidateSeatLook(WorldSeatLook seatLook, string path, List<string> errors) {
         if (!float.IsFinite(f: seatLook.YawSensitivity) || (seatLook.YawSensitivity < 0f)) {
             errors.Add(item: $"{path}.yawSensitivity must be finite and non-negative.");
@@ -4012,6 +4013,10 @@ public static class WorldDefinitionValidator {
 
         if (!float.IsFinite(f: seatLook.PitchSensitivity) || (seatLook.PitchSensitivity < 0f)) {
             errors.Add(item: $"{path}.pitchSensitivity must be finite and non-negative.");
+        }
+
+        if (!float.IsFinite(f: seatLook.StickLookRate) || (seatLook.StickLookRate < 0f)) {
+            errors.Add(item: $"{path}.stickLookRate must be finite and non-negative.");
         }
 
         if (!float.IsFinite(f: seatLook.MinPitch) || !float.IsFinite(f: seatLook.MaxPitch) ||

@@ -842,6 +842,7 @@ internal static class WorldBootComposition {
                 sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
                 viewports: sp.GetRequiredService<WorldSeatViewports>(),
                 seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>(),
+                instances: sp.GetRequiredService<WorldInstanceHost>(),
                 awaySeatViews: sp.GetRequiredService<WorldAwaySeatViews>(),
                 borderMargin: sp.GetRequiredService<IWorldBorderMarginSource>()
             );

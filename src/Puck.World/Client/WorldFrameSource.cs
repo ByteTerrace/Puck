@@ -48,14 +48,17 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // away-routed seat OUT of the local viewport layout (its own body left boot's simulation with it, so nothing
     // here can frame a camera against it) rather than reading stale/reused boot-scoped body data.
     private readonly WorldSeatInstanceRouter m_seatRouter;
+    // The routed-definition registry supplies the structure half of each seat's live look policy while the
+    // presentation clock integrates its latched stick Y. A traveling seat therefore uses the destination's clamp,
+    // exactly like pointer drag and world.view.orbit, rather than silently retaining the boot world's structure.
+    private readonly WorldInstanceHost m_instances;
     // The traveler-follow away-render pool (stage 1, item 5/6) — tracks a WorldSessionMirror/AwaySeatSceneEmitter/
     // WorldSessionView per FOLLOWED INSTANCE (refcounted, never per seat), reconciled once per produced frame
     // against the router's current away locations, and rendered alongside the jumbotron pool in RenderViews.
     private readonly WorldAwaySeatViews m_awaySeatViews;
     // Every local seat's live camera-orbit yaw/pitch — presentation-only, armed and shaped per that seat's own
     // control feel, composed into the resolved orbit rig only at ResolveCamera; never read by anything that
-    // feeds the simulation. Only the seat WorldPointerSink currently resolves the mouse onto ever carries a
-    // nonzero offset; every other slot resolves at rest.
+    // feeds the simulation. Pointer drag and the look stick share its one policy nudge door.
     private readonly WorldCameraOrbit m_cameraOrbit;
     // Each local seat's live control feel — the preference half WorldSeatCameraResolver.ResolveSeatLook merges with
     // the boot document's own structure each frame; only the merged WorldAxes is consumed here. Per seat, so two
@@ -182,17 +185,20 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// checked against the live world definition exactly as a scene mutation is checked against the live document.</param>
     /// <param name="seatRouter">The traveler-follow router (stage 1) — the per-seat roster-bookkeeping pass reads
     /// it to exclude an away-routed seat from the local viewport layout.</param>
+    /// <param name="instances">The running-instance registry — resolves the structure half of the currently routed
+    /// seat-look policy for presentation-frame stick integration.</param>
     /// <param name="awaySeatViews">The traveler-follow away-render pool (stage 1) — reconciled once per produced
     /// frame and rendered alongside the jumbotron pool.</param>
     /// <param name="borderMargin">The injected neighbour resolver behind the border-margin strip's render half — the
     /// SAME wire-shaped seam <see cref="Server.WorldServer.BorderMargin"/> reads for collision.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCameraOrbit cameraOrbit, WorldSeatFeel seatFeel, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldAwaySeatViews awaySeatViews, IWorldBorderMarginSource borderMargin) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCameraOrbit cameraOrbit, WorldSeatFeel seatFeel, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldInstanceHost instances, WorldAwaySeatViews awaySeatViews, IWorldBorderMarginSource borderMargin) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
         ArgumentNullException.ThrowIfNull(argument: cameraOrbit);
         ArgumentNullException.ThrowIfNull(argument: seatRouter);
+        ArgumentNullException.ThrowIfNull(argument: instances);
         ArgumentNullException.ThrowIfNull(argument: awaySeatViews);
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
@@ -216,6 +222,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_composer = composer;
         m_gizmos = gizmos;
         m_seatRouter = seatRouter;
+        m_instances = instances;
         m_awaySeatViews = awaySeatViews;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -400,8 +407,41 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // Traveler-follow stage 1: track/untrack away instances against the router's CURRENT locations before Dress
         // resolves any periscope handle this frame — see WorldAwaySeatViews.Reconcile's own remarks.
         m_awaySeatViews.Reconcile();
+        AdvanceLookSticks(deltaSeconds: deltaSeconds);
 
         return m_composed.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+    }
+
+    // Integrates the right stick's frame-stable Y latch on the PRESENTATION clock. SeatController promoted this
+    // fixed-point sample before clearing tick-local analog staging; converting it here cannot feed a float back into
+    // PlayerIntent. +Y means the player pushed up/look up, while positive orbit pitch raises the camera to look down,
+    // hence the sign flip before the shared nudge door. X deliberately stays on the authoritative Turn role: an
+    // absolute-orbit (worldAxes: true) world may eventually want it on orbit yaw too, but that is a separate policy.
+    private void AdvanceLookSticks(float deltaSeconds) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_roster.Seat(slot: slot) is not { } seat) {
+                continue;
+            }
+
+            var lookY = (float)(double)seat.CameraLookY;
+
+            if (lookY == 0f) {
+                continue;
+            }
+
+            var seatLook = WorldSeatCameraResolver.ResolveSeatLook(
+                structure: m_instances.ResolveRoutedDefinition(slot: slot).PlayerDefaults.SeatLook,
+                preference: m_seatFeel.Look(slot: slot)
+            );
+
+            m_cameraOrbit.Nudge(
+                slot: slot,
+                input: new Vector2(x: 0f, y: -lookY),
+                yawScale: 0f,
+                pitchScale: (seatLook.StickLookRate * deltaSeconds),
+                seatLook: seatLook
+            );
+        }
     }
 
     /// <inheritdoc/>
@@ -840,7 +880,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         var bodyOrientation = m_client.Orientation(index: body);
         var seatRig = m_client.Definition.Views.SeatRig;
 
-        // The one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live drag straight into the
+        // The one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live pointer/stick offset into the
         // document's own orbit vocabulary (authored yaw/pitch + the live offset) via WorldSeatCameraResolver — the
         // same shared path AwaySeatSceneEmitter reuses for a traveling seat, so a destination frames identically
         // whether the seat sits at its boot or arrived through a portal. The merged seat-look's WorldAxes selects

@@ -20,7 +20,7 @@
       ]
     },
     "None": {
-      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, NEVER black).",
+      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
       "properties": {
         "$type": {
           "const": "none"
@@ -176,7 +176,7 @@
       "additionalProperties": false
     },
     "Console": {
-      "description": "A screen showing the DEVELOPER CONSOLE as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel AND process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the SAME content to the screen-space overlay. At most one console source may be LIVE (declared) at a time; an unselected console entry sitting in a magazine is legal.",
+      "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
       "properties": {
         "$type": {
           "const": "console"
@@ -192,7 +192,7 @@
           "default": 64
         },
         "procedural": {
-          "description": "When true the slot shows the sibling generated pattern instead of console text \u2014 carried as a MODE of this variant rather than as a seventh union case.",
+          "description": "When true the slot shows the sibling generated pattern instead of console text \u2014 carried as a mode of this variant rather than as a seventh union case.",
           "type": "boolean",
           "default": false
         }
@@ -200,13 +200,13 @@
       "additionalProperties": false
     },
     "Qr": {
-      "description": "An AUTHORABLE QR code (ISO/IEC 18004) \u2014 the document names a payload string and the engine derives the scannable module grid (QrEncoder), rendered CPU-side into a STATIC B8G8R8A8 framebuffer and uploaded once, never re-derived from the tick like TestPattern. The driving case is a link one human hands another off an in-world screen. This record is the document-authored half only \u2014 nothing here mints a payload at runtime; screen.source \u003Cindex\u003E qr is the live-authoring twin, and world.identify is the one caller that MINTS its payload (the running world\u0027s own documentId and content-address pin) rather than being handed one.",
+      "description": "An authorable QR code (ISO/IEC 18004) \u2014 the document names a payload string and the engine derives the scannable module grid (QrEncoder), rendered CPU-side into a static B8G8R8A8 framebuffer and uploaded once, never re-derived from the tick like TestPattern. The driving case is a link one human hands another off an in-world screen. This record is the document-authored half only \u2014 nothing here mints a payload at runtime; screen.source \u003Cindex\u003E qr is the live-authoring twin, and world.identify is the one caller that mints its payload (the running world\u0027s own documentId and content-address pin) rather than being handed one.",
       "properties": {
         "$type": {
           "const": "qr"
         },
         "payload": {
-          "description": "The encoded string, UTF-8 byte mode. Must fit within version MaxSupportedVersion at EcLevel \u2014 validation refuses an oversized payload BY NAME (its byte count against the level\u0027s capacity), never truncates it.",
+          "description": "The encoded string, UTF-8 byte mode. Must fit within version MaxSupportedVersion at EcLevel \u2014 validation refuses an oversized payload by name (its byte count against the level\u0027s capacity), never truncates it.",
           "type": "string"
         },
         "ecLevel": {
@@ -226,7 +226,7 @@
       "additionalProperties": false
     },
     "WorldScreenProjection": {
-      "description": "How the destination render projects onto this face (see WorldScreenProjection). Default Camera \u2014 unauthored worlds and every session facet authored before this member existed render byte-identically. OPTIONAL and TRAILING (the same widen-without-moving-existing-members shape CameraName itself already follows). Window requires THIS SAME face\u0027s Portal to author Mapped with a Counterpart \u2014 refused by name otherwise (see WorldDefinitionValidator); a top-level screens row or magazine entry carries no face to pair with, so window is refused there unconditionally.",
+      "description": "How the destination render projects onto this face (see WorldScreenProjection). Default Camera \u2014 unauthored worlds and every session facet authored before this member existed render byte-identically. Optional and trailing (the same widen-without-moving-existing-members shape CameraName itself already follows). Window requires this same face\u0027s Portal to author Mapped with a Counterpart \u2014 refused by name otherwise (see WorldDefinitionValidator); a top-level screens row or magazine entry carries no face to pair with, so window is refused there unconditionally.",
       "enum": [
         "Camera",
         "Window"
@@ -234,17 +234,17 @@
       "default": "Camera"
     },
     "Session": {
-      "description": "A live rendered view of another world, resolved through a destinations row (docs/world-model.md, \u0022Observation and display\u0022 \u2014 Campaign 1 item 4). The face/screen resolves the SAME resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its STATIC authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+      "description": "A live rendered view of another world, resolved through a destinations row (docs/world-model.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
       "properties": {
         "$type": {
           "const": "session"
         },
         "destination": {
-          "description": "The Name this face/screen observes. Must resolve to a declared destinations row \u2014 an undeclared name refuses at BOOT (validated, like a portal facet\u0027s own destination).",
+          "description": "The Name this face/screen observes. Must resolve to a declared destinations row \u2014 an undeclared name refuses at boot (validated, like a portal facet\u0027s own destination).",
           "type": "string"
         },
         "camera": {
-          "description": "The destination\u0027s own placeable-camera name to render through, or null for its default projection (its first declared camera, else a fixed overview derived from its spawn points). Wire name camera \u2014 plain Camera would collide with the sibling Camera arm\u0027s own type name inside this enclosing record. Validated ONLY as non-empty when present at author time \u2014 the destination\u0027s own definition is not joined at boot (references assert naming intent, not reachability), so an UNKNOWN camera name is refused loudly at BIND time instead, once the destination is actually resolved, falling back to the default projection rather than refusing the whole bind. Ignored under Window (see Projection).",
+          "description": "The destination\u0027s own placeable-camera name to render through, or null for its default projection (its first declared camera, else a fixed overview derived from its spawn points). Wire name camera \u2014 plain Camera would collide with the sibling Camera arm\u0027s own type name inside this enclosing record. Validated only as non-empty when present at author time \u2014 the destination\u0027s own definition is not joined at boot (references assert naming intent, not reachability), so an unknown camera name is refused loudly at bind time instead, once the destination is actually resolved, falling back to the default projection rather than refusing the whole bind. Ignored under Window (see Projection).",
           "type": [
             "string",
             "null"
@@ -849,7 +849,7 @@
       "default": "Markov"
     },
     "WorldGeneratorAlternative": {
-      "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves INTO after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key IS the process state, so an author folds exactly as much history into it as the chain needs.",
+      "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
       "type": [
         "object",
         "null"
@@ -975,7 +975,7 @@
           ]
         },
         "bound": {
-          "description": "Markov only: the maximum tokens ONE emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
+          "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
           "type": "integer",
           "default": 1
         },
@@ -986,7 +986,7 @@
           "$ref": "#/$defs/WorldGeneratorMode"
         },
         "rangeMin": {
-          "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. RAW-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site), UNLIKE a site row\u0027s own min/max, which a fixed row authors as decimal text: a source is not bound to one site, so this declaration cannot know the kind it will write and has no honest decimal spelling to offer.",
+          "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
           "type": [
             "integer",
             "null"
@@ -1074,13 +1074,13 @@
       ]
     },
     "CompareState": {
-      "description": "Compares a named state cell against either a fixed authored value, or \u2014 WORLD SCOPE ONLY \u2014 ANOTHER named state cell/reserved channel read live at the SAME evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a MOVING threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the SAME two-sided comparison, never a new mechanism.",
+      "description": "Compares a named state cell against either a fixed authored value, or \u2014 world scope only \u2014 another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
       "properties": {
         "$type": {
           "const": "compareState"
         },
         "state": {
-          "description": "At BODY scope, a named counter slot the kit declares. At WORLD scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+          "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
           "type": "string"
         },
         "comparison": {
@@ -1095,7 +1095,7 @@
           "default": null
         },
         "key": {
-          "description": "At WORLD scope, the CELL inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]). At body scope a non-null key is refused: a per-body action-state slot is not keyed, and a parsed-and-discarded field is worse than no field.",
+          "description": "At world scope, the cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]). At body scope a non-null key is refused: a per-body action-state slot is not keyed, and a parsed-and-discarded field is worse than no field.",
           "type": [
             "string",
             "null"
@@ -1103,7 +1103,7 @@
           "default": null
         },
         "comparandState": {
-          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+          "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
           "type": [
             "string",
             "null"
@@ -1111,7 +1111,7 @@
           "default": null
         },
         "comparandKey": {
-          "description": "The CELL inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
+          "description": "The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
           "type": [
             "string",
             "null"
@@ -1232,7 +1232,7 @@
       "default": null
     },
     "MotionResponse": {
-      "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, FIRST match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
+      "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, first match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
       "type": [
         "object",
         "null"
@@ -1378,7 +1378,7 @@
           "type": "string"
         },
         "value": {
-          "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 WORLD SCOPE ONLY, exactly one of the two is authored (refused by name when both or neither are present, the SAME duality CompareState\u0027s own comparand carries). Required (non-null) at body scope, where a live copy source is refused.",
+          "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 world scope only, exactly one of the two is authored (refused by name when both or neither are present, the same duality CompareState\u0027s own comparand carries). Required (non-null) at body scope, where a live copy source is refused.",
           "type": [
             "number",
             "null"
@@ -1389,7 +1389,7 @@
           "$ref": "#/$defs/ActionTarget2"
         },
         "key": {
-          "description": "The CELL inside State at world scope \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name). Refused at body scope.",
+          "description": "The cell inside State at world scope \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name). Refused at body scope.",
           "type": [
             "string",
             "null"
@@ -1397,7 +1397,7 @@
           "default": null
         },
         "fromState": {
-          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Value): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read LIVE at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the SAME operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
+          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
           "type": [
             "string",
             "null"
@@ -1405,7 +1405,7 @@
           "default": null
         },
         "fromKey": {
-          "description": "The CELL inside FromState, on the same (row, key) terms as Key. Refused when FromState names a reserved channel or is absent.",
+          "description": "The cell inside FromState, on the same (row, key) terms as Key. Refused when FromState names a reserved channel or is absent.",
           "type": [
             "string",
             "null"
@@ -1413,7 +1413,7 @@
           "default": null
         },
         "valueSeconds": {
-          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Value and FromState \u2014 exactly one of the three is authored): an alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in SECONDS \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning every cooldown \u2014 and converted ONCE at rule compile time to an EXACT whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is REFUSED rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either. See WorldRuleCompiler.",
+          "description": "world scope only (refused at body scope, on the same terms as Value and FromState \u2014 exactly one of the three is authored): an alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either. See WorldRuleCompiler.",
           "type": [
             "number",
             "null"
@@ -1457,7 +1457,7 @@
           "$ref": "#/$defs/ActionTarget3"
         },
         "key": {
-          "description": "The CELL inside State at world scope; refused at body scope.",
+          "description": "The cell inside State at world scope; refused at body scope.",
           "type": [
             "string",
             "null"
@@ -1465,7 +1465,7 @@
           "default": null
         },
         "fromState": {
-          "description": "WORLD SCOPE ONLY \u2014 see FromState\u0027s remarks; here the addend is read live rather than the replacement.",
+          "description": "world scope only \u2014 see FromState\u0027s remarks; here the addend is read live rather than the replacement.",
           "type": [
             "string",
             "null"
@@ -1473,7 +1473,7 @@
           "default": null
         },
         "fromKey": {
-          "description": "The CELL inside FromState \u2014 see FromKey.",
+          "description": "The cell inside FromState \u2014 see FromKey.",
           "type": [
             "string",
             "null"
@@ -1481,7 +1481,7 @@
           "default": null
         },
         "valueSeconds": {
-          "description": "WORLD SCOPE ONLY \u2014 see ValueSeconds\u0027s remarks; here the converted tick count is the addend rather than the replacement.",
+          "description": "world scope only \u2014 see ValueSeconds\u0027s remarks; here the converted tick count is the addend rather than the replacement.",
           "type": [
             "number",
             "null"
@@ -1495,7 +1495,7 @@
       "additionalProperties": false
     },
     "CountdownState": {
-      "description": "Decrements a world-state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. WORLD SCOPE ONLY: the destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the world\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+      "description": "Decrements a world-state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. world scope only: the destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the world\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
       "properties": {
         "$type": {
           "const": "countdownState"
@@ -1569,7 +1569,7 @@
       "additionalProperties": false
     },
     "Generate": {
-      "description": "Redraws a DRAW SITE (a state row declaring a WorldDraw) \u2014 the ONE effect admissible at BOTH scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the SAME WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s MOMENT is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is STAGED during the body\u0027s advance and enqueued for the NEXT tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the DOCUMENT rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
+      "description": "Redraws a draw site (a state row declaring a WorldDraw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
       "properties": {
         "$type": {
           "const": "generate"
@@ -1585,7 +1585,7 @@
       "additionalProperties": false
     },
     "WorldHudRect": {
-      "description": "The panel\u0027s viewport rect, normalized to SCREEN space.",
+      "description": "The panel\u0027s viewport rect, normalized to screen space.",
       "type": "object",
       "properties": {
         "x": {
@@ -1632,7 +1632,7 @@
       ]
     },
     "WorldHudRect2": {
-      "description": "The element\u0027s rect, normalized to the OWNING PANEL\u0027s local space.",
+      "description": "The element\u0027s rect, normalized to the owning panel\u0027s local space.",
       "type": "object",
       "properties": {
         "x": {
@@ -1666,7 +1666,7 @@
       ]
     },
     "WorldHudElement": {
-      "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its LOCAL rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound TEXT element\u0027s live value REPLACES the authored literal; a bound GAUGE element\u0027s live value drives its fill; an unbound gauge draws empty).",
+      "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its local rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound text element\u0027s live value replaces the authored literal; a bound gauge element\u0027s live value drives its fill; an unbound gauge draws empty).",
       "type": [
         "object",
         "null"
@@ -1702,7 +1702,7 @@
           "default": null
         },
         "template": {
-          "description": "A Text element\u0027s TEMPLATE string \u2014 authored literal text interleaved with {token} placeholders, each a closed HudBindingVocabulary token resolved through the SAME operand path Binding uses (see HudTemplate for the brace/escape grammar). A richer binding source than Binding \u2014 many live facts composed into one string instead of one \u2014 never both on the same element. Ignored for Rect and Gauge (a gauge\u0027s fill is one fraction; it has no composed string to show). Omitted from the wire when null.",
+          "description": "A Text element\u0027s template string \u2014 authored literal text interleaved with {token} placeholders, each a closed HudBindingVocabulary token resolved through the same operand path Binding uses (see HudTemplate for the brace/escape grammar). A richer binding source than Binding \u2014 many live facts composed into one string instead of one \u2014 never both on the same element. Ignored for Rect and Gauge (a gauge\u0027s fill is one fraction; it has no composed string to show). Omitted from the wire when null.",
           "type": [
             "string",
             "null"
@@ -1756,7 +1756,7 @@
       "additionalProperties": false
     },
     "UpsertHudPanel": {
-      "description": "Upserts a whole HUD panel row \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no HUD panel of its own to author). Admits UpsertHudPanel into the world-rule effect set through the SAME seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
+      "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
       "properties": {
         "$type": {
           "const": "upsertHudPanel"
@@ -1771,7 +1771,7 @@
       "additionalProperties": false
     },
     "RemoveHudPanel": {
-      "description": "Removes a HUD panel row by id \u2014 WORLD SCOPE ONLY. See UpsertHudPanel\u0027s remarks.",
+      "description": "Removes a HUD panel row by id \u2014 world scope only. See UpsertHudPanel\u0027s remarks.",
       "properties": {
         "$type": {
           "const": "removeHudPanel"
@@ -1830,7 +1830,7 @@
       "default": null
     },
     "WorldEmission": {
-      "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement ROOT only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
+      "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
       "type": [
         "object",
         "null"
@@ -1861,7 +1861,7 @@
       "default": null
     },
     "WorldSolid": {
-      "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider ONLY (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the FIELD provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
+      "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider only (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the field provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
       "type": [
         "object",
         "null"
@@ -1900,7 +1900,7 @@
       "default": null
     },
     "WorldPlacementInhabit": {
-      "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both SPAWN its own driven bodies and RIDE another body\u0027s pose.",
+      "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both spawn its own driven bodies and ride another body\u0027s pose.",
       "type": [
         "object",
         "null"
@@ -1990,7 +1990,7 @@
       ]
     },
     "WorldPortalArrival": {
-      "description": "Where a traveler lands at the destination (see WorldPortalArrival). Default Spawn \u2014 unauthored worlds and every facet authored before this member existed are unchanged. OPTIONAL and TRAILING (the same widen-without-moving-existing-members shape Travel itself already follows).",
+      "description": "Where a traveler lands at the destination (see WorldPortalArrival). Default Spawn \u2014 unauthored worlds and every facet authored before this member existed are unchanged. Optional and trailing (the same widen-without-moving-existing-members shape Travel itself already follows).",
       "default": "spawn",
       "type": "string",
       "enum": [
@@ -1999,14 +1999,14 @@
       ]
     },
     "WorldPlacementPortal": {
-      "description": "The face\u0027s PORTAL facet (see WorldPlacementPortal) \u2014 absent (the default) means this face is not a door. OPTIONAL and TRAILING deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source \u2014 the door and the screen it shows are independent facts about the same face.",
+      "description": "The face\u0027s portal facet (see WorldPlacementPortal) \u2014 absent (the default) means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source \u2014 the door and the screen it shows are independent facts about the same face.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "destination": {
-          "description": "The Name of the destinations row naming the selected destination. Must resolve to an existing row \u2014 an undeclared name refuses by name (see WorldDefinitionValidator). No boot-time file-existence check on the destination\u0027s own referenced document \u2014 resolving the DOCUMENT is a future consumer\u0027s job; resolving the NAME, against this document\u0027s own destinations section, is this facet\u0027s own.",
+          "description": "The Name of the destinations row naming the selected destination. Must resolve to an existing row \u2014 an undeclared name refuses by name (see WorldDefinitionValidator). No boot-time file-existence check on the destination\u0027s own referenced document \u2014 resolving the document is a future consumer\u0027s job; resolving the name, against this document\u0027s own destinations section, is this facet\u0027s own.",
           "type": "string"
         },
         "travel": {
@@ -2016,7 +2016,7 @@
           "$ref": "#/$defs/WorldPortalArrival"
         },
         "counterpart": {
-          "description": "The DESTINATION document\u0027s border face this facet\u0027s frame maps onto under Mapped \u2014 \u0022\u003CplacementId\u003E/\u003Cface\u003E\u0022, the placement id and declared face name whose own placement transform (position \u002B yaw) is the arrival anchor. REQUIRED exactly when Arrival is Mapped (refused by name otherwise, in either direction \u2014 see WorldDefinitionValidator). No boot-time cross-document existence check: the named document is not resolved at boot (same reason Destination is not), so an absent placement/face refuses AT TRANSFER TIME instead, against the destination\u0027s own delivered definition (see WorldPortalCounterpart). Omitted from the wire when null.",
+          "description": "The destination document\u0027s border face this facet\u0027s frame maps onto under Mapped \u2014 \u0022\u003CplacementId\u003E/\u003Cface\u003E\u0022, the placement id and declared face name whose own placement transform (position \u002B yaw) is the arrival anchor. Required exactly when Arrival is Mapped (refused by name otherwise, in either direction \u2014 see WorldDefinitionValidator). No boot-time cross-document existence check: the named document is not resolved at boot (same reason Destination is not), so an absent placement/face refuses at transfer time instead, against the destination\u0027s own delivered definition (see WorldPortalCounterpart). Omitted from the wire when null.",
           "type": [
             "string",
             "null"
@@ -2024,7 +2024,7 @@
           "default": null
         },
         "marginDepth": {
-          "description": "The depth (world units) of the SHARED GROUND STRIP this face and its Counterpart face both author for a contiguous border \u2014 the terrain either side keeps solid so a body straddling the seam always has ground under it, never a wall it happens to be authoring past. Meaningful only when Arrival is Mapped (refused by name otherwise, the same rule Counterpart follows), and only for a Global destination while contact fields remain shared by one authority. REQUIRED \u2014 when a reachable IWorldNeighbourResolver is supplied \u2014 to be no shallower than the DERIVED floor (interaction reach plus max closing speed times tape latency, all read from this document and the neighbour\u0027s own; see WorldDefinitionValidator), BIT-IDENTICAL to the value the neighbour document authors on the counterpart face, and reciprocal: that face must map back to this exact face. A strip only one side widens, or whose other half points at a different face, is not shared. null (the default) authors no strip: an unmapped or unauthored face is unchanged. Omitted from the wire when null.",
+          "description": "The depth (world units) of the shared ground strip this face and its Counterpart face both author for a contiguous border \u2014 the terrain either side keeps solid so a body straddling the seam always has ground under it, never a wall it happens to be authoring past. Meaningful only when Arrival is Mapped (refused by name otherwise, the same rule Counterpart follows), and only for a Global destination while contact fields remain shared by one authority. Required \u2014 when a reachable IWorldNeighbourResolver is supplied \u2014 to be no shallower than the derived floor (interaction reach plus max closing speed times tape latency, all read from this document and the neighbour\u0027s own; see WorldDefinitionValidator), bit-identical to the value the neighbour document authors on the counterpart face, and reciprocal: that face must map back to this exact face. A strip only one side widens, or whose other half points at a different face, is not shared. null (the default) authors no strip: an unmapped or unauthored face is unchanged. Omitted from the wire when null.",
           "type": [
             "number",
             "null"
@@ -2074,7 +2074,7 @@
       "default": null
     },
     "WorldPlacementRegion": {
-      "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a NAMED VOLUME the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
+      "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a named volume the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
       "type": [
         "object",
         "null"
@@ -2099,7 +2099,7 @@
       ],
       "properties": {
         "bodyIndex": {
-          "description": "The 0-based population entity index the placement rides \u2014 the SAME indexing Entity and the console\u0027s body:\u003Cn\u003E grant subject use, NOT the 1-based player.* seat number (body:1 is \u0022player 2\u0022). Validated within 0..the world\u0027s authored population capacity; the target need not be ACTIVE at author time (see remarks \u2014 an inactive body at RUNTIME makes the row contribute nothing, it does not refuse).",
+          "description": "The 0-based population entity index the placement rides \u2014 the same indexing Entity and the console\u0027s body:\u003Cn\u003E grant subject use, not the 1-based player.* seat number (body:1 is \u0022player 2\u0022). Validated within 0..the world\u0027s authored population capacity; the target need not be active at author time (see remarks \u2014 an inactive body at runtime makes the row contribute nothing, it does not refuse).",
           "type": "integer"
         },
         "localOffset": {
@@ -2131,10 +2131,10 @@
           "type": "string"
         },
         "position": {
-          "description": "The stamp position, world space. INERT (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+          "description": "The stamp position, world space. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
         },
         "yawDegrees": {
-          "description": "The stamp yaw about \u002BY, degrees. Same ATTACH caveat as Position.",
+          "description": "The stamp yaw about \u002BY, degrees. Same attach caveat as Position.",
           "type": "number"
         },
         "scale": {
@@ -2176,7 +2176,7 @@
       "additionalProperties": false
     },
     "UpsertPlacement": {
-      "description": "Upserts a whole placement row \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no placement of its own to author). Admits UpsertPlacement into the world-rule effect set through the SAME seam Generate uses.",
+      "description": "Upserts a whole placement row \u2014 world scope only (refused at body scope: a per-body action has no placement of its own to author). Admits UpsertPlacement into the world-rule effect set through the same seam Generate uses.",
       "properties": {
         "$type": {
           "const": "upsertPlacement"
@@ -2191,7 +2191,7 @@
       "additionalProperties": false
     },
     "RemovePlacement": {
-      "description": "Removes a placement row by id \u2014 WORLD SCOPE ONLY. See UpsertPlacement\u0027s remarks.",
+      "description": "Removes a placement row by id \u2014 world scope only. See UpsertPlacement\u0027s remarks.",
       "properties": {
         "$type": {
           "const": "removePlacement"
@@ -2207,7 +2207,7 @@
       "additionalProperties": false
     },
     "Save": {
-      "description": "Writes a session snapshot of the world to its own loaded file \u2014 WORLD SCOPE ONLY (refused at body scope: a per-body action has no world file of its own to save). A rule gate now decides WHEN a save happens (an every-N-ticks cadence, a boss-defeated edge), closing the one gap the mutation substrate could not: a rule could already express any cadence over $tick or a state fact, but had nothing to FIRE that composed a save \u2014 every prior save was a human typing world.save, so a crashed server rewound to the last manual one.",
+      "description": "Writes a session snapshot of the world to its own loaded file \u2014 world scope only (refused at body scope: a per-body action has no world file of its own to save). A rule gate now decides when a save happens (an every-N-ticks cadence, a boss-defeated edge), closing the one gap the mutation substrate could not: a rule could already express any cadence over $tick or a state fact, but had nothing to fire that composed a save \u2014 every prior save was a human typing world.save, so a crashed server rewound to the last manual one.",
       "properties": {
         "$type": {
           "const": "save"
@@ -2437,7 +2437,7 @@
       "additionalProperties": false
     },
     "Machine2": {
-      "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index IS machine identity for screen-hosted machines. The validator checks only that the screen row EXISTS, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
+      "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
       "properties": {
         "$type": {
           "const": "machine"
@@ -2469,7 +2469,7 @@
       "additionalProperties": false
     },
     "Synth": {
-      "description": "The world voice synth playing a patch asset (WorldPatch). Patches are MONO by construction: the feed\u0027s channel selectors degenerate to mix \u2014 documented, never rejected.",
+      "description": "The world voice synth playing a patch asset (WorldPatch). Patches are mono by construction: the feed\u0027s channel selectors degenerate to mix \u2014 documented, never rejected.",
       "properties": {
         "$type": {
           "const": "synth"
@@ -2536,7 +2536,7 @@
       ],
       "properties": {
         "radius": {
-          "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is CULLED (finite support IS the cull).",
+          "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is culled (finite support is the cull).",
           "type": "number"
         },
         "curve": {

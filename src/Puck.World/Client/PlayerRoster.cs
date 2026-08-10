@@ -733,7 +733,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// router seam (see <see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis"/>) — this is the router seam
     /// alone; there is no separate device-facing door.</summary>
     /// <param name="slot">The logical player slot recorded in the command snapshot.</param>
-    /// <param name="value">The already-quantized stick sample (+X turns right).</param>
+    /// <param name="value">The already-quantized stick sample (+X turns the body right, +Y pitches the presentation camera up).</param>
     /// <param name="actingPrincipal">The principal asking — see <see cref="RouteMove(int, FixedVector2, WorldPrincipal)"/>'s
     /// identical remark. Mandatory.</param>
     public void RouteLook(int slot, FixedVector2 value, WorldPrincipal actingPrincipal) {

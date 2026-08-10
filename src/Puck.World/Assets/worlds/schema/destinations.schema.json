@@ -1,11 +1,11 @@
 {
-  "description": "The destinations section (default null = names nothing) \u2014 scoped-selection rows layered over exactly one References row each (see WorldDestination), echoed by world.destinations. A WorldPlacementPortal facet\u0027s Destination resolves against THIS section, not References directly. No boot-time file-existence check; resolution is a consumer\u0027s job. OPTIONAL, for the SAME reason Rules is. BOOT-ONLY like References/ Portals \u2014 no live mutation arm yet.",
+  "description": "The destinations section (default null = names nothing) \u2014 scoped-selection rows layered over exactly one References row each (see WorldDestination), echoed by world.destinations. A WorldPlacementPortal facet\u0027s Destination resolves against this section, not References directly. No boot-time file-existence check; resolution is a consumer\u0027s job. Optional, for the same reason Rules is. boot-only like References/ Portals \u2014 no live mutation arm yet.",
   "type": [
     "array",
     "null"
   ],
   "items": {
-    "description": "One row of the destinations section \u2014 SCOPED SELECTION layered over exactly one WorldReference row (docs/world-model.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
+    "description": "One row of the destinations section \u2014 scoped selection layered over exactly one WorldReference row (docs/world-model.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
     "type": [
       "object",
       "null"
@@ -28,7 +28,7 @@
         ]
       },
       "scope": {
-        "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the SAME widen-without-moving-existing-members shape WorldWaterSection\u0027s own remarks describe.",
+        "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldWaterSection\u0027s own remarks describe.",
         "default": "global",
         "type": "string",
         "enum": [
@@ -38,7 +38,7 @@
         ]
       },
       "selector": {
-        "description": "Which group a Group row resolves through (see WorldGroupSelector). REQUIRED exactly when Scope is Group \u2014 a selector on any other scope, or a group scope with none, refuses by name (see WorldDefinitionValidator).",
+        "description": "Which group a Group row resolves through (see WorldGroupSelector). Required exactly when Scope is Group \u2014 a selector on any other scope, or a group scope with none, refuses by name (see WorldDefinitionValidator).",
         "type": [
           "object",
           "null"
@@ -48,7 +48,7 @@
         ],
         "anyOf": [
           {
-            "description": "Assigns the destination to exactly ONE authored group \u2014 every traveler must prove membership in Group specifically.",
+            "description": "Assigns the destination to exactly one authored group \u2014 every traveler must prove membership in Group specifically.",
             "properties": {
               "$type": {
                 "const": "named"
@@ -64,7 +64,7 @@
             "additionalProperties": false
           },
           {
-            "description": "Selects the traveler\u0027s UNIQUE verified membership claim carrying Tag \u2014 zero matching memberships and multiple matching memberships are distinct named refusals; the engine never picks one silently (see Tags).",
+            "description": "Selects the traveler\u0027s unique verified membership claim carrying Tag \u2014 zero matching memberships and multiple matching memberships are distinct named refusals; the engine never picks one silently (see Tags).",
             "properties": {
               "$type": {
                 "const": "tagged"

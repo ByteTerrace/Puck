@@ -2,7 +2,7 @@
   "description": "The diegetic screens standing in the plaza \u2014 pure data the frame source emits as screen slabs and the binder feeds; a screen the world never authors, only declares.",
   "type": "array",
   "items": {
-    "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the SAMPLED surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
+    "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
     "type": [
       "object",
       "null"
@@ -90,7 +90,7 @@
             "type": "boolean"
           },
           "engageChannel": {
-            "description": "The world-event channel whose arrival on a body engages this screen, or null (the default) for a route that does not answer gestures. THE NAME IS THE AUTHOR\u0027S: nothing in the engine special-cases a spelling. Omitted from the wire when null.",
+            "description": "The world-event channel whose arrival on a body engages this screen, or null (the default) for a route that does not answer gestures. The author chooses this name freely; the engine never special-cases a spelling. Omitted from the wire when null.",
             "type": [
               "string",
               "null"
@@ -104,7 +104,7 @@
             ]
           },
           "channels": {
-            "description": "The declared channel names this route\u0027s mask reaches \u2014 a masked-out channel keeps flowing to the routed body\u0027s OWN pose (relevant under the capture:false MIRROR policy) but never reaches this route\u0027s target. null (the default) reaches every declared channel. Omitted from the wire when null.",
+            "description": "The declared channel names this route\u0027s mask reaches \u2014 a masked-out channel keeps flowing to the routed body\u0027s own pose (relevant under the capture:false mirror policy) but never reaches this route\u0027s target. null (the default) reaches every declared channel. Omitted from the wire when null.",
             "type": [
               "array",
               "null"
@@ -229,7 +229,7 @@
             }
           },
           "selected": {
-            "description": "The 0-based entry the selector STARTS on (what screen.select advances from), not what the screen boots showing \u2014 a screen always wakes on its declared Source (the one-live-console ceiling depends on this). Live selection drifts from this and is folded back by world.save (see Puck.World.WorldSessionCapture).",
+            "description": "The 0-based entry the selector starts on (what screen.select advances from), not what the screen boots showing \u2014 a screen always wakes on its declared Source (the one-live-console ceiling depends on this). Live selection drifts from this and is folded back by world.save (see Puck.World.WorldSessionCapture).",
             "type": "integer",
             "default": 0
           },

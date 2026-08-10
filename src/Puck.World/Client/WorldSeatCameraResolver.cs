@@ -5,7 +5,7 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// The seat-native chase/orbit camera resolution — the one place an authored <see cref="WorldCameraRig"/> composes a
-/// seat's live orbit-drag offset and the rig's own <see cref="WorldCameraRig.SmoothRate"/> ease, shared by every
+/// seat's live pointer/stick orbit offset and the rig's own <see cref="WorldCameraRig.SmoothRate"/> ease, shared by every
 /// caller that resolves a body through a world's own authored seat rig: <see cref="WorldFrameSource.ResolveCamera"/>
 /// (a local seat rendering its own boot instance) and <see cref="AwaySeatSceneEmitter.ResolveChaseCamera"/> (a
 /// traveling seat rendering a destination instance it crossed into). Both feed this the same shape — an authored
@@ -36,7 +36,8 @@ internal static class WorldSeatCameraResolver {
     /// type's own remarks cite: the world currently framing the seat (the boot world for a boot-anchored seat, the
     /// destination for a traveling one) owns rig structure — <see cref="WorldSeatLook.WorldAxes"/> and the pitch
     /// clamp; the seat's own live control feel (<see cref="WorldSeatFeel.Look"/> — its profile's, or the framing
-    /// world's own when unclaimed) owns input preferences — sensitivity, inversion, and what arms the drag. The one
+    /// world's own when unclaimed) owns input preferences — pointer sensitivity, stick rate, inversion, and what
+    /// arms the drag. The one
     /// place this split is made: a caller merges here rather than reading each field from whichever source happens
     /// to be at hand, so <c>WorldFrameSource.ResolveCamera</c> (a boot seat) and
     /// <see cref="AwaySeatSceneEmitter.ResolveChaseCamera"/> (a traveling seat) resolve the same shape from the same
@@ -45,7 +46,7 @@ internal static class WorldSeatCameraResolver {
     /// <see cref="WorldSeatLook.WorldAxes"/>, <see cref="WorldSeatLook.MinPitch"/>, and
     /// <see cref="WorldSeatLook.MaxPitch"/>.</param>
     /// <param name="preference">The seat's live control feel — supplies <see cref="WorldSeatLook.YawSensitivity"/>,
-    /// <see cref="WorldSeatLook.PitchSensitivity"/>, <see cref="WorldSeatLook.InvertYaw"/>,
+    /// <see cref="WorldSeatLook.PitchSensitivity"/>, <see cref="WorldSeatLook.StickLookRate"/>, <see cref="WorldSeatLook.InvertYaw"/>,
     /// <see cref="WorldSeatLook.InvertPitch"/>, and <see cref="WorldSeatLook.Arming"/>.</param>
     public static WorldSeatLook ResolveSeatLook(WorldSeatLook structure, WorldSeatLook preference) => new(
         YawSensitivity: preference.YawSensitivity,
@@ -55,7 +56,8 @@ internal static class WorldSeatCameraResolver {
         MinPitch: structure.MinPitch,
         MaxPitch: structure.MaxPitch,
         Arming: preference.Arming,
-        WorldAxes: structure.WorldAxes
+        WorldAxes: structure.WorldAxes,
+        StickLookRate: preference.StickLookRate
     );
 
     /// <summary>Recovers a body's heading as the yaw scalar <c>OrbitRig.Offset</c>'s convention expects (0 = +Z,
@@ -71,7 +73,7 @@ internal static class WorldSeatCameraResolver {
 
     /// <summary>Resolves the rig to actually render through: the compiled plain chase for any authored motion other
     /// than <see cref="WorldCameraMotion.Orbit"/>, or — for an authored Orbit rig — a freshly-composed rig feeding
-    /// the seat's live drag into the document's own orbit vocabulary (authored yaw/pitch + the live offset), rather
+    /// the seat's live pointer/stick offset into the document's own orbit vocabulary (authored yaw/pitch + the live offset), rather
     /// than post-rotating a resolved eye/target. <paramref name="seatLookWorldAxes"/> selects what the composed yaw
     /// rides on top of: <see langword="false"/> adds the body's own yaw (the orbit rides the body's heading — turn,
     /// and the camera swings with you); <see langword="true"/> drops it, an absolute orbit independent of facing.
@@ -82,8 +84,8 @@ internal static class WorldSeatCameraResolver {
     /// returned unchanged when the authored motion is not <see cref="WorldCameraMotion.Orbit"/>.</param>
     /// <param name="seatLookWorldAxes">The resolved control feel's <see cref="WorldSeatLook.WorldAxes"/>.</param>
     /// <param name="bodyOrientation">The traveler/seat body's resolved orientation.</param>
-    /// <param name="liveYaw">The seat's live orbit-drag yaw offset (<c>WorldCameraOrbit.Yaw</c>).</param>
-    /// <param name="livePitch">The seat's live orbit-drag pitch offset (<c>WorldCameraOrbit.Pitch</c>).</param>
+    /// <param name="liveYaw">The seat's live orbit yaw offset (<c>WorldCameraOrbit.Yaw</c>).</param>
+    /// <param name="livePitch">The seat's live orbit pitch offset (<c>WorldCameraOrbit.Pitch</c>).</param>
     /// <param name="cache">This (seat, rendered instance) pair's persisted compile cache.</param>
     public static ISdfCameraRig ResolveChase(WorldCameraRig authoredRig, ISdfCameraRig compiledChase, bool seatLookWorldAxes, Quaternion bodyOrientation, float liveYaw, float livePitch, LiveOrbitCache cache) {
         if (authoredRig.Motion is not WorldCameraMotion.Orbit orbit) {

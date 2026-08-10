@@ -5,8 +5,8 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// One seat's control feel — how its mouse-look orbit responds: sensitivity, inversion, the pitch clamp, and what
-/// arms the drag. Authored on <see cref="WorldPlayerDefaults.SeatLook"/> and read from whichever document owns the
+/// One seat's control feel — how its pointer and stick look orbit responds: sensitivity/rate, inversion, the pitch
+/// clamp, and what arms the pointer drag. Authored on <see cref="WorldPlayerDefaults.SeatLook"/> and read from whichever document owns the
 /// seat, so feel is per-seat rather than per-world: an unclaimed seat reads the world's, and a joined seat reads its
 /// own identity document's, arriving on the same seat-document recompose that carries that identity's bindings and
 /// HUD. A player's feel therefore travels with their profile across worlds and machines, and two people sharing a
@@ -27,6 +27,8 @@ namespace Puck.World;
 /// <param name="Arming">What enables the orbit drag.</param>
 /// <param name="WorldAxes">Whether the live orbit composes onto world axes rather than the seat body's own facing
 /// (an absolute orbit versus one that rides the body's yaw).</param>
+/// <param name="StickLookRate">The look stick's camera-pitch rate in radians per second at full deflection. Zero is
+/// the unauthored default, preserving the pre-field behavior where the stick did not move camera pitch.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSeatLook(
     float YawSensitivity,
@@ -36,7 +38,8 @@ public sealed record WorldSeatLook(
     float MinPitch,
     float MaxPitch,
     WorldSeatLookArming Arming,
-    bool WorldAxes
+    bool WorldAxes,
+    float StickLookRate = 0f
 );
 
 /// <summary>Identifies what arms a <see cref="WorldSeatLook"/> orbit drag.</summary>

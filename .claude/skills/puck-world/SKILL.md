@@ -43,7 +43,7 @@ away. Verify game behavior by RUNNING the game, never by a build gate
 |---|---|---|
 | `src/Puck.World.Data` | The document model and the whole Protocol wire surface | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; `Protocol/`: `PlayerIntent`, `WorldCommand`, `WorldMutation`, `WorldGrant`/`WorldPrincipal`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport` |
 | `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, `WorldEngagement`, `WorldMachineHost`, `WorldAddonRuntime`, `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
-| `src/Puck.World` | The sole composition root | `Program.cs`, the client (`Client/`), presentation and the screen-output binder, `Audio/`, every `*CommandModule`, `Assets/` (four shipped worlds) |
+| `src/Puck.World` | The sole composition root | `Program.cs`, the client (`Client/`), presentation and the screen-output binder, `Audio/`, every `*CommandModule`, and the shipped world/scenario documents under `Assets/` |
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Data` references
@@ -241,7 +241,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | Grants, principals, verdicts, co-driving fold/consent, budgets, handles, refusal catalog, `world.why` | [references/authority.md](references/authority.md) |
 | `SubmissionEnvelope`, the one queue, completions, echo routing, the intent buffer | [references/ordered-domain.md](references/ordered-domain.md) |
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
-| Camera rigs (seat chase + named cameras), motion/aim/lens/`SmoothRate`, the seat camera path, live mouse-look orbit and PER-SEAT control feel (`playerDefaults.seatLook`), the pointer/cursor stack and the radial action menu (binding wheels, hold Tab, `player.wheel.ring`/`player.wheel.commit`/`world.view.wheel`), window-layout composition, `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
+| Camera rigs (seat chase + named cameras), motion/aim/lens/`SmoothRate`, the seat camera path, live pointer/stick orbit and PER-SEAT control feel (`playerDefaults.seatLook`), the pointer/cursor stack and the radial action menu (binding wheels, hold Tab, `player.wheel.ring`/`player.wheel.commit`/`world.view.wheel`), window-layout composition, `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
 | `player.engage`, context routes (screen or body target, capture policy, channel mask), latch/route repair, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |

@@ -39,8 +39,8 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     /// <summary>The Axis2D command the gamepad's LEFT stick is bound to (+Y forward, +X strafe right). The handler
     /// ROUTES the dispatch to the owning device's player (joining an unmapped pad per the roster rules).</summary>
     public const string MoveCommand = "player.move";
-    /// <summary>The Axis2D command the gamepad's RIGHT stick is bound to (+X turns right). Same routing contract as
-    /// <see cref="MoveCommand"/>.</summary>
+    /// <summary>The Axis2D command the gamepad's RIGHT stick is bound to (+X turns the body right, +Y pitches the
+    /// presentation camera up). Same routing contract as <see cref="MoveCommand"/>.</summary>
     public const string LookCommand = "player.look";
     /// <summary>The confirm command (Gamepad South / Keyboard Enter, press edge) — promotes the pending player owning
     /// the pressing device.</summary>
@@ -370,7 +370,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: LookCommand,
-            description: "The right stick's look channel (Axis2D, +X turns right) — routed to the owning device's player each frame; not meant to be typed.",
+            description: "The right stick's look channel (Axis2D, +X turns the body right / +Y pitches the camera up) — routed to the owning device's player each frame; not meant to be typed.",
             valueKind: CommandValueKind.Axis2D,
             handler: LookRouter
         );

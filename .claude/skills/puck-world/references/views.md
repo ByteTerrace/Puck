@@ -1,10 +1,11 @@
-# Views — camera rigs, the seat chase, and mouse look
+# Views — camera rigs, the seat chase, and pointer/stick look
 
 The `views` document section owns every presentation camera: the one shared
-seat-chase rig every joined seat frames through, the named authored cameras a
-window layout can show instead of a seat, and the local seat's live
-mouse-look orbit policy. Document side: `src/Puck.World.Data/WorldViews.cs`
-(`WorldViewDefaults`, `WorldViewLayout`, `WorldViewSlot`, `WorldSeatLook`,
+seat-chase rig every joined seat frames through and the named authored cameras a
+window layout can show instead of a seat. The local seat's live pointer/stick
+orbit policy is instead `playerDefaults.seatLook`. Document side:
+`src/Puck.World.Data/WorldViews.cs` (`WorldViewDefaults`, `WorldViewLayout`,
+`WorldViewSlot`), `src/Puck.World.Data/WorldSeatLook.cs` (`WorldSeatLook`,
 `WorldSeatLookArming`), `src/Puck.World.Data/WorldCameraRig.cs`
 (`WorldCameraRig`, the `WorldCameraMotion`/`WorldCameraAim` unions,
 `WorldCameraLens`, the track records), `src/Puck.World.Data/WorldAnchor.cs`
@@ -16,8 +17,9 @@ itself is declared in `WorldDefinition.cs`). Compile/resolve side:
 paths), `src/Puck.World/Client/WorldEditorSession.cs` (the per-seat rig
 override), `src/Puck.World/Client/WorldViewComposer.cs` (layout selection and
 transitions), `src/Puck.World/WorldCameraOrbit.cs` +
-`WorldCameraOrbitDrag.cs` (the live mouse-look state and the pointer consumer
-that drives it), `src/Puck.World/WorldPointer.cs` + `WorldPointerSink.cs`
+`WorldCameraOrbitDrag.cs` (the live orbit state and pointer consumer) and
+`WorldFrameSource.cs` (the look-stick frame integrator),
+`src/Puck.World/WorldPointer.cs` + `WorldPointerSink.cs`
 (the per-seat pointer store and the one window-input observer feeding it).
 Engine vocabulary: `src/Puck.SdfVm/Views/SdfCameraRig.cs` (`ISdfCameraRig`,
 `OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FirstPersonRig`/`FixedRig`),
@@ -33,19 +35,19 @@ Mutation kinds: `SetViewDefaults` 31, `UpsertViewLayout` 32,
 - The rig: Motion / Aim / Lens, plus rig-level `SmoothRate`
 - The motion arms
 - The seat camera path
-- Mouse look (`playerDefaults.seatLook`)
+- Pointer and stick look (`playerDefaults.seatLook`)
 - The verbs
 - Capacities and refusals
 - Verifying
 
 ## The `views` section shape
 
-`WorldViewDefaults(SeatRig, Layouts, SeatLook)` — a REQUIRED section every
+`WorldViewDefaults(SeatRig, Layouts)` — a REQUIRED section every
 document carries.
 
 - **`SeatRig`** (`WorldCameraRig`) — the ONE chase framing every local seat
   wakes on. There is exactly one authored seat rig for the whole document,
-  shared by all four seats; a live per-seat orbit drag (see Mouse look below)
+  shared by all four seats; a live per-seat orbit (see Pointer and stick look below)
   cannot live inside it, because it is one row, not four. `RebuildSeatRigs`
   compiles the SAME authored rig into every slot of `WorldFrameSource`'s
   per-seat rig cache on construction and on any `views`-section delivery
@@ -56,9 +58,9 @@ document carries.
   big-top/two-bottom → 2×2, `WorldFrameSource.LayoutRegion`). No cap exists on
   layout count or slots per layout — only per-field shape is validated (see
   Capacities).
-- **`SeatLook`** (`WorldSeatLook?`) — the local seat's live mouse-look orbit
-  policy, or `null` to fall back to `WorldSeatLook.Default`. One policy for
-  the whole document, like `SeatRig` — not per-seat.
+`playerDefaults.seatLook` (`WorldSeatLook`) is separate from `views`: the
+required control-feel row whose world value is the floor for a seat carrying
+no profile preference.
 
 `WorldViewDefaults.Default`: `SeatRig` is an `Orbit` motion (`Distance:
 5.4626001f, Yaw: 0f, Pitch: 0.4145069f, PivotOffset: Vector3.Zero`), `Aim` is
@@ -66,7 +68,7 @@ document carries.
 engine default 55° (`WorldViewDefaults.EngineDefaultFieldOfViewRadians`,
 pinned in `WorldViews.cs` because `Puck.World.Data` cannot reference
 `Puck.SdfVm` — it mirrors `OrbitRig.DefaultFieldOfViewRadians`), `SmoothRate`
-is `6f`. `Layouts` is empty. `SeatLook` is `WorldSeatLook.Default`. The
+is `6f`. `Layouts` is empty. The
 default `Orbit`'s `Distance`/`Pitch` numerically match
 `hypot(2.2, 5)`/`atan2(2.2, 5)` — `OrientedFollowRig`'s own default
 `EyeOffset (0, 2.2, 5)` — to five decimal places; nothing in source spells out
@@ -74,18 +76,17 @@ that derivation (no `hypot`/`atan2` call exists in `WorldViews.cs`), so treat
 it as the apparent authoring recipe for converting a chase offset into an
 equivalent orbit distance/pitch, not a documented contract.
 
-The four shipped worlds each author their OWN `seatRig`/`seatLook` rather than
-inheriting `WorldViewDefaults.Default` verbatim (read directly from
-`src/Puck.World/Assets/worlds/*.world.json`) — the concrete instance of
+Every shipped world and scenario document authors its own `seatRig`/`seatLook`
+(read directly from `src/Puck.World/Assets/worlds/*.world.json` and
+`src/Puck.World/Assets/scenarios/*.world.json`) — the concrete instance of
 CLAUDE.md's "would each world want this different" test: `play`/`jump` match
 the type default's `Orbit` exactly (`distance 5.4626001`, `pitch 0.4145069`,
 `smoothRate 6`, FOV 55°); `kart` widens to `distance 6.5`, `pitch 0.3947911`,
 FOV ≈60° (`1.0471976`), `smoothRate 6`; `dive` pulls in to `distance
 5.2497619`, `pitch 0.3097029`, an `aim.offset` of `(0, 0.6, 0)` (lower than
-the other three's `(0, 1, 0)`), and `smoothRate 4` — the one shipped world
-NOT using `6`. All four author `seatLook.yawSensitivity`/`pitchSensitivity`
-at `0.001` (not the type default's `0.005`) and otherwise match
-`WorldSeatLook.Default`'s pitch clamp/arming/worldAxes exactly.
+the other three's `(0, 1, 0)`), and `smoothRate 4`. Every current world and
+scenario authors `seatLook.yawSensitivity`/`pitchSensitivity` at `0.001`, the
+same pitch clamp/arming/worldAxes values, and `stickLookRate: 2.6`.
 
 ## The rig: Motion / Aim / Lens, plus rig-level `SmoothRate`
 
@@ -193,7 +194,8 @@ out eye, out target)`:
    `RebuildSeatRigs` on construction and on any views delivery).
 3. **Live orbit composition** (the ONE live camera mechanism this type
    carries — no other motion kind gets one): only when `views.seatRig.Motion`
-   is `Orbit`. `seatLook = playerDefaults.seatLook ?? WorldSeatLook.Default`;
+   is `Orbit`. `seatLook` is the required `playerDefaults.seatLook`, merged
+   with the seat's profile preference when it carries one;
    `yaw = orbit.Yaw + liveYaw + (seatLook.WorldAxes ? 0 : BodyYaw(bodyOrientation))`;
    `pitch = orbit.Pitch + livePitch`. `BodyYaw` recovers the body's heading
    as `atan2(behind.X, behind.Z)` (`behind = Transform(UnitZ, orientation)`) —
@@ -241,12 +243,14 @@ safety net: a fixed pull-back over the centroid of the world's authored
 `population.seatSpawns`, engaged only when `m_views` would otherwise be
 empty (every local seat departed with none rejoined).
 
-## Mouse look (`playerDefaults.seatLook`)
+## Pointer and stick look (`playerDefaults.seatLook`)
 
 `WorldSeatLook(YawSensitivity, PitchSensitivity, InvertYaw, InvertPitch,
-MinPitch, MaxPitch, Arming, WorldAxes)` — presentation-only, one policy for
-the whole document (not per-seat). Sensitivities are RADIANS of orbit per
-PIXEL of raw pointer motion. `MinPitch`/`MaxPitch` are RADIANS, validated
+MinPitch, MaxPitch, Arming, WorldAxes, StickLookRate)` — presentation-only,
+one world floor plus an optional per-seat profile preference. Pointer
+sensitivities are RADIANS of orbit per PIXEL of raw pointer motion;
+`StickLookRate` is camera-pitch RADIANS per SECOND at full normalized stick
+deflection and is integrated against presentation-frame time. `MinPitch`/`MaxPitch` are RADIANS, validated
 finite and within `[-π/2, π/2]` with `MinPitch < MaxPitch`. `Arming`
 (`WorldSeatLookArming`: `None`/`Always`/`LeftButton`/`RightButton`/
 `MiddleButton`) selects what starts/stops the drag; `None` disables orbiting
@@ -262,23 +266,25 @@ lowercase-first form (`leftButton`/`rightButton`/`middleButton`); treat the
 shipped-document casing as authoritative over that description string.
 `WorldAxes` is the SAME switch `ResolveCamera` step 3 reads —
 selects whether the live orbit composes onto world axes (`true`) or the
-seat body's own facing (`false`, the shipped default). `WorldSeatLook
-.Default`: `YawSensitivity`/`PitchSensitivity` `0.005f`, no inversion,
-`MinPitch: -0.35f` (≈ -20°), `MaxPitch: 1.2f` (≈ 69°), `Arming
-.RightButton`, `WorldAxes: false`.
+seat body's own facing (`false`, the shipped default). The trailing record
+default for `StickLookRate` is `0f`, preserving the pre-field behavior for an
+older/unauthored nested row. Every shipped world and scenario currently
+authors `2.6` radians/second explicitly. The whole `seatLook` row remains
+required; there is no engine fallback row.
 
 `WorldCameraOrbit` (`src/Puck.World/WorldCameraOrbit.cs`) holds each seat's
 LIVE accumulated yaw/pitch offset — `float[PlayerRoster.MaxSlots]` pairs,
 `Volatile` read/write, no lock (independent scalars, no cross-field
 invariant, distinct slots never alias). Never rides `CommandSnapshot` or
 feeds the simulation; `WorldClient.Orientation` (the sim body orientation) is
-never written by it. `Nudge` wraps yaw to `[-π, π]` and clamps pitch to the
-CALLER-supplied `minPitch`/`maxPitch` — the caller passes the LIVE
-`WorldSeatLook` values, so a `world.row.set playerDefaults.seatLook` edit takes effect on the very
-next drag.
+never written by it. `Nudge` is the one input-policy door shared by pointer
+and stick: it applies the live `WorldSeatLook` inversion, wraps yaw to
+`[-π, π]`, and clamps pitch to that policy's `MinPitch`/`MaxPitch`. A
+`world.row.set playerDefaults.seatLook` edit therefore takes effect on the
+next drag or rendered-frame stick integration.
 
 `WorldCameraOrbitDrag` (`src/Puck.World/WorldCameraOrbitDrag.cs`), an
-`IWorldPointerConsumer`, turns a drag into `Nudge` calls. Rig structure (the
+`IWorldPointerConsumer`, turns a drag into shared `Nudge` calls. Rig structure (the
 pitch clamp) is resolved FRESH ON EVERY EVENT (never cached) through
 `WorldInstanceHost.ResolveRoutedDefinition(slot).PlayerDefaults.SeatLook` — the
 world the seat's LIVE route (`WorldSeatInstanceRouter`) currently frames it
@@ -301,6 +307,14 @@ seat's DRAINED motion — so it tracks no held state of its own. When the drag
 is not armed (or `Arming.None` disables it) it still drains the motion and
 discards it, so free-cursor browsing is never banked and applied in one jump
 the moment a press or a live re-arm lands.
+
+The ordinary play look stick uses that same door from `WorldFrameSource`:
+`SeatController.ClearAnalog` promotes its tick-local Y sample to a
+frame-stable presentation latch, and each rendered frame integrates
+`StickLookRate * deltaSeconds`. X stays on the authoritative `Turn` role; no
+camera float feeds back into the tick. Because stick +Y means look up while
+positive orbit pitch raises the camera to look down, the integrator flips Y
+before entering `Nudge`.
 
 `WorldPointerSink` (`src/Puck.World/WorldPointerSink.cs`) is the ONE
 `IWindowInputObserver` the pointer has: it writes every raw pointer event
@@ -424,13 +438,13 @@ only the selected player and `open=false`.
 | Verb | Routing | Effect |
 |---|---|---|
 | `world.row.set views.seatRig <rig-json>` | Simulation | Replaces `views.seatRig` from an inline `WorldCameraRig`. Applies live: every seat re-frames next frame. |
-| `world.row.set playerDefaults.seatLook <look-json>` | Simulation | Replaces the WORLD's control feel from an inline `WorldSeatLook`. Applies live on the next pointer motion — but only for seats sitting at the world's floor: a seat carrying a profile keeps its own feel, which is the point of the per-seat split. |
+| `world.row.set playerDefaults.seatLook <look-json>` | Simulation | Replaces the WORLD's control feel from an inline `WorldSeatLook`. Applies live on the next pointer motion or rendered-frame stick integration — but only for seats sitting at the world's floor: a seat carrying a profile keeps its own feel, which is the point of the per-seat split. |
 | `world.row.set views.layouts <layout-json>` | Simulation | Upserts one named `WorldViewLayout` (whole-row, keyed by name). |
 | `world.row.remove views.layouts <name>` | Simulation | Removes a named layout — always allowed; the composer falls back to authored/built-in selection. |
 | `view.override layout <name\|auto>` | Simulation | LIVE composition override forcing the active layout for every seat; `auto`/`-` clears it. Gated `Control` over `GrantSubject.Composition`. |
 | `view.override camera <name\|auto>` | Simulation | LIVE composition override resolving every camera-bearing slot to one camera; `auto` clears it. Same gate as the layout arm. |
 | `world.view.state` | Immediate | Read-back: active layout name, selection reason (`override`/`authored`/`builtin`), transition progress, each slot's rect + occupant (`seat<order>`/`cam:<name>`). |
-| `world.view.orbit [player]` | Immediate | Read-back of ONE local seat's live orbit: THAT SEAT's control feel in force (its profile's, or the world's when it carries none) PLUS its live drag. `player` is 1-based, default 1, range `1..PlayerRoster.MaxSlots` (4). Two seats can answer differently. |
+| `world.view.orbit [player]` | Immediate | Read-back of ONE local seat's live orbit: THAT SEAT's control feel in force (including `stickLookRate`) PLUS its live pointer/stick yaw and pitch. `player` is 1-based, default 1, range `1..PlayerRoster.MaxSlots` (4). Two seats can answer differently. |
 | `world.view.pointer` | Immediate | Read-back of the drawn cursor's last composed frame: the seat the pointer rides (the keyboard's), position in CLIENT px (`position=`) and mapped into the fixed FRAME extent (`frame=` — the spaces diverge on a window resize; `WorldCursorFeed.Decide` owns the client→frame scale, the inverse of the presenter's stretch blit) and normalized within the seat's viewport (`local=`), the viewport rect, the visibility verdict (`visible`/`no-position`/`no-view`/`outside-viewport`/`orbit-drag` — `WorldCursorFeed`'s one visibility rule), the held pointer buttons (`buttons=` — `L`/`R`/`M` in that order, or `-`), the live hover target (`hover=none`, or the hovered panel/world row's label), and the seat's system-release generation (`syscount=` — `WorldPointer.SystemReleaseCount`, the synthetic-release discriminator). |
 
 **`world.view.orbit` echoes `minPitch`/`maxPitch` and the live `yaw`/`pitch`
@@ -439,7 +453,8 @@ IN DEGREES** (`WorldViewCommandModule.DescribeOrbit`, `RadiansToDegrees =
 computed: `minPitch`/`maxPitch` are the document's own `WorldSeatLook.MinPitch`/
 `MaxPitch` fields, and the live `yaw`/`pitch` are `WorldCameraOrbit.Yaw(slot)`/
 `Pitch(slot)`, radians throughout (not persisted, but never converted before
-this one echo). A script that reads this echo and feeds it straight back into
+this one echo). `stickLookRate` remains the authored radians/second value; it
+is not an angle and is not degree-converted. A script that reads this echo and feeds it straight back into
 `world.row.set playerDefaults.seatLook`'s inline JSON will be off by a factor of `π/180` — convert
 explicitly.
 
@@ -494,7 +509,7 @@ carry no principal at all — direct reads of live presentation state.
   refused by name; there is no engine default to fall back on) refuses: a
   non-finite/negative yaw or pitch sensitivity; a non-finite `MinPitch`/
   `MaxPitch`, either outside `[-π/2, π/2]`, or `MinPitch >= MaxPitch`; an
-  undefined `Arming` value.
+  undefined `Arming` value; or a non-finite/negative `StickLookRate`.
 - `ValidateViews` (layouts) refuses: a null layout row; a missing or
   duplicated layout `Name`; a negative `SeatCount`; a non-finite/negative
   `TransitionSeconds`; a non-finite `TransitionRenderScale` outside `(0,1]`;
@@ -514,7 +529,7 @@ session:
 world.row.set views.seatRig {"motion":{"$type":"orbit","distance":6,"yaw":0,"pitch":0.3,"pivotOffset":[0,0,0]},"aim":{"$type":"anchor","offset":[0,1,0],"worldAxes":false},"lens":{"fieldOfViewRadians":0.96},"smoothRate":6}
 world.wait 1
 world.view.state
-world.row.set playerDefaults.seatLook {"yawSensitivity":0.005,"pitchSensitivity":0.005,"invertYaw":false,"invertPitch":false,"minPitch":-0.35,"maxPitch":1.2,"arming":"RightButton","worldAxes":false}
+world.row.set playerDefaults.seatLook {"yawSensitivity":0.005,"pitchSensitivity":0.005,"invertYaw":false,"invertPitch":false,"minPitch":-0.35,"maxPitch":1.2,"arming":"RightButton","worldAxes":false,"stickLookRate":2.6}
 world.wait 1
 world.view.orbit 1
 ```

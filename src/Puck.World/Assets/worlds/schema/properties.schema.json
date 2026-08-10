@@ -1,5 +1,5 @@
 {
-  "description": "The properties section (default null = none) \u2014 the carrier-property NAME vocabulary (see WorldPropertyRegistrySection), validated the SAME way a group kind name is: unknown- by-name. OPTIONAL, for the SAME reason Rules is.",
+  "description": "The properties section (default null = none) \u2014 the carrier-property name vocabulary (see WorldPropertyRegistrySection), validated the same way a group kind name is: unknown- by-name. Optional, for the same reason Rules is.",
   "type": [
     "object",
     "null"

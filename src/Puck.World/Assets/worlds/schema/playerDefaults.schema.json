@@ -90,7 +90,7 @@
       "type": "number"
     },
     "seatLook": {
-      "description": "The control feel a seat of this document wakes with. REQUIRED \u2014 there is no engine fallback, so a document either states what its seats should feel like or fails validation. Read per seat from whichever document owns it: the world\u0027s for an unclaimed seat, the joined identity\u0027s own for a claimed one, which is how a player\u0027s feel travels with their profile (see WorldSeatLook).",
+      "description": "The control feel a seat of this document wakes with. required \u2014 there is no engine fallback, so a document either states what its seats should feel like or fails validation. Read per seat from whichever document owns it: the world\u0027s for an unclaimed seat, the joined identity\u0027s own for a claimed one, which is how a player\u0027s feel travels with their profile (see WorldSeatLook).",
       "type": "object",
       "properties": {
         "yawSensitivity": {
@@ -130,6 +130,11 @@
         "worldAxes": {
           "description": "Whether the live orbit composes onto world axes rather than the seat body\u0027s own facing (an absolute orbit versus one that rides the body\u0027s yaw).",
           "type": "boolean"
+        },
+        "stickLookRate": {
+          "description": "The look stick\u0027s camera-pitch rate in radians per second at full deflection. Zero is the unauthored default, preserving the pre-field behavior where the stick did not move camera pitch.",
+          "type": "number",
+          "default": 0
         }
       },
       "required": [

@@ -1,5 +1,5 @@
 {
-  "description": "The market section (default null = no local auction house \u2014 every market.* verb refuses by name) \u2014 see WorldMarketSection. OPTIONAL, for the SAME reason Rules is. Trailing by design, after Admission, for the identical reason every optional section here is.",
+  "description": "The market section (default null = no local auction house \u2014 every market.* verb refuses by name) \u2014 see WorldMarketSection. Optional, for the same reason Rules is. Trailing by design, after Admission, for the identical reason every optional section here is.",
   "type": [
     "object",
     "null"
